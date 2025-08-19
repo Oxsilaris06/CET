@@ -152,7 +152,7 @@
             display: block;
             transition: max-height 0.3s ease-in-out, opacity 0.3s ease-in-out;
             overflow: hidden;
-            max-height: 2000px; /* Augmenté pour être sûr */
+            max-height: 2000px; /* Increased to be safe */
             opacity: 1;
             padding-top: 15px;
         }
@@ -475,7 +475,7 @@
                 Presets 🎚️
             </legend>
             <div class="fieldset-content">
-                <div class="sub-title"><i>Veuillez ajouter manuellement un article après avoir utilisé un preset pour mettre a jour le panier</i></div>
+              
                  <div class="preset-section">
                      <div class="preset-buttons">
                          <button class="preset-button" data-preset="psig">Config PSIG 🥷🏻</button>
@@ -665,7 +665,7 @@
             <legend>
                 NR - Garantie à vie 🇫🇷
             </legend>
-            <div class="fieldset-content">
+             <div class="fieldset-content">
                 <div class="sub-title"><i>🇫🇷Fabrication française 🇫🇷</i></div>
                 <div id="garantie-vie-container" class="checkbox-container">
                          <div id="garantie-vie-checkboxes"></div>
@@ -691,7 +691,6 @@
     </div>
 
     <script>
-    // Attend que le contenu de la page soit entièrement chargé avant d'exécuter le script
     document.addEventListener('DOMContentLoaded', () => {
 
         const database = {
@@ -794,7 +793,7 @@
             ],
             lunettes: [
                 { id: 0, name: "Aucune", price: 0, link: "#", description: "" },
-                { id: 1, name: "Kit Drop Zone Pyramex", note: 2, price: 40, link: "https://military.eu/fr/p/pyramex/lunettes-de-protection-venture-gear-drop-zone-pyramex-2210247", description: "Kit de lunettes de protection avec verres interchangeables (transparent, fumé, orane)." },
+                { id: 1, name: "Kit Drop Zone Pyrax", note: 2, price: 40, link: "https://military.eu/fr/p/pyramex/lunettes-de-protection-venture-gear-drop-zone-pyramex-2210247", description: "Kit de lunettes de protection avec verres interchangeables (transparent, fumé, orane)." },
                 { id: 2, name: "Bolle safety", note: 2, price: 8, link: "https://military.eu/fr/p/bolle/lunettes-tactique-rush-twilight-bolle-11205", description: "Reference des lunettes de protections, légerement fumées." }
             ],
             "garantie-vie": [
@@ -814,9 +813,10 @@
 
         const allItems = {};
         let popup = null;
+        const allSelectors = document.querySelectorAll('select');
         
         function populateSelectors() {
-            document.querySelectorAll('select').forEach(selector => {
+            allSelectors.forEach(selector => {
                 const category = selector.id;
                 if (database[category]) {
                     database[category].forEach(item => {
@@ -890,7 +890,7 @@
             selectedItemsList.innerHTML = '';
             const allSelected = [];
             
-            document.querySelectorAll('select').forEach(selector => {
+            allSelectors.forEach(selector => {
                 const selectedId = parseInt(selector.value);
                 if (selectedId !== 0) {
                     const item = database[selector.id]?.find(i => i.id === selectedId);
@@ -933,18 +933,21 @@
             const presetConfig = presets[presetName];
             if (!presetConfig) return;
 
-            Object.keys(presetConfig).forEach(category => {
+            for (const category in presetConfig) {
                 const value = presetConfig[category];
-                if (Array.isArray(value)) {
+                const element = document.getElementById(category);
+
+                if (element && element.tagName === 'SELECT') {
+                    element.value = value;
+                } else if (Array.isArray(value)) {
                     value.forEach(id => {
                         const checkbox = document.getElementById(`${category}-${id}`);
-                        if (checkbox) checkbox.checked = true;
+                        if (checkbox) {
+                            checkbox.checked = true;
+                        }
                     });
-                } else {
-                    const select = document.getElementById(category);
-                    if (select) select.value = value;
                 }
-            });
+            }
             triggerAllChanges();
         }
         
@@ -952,7 +955,7 @@
             const presetToSave = document.getElementById('preset-save-select').value;
             const currentConfig = {};
             
-            document.querySelectorAll('select').forEach(s => {
+            allSelectors.forEach(s => {
                 if (s.value !== '0') currentConfig[s.id] = parseInt(s.value);
             });
             document.querySelectorAll('input[type="checkbox"]:checked').forEach(cb => {
@@ -964,17 +967,31 @@
             presets[presetToSave] = currentConfig;
             alert(`Configuration enregistrée sur '${presetToSave}' !`);
         }
+        
+        function filterAllItems() {
+            const searchValue = document.getElementById('global-search').value.toLowerCase();
+            document.querySelectorAll('.item-selector-wrapper, .checkbox-item').forEach(itemElement => {
+                const name = itemElement.querySelector('label')?.textContent.toLowerCase() || '';
+                // Basic implementation: more complex logic needed to get description from database
+                if (name.includes(searchValue)) {
+                    itemElement.style.display = '';
+                } else {
+                    itemElement.style.display = 'none';
+                }
+            });
+        }
 
         function resetAll() {
-            document.querySelectorAll('form, .container').forEach(form => form.reset()); // Ne fonctionne pas toujours, donc on force
-            document.querySelectorAll('select').forEach(s => s.selectedIndex = 0);
+            allSelectors.forEach(s => s.selectedIndex = 0);
             document.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false);
             document.getElementById('global-search').value = '';
+            filterAllItems();
+            if (popup) popup.remove();
             triggerAllChanges();
         }
 
         function triggerAllChanges() {
-             document.querySelectorAll('select').forEach(selector => {
+             allSelectors.forEach(selector => {
                 const descBox = document.getElementById(`${selector.id}-desc`);
                 if(descBox) {
                     const selectedItem = database[selector.id]?.find(item => item.id === parseInt(selector.value));
@@ -986,7 +1003,7 @@
             updateRecap();
         }
 
-        // --- Initialisation et Écouteurs d'Événements ---
+        // --- Initialization and Event Listeners ---
 
         populateSelectors();
         createCheckboxes('poches', 'poches-checkboxes');
@@ -1006,12 +1023,12 @@
         });
 
         document.querySelectorAll('.preset-button').forEach(button => {
-            button.addEventListener('click', () => applyPreset(button.dataset.preset));
+            button.addEventListener('click', (e) => applyPreset(e.target.dataset.preset));
         });
         
         document.getElementById('save-preset-btn').addEventListener('click', savePreset);
         document.getElementById('reset-btn').addEventListener('click', resetAll);
-        document.getElementById('global-search').addEventListener('keyup', () => { /* La recherche n'est pas implémentée dans cette version */ });
+        document.getElementById('global-search').addEventListener('keyup', filterAllItems);
         window.addEventListener('click', (e) => {
             if (popup && !popup.contains(e.target) && !e.target.classList.contains('info-button')) {
                 popup.remove();
@@ -1019,7 +1036,7 @@
             }
         });
 
-        // Initialiser l'état de la page au chargement
+        // Initialize page state on load
         triggerAllChanges();
     });
     </script>
