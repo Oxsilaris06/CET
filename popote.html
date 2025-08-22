@@ -20,6 +20,7 @@
             --success-green: #28a745;
             --button-hover-transition: 0.3s ease-in-out;
         }
+
         body.dark-theme {
             --bg-body: #121212;
             --bg-container: #1e1e1e;
@@ -27,6 +28,7 @@
             --text-primary: #e0e0e0;
             --text-secondary: #95a5a6;
             --border-color: #444444;
+            --revolut-btn-color: #2a2a2a;
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -36,7 +38,6 @@
         .iframe-container { display: none; }
         .table-container {
             margin-bottom: 25px;
-            border: 1px solid var(--border-color);
             border-radius: 6px;
             overflow: hidden;
             display: block;
@@ -47,6 +48,7 @@
             font-size: 1.1em;
             text-align: left;
             table-layout: fixed;
+            border: 1px solid var(--border-color);
         }
         th, td {
             padding: 12px 15px;
@@ -165,7 +167,6 @@
         select:focus, input[type="text"]:focus { border-color: var(--accent-blue); outline: none; }
         .action-button { display: block; width: 100%; padding: 12px; margin-top: 15px; font-family: 'Oswald', sans-serif; font-size: 1.2em; font-weight: 500; color: white; border: none; border-radius: 4px; cursor: pointer; text-transform: uppercase; text-decoration: none; text-align: center; transition: background-color var(--button-hover-transition); }
         .action-button:hover { opacity: 0.8; }
-
         .top-buttons-container {
             display: flex;
             gap: 10px;
@@ -206,7 +207,9 @@
         #info-elite-content p { font-size: 1.2em; font-weight: 500; }
         .action-button.prozis { background-color: var(--prozis-red); color: white; }
         .action-button.elite { background-color: var(--text-primary); color: white; }
-        .action-button.revolut { background-color: black; color: white; }
+        .action-button.revolut { background-color: black; color: white; transition: background-color 0.3s, color 0.3s; }
+        body.dark-theme .action-button.revolut { background-color: var(--revolut-btn-color); color: var(--text-primary); }
+
         @keyframes pulse {
             0% { transform: scale(1); }
             100% { transform: scale(1.02); }
@@ -235,7 +238,7 @@
             <p>Lors du paiement merci d'ajouter votre trigramme et la date.</p>
         </div>
 
-        <div id="dettes-display-area" class="table-container" style="display: block;">
+        <div id="dettes-display-area" class="table-container">
             <table id="dettes-table">
                 <thead>
                     <tr><th>Membre</th><th>Dette</th></tr>
@@ -287,7 +290,22 @@
     </div>
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            const memberPasswords = { "POILPRE": "0621520088", "LANEZ": "0646383656", "GUILLAS": "0603730965", "ROUILLE": "0661683695", "PRINCE": "0616312867", "GOURDOU": "0632921504", "MAHEUX": "0629835682", "ROTONDI": "08031993", "VERGNAUD": "0643698062", "BESSON": "0616711305", "CHAREIX": "0643406864", "TEST": "" };
+            const memberPasswords = { 
+                "POILPRE": "0621520088", 
+                "LANEZ": "0646383656", 
+                "GUILLAS": "0603730965", 
+                "ROUILLE": "0661683695", 
+                "PRINCE": "0616312867", 
+                "GOURDOU": "0632921504", 
+                "MAHEUX": "0629835682", 
+                "ROTONDI": "08031993", 
+                "VERGNAUD": "0643698062", 
+                "BESSON": "0616711305", 
+                "CHAREIX": "0643406864",
+                "LAFAY": "0618682121",
+                "GIRAUD": "0651233802",
+                "MARTINS": "BENOU"
+            };
             const memberSelect = document.getElementById('member-select');
             const passwordInput = document.getElementById('password-input');
             const validateBtn = document.getElementById('validate-btn');
@@ -317,7 +335,7 @@
                     const response = await fetch(APPS_SCRIPT_URL_DETTES);
                     allDettesData = await response.json();
                     loadMembersInDropdown();
-                    displaySelectedMemberDette(memberSelect.value); // Affiche la dette du premier membre
+                    displaySelectedMemberDette(memberSelect.value);
                 } catch (error) {
                     console.error("Erreur lors du chargement des données des dettes :", error);
                     detteBox.textContent = "Erreur de chargement des données des dettes.";
@@ -329,6 +347,11 @@
             function loadMembersInDropdown() {
                 memberSelect.innerHTML = '';
                 
+                const defaultOption = document.createElement('option');
+                defaultOption.value = "";
+                defaultOption.textContent = "Sélectionner un membre";
+                memberSelect.appendChild(defaultOption);
+
                 allDettesData.forEach(item => {
                     if (item.MEMBRE && item.MEMBRE !== "Total dettes :") {
                         const option = document.createElement('option');
@@ -364,9 +387,8 @@
                     tbody.appendChild(row);
 
                     dettesTable.style.display = 'table';
-                    dettesDisplayArea.style.display = 'block';
                 } else {
-                    dettesDisplayArea.style.display = 'none';
+                    dettesTable.style.display = 'none';
                 }
             }
 
@@ -375,6 +397,8 @@
             memberSelect.addEventListener('change', () => {
                 if (memberSelect.value) {
                     displaySelectedMemberDette(memberSelect.value);
+                } else {
+                    dettesTable.style.display = 'none';
                 }
             });
 
@@ -389,7 +413,11 @@
                 detteBox.textContent = "Veuillez choisir un membre et entrer le mot de passe.";
                 detteBox.classList.remove('correct', 'incorrect');
                 detteBox.style.display = 'none';
-                dettesDisplayArea.style.display = 'none';
+                displaySelectedMemberDette(memberSelect.value);
+                toggleDettesBtn.classList.add('active-btn');
+                toggleDettesBtn.classList.remove('inactive-btn');
+                toggleLogBtn.classList.add('inactive-btn');
+                toggleLogBtn.classList.remove('active-btn');
                 ['canettes', 'bcaa', 'cookie', 'boules', 'autres'].forEach(id => document.getElementById(id).value = '0');
                 if (infoEliteContent.style.display === 'block') {
                     infoEliteContent.style.display = 'none';
@@ -403,7 +431,7 @@
                 const selectedMember = memberSelect.value;
                 const enteredPassword = passwordInput.value;
                 
-                if (memberPasswords[selectedMember] === enteredPassword) {
+                if (memberPasswords[selectedMember] && memberPasswords[selectedMember].toLowerCase() === enteredPassword.toLowerCase()) {
                     detteBox.textContent = `Accès autorisé pour ${selectedMember}.`;
                     detteBox.classList.add('correct');
                     detteBox.style.display = 'block';
@@ -414,9 +442,6 @@
                     passwordInput.disabled = true;
                     memberSelect.disabled = true;
                     
-                    dettesDisplayArea.style.display = 'block';
-                    dettesTable.style.display = 'table';
-                    logIframe.style.display = 'none';
                     displaySelectedMemberDette(selectedMember);
 
                 } else {
@@ -464,6 +489,10 @@
                         detteBox.classList.add('correct');
                         detteBox.classList.remove('incorrect');
                         ['canettes', 'bcaa', 'cookie', 'boules', 'autres'].forEach(id => document.getElementById(id).value = '0');
+                        
+                        // Met à jour l'iframe des logs et le tableau des dettes après une consommation
+                        logIframe.src = logIframe.src;
+                        fetchAllDettes();
                     } else { throw new Error(result.message); }
                 } catch (error) {
                     console.error('Erreur:', error);
@@ -500,6 +529,9 @@
                 toggleDettesBtn.classList.remove('active-btn');
                 toggleLogBtn.classList.add('active-btn');
                 toggleLogBtn.classList.remove('inactive-btn');
+
+                // Recharge l'iframe du log
+                logIframe.src = logIframe.src;
             });
 
             themeToggle.addEventListener('change', () => {
