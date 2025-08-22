@@ -35,7 +35,6 @@
         body { font-family: 'Oswald', sans-serif; background-color: var(--bg-body); color: var(--text-primary); line-height: 1.6; padding: 15px; transition: background-color 0.3s; }
         .container { max-width: 900px; margin: auto; background: var(--bg-container); padding: 20px 30px; border-radius: 8px; border: 1px solid var(--border-color); }
         h1 { text-align: center; font-size: 2.5em; margin-bottom: 30px; color: var(--accent-blue); text-transform: uppercase; letter-spacing: 2px; }
-        .iframe-container { display: none; }
         .table-container {
             margin-bottom: 25px;
             border-radius: 6px;
@@ -59,6 +58,9 @@
             background-color: var(--bg-interactive);
             font-weight: 500;
             text-transform: uppercase;
+        }
+        tr:last-child td {
+            border-bottom: none;
         }
         tr:hover {
             background-color: var(--bg-interactive);
@@ -249,7 +251,16 @@
             </table>
         </div>
         
-        <iframe id="log-iframe" src="https://docs.google.com/spreadsheets/d/e/2PACX-1vRLHdtVE4-7pLNn_aCCjM0ApdPZYXfs2suldp9C2p5VcygE9MxKhby77hONvsexEjAExlC1n9iKzzjd/pubhtml?widget=true&headers=false" style="display: none; height: 300px; width: 100%; border: 1px solid var(--border-color); border-radius: 6px;"></iframe>
+        <div id="log-display-area" class="table-container" style="display: none;">
+            <table id="log-table">
+                <thead>
+                    <tr><th>Horodatage</th><th>Membre</th><th>Cannette</th><th>BCAA</th><th>COOKIE</th><th>BOULES</th><th>AUTRES</th></tr>
+                </thead>
+                <tbody id="log-tbody">
+                    <tr><td colspan="7">Chargement des données...</td></tr>
+                </tbody>
+            </table>
+        </div>
         
         <div class="login-fieldsets">
             <fieldset>
@@ -290,17 +301,17 @@
     </div>
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            const memberPasswords = { 
-                "POILPRE": "0621520088", 
-                "LANEZ": "0646383656", 
-                "GUILLAS": "0603730965", 
-                "ROUILLE": "0661683695", 
-                "PRINCE": "0616312867", 
-                "GOURDOU": "0632921504", 
-                "MAHEUX": "0629835682", 
-                "ROTONDI": "08031993", 
-                "VERGNAUD": "0643698062", 
-                "BESSON": "0616711305", 
+            const memberPasswords = {
+                "POILPRE": "0621520088",
+                "LANEZ": "0646383656",
+                "GUILLAS": "0603730965",
+                "ROUILLE": "0661683695",
+                "PRINCE": "0616312867",
+                "GOURDOU": "0632921504",
+                "MAHEUX": "0629835682",
+                "ROTONDI": "08031993",
+                "VERGNAUD": "0643698062",
+                "BESSON": "0616711305",
                 "CHAREIX": "0643406864",
                 "LAFAY": "0618682121",
                 "GIRAUD": "0651233802",
@@ -318,12 +329,14 @@
             const showInfoBtn = document.getElementById('show-info-btn');
             const infoEliteContent = document.getElementById('info-elite-content');
             const dettesDisplayArea = document.getElementById('dettes-display-area');
-            
+            const logDisplayArea = document.getElementById('log-display-area');
+
             const APPS_SCRIPT_URL_DETTES = "https://script.google.com/macros/s/AKfycby0TPspM09tHYyL0_24-ko_cyScsA-uYlllwY_c14fheBRa4dzHB9iP6NnvIcZdHNvV/exec";
+            const APPS_SCRIPT_URL_LOGS = "https://script.google.com/macros/s/AKfycbz7DIxyigGEyQH7Ddh_x2bOi6RCct02zRi7VKBR__LvWzWQLTuz-IC0roeEm_CNHakWCg/exec";
             const APPS_SCRIPT_URL_CONSO = "https://script.google.com/macros/s/AKfycbyy4eMw-0-UdxoKqzBAvZazerLXQh16rkS8GOw4D-9cwWGLpulAQIcbd5sBOZWABsaNLg/exec";
             
             const dettesTable = document.getElementById('dettes-table');
-            const logIframe = document.getElementById('log-iframe');
+            const logTable = document.getElementById('log-table');
             const toggleDettesBtn = document.getElementById('toggle-dettes-btn');
             const toggleLogBtn = document.getElementById('toggle-log-btn');
             const themeToggle = document.getElementById('theme-toggle');
@@ -335,7 +348,6 @@
                     const response = await fetch(APPS_SCRIPT_URL_DETTES);
                     allDettesData = await response.json();
                     loadMembersInDropdown();
-                    displaySelectedMemberDette(memberSelect.value);
                 } catch (error) {
                     console.error("Erreur lors du chargement des données des dettes :", error);
                     detteBox.textContent = "Erreur de chargement des données des dettes.";
@@ -344,6 +356,56 @@
                 }
             }
             
+            async function loadLogsTable() {
+                try {
+                    const response = await fetch(APPS_SCRIPT_URL_LOGS);
+                    const data = await response.json();
+
+                    const tbody = logTable.querySelector('tbody');
+                    tbody.innerHTML = '';
+                    
+                    data.forEach(item => {
+                        const row = document.createElement('tr');
+                        const dateCell = document.createElement('td');
+                        const membreCell = document.createElement('td');
+                        const canetteCell = document.createElement('td');
+                        const bcaaCell = document.createElement('td');
+                        const cookieCell = document.createElement('td');
+                        const boulesCell = document.createElement('td');
+                        const autresCell = document.createElement('td');
+                        
+                        dateCell.textContent = item.Horodatage;
+                        membreCell.textContent = item.Membre;
+                        canetteCell.textContent = item.Cannette;
+                        bcaaCell.textContent = item.BCAA;
+                        cookieCell.textContent = item.COOKIE;
+                        boulesCell.textContent = item.BOULES;
+                        autresCell.textContent = item.AUTRES;
+
+                        dateCell.setAttribute('data-label', 'Horodatage');
+                        membreCell.setAttribute('data-label', 'Membre');
+                        canetteCell.setAttribute('data-label', 'Cannette');
+                        bcaaCell.setAttribute('data-label', 'BCAA');
+                        cookieCell.setAttribute('data-label', 'COOKIE');
+                        boulesCell.setAttribute('data-label', 'BOULES');
+                        autresCell.setAttribute('data-label', 'AUTRES');
+                        
+                        row.appendChild(dateCell);
+                        row.appendChild(membreCell);
+                        row.appendChild(canetteCell);
+                        row.appendChild(bcaaCell);
+                        row.appendChild(cookieCell);
+                        row.appendChild(boulesCell);
+                        row.appendChild(autresCell);
+                        tbody.appendChild(row);
+                    });
+                } catch (error) {
+                    const tbody = logTable.querySelector('tbody');
+                    tbody.innerHTML = '<tr><td colspan="7">Erreur de chargement des données.</td></tr>';
+                    console.error("Erreur lors de la récupération des données de logs :", error);
+                }
+            }
+
             function loadMembersInDropdown() {
                 memberSelect.innerHTML = '';
                 
@@ -413,11 +475,8 @@
                 detteBox.textContent = "Veuillez choisir un membre et entrer le mot de passe.";
                 detteBox.classList.remove('correct', 'incorrect');
                 detteBox.style.display = 'none';
-                displaySelectedMemberDette(memberSelect.value);
-                toggleDettesBtn.classList.add('active-btn');
-                toggleDettesBtn.classList.remove('inactive-btn');
-                toggleLogBtn.classList.add('inactive-btn');
-                toggleLogBtn.classList.remove('active-btn');
+                dettesTable.style.display = 'none';
+                logDisplayArea.style.display = 'none';
                 ['canettes', 'bcaa', 'cookie', 'boules', 'autres'].forEach(id => document.getElementById(id).value = '0');
                 if (infoEliteContent.style.display === 'block') {
                     infoEliteContent.style.display = 'none';
@@ -490,9 +549,8 @@
                         detteBox.classList.remove('incorrect');
                         ['canettes', 'bcaa', 'cookie', 'boules', 'autres'].forEach(id => document.getElementById(id).value = '0');
                         
-                        // Met à jour l'iframe des logs et le tableau des dettes après une consommation
-                        logIframe.src = logIframe.src;
                         fetchAllDettes();
+                        loadLogsTable();
                     } else { throw new Error(result.message); }
                 } catch (error) {
                     console.error('Erreur:', error);
@@ -512,8 +570,7 @@
             
             toggleDettesBtn.addEventListener('click', () => {
                 dettesDisplayArea.style.display = 'block';
-                dettesTable.style.display = 'table';
-                logIframe.style.display = 'none';
+                logDisplayArea.style.display = 'none';
                 toggleDettesBtn.classList.add('active-btn');
                 toggleDettesBtn.classList.remove('inactive-btn');
                 toggleLogBtn.classList.add('inactive-btn');
@@ -524,14 +581,12 @@
             toggleLogBtn.addEventListener('click', () => {
                 dettesDisplayArea.style.display = 'block';
                 dettesTable.style.display = 'none';
-                logIframe.style.display = 'block';
+                logDisplayArea.style.display = 'block';
                 toggleDettesBtn.classList.add('inactive-btn');
                 toggleDettesBtn.classList.remove('active-btn');
                 toggleLogBtn.classList.add('active-btn');
                 toggleLogBtn.classList.remove('inactive-btn');
-
-                // Recharge l'iframe du log
-                logIframe.src = logIframe.src;
+                loadLogsTable();
             });
 
             themeToggle.addEventListener('change', () => {
