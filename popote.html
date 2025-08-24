@@ -6,7 +6,7 @@
     <title>Popote</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;500&display=swap');
-        
+
         :root {
             --bg-body: #e9ecef;
             --bg-container: #ffffff;
@@ -116,12 +116,6 @@
                 align-items: center;
                 text-align: center;
             }
-            .table-container td {
-                border: none;
-                position: relative;
-                padding: 10px;
-                text-align: center;
-            }
             .table-container td:before {
                 content: attr(data-label);
                 display: block;
@@ -161,10 +155,10 @@
         fieldset { border: 1px solid var(--border-color); border-radius: 6px; padding: 20px; margin-bottom: 25px; }
         legend { padding: 0 10px; font-size: 1.5em; color: var(--text-primary); font-weight: 500; }
         .item-selector { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 15px; }
-        .conso-item { 
-            display: flex; 
-            justify-content: flex-start; 
-            align-items: center; 
+        .conso-item {
+            display: flex;
+            justify-content: flex-start;
+            align-items: center;
             margin-bottom: 10px;
             gap: 15px;
         }
@@ -205,15 +199,6 @@
             background-color: var(--text-secondary);
         }
 
-        #conso-fieldset { display: none; }
-        #dette-box { margin-top: 25px; padding: 20px; min-height: 50px; border-radius: 6px; background-color: var(--bg-interactive); text-align: center; font-size: 1.5em; font-weight: 500; }
-        #dette-box.incorrect { background-color: var(--danger-red); color: white; animation: pulse 1s infinite alternate; }
-        #dette-box.correct { background-color: var(--success-green); color: white; }
-        .info-panel { display: none; margin-top: 25px; }
-        .info-content { display: none; margin-top: 20px; padding: 20px; border: 1px solid var(--border-color); border-radius: 6px; background-color: var(--bg-interactive); font-size: 1.1em; }
-        .info-content h3 { color: var(--accent-blue); margin-bottom: 10px; }
-        .info-content p { margin-bottom: 8px; }
-        #info-elite-content p { font-size: 1.2em; font-weight: 500; }
         .action-button.prozis { background-color: var(--prozis-red); color: white; }
         .action-button.elite { background-color: var(--text-primary); color: white; }
         .action-button.revolut { background-color: black; color: white; transition: background-color 0.3s, color 0.3s; }
@@ -223,95 +208,147 @@
             0% { transform: scale(1); }
             100% { transform: scale(1.02); }
         }
+
+        .dette-box-incorrect { background-color: var(--danger-red); color: white; animation: pulse 1s infinite alternate; }
+        .dette-box-correct { background-color: var(--success-green); color: white; }
+
+        .hidden { display: none; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="dark-mode-toggle" onclick="toggleDarkMode()">
-            <span id="toggle-icon"></span>
+    <div class="container" id="app">
+        <div class="dark-mode-toggle" @click="toggleDarkMode">
+            <span v-text="toggleIcon"></span>
         </div>
 
         <h1>☕Popote☕</h1>
         <div class="top-buttons-container">
-            <button id="toggle-dettes-btn" class="active-btn">Dettes</button>
-            <button id="toggle-log-btn" class="inactive-btn">Log</button>
+            <button @click="viewMode = 'dettes'" :class="{'active-btn': viewMode === 'dettes', 'inactive-btn': viewMode !== 'dettes'}">Dettes</button>
+            <button @click="viewMode = 'log'" :class="{'active-btn': viewMode === 'log', 'inactive-btn': viewMode !== 'log'}">Log</button>
         </div>
-        
+
         <a href="https://revolut.me/nicomhx" target="_blank" class="action-button revolut" style="text-decoration: none; text-align: center; margin-bottom: 5px;"> Payer mes dettes 💸 </a>
         <div style="text-align: center; margin-bottom: 20px; color: var(--text-secondary); font-size: 1em;">
             <p>Lors du paiement merci d'ajouter votre trigramme et la date.</p>
         </div>
 
-        <div id="dettes-display-area" class="table-container">
+        <div class="table-container" v-if="viewMode === 'dettes'">
             <table id="dettes-table">
                 <thead>
                     <tr><th>Membre</th><th>Dette</th></tr>
                 </thead>
                 <tbody id="dettes-tbody">
-                    <tr><td colspan="2">Chargement des données...</td></tr>
+                    <tr v-if="connectedMemberDette">
+                        <td data-label="Membre">{{ connectedMemberDette.membre }}</td>
+                        <td data-label="Dette">{{ parseFloat(connectedMemberDette.dette).toFixed(2) }} €</td>
+                    </tr>
                 </tbody>
             </table>
         </div>
-        
-        <div id="log-display-area" class="table-container" style="display: none;">
+
+        <div class="table-container" v-if="viewMode === 'log'">
             <table id="log-table">
                 <thead>
                     <tr><th>Horodatage</th><th>Membre</th><th>Cannette</th><th>BCAA</th><th>COOKIE</th><th>BOULES</th><th>AUTRES</th></tr>
                 </thead>
                 <tbody id="log-tbody">
-                    <tr><td colspan="7">Chargement des données...</td></tr>
+                    <tr v-if="loadingLogs">
+                        <td colspan="7">Chargement des logs...</td>
+                    </tr>
+                    <tr v-else-if="logs.length === 0">
+                        <td colspan="7">Aucun log trouvé.</td>
+                    </tr>
+                    <tr v-for="log in logs" :key="log.Horodatage + log.Membre">
+                        <td data-label="Horodatage">{{ log.Horodatage }}</td>
+                        <td data-label="Membre">{{ log.Membre }}</td>
+                        <td data-label="Cannette">{{ log.Cannette }}</td>
+                        <td data-label="BCAA">{{ log.BCAA }}</td>
+                        <td data-label="COOKIE">{{ log.COOKIE }}</td>
+                        <td data-label="BOULES">{{ log.BOULES }}</td>
+                        <td data-label="AUTRES">{{ log.AUTRES }}</td>
+                    </tr>
                 </tbody>
             </table>
         </div>
-        
-        <div class="login-fieldsets">
+
+        <div class="login-fieldsets" v-if="!isConnected">
             <fieldset>
                 <legend>Accès</legend>
                 <div class="item-selector">
                     <label for="member-select">Nom du membre</label>
-                    <select id="member-select"></select>
+                    <select id="member-select" v-model="selectedMember">
+                        <option value="">Sélectionner un membre</option>
+                        <option v-for="member in allMembers" :key="member" :value="member">
+                            {{ member }}
+                        </option>
+                    </select>
                 </div>
-                <div class="item-selector"><label for="password-input">Mot de passe</label><input type="text" id="password-input" placeholder="••••"></div>
-                <button id="validate-btn" class="action-button" style="background-color: var(--accent-blue);">Valider</button>
+                <div class="item-selector">
+                    <label for="password-input">Mot de passe</label>
+                    <input type="text" id="password-input" v-model="password" placeholder="••••">
+                </div>
+                <button @click="validateLogin" class="action-button" :style="{'background-color': 'var(--accent-blue)'}" :disabled="loadingValidation">
+                    {{ loadingValidation ? 'Validation...' : 'Valider' }}
+                </button>
             </fieldset>
         </div>
-        
-        <div id="dette-box" style="display: none;">Veuillez choisir un membre et entrer le mot de passe.</div>
 
-        <fieldset id="conso-fieldset">
+        <div id="dette-box" :class="{'dette-box-correct': validationMessage.isCorrect, 'dette-box-incorrect': !validationMessage.isCorrect}" v-if="validationMessage.text">
+            {{ validationMessage.text }}
+        </div>
+
+        <fieldset id="conso-fieldset" v-if="isConnected">
             <legend>Ajouter une consommation</legend>
             <div class="conso-item">
                 <img src="canettes.png" alt="Canettes & Sucreries" class="conso-item-image">
                 <label for="canettes">Canettes & Sucreries (0.8€)</label>
-                <input type="number" id="canettes" value="0" min="0">
+                <input type="number" id="canettes" v-model.number="conso.canettes" min="0">
             </div>
             <div class="conso-item">
                 <img src="bcaa.png" alt="Bcaa" class="conso-item-image">
                 <label for="bcaa">Bcaa (1.5€)</label>
-                <input type="number" id="bcaa" value="0" min="0">
+                <input type="number" id="bcaa" v-model.number="conso.bcaa" min="0">
             </div>
             <div class="conso-item">
                 <img src="cookie.png" alt="Cookie Prozis" class="conso-item-image">
                 <label for="cookie">Cookie Prozis (1.8€)</label>
-                <input type="number" id="cookie" value="0" min="0">
+                <input type="number" id="cookie" v-model.number="conso.cookie" min="0">
             </div>
             <div class="conso-item">
                 <img src="boules.png" alt="Boules Prozis" class="conso-item-image">
                 <label for="boules">Boules Prozis (1.5€)</label>
-                <input type="number" id="boules" value="0" min="0">
+                <input type="number" id="boules" v-model.number="conso.boules" min="0">
             </div>
             <div class="conso-item">
                 <img src="autres.png" alt="Autres" class="conso-item-image">
                 <label for="autres">Autres (0.5€)</label>
-                <input type="number" id="autres" value="0" min="0">
+                <input type="number" id="autres" v-model.number="conso.autres" min="0">
             </div>
-            <button id="submit-conso-btn" class="action-button" style="background-color: var(--accent-blue);">Valider la conso</button>
-            <button id="close-conso-btn" class="action-button" style="background-color: var(--text-secondary);">Fermer</button>
+            <button @click="submitConso" class="action-button" :style="{'background-color': 'var(--accent-blue)'}" :disabled="loadingSubmit">
+                {{ loadingSubmit ? 'Envoi...' : 'Valider la conso' }}
+            </button>
+            <button @click="resetForm" class="action-button" :style="{'background-color': 'var(--text-secondary)'}">Fermer</button>
         </fieldset>
-        <div id="prozis-panel" class="info-panel">
+
+        <fieldset id="password-fieldset" v-if="isConnected">
+            <legend>Modifier le mot de passe</legend>
+            <div class="item-selector">
+                <label for="old-password-input">Ancien mot de passe</label>
+                <input type="text" id="old-password-input" v-model="oldPassword" placeholder="Ancien mot de passe">
+            </div>
+            <div class="item-selector">
+                <label for="new-password-input">Nouveau mot de passe</label>
+                <input type="text" id="new-password-input" v-model="newPassword" placeholder="Nouveau mot de passe">
+            </div>
+            <button @click="changeUserPassword" class="action-button" :style="{'background-color': 'var(--accent-blue)'}" :disabled="loadingPasswordChange">
+                {{ loadingPasswordChange ? 'Mise à jour...' : 'Modifier le mot de passe' }}
+            </button>
+        </fieldset>
+        
+        <div id="prozis-panel" class="info-panel" v-if="isConnected">
             <a href="https://www.prozis.com" target="_blank" class="action-button prozis">Site Prozis</a>
-            <button id="show-info-btn" class="action-button elite">Informations ELITE</button>
-            <div id="info-elite-content" class="info-content">
+            <button @click="toggleEliteInfo" class="action-button" :class="eliteButtonClass">{{ eliteButtonText }}</button>
+            <div id="info-elite-content" v-if="showEliteInfo">
                 <h3>Informations ELITE Partner</h3>
                 <p><strong>ID :</strong> nicolas.maheux45@gmail.com</p>
                 <p><strong>MDP :</strong> PSIGGILETTE06</p>
@@ -319,326 +356,233 @@
                 <p>⚠️ IMPORTANT : N'enregistrez pas vos cartes bleues sur le compte popote, toute CB oubliée sera systématiquement supprimée</p>
             </div>
         </div>
-        <div id="dette-box">Veuillez choisir un membre et entrer le mot de passe.</div>
     </div>
+
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script>
-        const toggleButton = document.getElementById('toggle-icon');
+        const { createApp, ref, computed } = Vue;
 
-        function setDarkMode(isDark) {
-            if (isDark) {
-                document.body.classList.remove('light-mode');
-                document.body.classList.add('dark-mode');
-                toggleButton.textContent = '🌙';
-            } else {
-                document.body.classList.remove('dark-mode');
-                document.body.classList.add('light-mode');
-                toggleButton.textContent = '☀️';
-            }
-        }
-
-        function toggleDarkMode() {
-            const isDark = document.body.classList.contains('dark-mode');
-            const newMode = !isDark;
-            localStorage.setItem('darkMode', newMode);
-            setDarkMode(newMode);
-        }
-
-        document.addEventListener('DOMContentLoaded', () => {
-            const storedPreference = localStorage.getItem('darkMode');
-            if (storedPreference !== null) {
-                setDarkMode(storedPreference === 'true');
-            } else {
-                const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-                setDarkMode(prefersDark);
-            }
-
-            const memberPasswords = {
-                "POILPRE": "0621520088",
-                "LANEZ": "0646383656",
-                "GUILLAS": "0603730965",
-                "ROUILLE": "0661683695",
-                "PRINCE": "0616312867",
-                "GOURDOU": "0632921504",
-                "MAHEUX": "0629835682",
-                "ROTONDI": "08031993",
-                "VERGNAUD": "0643698062",
-                "BESSON": "0616711305",
-                "CHAREIX": "0643406864",
-                "LAFAY": "0618682121",
-                "GIRAUD": "0651233802",
-                "MARTINS": "BENOU"
-            };
-            const memberSelect = document.getElementById('member-select');
-            const passwordInput = document.getElementById('password-input');
-            const validateBtn = document.getElementById('validate-btn');
-            const consoFieldset = document.getElementById('conso-fieldset');
-            const submitConsoBtn = document.getElementById('submit-conso-btn');
-            const detteBox = document.getElementById('dette-box');
-            const closeConsoBtn = document.getElementById('close-conso-btn');
-            const loginFieldsets = document.querySelector('.login-fieldsets');
-            const prozisPanel = document.getElementById('prozis-panel');
-            const showInfoBtn = document.getElementById('show-info-btn');
-            const infoEliteContent = document.getElementById('info-elite-content');
-            const dettesDisplayArea = document.getElementById('dettes-display-area');
-            const logDisplayArea = document.getElementById('log-display-area');
-
-            const APPS_SCRIPT_URL_DETTES = "https://script.google.com/macros/s/AKfycby0TPspM09tHYyL0_24-ko_cyScsA-uYlllwY_c14fheBRa4dzHB9iP6NnvIcZdHNvV/exec";
-            const APPS_SCRIPT_URL_LOGS = "https://script.google.com/macros/s/AKfycbz7DIxyigGEyQH7Ddh_x2bOi6RCct02zRi7VKBR__LvWzWQLTuz-IC0roeEm_CNHakWCg/exec";
-            const APPS_SCRIPT_URL_CONSO = "https://script.google.com/macros/s/AKfycbyy4eMw-0-UdxoKqzBAvZazerLXQh16rkS8GOw4D-9cwWGLpulAQIcbd5sBOZWABsaNLg/exec";
-            
-            const dettesTable = document.getElementById('dettes-table');
-            const logTable = document.getElementById('log-table');
-            const toggleDettesBtn = document.getElementById('toggle-dettes-btn');
-            const toggleLogBtn = document.getElementById('toggle-log-btn');
-
-            let allDettesData = [];
-
-            async function fetchAllDettes() {
-                try {
-                    const response = await fetch(APPS_SCRIPT_URL_DETTES);
-                    allDettesData = await response.json();
-                    loadMembersInDropdown();
-                } catch (error) {
-                    console.error("Erreur lors du chargement des données des dettes :", error);
-                    detteBox.textContent = "Erreur de chargement des données des dettes.";
-                    detteBox.classList.add('incorrect');
-                    detteBox.style.display = 'block';
-                }
-            }
-            
-            async function loadLogsTable() {
-                try {
-                    const response = await fetch(APPS_SCRIPT_URL_LOGS);
-                    const data = await response.json();
-
-                    const tbody = logTable.querySelector('tbody');
-                    tbody.innerHTML = '';
-                    
-                    data.forEach(item => {
-                        const row = document.createElement('tr');
-                        const dateCell = document.createElement('td');
-                        const membreCell = document.createElement('td');
-                        const canetteCell = document.createElement('td');
-                        const bcaaCell = document.createElement('td');
-                        const cookieCell = document.createElement('td');
-                        const boulesCell = document.createElement('td');
-                        const autresCell = document.createElement('td');
-                        
-                        dateCell.textContent = item.Horodatage;
-                        membreCell.textContent = item.Membre;
-                        canetteCell.textContent = item.Cannette;
-                        bcaaCell.textContent = item.BCAA;
-                        cookieCell.textContent = item.COOKIE;
-                        boulesCell.textContent = item.BOULES;
-                        autresCell.textContent = item.AUTRES;
-
-                        dateCell.setAttribute('data-label', 'Horodatage');
-                        membreCell.setAttribute('data-label', 'Membre');
-                        canetteCell.setAttribute('data-label', 'Cannette');
-                        bcaaCell.setAttribute('data-label', 'BCAA');
-                        cookieCell.setAttribute('data-label', 'COOKIE');
-                        boulesCell.setAttribute('data-label', 'BOULES');
-                        autresCell.setAttribute('data-label', 'AUTRES');
-                        
-                        row.appendChild(dateCell);
-                        row.appendChild(membreCell);
-                        row.appendChild(canetteCell);
-                        row.appendChild(bcaaCell);
-                        row.appendChild(cookieCell);
-                        row.appendChild(boulesCell);
-                        row.appendChild(autresCell);
-                        tbody.appendChild(row);
-                    });
-                } catch (error) {
-                    const tbody = logTable.querySelector('tbody');
-                    tbody.innerHTML = '<tr><td colspan="7">Erreur de chargement des données.</td></tr>';
-                    console.error("Erreur lors de la récupération des données de logs :", error);
-                }
-            }
-
-            function loadMembersInDropdown() {
-                memberSelect.innerHTML = '';
-                
-                const defaultOption = document.createElement('option');
-                defaultOption.value = "";
-                defaultOption.textContent = "Sélectionner un membre";
-                memberSelect.appendChild(defaultOption);
-
-                allDettesData.forEach(item => {
-                    if (item.MEMBRE && item.MEMBRE !== "Total dettes :") {
-                        const option = document.createElement('option');
-                        option.value = item.MEMBRE;
-                        option.textContent = item.MEMBRE;
-                        memberSelect.appendChild(option);
-                    }
-                });
-            }
-
-            function displaySelectedMemberDette(memberName) {
-                const memberData = allDettesData.find(item => item.MEMBRE && item.MEMBRE.toLowerCase() === memberName.toLowerCase());
-                const tbody = document.getElementById('dettes-tbody');
-                tbody.innerHTML = '';
-
-                if (memberData) {
-                    const row = document.createElement('tr');
-                    const membreCell = document.createElement('td');
-                    const detteCell = document.createElement('td');
-                    
-                    membreCell.textContent = memberData.MEMBRE;
-                    let dette = memberData.DETTES;
-                    if (dette === "") {
-                        dette = 0;
-                    }
-                    detteCell.textContent = parseFloat(dette).toFixed(2) + ' €';
-                    
-                    membreCell.setAttribute('data-label', 'Membre');
-                    detteCell.setAttribute('data-label', 'Dette');
-                    
-                    row.appendChild(membreCell);
-                    row.appendChild(detteCell);
-                    tbody.appendChild(row);
-
-                    dettesTable.style.display = 'table';
-                } else {
-                    dettesTable.style.display = 'none';
-                }
-            }
-
-            fetchAllDettes();
-
-            memberSelect.addEventListener('change', () => {
-                if (memberSelect.value) {
-                    displaySelectedMemberDette(memberSelect.value);
-                } else {
-                    dettesTable.style.display = 'none';
-                }
-            });
-
-            const resetForm = () => {
-                consoFieldset.style.display = 'none';
-                prozisPanel.style.display = 'none';
-                loginFieldsets.style.display = 'block';
-                validateBtn.disabled = false;
-                passwordInput.disabled = false;
-                passwordInput.value = '';
-                memberSelect.disabled = false;
-                detteBox.textContent = "Veuillez choisir un membre et entrer le mot de passe.";
-                detteBox.classList.remove('correct', 'incorrect');
-                detteBox.style.display = 'none';
-                dettesTable.style.display = 'none';
-                logDisplayArea.style.display = 'none';
-                ['canettes', 'bcaa', 'cookie', 'boules', 'autres'].forEach(id => document.getElementById(id).value = '0');
-                if (infoEliteContent.style.display === 'block') {
-                    infoEliteContent.style.display = 'none';
-                    showInfoBtn.textContent = 'Informations ELITE';
-                    showInfoBtn.classList.remove('prozis');
-                    showInfoBtn.classList.add('elite');
-                }
-            };
-
-            validateBtn.addEventListener('click', () => {
-                const selectedMember = memberSelect.value;
-                const enteredPassword = passwordInput.value;
-                
-                if (memberPasswords[selectedMember] && memberPasswords[selectedMember].toLowerCase() === enteredPassword.toLowerCase()) {
-                    detteBox.textContent = `Accès autorisé pour ${selectedMember}.`;
-                    detteBox.classList.add('correct');
-                    detteBox.style.display = 'block';
-                    loginFieldsets.style.display = 'none';
-                    consoFieldset.style.display = 'block';
-                    prozisPanel.style.display = 'block';
-                    validateBtn.disabled = true;
-                    passwordInput.disabled = true;
-                    memberSelect.disabled = true;
-                    
-                    displaySelectedMemberDette(selectedMember);
-
-                } else {
-                    detteBox.textContent = "Mot de passe incorrect";
-                    detteBox.classList.add('incorrect');
-                    detteBox.style.display = 'block';
-                }
-            });
-
-            submitConsoBtn.addEventListener('click', async () => {
-                const canettes = parseInt(document.getElementById('canettes').value) || 0;
-                const bcaa = parseInt(document.getElementById('bcaa').value) || 0;
-                const cookie = parseInt(document.getElementById('cookie').value) || 0;
-                const boules = parseInt(document.getElementById('boules').value) || 0;
-                const autres = parseInt(document.getElementById('autres').value) || 0;
-
-                if (canettes === 0 && bcaa === 0 && cookie === 0 && boules === 0 && autres === 0) {
-                    detteBox.textContent = "Erreur: Veuillez entrer au moins une consommation.";
-                    detteBox.classList.remove('correct');
-                    detteBox.classList.add('incorrect');
-                    detteBox.style.display = 'block';
-                    return;
-                }
-
-                detteBox.textContent = "Envoi en cours...";
-                detteBox.style.display = 'block';
-                const data = {
-                    membre: memberSelect.value,
-                    canettes: canettes,
-                    bcaa: bcaa,
-                    cookie: cookie,
-                    boules: boules,
-                    autres: autres,
+        createApp({
+            data() {
+                return {
+                    viewMode: 'dettes',
+                    isDarkMode: localStorage.getItem('darkMode') === 'true' || window.matchMedia('(prefers-color-scheme: dark)').matches,
+                    selectedMember: "",
+                    password: "",
+                    oldPassword: "",
+                    newPassword: "",
+                    isConnected: false,
+                    allDettes: [],
+                    allMembers: [],
+                    logs: [],
+                    loadingDettes: true,
+                    loadingLogs: false,
+                    loadingValidation: false,
+                    loadingSubmit: false,
+                    loadingPasswordChange: false,
+                    validationMessage: { text: "", isCorrect: false },
+                    showEliteInfo: false,
+                    conso: {
+                        canettes: 0,
+                        bcaa: 0,
+                        cookie: 0,
+                        boules: 0,
+                        autres: 0,
+                    },
+                    APPS_SCRIPT_URL: "https://script.google.com/macros/s/AKfycbwSPpz4pEK0hxKKOI0HWY2arZwh7bAZeM83co-ahjZZd3EsiYaVS64pmUvXY3htmngd/exec",
                 };
-                try {
-                    const response = await fetch(APPS_SCRIPT_URL_CONSO, {
-                        method: 'POST',
-                        redirect: 'follow',
-                        body: JSON.stringify(data),
-                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                    });
-                    const result = await response.json();
-                    if (result.result === 'success') {
-                        detteBox.textContent = `Consommation pour ${memberSelect.value} ajoutée !`;
-                        detteBox.classList.add('correct');
-                        detteBox.classList.remove('incorrect');
-                        ['canettes', 'bcaa', 'cookie', 'boules', 'autres'].forEach(id => document.getElementById(id).value = '0');
-                        
-                        fetchAllDettes();
-                        loadLogsTable();
-                    } else { throw new Error(result.message); }
-                } catch (error) {
-                    console.error('Erreur:', error);
-                    detteBox.textContent = "Erreur : impossible d'ajouter la consommation.";
-                    detteBox.classList.remove('correct');
-                    detteBox.classList.add('incorrect');
+            },
+            created() {
+                this.fetchDettes();
+                this.fetchLogs();
+                this.fetchMembers();
+                this.setInitialDarkMode();
+            },
+            computed: {
+                toggleIcon() {
+                    return this.isDarkMode ? '🌙' : '☀️';
+                },
+                eliteButtonClass() {
+                    return this.showEliteInfo ? 'prozis' : 'elite';
+                },
+                eliteButtonText() {
+                    return this.showEliteInfo ? 'Fermer les informations' : 'Informations ELITE';
+                },
+                connectedMemberDette() {
+                    if (this.allDettes.length > 0 && this.selectedMember) {
+                        return this.allDettes.find(dette => dette.membre.trim() === this.selectedMember.trim());
+                    }
+                    return null;
                 }
-            });
+            },
+            watch: {
+                viewMode(newVal) {
+                    if (newVal === 'log') {
+                        this.fetchLogs();
+                    } else if (newVal === 'dettes') {
+                        this.fetchDettes();
+                    }
+                },
+                selectedMember(newVal) {
+                    if (newVal) {
+                        this.fetchDettes();
+                    }
+                }
+            },
+            methods: {
+                async fetchDettes() {
+                    this.loadingDettes = true;
+                    try {
+                        const response = await fetch(`${this.APPS_SCRIPT_URL}?action=getDettes`);
+                        const data = await response.json();
+                        this.allDettes = data.map(item => ({
+                            membre: item.membre,
+                            dette: item.dette
+                        }));
+                    } catch (error) {
+                        console.error("Erreur lors du chargement des dettes:", error);
+                        this.validationMessage = { text: "Erreur de chargement des données.", isCorrect: false };
+                    } finally {
+                        this.loadingDettes = false;
+                    }
+                },
+                async fetchLogs() {
+                    this.loadingLogs = true;
+                    try {
+                        const response = await fetch(`${this.APPS_SCRIPT_URL}?action=getLogs`);
+                        this.logs = await response.json();
+                    } catch (error) {
+                        console.error("Erreur lors du chargement des logs:", error);
+                        this.logs = [];
+                    } finally {
+                        this.loadingLogs = false;
+                    }
+                },
+                async fetchMembers() {
+                    try {
+                        const response = await fetch(`${this.APPS_SCRIPT_URL}?action=getMembers`);
+                        const data = await response.json();
+                        this.allMembers = data.map(member => member.trim());
+                    } catch (error) {
+                        console.error("Erreur lors du chargement des membres:", error);
+                    }
+                },
+                setInitialDarkMode() {
+                    if (this.isDarkMode) {
+                        document.body.classList.add('dark-mode');
+                    } else {
+                        document.body.classList.add('light-mode');
+                    }
+                },
+                toggleDarkMode() {
+                    this.isDarkMode = !this.isDarkMode;
+                    localStorage.setItem('darkMode', this.isDarkMode);
+                    document.body.classList.toggle('dark-mode', this.isDarkMode);
+                    document.body.classList.toggle('light-mode', !this.isDarkMode);
+                },
+                async validateLogin() {
+                    this.loadingValidation = true;
+                    this.validationMessage = { text: "Vérification du mot de passe...", isCorrect: true };
+                    try {
+                        const url = `${this.APPS_SCRIPT_URL}?action=authenticate&member=${this.selectedMember}&password=${this.password}`;
+                        const response = await fetch(url);
+                        const result = await response.json();
 
-            closeConsoBtn.addEventListener('click', resetForm);
-            showInfoBtn.addEventListener('click', () => {
-                const isVisible = infoEliteContent.style.display === 'block';
-                infoEliteContent.style.display = isVisible ? 'none' : 'block';
-                showInfoBtn.textContent = isVisible ? 'Informations ELITE' : 'Fermer les informations';
-                showInfoBtn.style.backgroundColor = isVisible ? 'var(--text-primary)' : 'var(--danger-red)';
-            });
-            
-            toggleDettesBtn.addEventListener('click', () => {
-                dettesDisplayArea.style.display = 'block';
-                logDisplayArea.style.display = 'none';
-                toggleDettesBtn.classList.add('active-btn');
-                toggleDettesBtn.classList.remove('inactive-btn');
-                toggleLogBtn.classList.add('inactive-btn');
-                toggleLogBtn.classList.remove('active-btn');
-                displaySelectedMemberDette(memberSelect.value);
-            });
-            
-            toggleLogBtn.addEventListener('click', () => {
-                dettesDisplayArea.style.display = 'block';
-                dettesTable.style.display = 'none';
-                logDisplayArea.style.display = 'block';
-                toggleDettesBtn.classList.add('inactive-btn');
-                toggleDettesBtn.classList.remove('active-btn');
-                toggleLogBtn.classList.add('active-btn');
-                toggleLogBtn.classList.remove('inactive-btn');
-                loadLogsTable();
-            });
-        });
+                        if (result.result === 'success') {
+                            this.isConnected = true;
+                            this.validationMessage = { text: `Accès autorisé pour ${this.selectedMember}.`, isCorrect: true };
+                        } else {
+                            throw new Error(result.message);
+                        }
+                    } catch (error) {
+                        console.error("Erreur d'authentification:", error);
+                        this.validationMessage = { text: "Mot de passe incorrect ou erreur réseau.", isCorrect: false };
+                    } finally {
+                        this.loadingValidation = false;
+                    }
+                },
+                async submitConso() {
+                    const totalConsos = Object.values(this.conso).reduce((sum, val) => sum + val, 0);
+                    if (totalConsos === 0) {
+                        this.validationMessage = { text: "Erreur: Veuillez entrer au moins une consommation.", isCorrect: false };
+                        return;
+                    }
+
+                    this.loadingSubmit = true;
+                    this.validationMessage = { text: "Envoi en cours...", isCorrect: true };
+                    const data = {
+                        membre: this.selectedMember,
+                        ...this.conso,
+                    };
+                    try {
+                        const response = await fetch(this.APPS_SCRIPT_URL, {
+                            method: 'POST',
+                            redirect: 'follow',
+                            body: JSON.stringify(data),
+                            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                        });
+                        const result = await response.json();
+                        if (result.result === 'success') {
+                            this.validationMessage = { text: `Consommation pour ${this.selectedMember} ajoutée !`, isCorrect: true };
+                            this.resetConsoInputs();
+                            this.fetchDettes();
+                            this.fetchLogs();
+                        } else {
+                            throw new Error(result.message);
+                        }
+                    } catch (error) {
+                        console.error('Erreur:', error);
+                        this.validationMessage = { text: "Erreur : impossible d'ajouter la consommation.", isCorrect: false };
+                    } finally {
+                        this.loadingSubmit = false;
+                    }
+                },
+                async changeUserPassword() {
+                    if (!this.oldPassword || !this.newPassword) {
+                        this.validationMessage = { text: "Veuillez remplir les deux champs de mot de passe.", isCorrect: false };
+                        return;
+                    }
+                    if (this.oldPassword === this.newPassword) {
+                        this.validationMessage = { text: "Le nouveau mot de passe doit être différent de l'ancien.", isCorrect: false };
+                        return;
+                    }
+
+                    this.loadingPasswordChange = true;
+                    this.validationMessage = { text: "Mise à jour du mot de passe...", isCorrect: true };
+                    try {
+                        const url = `${this.APPS_SCRIPT_URL}?action=changePassword&member=${this.selectedMember}&oldPassword=${this.oldPassword}&newPassword=${this.newPassword}`;
+                        const response = await fetch(url);
+                        const result = await response.json();
+
+                        if (result.result === 'success') {
+                            this.validationMessage = { text: result.message, isCorrect: true };
+                            this.oldPassword = "";
+                            this.newPassword = "";
+                        } else {
+                            throw new Error(result.message);
+                        }
+                    } catch (error) {
+                        console.error("Erreur de modification du mot de passe:", error);
+                        this.validationMessage = { text: "Erreur : " + error.message, isCorrect: false };
+                    } finally {
+                        this.loadingPasswordChange = false;
+                    }
+                },
+                resetForm() {
+                    this.selectedMember = "";
+                    this.password = "";
+                    this.isConnected = false;
+                    this.validationMessage = { text: "", isCorrect: false };
+                    this.resetConsoInputs();
+                },
+                resetConsoInputs() {
+                    this.conso = { canettes: 0, bcaa: 0, cookie: 0, boules: 0, autres: 0 };
+                },
+                toggleEliteInfo() {
+                    this.showEliteInfo = !this.showEliteInfo;
+                },
+            },
+        }).mount('#app');
     </script>
 </body>
 </html>
