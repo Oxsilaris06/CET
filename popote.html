@@ -226,6 +226,64 @@
         .hidden { display: none; }
         .tab-content { display: none; }
         .tab-content.active { display: block; }
+
+        .checkmark-container {
+            display: inline-block;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            border: 2px solid var(--success-green);
+            position: relative;
+            transform: scale(0);
+            transition: transform 0.5s cubic-bezier(0.68, -0.55, 0.27, 1.55);
+            margin-right: 10px;
+        }
+        .checkmark-container.show {
+            transform: scale(1);
+        }
+        .checkmark-container .checkmark {
+            width: 10px;
+            height: 20px;
+            border: solid var(--success-green);
+            border-width: 0 3px 3px 0;
+            transform: rotate(45deg);
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            margin-left: -5px;
+            margin-top: -10px;
+            opacity: 0;
+            transition: opacity 0.5s ease 0.3s;
+        }
+        .checkmark-container.show .checkmark {
+            opacity: 1;
+        }
+        #dette-box {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2em;
+            padding: 10px;
+            border-radius: 6px;
+            margin-top: 15px;
+            transition: background-color 0.5s, color 0.5s;
+        }
+        .dette-box-correct {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        body.dark-mode .dette-box-correct {
+            background-color: #21432f;
+            color: #b3c5bb;
+        }
+        .dette-box-incorrect {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        body.dark-mode .dette-box-incorrect {
+            background-color: #4b2326;
+            color: #d1b1b3;
+        }
     </style>
 </head>
 <body>
@@ -316,7 +374,10 @@
         </div>
 
         <div id="dette-box" :class="{'dette-box-correct': validationMessage.isCorrect, 'dette-box-incorrect': !validationMessage.isCorrect}" v-if="validationMessage.text && !passwordChangeMessage.text">
-            {{ validationMessage.text }}
+            <div class="checkmark-container" :class="{'show': showCheckmark}">
+                <div class="checkmark"></div>
+            </div>
+            <span>{{ validationMessage.text }}</span>
         </div>
 
         <fieldset id="conso-fieldset" v-if="isConnected">
@@ -387,6 +448,7 @@
     </div>
 
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
     <script>
         const { createApp, ref, computed } = Vue;
 
@@ -419,6 +481,7 @@
                         autres: 0,
                     },
                     APPS_SCRIPT_URL: "https://script.google.com/macros/s/AKfycbwSPpz4pEK0hxKKOI0HWY2arZwh7bAZeM83co-ahjZZd3EsiYaVS64pmUvXY3htmngd/exec",
+                    showCheckmark: false,
                 };
             },
             created() {
@@ -439,7 +502,11 @@
                 },
                 connectedMemberDette() {
                     if (this.allDettes.length > 0 && this.selectedMember) {
-                        return this.allDettes.find(dette => dette.membre.trim() === this.selectedMember.trim());
+                        const dette = this.allDettes.find(dette => dette.membre.trim() === this.selectedMember.trim());
+                        if (dette && parseFloat(dette.dette) <= 0) {
+                            this.triggerConfetti();
+                        }
+                        return dette;
                     }
                     return null;
                 },
@@ -539,6 +606,7 @@
                         if (result.result === 'success') {
                             this.isConnected = true;
                             this.validationMessage = { text: `Accès autorisé pour ${this.selectedMember}.`, isCorrect: true };
+                            await this.fetchDettes();
                         } else {
                             throw new Error(result.message);
                         }
@@ -553,6 +621,7 @@
                     const totalConsos = Object.values(this.conso).reduce((sum, val) => sum + val, 0);
                     if (totalConsos === 0) {
                         this.validationMessage = { text: "Erreur: Veuillez entrer au moins une consommation.", isCorrect: false };
+                        this.showCheckmark = false;
                         return;
                     }
 
@@ -572,8 +641,12 @@
                         const result = await response.json();
                         if (result.result === 'success') {
                             this.validationMessage = { text: `Consommation pour ${this.selectedMember} ajoutée !`, isCorrect: true };
+                            this.showCheckmark = true;
+                            setTimeout(() => {
+                                this.showCheckmark = false;
+                            }, 3000);
                             this.resetConsoInputs();
-                            this.fetchDettes();
+                            await this.fetchDettes();
                             this.fetchLogs();
                         } else {
                             throw new Error(result.message);
@@ -581,6 +654,7 @@
                     } catch (error) {
                         console.error('Erreur:', error);
                         this.validationMessage = { text: "Erreur : impossible d'ajouter la consommation.", isCorrect: false };
+                        this.showCheckmark = false;
                     } finally {
                         this.loadingSubmit = false;
                     }
@@ -630,6 +704,13 @@
                 toggleEliteInfo() {
                     this.showEliteInfo = !this.showEliteInfo;
                 },
+                triggerConfetti() {
+                    confetti({
+                        particleCount: 100,
+                        spread: 70,
+                        origin: { y: 0.6 }
+                    });
+                }
             },
         }).mount('#app');
     </script>
