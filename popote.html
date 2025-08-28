@@ -22,6 +22,8 @@
             --success-green: #28a745;
             --button-hover-transition: 0.3s ease-in-out;
             --header-color: #FFD700; /* Or */
+            --high-debt-bg-light: #F8D7DA;
+            --high-debt-text-light: #721C24;
         }
         @media (prefers-color-scheme: dark) {
             :root {
@@ -35,6 +37,8 @@
                 --accent-hover: #4a7aa5;
                 --revolut-btn-color: rgba(0, 0, 0, 0.25);
                 --danger-red-dark: #FF6666; /* Un rouge plus doux pour le mode sombre */
+                --high-debt-bg-dark: #4b2326;
+                --high-debt-text-dark: #d1b1b3;
             }
         }
         body.light-mode {
@@ -112,6 +116,7 @@
             color: var(--text-primary); 
             font-weight: 500;
             font-family: 'Saira Stencil One', sans-serif;
+            cursor: pointer;
         }
         .item-selector { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 15px; }
         .conso-item { display: flex; justify-content: flex-start; align-items: center; margin-bottom: 10px; gap: 15px; }
@@ -162,7 +167,7 @@
             transition: background-color var(--button-hover-transition);
         }
         .action-button:hover { opacity: 1; }
-        .top-buttons-container { display: flex; gap: 10px; margin-bottom: 25px; justify-content: flex-start; }
+        .top-buttons-container { display: none; }
         .top-buttons-container button { 
             flex-grow: 1; 
             padding: 10px 15px; 
@@ -198,12 +203,8 @@
         body.dark-mode .action-button.revolut:hover {
             background-color: #333333;
         }
-        @keyframes pulse-low { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
-        @keyframes pulse-medium { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
-        @keyframes pulse-high { 0% { transform: scale(1); } 50% { transform: scale(1.15); } 100% { transform: scale(1); } }
-        .pulse-low { animation: pulse-low 1.5s infinite alternate; display: inline-block; }
-        .pulse-medium { animation: pulse-medium 1s infinite alternate; display: inline-block; }
-        .pulse-high { animation: pulse-high 0.8s infinite alternate; display: inline-block; }
+        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
+        .pulse-high { animation: pulse 0.8s infinite alternate; }
         .hidden { display: none; }
         .tab-content { display: none; }
         .tab-content.active { display: block; animation: fadeIn 0.3s ease-in-out; }
@@ -252,6 +253,50 @@
         body.light-mode .dette-value-color { color: var(--danger-red); }
         body.dark-mode .dette-value-color { color: var(--danger-red-dark); }
         .timestamp-log { white-space: pre; }
+        .collapsible-content {
+            display: none;
+            overflow: hidden;
+            transition: max-height 0.4s ease-in-out, opacity 0.4s ease-in-out;
+            max-height: 0;
+            opacity: 0;
+        }
+        .collapsible-content.active {
+            display: block;
+            max-height: 1000px; /* A large value to allow the transition */
+            opacity: 1;
+        }
+        .toggle-arrow {
+            font-size: 1.5em; 
+            transform: rotate(0deg); 
+            transition: transform 0.3s ease-in-out;
+            margin-left: 10px;
+            float: right;
+        }
+        .toggle-arrow.rotated {
+            transform: rotate(180deg);
+        }
+        .pay-debt-button-pulsing {
+            animation: pulse 1.5s infinite alternate;
+        }
+        .conso-item input[disabled] {
+            cursor: not-allowed;
+            background-color: var(--bg-container);
+        }
+        .high-debt-message {
+            text-align: center;
+            margin-bottom: 15px;
+            font-weight: bold;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        body.light-mode .high-debt-message {
+            background-color: var(--high-debt-bg-light);
+            color: var(--high-debt-text-light);
+        }
+        body.dark-mode .high-debt-message {
+            background-color: var(--high-debt-bg-dark);
+            color: var(--high-debt-text-dark);
+        }
     </style>
 </head>
 <body>
@@ -259,66 +304,32 @@
         <div class="dark-mode-toggle" @click="toggleDarkMode">
             <span v-text="toggleIcon"></span>
         </div>
-        <h1>☕Popote☕</h1>
-        <div class="top-buttons-container">
-            <button @click="viewMode = 'dettes'" :class="{'active-btn': viewMode === 'dettes', 'inactive-btn': viewMode !== 'dettes'}">Dettes</button>
-            <button @click="viewMode = 'log'" :class="{'active-btn': viewMode === 'log', 'inactive-btn': viewMode !== 'log'}">Log</button>
-        </div>
-        <a href="https://revolut.me/nicomhx" target="_blank" class="action-button revolut" style="text-decoration: none; text-align: center; margin-bottom: 5px;"> Payer mes dettes 💸 </a>
+        <h1>Popote</h1>
+        <a href="https://revolut.me/nicomhx" target="_blank" class="action-button revolut" :class="{'pay-debt-button-pulsing': isHighDebt}" style="text-decoration: none; text-align: center; margin-bottom: 5px;"> Payer mes dettes 💸 </a>
         <div style="text-align: center; margin-bottom: 20px; color: var(--text-secondary); font-size: 1em;">
             <p>Lors du paiement merci d'ajouter votre trigramme et la date.</p>
         </div>
-        <div class="tab-content" :class="{ 'active': viewMode === 'dettes' }">
-            <div class="table-container">
-                <table id="dettes-table">
-                    <thead>
-                        <tr><th>Membre</th><th>Dette</th></tr>
-                    </thead>
-                    <tbody id="dettes-tbody">
-                        <tr v-if="connectedMemberDette">
-                            <td data-label="Membre">{{ connectedMemberDette.membre }}</td>
-                            <td data-label="Dette">
-                                <span :class="dettePulseClass" :style="{ color: connectedMemberDette.dette > 0 ? (isDarkMode ? 'var(--danger-red-dark)' : 'var(--danger-red)') : 'var(--success-green)' }">
-                                    {{ parseFloat(connectedMemberDette.dette).toFixed(2) }} €
-                                </span>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-        <div class="tab-content" :class="{ 'active': viewMode === 'log' }">
-            <div class="table-container">
-                <table id="log-table">
-                    <thead>
-                        <tr><th>Horodatage</th><th>Membre</th><th>Cannette</th><th>BCAA</th><th>COOKIE</th><th>BOULES</th><th>AUTRES</th></tr>
-                    </thead>
-                    <tbody id="log-tbody">
-                        <tr v-if="loadingLogs">
-                            <td colspan="7">Chargement des logs...</td>
-                        </tr>
-                        <tr v-else-if="logs.length === 0">
-                            <td colspan="7">Aucun log trouvé.</td>
-                        </tr>
-                        <tr v-for="log in logs" :key="log.Horodatage + log.Membre">
-                            <td data-label="Horodatage" class="timestamp-log">
-                                {{ formatDate(log.Horodatage) }}<br>
-                                {{ formatTime(log.Horodatage) }}
-                            </td>
-                            <td data-label="Membre">{{ log.Membre }}</td>
-                            <td data-label="Cannette">{{ log.Cannette }}</td>
-                            <td data-label="BCAA">{{ log.BCAA }}</td>
-                            <td data-label="COOKIE">{{ log.COOKIE }}</td>
-                            <td data-label="BOULES">{{ log.BOULES }}</td>
-                            <td data-label="AUTRES">{{ log.AUTRES }}</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
+        
         <div class="login-fieldsets" v-if="!isConnected">
             <fieldset>
                 <legend>Accès</legend>
+                <div class="table-container">
+                    <table id="dettes-table" v-if="allDettes.length > 0">
+                        <thead>
+                            <tr><th>Membre</th><th>Dette</th></tr>
+                        </thead>
+                        <tbody id="dettes-tbody">
+                            <tr v-if="connectedMemberDette">
+                                <td data-label="Membre">{{ connectedMemberDette.membre }}</td>
+                                <td data-label="Dette">
+                                    <span :class="dettePulseClass" :style="{ color: connectedMemberDette.dette > 0 ? (isDarkMode ? 'var(--danger-red-dark)' : 'var(--danger-red)') : 'var(--success-green)' }">
+                                        {{ parseFloat(connectedMemberDette.dette).toFixed(2) }} €
+                                    </span>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
                 <div class="item-selector">
                     <label for="member-select">Nom du membre</label>
                     <select id="member-select" v-model="selectedMember">
@@ -337,6 +348,7 @@
                 </button>
             </fieldset>
         </div>
+        
         <div id="dette-box" :class="{'dette-box-correct': validationMessage.isCorrect, 'dette-box-incorrect': !validationMessage.isCorrect}" v-if="validationMessage.text && !passwordChangeMessage.text">
             <div class="checkmark-container" :class="{'show': showCheckmark}">
                 <div class="checkmark"></div>
@@ -345,35 +357,38 @@
         </div>
         <fieldset id="conso-fieldset" v-if="isConnected">
             <legend>Ajouter une consommation</legend>
+            <div v-if="isHighDebt" class="high-debt-message">
+                Votre dette est trop élevée, veuillez la régler pour continuer à consommer.
+            </div>
             <div class="conso-item">
                 <img src="canettes.png" alt="Canettes & Sucreries" class="conso-item-image">
                 <label for="canettes">Canettes & Sucreries (0.6€)</label>
-                <input type="number" id="canettes" v-model.number="conso.canettes" min="0">
+                <input type="number" id="canettes" v-model.number="conso.canettes" min="0" :disabled="isHighDebt">
             </div>
             <div class="conso-item">
                 <img src="bcaa.png" alt="Bcaa" class="conso-item-image">
                 <label for="bcaa">Bcaa (1.5€)</label>
-                <input type="number" id="bcaa" v-model.number="conso.bcaa" min="0">
+                <input type="number" id="bcaa" v-model.number="conso.bcaa" min="0" :disabled="isHighDebt">
             </div>
             <div class="conso-item">
                 <img src="cookie.png" alt="Cookie Prozis" class="conso-item-image">
                 <label for="cookie">Cookie Prozis (1.8€)</label>
-                <input type="number" id="cookie" v-model.number="conso.cookie" min="0">
+                <input type="number" id="cookie" v-model.number="conso.cookie" min="0" :disabled="isHighDebt">
             </div>
             <div class="conso-item">
                 <img src="boules.png" alt="Boules Prozis" class="conso-item-image">
                 <label for="boules">Boules Prozis (1.5€)</label>
-                <input type="number" id="boules" v-model.number="conso.boules" min="0">
+                <input type="number" id="boules" v-model.number="conso.boules" min="0" :disabled="isHighDebt">
             </div>
             <div class="conso-item">
                 <img src="autres.png" alt="Autres" class="conso-item-image">
                 <label for="autres">Autres (0.4€)</label>
-                <input type="number" id="autres" v-model.number="conso.autres" min="0">
+                <input type="number" id="autres" v-model.number="conso.autres" min="0" :disabled="isHighDebt">
             </div>
             <div class="conso-total-wrapper" v-if="totalConso > 0">
                 <strong>Total à ajouter : {{ totalConso.toFixed(2) }}€</strong>
             </div>
-            <button @click="submitConso" class="action-button" :style="{'background-color': 'var(--accent-blue)'}" :disabled="loadingSubmit">
+            <button @click="submitConso" class="action-button" :style="{'background-color': 'var(--accent-blue)'}" :disabled="loadingSubmit || isHighDebt">
                     {{ loadingSubmit ? 'Envoi...' : 'Valider la conso' }}
                 </button>
             <button @click="resetForm" class="action-button" :style="{'background-color': 'var(--text-secondary)'}">Fermer</button>
@@ -406,6 +421,39 @@
                 <p>⚠️ IMPORTANT : N'enregistrez pas vos cartes bleues sur le compte popote, toute CB oubliée sera systématiquement supprimée</p>
             </div>
         </div>
+        
+        <fieldset>
+            <legend @click="toggleLogTable">Logs <span class="toggle-arrow" :class="{'rotated': isLogTableVisible}">&#9660;</span></legend>
+            <div id="log-table-container" class="collapsible-content" :class="{'active': isLogTableVisible}">
+                <div class="table-container">
+                    <table id="log-table">
+                        <thead>
+                            <tr><th>Horodatage</th><th>Membre</th><th>Cannette</th><th>BCAA</th><th>COOKIE</th><th>BOULES</th><th>AUTRES</th></tr>
+                        </thead>
+                        <tbody id="log-tbody">
+                            <tr v-if="loadingLogs">
+                                <td colspan="7">Chargement des logs...</td>
+                            </tr>
+                            <tr v-else-if="logs.length === 0">
+                                <td colspan="7">Aucun log trouvé.</td>
+                            </tr>
+                            <tr v-for="log in logs" :key="log.Horodatage + log.Membre">
+                                <td data-label="Horodatage" class="timestamp-log">
+                                    {{ formatDate(log.Horodatage) }}<br>
+                                    {{ formatTime(log.Horodatage) }}
+                                </td>
+                                <td data-label="Membre">{{ log.Membre }}</td>
+                                <td data-label="Cannette">{{ log.Cannette }}</td>
+                                <td data-label="BCAA">{{ log.BCAA }}</td>
+                                <td data-label="COOKIE">{{ log.COOKIE }}</td>
+                                <td data-label="BOULES">{{ log.BOULES }}</td>
+                                <td data-label="AUTRES">{{ log.AUTRES }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </fieldset>
     </div>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
@@ -414,7 +462,6 @@
         createApp({
             data() {
                 return {
-                    viewMode: 'dettes',
                     isDarkMode: localStorage.getItem('darkMode') === 'true' || window.matchMedia('(prefers-color-scheme: dark)').matches,
                     selectedMember: "",
                     password: "",
@@ -442,6 +489,7 @@
                     APPS_SCRIPT_URL: "https://script.google.com/macros/s/AKfycbwSPpz4pEK0hxKKOI0HWY2arZwh7bAZeM83co-ahjZZd3EsiYaVS64pmUvXY3htmngd/exec",
                     showCheckmark: false,
                     confettiTriggeredForMembers: [],
+                    isLogTableVisible: false,
                 };
             },
             created() {
@@ -468,6 +516,10 @@
                 totalConso() {
                     return (this.conso.canettes * 0.6) + (this.conso.bcaa * 1.5) + (this.conso.cookie * 1.8) + (this.conso.boules * 1.5) + (this.conso.autres * 0.4);
                 },
+                isHighDebt() {
+                    if (!this.connectedMemberDette) return false;
+                    return parseFloat(this.connectedMemberDette.dette) >= 20;
+                },
                 dettePulseClass() {
                     if (this.connectedMemberDette && this.connectedMemberDette.dette > 0) {
                         if (this.connectedMemberDette.dette >= 21) { return 'pulse-high'; }
@@ -478,10 +530,6 @@
                 }
             },
             watch: {
-                viewMode(newVal) {
-                    if (newVal === 'log') { this.fetchLogs(); }
-                    else if (newVal === 'dettes') { this.fetchDettes(); }
-                },
                 selectedMember(newVal) {
                     if (newVal) { this.fetchDettes(); }
                 }
@@ -646,6 +694,12 @@
                     const element = document.getElementById('dette-box');
                     if (element) {
                         element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                },
+                toggleLogTable() {
+                    this.isLogTableVisible = !this.isLogTableVisible;
+                    if (this.isLogTableVisible) {
+                        this.fetchLogs();
                     }
                 }
             },
