@@ -78,7 +78,7 @@
             font-weight: 400; 
         }
         .table-container { margin-bottom: 25px; border-radius: 6px; overflow: hidden; display: block; }
-        table { width: 100%; border-collapse: collapse; font-size: 1.1em; text-align: left; table-layout: fixed; border: 1px solid var(--border-color); }
+        table { width: 100%; border-collapse: collapse; font-size: 1.1em; text-align: left; border: 1px solid var(--border-color); }
         th, td { padding: 12px 15px; border-bottom: 1px solid var(--border-color); color: var(--text-primary); }
         th { background-color: var(--bg-interactive); font-weight: 500; text-transform: uppercase; }
         tr:last-child td { border-bottom: none; }
@@ -86,8 +86,17 @@
         @media (max-width: 600px) {
             .table-container table, .table-container thead, .table-container tbody, .table-container th, .table-container td, .table-container tr { display: block; }
             .table-container thead tr { position: absolute; top: -9999px; left: -9999px; }
-            .table-container tr { border: 1px solid var(--border-color); border-radius: 8px; margin-bottom: 15px; padding: 15px; background-color: var(--bg-container); display: grid; grid-template-columns: 1fr 1fr; gap: 5px 10px; align-items: center; text-align: center; }
-            .table-container td:before { content: attr(data-label); display: block; font-weight: 500; text-transform: uppercase; color: var(--text-secondary); font-size: 0.9em; margin-bottom: 5px; }
+            .table-container tr { border: 1px solid var(--border-color); border-radius: 8px; margin-bottom: 15px; padding: 15px; background-color: var(--bg-container); }
+            .table-container td { 
+                border-bottom: 1px solid var(--border-color); 
+                display: flex; 
+                justify-content: space-between; 
+                align-items: center;
+                padding: 8px 15px;
+            }
+            .table-container td:before { content: attr(data-label); display: block; font-weight: 500; text-transform: uppercase; color: var(--text-secondary); font-size: 0.9em; }
+            .log-item-details td:before { content: ''; }
+            .log-item-details td { padding: 0; }
         }
         .dark-mode-toggle { 
             position: fixed; 
@@ -431,27 +440,28 @@
                 <div class="table-container">
                     <table id="log-table">
                         <thead>
-                            <tr><th>Horodatage</th><th>Membre</th><th>Cannette</th><th>BCAA</th><th>COOKIE</th><th>BOULES</th><th>AUTRES</th></tr>
+                            <tr><th>Horodatage</th><th>Membre</th><th>Consommation</th></tr>
                         </thead>
                         <tbody id="log-tbody">
                             <tr v-if="loadingLogs">
-                                <td colspan="7">Chargement des logs...</td>
+                                <td colspan="3">Chargement des logs...</td>
                             </tr>
                             <tr v-else-if="logs.length === 0">
-                                <td colspan="7">Aucun log trouvé.</td>
+                                <td colspan="3">Aucun log trouvé.</td>
                             </tr>
-                            <tr v-for="log in logs" :key="log.Horodatage + log.Membre">
-                                <td data-label="Horodatage" class="timestamp-log">
-                                    {{ formatDate(log.Horodatage) }}<br>
-                                    {{ formatTime(log.Horodatage) }}
-                                </td>
-                                <td data-label="Membre">{{ log.Membre }}</td>
-                                <td data-label="Cannette">{{ log.Cannette }}</td>
-                                <td data-label="BCAA">{{ log.BCAA }}</td>
-                                <td data-label="COOKIE">{{ log.COOKIE }}</td>
-                                <td data-label="BOULES">{{ log.BOULES }}</td>
-                                <td data-label="AUTRES">{{ log.AUTRES }}</td>
-                            </tr>
+                            <template v-for="log in logs" :key="log.Horodatage + log.Membre">
+                                <tr>
+                                    <td data-label="Horodatage" class="timestamp-log">
+                                        {{ formatDate(log.Horodatage) }}<br>{{ formatTime(log.Horodatage) }}
+                                    </td>
+                                    <td data-label="Membre">{{ log.Membre }}</td>
+                                    <td data-label="Consommation">
+                                        <div v-for="(item, key) in filterLogItems(log)" :key="key">
+                                            {{ key }} : {{ item }}
+                                        </div>
+                                    </td>
+                                </tr>
+                            </template>
                         </tbody>
                     </table>
                 </div>
@@ -548,6 +558,18 @@
                 }
             },
             methods: {
+                filterLogItems(log) {
+                    const filtered = {};
+                    for (const key in log) {
+                        if (['Horodatage', 'Membre'].includes(key)) {
+                            continue;
+                        }
+                        if (log[key] > 0) {
+                            filtered[key] = log[key];
+                        }
+                    }
+                    return filtered;
+                },
                 formatDate(timestamp) {
                     const date = new Date(timestamp);
                     const day = String(date.getDate()).padStart(2, '0');
