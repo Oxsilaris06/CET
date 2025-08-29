@@ -204,7 +204,9 @@
             background-color: #333333;
         }
         @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
-        .pulse-high { animation: pulse 0.8s infinite alternate; }
+        .pay-debt-button-pulsing {
+            animation: pulse 1.5s infinite alternate;
+        }
         .hidden { display: none; }
         .tab-content { display: none; }
         .tab-content.active { display: block; animation: fadeIn 0.3s ease-in-out; }
@@ -313,23 +315,21 @@
         <div class="login-fieldsets" v-if="!isConnected">
             <fieldset>
                 <legend>Accès</legend>
-                <div class="table-container">
-                    <table id="dettes-table" v-if="allDettes.length > 0">
-                        <thead>
-                            <tr><th>Membre</th><th>Dette</th></tr>
-                        </thead>
-                        <tbody id="dettes-tbody">
-                            <tr v-if="connectedMemberDette">
-                                <td data-label="Membre">{{ connectedMemberDette.membre }}</td>
-                                <td data-label="Dette">
-                                    <span :class="dettePulseClass" :style="{ color: connectedMemberDette.dette > 0 ? (isDarkMode ? 'var(--danger-red-dark)' : 'var(--danger-red)') : 'var(--success-green)' }">
-                                        {{ parseFloat(connectedMemberDette.dette).toFixed(2) }} €
-                                    </span>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
+                <table id="dettes-table" v-if="allDettes.length > 0">
+                    <thead>
+                        <tr><th>Membre</th><th>Dette</th></tr>
+                    </thead>
+                    <tbody id="dettes-tbody">
+                        <tr v-if="connectedMemberDette">
+                            <td data-label="Membre">{{ connectedMemberDette.membre }}</td>
+                            <td data-label="Dette">
+                                <span :class="dettePulseClass" :style="{ color: connectedMemberDette.dette > 0 ? (isDarkMode ? 'var(--danger-red-dark)' : 'var(--danger-red)') : 'var(--success-green)' }">
+                                    {{ parseFloat(connectedMemberDette.dette).toFixed(2) }} €
+                                </span>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
                 <div class="item-selector">
                     <label for="member-select">Nom du membre</label>
                     <select id="member-select" v-model="selectedMember">
@@ -357,38 +357,41 @@
         </div>
         <fieldset id="conso-fieldset" v-if="isConnected">
             <legend>Ajouter une consommation</legend>
-            <div v-if="isHighDebt" class="high-debt-message">
+            <div v-if="isAlertDebt" class="high-debt-message">
+                Votre dette est élevée, veuillez penser à la régler.
+            </div>
+            <div v-if="isBlockDebt" class="high-debt-message">
                 Votre dette est trop élevée, veuillez la régler pour continuer à consommer.
             </div>
             <div class="conso-item">
                 <img src="canettes.png" alt="Canettes & Sucreries" class="conso-item-image">
                 <label for="canettes">Canettes & Sucreries (0.6€)</label>
-                <input type="number" id="canettes" v-model.number="conso.canettes" min="0" :disabled="isHighDebt">
+                <input type="number" id="canettes" v-model.number="conso.canettes" min="0" :disabled="isBlockDebt">
             </div>
             <div class="conso-item">
                 <img src="bcaa.png" alt="Bcaa" class="conso-item-image">
                 <label for="bcaa">Bcaa (1.5€)</label>
-                <input type="number" id="bcaa" v-model.number="conso.bcaa" min="0" :disabled="isHighDebt">
+                <input type="number" id="bcaa" v-model.number="conso.bcaa" min="0" :disabled="isBlockDebt">
             </div>
             <div class="conso-item">
                 <img src="cookie.png" alt="Cookie Prozis" class="conso-item-image">
                 <label for="cookie">Cookie Prozis (1.8€)</label>
-                <input type="number" id="cookie" v-model.number="conso.cookie" min="0" :disabled="isHighDebt">
+                <input type="number" id="cookie" v-model.number="conso.cookie" min="0" :disabled="isBlockDebt">
             </div>
             <div class="conso-item">
                 <img src="boules.png" alt="Boules Prozis" class="conso-item-image">
                 <label for="boules">Boules Prozis (1.5€)</label>
-                <input type="number" id="boules" v-model.number="conso.boules" min="0" :disabled="isHighDebt">
+                <input type="number" id="boules" v-model.number="conso.boules" min="0" :disabled="isBlockDebt">
             </div>
             <div class="conso-item">
                 <img src="autres.png" alt="Autres" class="conso-item-image">
                 <label for="autres">Autres (0.4€)</label>
-                <input type="number" id="autres" v-model.number="conso.autres" min="0" :disabled="isHighDebt">
+                <input type="number" id="autres" v-model.number="conso.autres" min="0" :disabled="isBlockDebt">
             </div>
             <div class="conso-total-wrapper" v-if="totalConso > 0">
                 <strong>Total à ajouter : {{ totalConso.toFixed(2) }}€</strong>
             </div>
-            <button @click="submitConso" class="action-button" :style="{'background-color': 'var(--accent-blue)'}" :disabled="loadingSubmit || isHighDebt">
+            <button @click="submitConso" class="action-button" :style="{'background-color': 'var(--accent-blue)'}" :disabled="loadingSubmit || isBlockDebt">
                     {{ loadingSubmit ? 'Envoi...' : 'Valider la conso' }}
                 </button>
             <button @click="resetForm" class="action-button" :style="{'background-color': 'var(--text-secondary)'}">Fermer</button>
@@ -410,7 +413,7 @@
                 {{ passwordChangeMessage.text }}
             </div>
         </fieldset>
-        <div id="prozis-panel" class="info-panel" v-if="isConnected">
+        <div id="prozis-panel" v-if="isConnected">
             <a href="https://www.prozis.com" target="_blank" class="action-button prozis">Site Prozis</a>
             <button @click="toggleEliteInfo" class="action-button" :class="eliteButtonClass">{{ eliteButtonText }}</button>
             <div id="info-elite-content" v-if="showEliteInfo">
@@ -516,6 +519,16 @@
                 totalConso() {
                     return (this.conso.canettes * 0.6) + (this.conso.bcaa * 1.5) + (this.conso.cookie * 1.8) + (this.conso.boules * 1.5) + (this.conso.autres * 0.4);
                 },
+                isAlertDebt() {
+                    if (!this.connectedMemberDette) return false;
+                    const dette = parseFloat(this.connectedMemberDette.dette);
+                    return dette >= 20 && dette < 30;
+                },
+                isBlockDebt() {
+                    if (!this.connectedMemberDette) return false;
+                    const dette = parseFloat(this.connectedMemberDette.dette);
+                    return dette >= 30;
+                },
                 isHighDebt() {
                     if (!this.connectedMemberDette) return false;
                     return parseFloat(this.connectedMemberDette.dette) >= 20;
@@ -566,6 +579,7 @@
                     try {
                         const response = await fetch(`${this.APPS_SCRIPT_URL}?action=getLogs`);
                         this.logs = await response.json();
+                        this.logs.sort((a, b) => new Date(b.Horodatage) - new Date(a.Horodatage));
                     } catch (error) {
                         console.error("Erreur lors du chargement des logs:", error);
                         this.logs = [];
