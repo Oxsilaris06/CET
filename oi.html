@@ -9,13 +9,11 @@
             --bg-body: #121212; --bg-container: #1e1e1e; --bg-interactive: #2a2a2a;
             --text-primary: #e0e0e0; --text-secondary: #95a5a6; --border-color: #444444;
             --accent-blue: #5b9bd5; --accent-hover: #4a7aa5; --danger-red: #dc3545;
-            --collective-accent: #ffc107; --collective-hover: #d19a00;
         }
         body.light-mode {
             --bg-body: #e9ecef; --bg-container: #ffffff; --bg-interactive: #f8f9fa;
             --text-primary: #212529; --text-secondary: #6c757d; --accent-blue: #0033a0;
             --accent-hover: #00226b; --border-color: #ced4da; --danger-red: #dc3545;
-            --collective-accent: #ffc107; --collective-hover: #d19a00;
         }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: 'Arial', sans-serif; background-color: var(--bg-body); color: var(--text-primary); line-height: 1.6; padding: 15px; transition: background-color 0.5s, color 0.5s; }
@@ -116,7 +114,6 @@
 
         <label for="photoAdversaire">Ajouter une photo de l'adversaire :</label>
         <input type="file" id="photoAdversaire" accept="image/*">
-        <img id="previewAdversaire" class="image-preview" style="display:none;" />
     </div>
 
     <div class="form-section">
@@ -190,85 +187,139 @@ ESCORTER L'INDIVIDU JUSQU'AU LIEU DE GAV"></textarea>
         <h3>Photos de l'opération</h3>
         <label for="photoCheminement">Cheminement :</label>
         <input type="file" id="photoCheminement" accept="image/*">
-        <img id="previewCheminement" class="image-preview" style="display:none;" />
-
+        
         <label for="photoTerrain">Terrain / Environnement :</label>
         <input type="file" id="photoTerrain" accept="image/*">
-        <img id="previewTerrain" class="image-preview" style="display:none;" />
         
         <label for="photoPorte">Porte / Point d'effraction :</label>
         <input type="file" id="photoPorte" accept="image/*">
-        <img id="previewPorte" class="image-preview" style="display:none;" />
     </div>
 
     <button id="generatePdf">Générer le PDF</button>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script>
-    document.getElementById('generatePdf').addEventListener('click', () => {
-        const input = document.querySelector('.container');
-        html2canvas(input, {
-            allowTaint: true,
-            useCORS: true,
-            scale: 2 // Améliore la qualité de l'image
-        }).then(canvas => {
-            const imgData = canvas.toDataURL('image/png');
-            const pdf = new jspdf.jsPDF({
-                orientation: 'portrait',
-                unit: 'px',
-                format: 'a4'
-            });
-            const imgWidth = pdf.internal.pageSize.getWidth();
-            const imgHeight = (canvas.height * imgWidth) / canvas.width;
-            
-            let heightLeft = imgHeight;
-            let position = 0;
-            const pageHeight = pdf.internal.pageSize.getHeight();
-            
-            while (heightLeft > 0) {
-                pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-                heightLeft -= pageHeight;
-                position -= pageHeight;
-                if (heightLeft > 0) {
-                    pdf.addPage();
+    document.getElementById('generatePdf').addEventListener('click', async () => {
+        const doc = new jspdf.jsPDF();
+        let yPos = 20;
+        const margin = 15;
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const pageHeight = doc.internal.pageSize.getHeight();
+
+        // Fonction pour ajouter du texte et gérer les sauts de page
+        const addText = (text, x, size, style, bold) => {
+            const lines = doc.splitTextToSize(text, pageWidth - margin * 2);
+            for (const line of lines) {
+                if (yPos > pageHeight - margin) {
+                    doc.addPage();
+                    yPos = margin;
+                }
+                doc.setFontSize(size);
+                doc.setFont(undefined, bold ? "bold" : "normal");
+                doc.text(line, x, yPos);
+                yPos += size / 1.5;
+            }
+        };
+
+        // Ajout du contenu du formulaire
+        addText("Ordre Initial", pageWidth / 2, 22, "bold");
+        yPos += 20;
+
+        addText("1. SITUATION", margin, 16, "bold");
+        yPos += 10;
+
+        addText(`Date de l'opération : ${document.getElementById('date_op').value}`, margin, 12, "normal");
+        yPos += 5;
+        
+        if (document.getElementById('situation_generale').value) {
+            addText("1.1 Générale :", margin, 12, "bold");
+            addText(document.getElementById('situation_generale').value, margin, 12, "normal");
+            yPos += 10;
+        }
+
+        if (document.getElementById('situation_particuliere').value) {
+            addText("1.2 Particulière :", margin, 12, "bold");
+            addText(document.getElementById('situation_particuliere').value, margin, 12, "normal");
+            yPos += 10;
+        }
+
+        yPos += 10;
+        addText("1.3 ADVERSAIRE(S)", margin, 16, "bold");
+        yPos += 10;
+
+        const adversaireFields = [
+            'nom_adversaire', 'domicile_adversaire', 'date_naissance', 'description_adversaire',
+            'profession_adversaire', 'antecedents_adversaire', 'etat_esprit_adversaire',
+            'attitude_adversaire', 'volume_adversaire', 'substances_adversaire',
+            'vehicules_adversaire', 'armes_adversaire', 'mode_action_me1',
+            'mode_action_me2', 'mode_action_me3'
+        ];
+
+        for (const fieldId of adversaireFields) {
+            const element = document.getElementById(fieldId);
+            if (element && element.value) {
+                const label = document.querySelector(`label[for="${fieldId}"]`).textContent;
+                addText(`${label}: ${element.value}`, margin, 12, "normal");
+                yPos += 5;
+            }
+        }
+        
+        // Photos
+        const photos = {
+            'photoAdversaire': 'Photo de l\'adversaire',
+            'photoCheminement': 'Cheminement',
+            'photoTerrain': 'Terrain / Environnement',
+            'photoPorte': 'Porte / Point d\'effraction'
+        };
+
+        for (const [id, labelText] of Object.entries(photos)) {
+            const input = document.getElementById(id);
+            if (input.files.length > 0) {
+                const file = input.files[0];
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    addText(labelText, margin, 12, "bold");
+                    doc.addImage(e.target.result, 'JPEG', margin, yPos + 5, pageWidth / 2, (pageWidth / 2) * (file.height / file.width));
+                    yPos += (pageWidth / 2) * (file.height / file.width) + 10;
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+        
+        // Missions, exécution et articulation
+        const sections = [
+            { id: 'missions_psig', title: '2. MISSIONS du PSIG' },
+            { id: 'date_execution', title: '3. EXÉCUTION', isMultiField: true, fields: ['date_execution', 'heure_execution', 'type_action'] },
+            { id: 'equipe_india', title: '4. ARTICULATION', isMultiField: true, fields: ['equipe_india', 'equipe_oscar', 'place_chef'] },
+        ];
+        
+        for (const section of sections) {
+            yPos += 10;
+            addText(section.title, margin, 16, "bold");
+            yPos += 5;
+
+            if (section.isMultiField) {
+                for (const fieldId of section.fields) {
+                    const element = document.getElementById(fieldId);
+                    if (element && element.value) {
+                        const label = document.querySelector(`label[for="${fieldId}"]`).textContent;
+                        addText(`${label}: ${element.value}`, margin, 12, "normal");
+                        yPos += 5;
+                    }
+                }
+            } else {
+                const element = document.getElementById(section.id);
+                if (element && element.value) {
+                    addText(element.value, margin, 12, "normal");
+                    yPos += 10;
                 }
             }
-
-            pdf.save('ordre_initial.pdf');
-        }).catch(error => {
-            console.error('Erreur lors de la génération du PDF:', error);
-            alert('Erreur lors de la génération du PDF. Assurez-vous que l\'image est chargée et que le formulaire est visible sur l\'écran.');
-        });
-    });
-
-    // Gestion des prévisualisations d'images
-    document.getElementById('photoAdversaire').addEventListener('change', function(event) {
-        handleImagePreview(event, 'previewAdversaire');
-    });
-    document.getElementById('photoCheminement').addEventListener('change', function(event) {
-        handleImagePreview(event, 'previewCheminement');
-    });
-    document.getElementById('photoTerrain').addEventListener('change', function(event) {
-        handleImagePreview(event, 'previewTerrain');
-    });
-    document.getElementById('photoPorte').addEventListener('change', function(event) {
-        handleImagePreview(event, 'previewPorte');
-    });
-
-    function handleImagePreview(event, elementId) {
-        const file = event.target.files[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                const img = document.getElementById(elementId);
-                img.src = e.target.result;
-                img.style.display = 'block';
-            };
-            reader.readAsDataURL(file);
         }
-    }
+
+        doc.save('ordre_initial.pdf');
+    });
+
 </script>
 
 </body>
