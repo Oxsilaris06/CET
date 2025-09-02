@@ -35,6 +35,11 @@
             cursor: pointer; font-size: 16px; margin-top: 20px;
         }
         button:hover { background-color: var(--accent-hover); }
+        .grid-container {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+        }
     </style>
 </head>
 <body>
@@ -99,8 +104,15 @@
         <label for="armes_adversaire">Armes :</label>
         <input type="text" id="armes_adversaire" placeholder="Armes (si connue) ou RAS">
 
-        <label for="modes_action_adversaire">Modes d'actions :</label>
-        <input type="text" id="modes_action_adversaire" placeholder="ME1 probable, ME2 & ME3">
+        <label for="mode_action_me1">Mode d'action : ME1 (+ probable)</label>
+        <textarea id="mode_action_me1" rows="1" placeholder="Fuite"></textarea>
+
+        <label for="mode_action_me2">Mode d'action : ME2</label>
+        <textarea id="mode_action_me2" rows="1" placeholder="Rébellion"></textarea>
+        
+        <label for="mode_action_me3">Mode d'action : ME3</label>
+        <textarea id="mode_action_me3" rows="1" placeholder="Retranchement"></textarea>
+
 
         <label for="photoAdversaire">Ajouter une photo de l'adversaire :</label>
         <input type="file" id="photoAdversaire" accept="image/*">
@@ -112,8 +124,8 @@
         <label for="amies">1.4 Ami(e)s :</label>
         <input type="text" id="amies" placeholder="Équipes en soutien (BR, GIC, PSIG MENTON...)">
 
-        <label for="terrain">1.5 Terrain / Environnement :</label>
-        <input type="text" id="terrain" placeholder="Météo / Relief / Milieu / Média">
+        <label for="terrain_info">1.5 Terrain / Environnement :</label>
+        <input type="text" id="terrain_info" placeholder="Météo / Relief / Milieu / Média">
 
         <label for="population">1.6 Population :</label>
         <input type="text" id="population" placeholder="Favorable / Défavorable / Neutre">
@@ -140,17 +152,53 @@ ESCORTER L'INDIVIDU JUSQU'AU LIEU DE GAV"></textarea>
         <label for="type_action">Type d'action :</label>
         <input type="text" id="type_action" placeholder="en force / en souplesse">
     </div>
-
+    
     <div class="form-section">
         <h2>4. ARTICULATION</h2>
-        <label for="equipe_india">ÉQUIPE INDIA (Interpellation) :</label>
-        <textarea id="equipe_india" rows="2" placeholder="India 1 : (Personnel) / India 2 : ..."></textarea>
-
-        <label for="equipe_oscar">ÉQUIPE OSCAR (Observation/Appui) :</label>
-        <textarea id="equipe_oscar" rows="2" placeholder="Oscar 1 : (Personnel) / Oscar 2 : ..."></textarea>
-
+        <div class="grid-container">
+            <div>
+                <h3>ÉQUIPE INDIA (Interpellation)</h3>
+                <label for="india_1">India 1 :</label>
+                <input type="text" id="india_1" placeholder="Personnel">
+                <label for="india_2">India 2 :</label>
+                <input type="text" id="india_2" placeholder="Personnel">
+                <label for="india_3">India 3 :</label>
+                <input type="text" id="india_3" placeholder="Personnel">
+                <label for="india_4">India 4 :</label>
+                <input type="text" id="india_4" placeholder="Personnel">
+                <label for="india_5">India 5 :</label>
+                <input type="text" id="india_5" placeholder="Personnel">
+            </div>
+            <div>
+                <h3>ÉQUIPE OSCAR (Observation/Appui)</h3>
+                <label for="oscar_1">Oscar 1 :</label>
+                <input type="text" id="oscar_1" placeholder="Personnel">
+                <label for="oscar_2">Oscar 2 :</label>
+                <input type="text" id="oscar_2" placeholder="Personnel">
+                <label for="oscar_3">Oscar 3 :</label>
+                <input type="text" id="oscar_3" placeholder="Personnel">
+                <label for="oscar_4">Oscar 4 :</label>
+                <input type="text" id="oscar_4" placeholder="Personnel">
+                <label for="oscar_5">Oscar 5 :</label>
+                <input type="text" id="oscar_5" placeholder="Personnel">
+            </div>
+        </div>
+        
         <label for="place_chef">Place du Chef :</label>
         <input type="text" id="place_chef" placeholder="En INDIA / Avec élément interpellation...">
+
+        <h3>Photos de l'opération</h3>
+        <label for="photoCheminement">Cheminement :</label>
+        <input type="file" id="photoCheminement" accept="image/*">
+        <img id="previewCheminement" class="image-preview" style="display:none;" />
+
+        <label for="photoTerrain">Terrain / Environnement :</label>
+        <input type="file" id="photoTerrain" accept="image/*">
+        <img id="previewTerrain" class="image-preview" style="display:none;" />
+        
+        <label for="photoPorte">Porte / Point d'effraction :</label>
+        <input type="file" id="photoPorte" accept="image/*">
+        <img id="previewPorte" class="image-preview" style="display:none;" />
     </div>
 
     <button id="generatePdf">Générer le PDF</button>
@@ -163,7 +211,8 @@ ESCORTER L'INDIVIDU JUSQU'AU LIEU DE GAV"></textarea>
         const input = document.querySelector('.container');
         html2canvas(input, {
             allowTaint: true,
-            useCORS: true
+            useCORS: true,
+            scale: 2 // Améliore la qualité de l'image
         }).then(canvas => {
             const imgData = canvas.toDataURL('image/png');
             const pdf = new jspdf.jsPDF({
@@ -173,7 +222,20 @@ ESCORTER L'INDIVIDU JUSQU'AU LIEU DE GAV"></textarea>
             });
             const imgWidth = pdf.internal.pageSize.getWidth();
             const imgHeight = (canvas.height * imgWidth) / canvas.width;
-            pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
+            
+            let heightLeft = imgHeight;
+            let position = 0;
+            const pageHeight = pdf.internal.pageSize.getHeight();
+            
+            while (heightLeft > 0) {
+                pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+                heightLeft -= pageHeight;
+                position -= pageHeight;
+                if (heightLeft > 0) {
+                    pdf.addPage();
+                }
+            }
+
             pdf.save('ordre_initial.pdf');
         }).catch(error => {
             console.error('Erreur lors de la génération du PDF:', error);
@@ -181,18 +243,32 @@ ESCORTER L'INDIVIDU JUSQU'AU LIEU DE GAV"></textarea>
         });
     });
 
+    // Gestion des prévisualisations d'images
     document.getElementById('photoAdversaire').addEventListener('change', function(event) {
+        handleImagePreview(event, 'previewAdversaire');
+    });
+    document.getElementById('photoCheminement').addEventListener('change', function(event) {
+        handleImagePreview(event, 'previewCheminement');
+    });
+    document.getElementById('photoTerrain').addEventListener('change', function(event) {
+        handleImagePreview(event, 'previewTerrain');
+    });
+    document.getElementById('photoPorte').addEventListener('change', function(event) {
+        handleImagePreview(event, 'previewPorte');
+    });
+
+    function handleImagePreview(event, elementId) {
         const file = event.target.files[0];
         if (file) {
             const reader = new FileReader();
             reader.onload = function(e) {
-                const img = document.getElementById('previewAdversaire');
+                const img = document.getElementById(elementId);
                 img.src = e.target.result;
                 img.style.display = 'block';
             };
             reader.readAsDataURL(file);
         }
-    });
+    }
 </script>
 
 </body>
