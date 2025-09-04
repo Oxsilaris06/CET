@@ -21,11 +21,11 @@
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: 'Oswald', sans-serif; background-color: var(--bg-body); color: var(--text-primary); line-height: 1.6; padding: 15px; transition: background-color 0.3s, color 0.3s; }
         .container { max-width: 800px; margin: auto; background: var(--bg-container); padding: 20px 30px; border-radius: 8px; border: 1px solid var(--border-color); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-        h1 { text-align: center; font-size: 2.5em; margin-bottom: 20px; color: var(--accent-blue); font-family: 'Saira Stencil One', sans-serif; }
+        h1 { text-align: center; font-size: 2.5em; margin-bottom: 20px; color: var(--accent-blue); font-family: 'Saira+Stencil+One', sans-serif; }
         h2 { color: var(--accent-blue); border-bottom: 2px solid var(--accent-blue); padding-bottom: 10px; margin-top: 20px; font-weight: 400; }
 
         /* Wizard Styles */
-        .wizard-progress { display: flex; justify-content: space-between; margin-bottom: 25px; list-style-type: none; }
+        .wizard-progress { display: flex; justify-content: space-between; margin-bottom: 25px; list-style-type: none; padding:0; }
         .wizard-progress-step { flex: 1; text-align: center; font-size: 0.9em; color: var(--text-secondary); position: relative; }
         .wizard-progress-step:before { content: ''; position: absolute; top: 50%; left: -50%; width: 100%; height: 2px; background-color: var(--border-color); z-index: -1; }
         .wizard-progress-step:first-child:before { content: none; }
@@ -48,7 +48,7 @@
         .form-section { margin-bottom: 20px; }
         .dynamic-list-item { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
         .dynamic-list-item > *:not(button) { flex-grow: 1; }
-        button.add-btn, button.remove-btn { padding: 5px 10px; font-size: 14px; margin: 0; }
+        button.add-btn, button.remove-btn { padding: 5px 10px; font-size: 14px; margin: 0; cursor:pointer; }
         button.add-btn { background-color: #27ae60; color: white; border: none; border-radius: 4px; }
         button.remove-btn { background-color: var(--danger-red); color: white; border: none; border-radius: 4px; }
         
@@ -193,155 +193,95 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
     <script>
-        // Le script complet de la version finale du précédent générateur est ici, adapté pour le wizard.
-        // Il contient la logique de sauvegarde, de chargement, de création des champs dynamiques et de génération du PDF.
-        // ... (Le script complet de la réponse précédente est inséré ici et adapté) ...
-
-        // --- NOUVELLE LOGIQUE WIZARD ---
         let currentStep = 0;
         const steps = document.querySelectorAll(".wizard-step");
         const progressSteps = document.querySelectorAll(".wizard-progress-step");
+        const availableVehicles = ['Sharan', 'Kodiaq', '5008', 'Scénic', 'BT'];
 
         function showStep(n) {
             steps.forEach(step => step.classList.remove('active'));
             steps[n].classList.add('active');
-
-            progressSteps.forEach((step, index) => {
-                step.classList.toggle('active', index <= n);
-            });
-
+            progressSteps.forEach((step, index) => step.classList.toggle('active', index <= n));
             document.getElementById("prevBtn").style.display = n === 0 ? "none" : "inline-block";
             document.getElementById("nextBtn").style.display = n === (steps.length - 1) ? "none" : "inline-block";
             document.getElementById("generatePdfBtn").style.display = n === (steps.length - 1) ? "inline-block" : "none";
         }
 
         function changeStep(n) {
-            // Sauvegarde des données à chaque changement d'étape
             saveFormData();
-            currentStep += n;
-            if (currentStep >= steps.length) {
-                currentStep = steps.length - 1;
-            }
-            if (currentStep < 0) {
-                currentStep = 0;
-            }
+            currentStep = Math.max(0, Math.min(currentStep + n, steps.length - 1));
             showStep(currentStep);
         }
 
         document.addEventListener('DOMContentLoaded', () => {
+            loadFormData(); 
             showStep(currentStep);
-            loadFormData(); // Charger les données après l'initialisation du wizard
+            // Theme setup
+            const savedTheme = localStorage.getItem('theme') || 'dark';
+            document.body.classList.add(savedTheme === 'dark' ? 'dark-mode' : 'light-mode');
+            document.getElementById('darkModeIcon').textContent = savedTheme === 'dark' ? 'nightlight' : 'clear_day';
         });
 
-
-        // --- LOGIQUE REPRISE ET ADAPTÉE ---
-        const availableVehicles = ['Sharan', 'Kodiaq', '5008', 'Scénic', 'BT'];
-
-        function saveFormData() { /* ... Contenu de la fonction saveFormData ... */ }
-        function loadFormData() { /* ... Contenu de la fonction loadFormData ... */ }
-        
-        // Toutes les fonctions utilitaires (addDynamicField, addPatracdvrRow, etc.) sont ici
-        function addDynamicFieldWithSelect(containerId, placeholder, options, value = '') {
-            const container = document.getElementById(containerId);
-            const item = document.createElement('div');
-            item.className = 'dynamic-list-item';
-            const selectId = `select_${containerId}_${Math.random()}`;
-            const inputId = `input_${containerId}_${Math.random()}`;
-
-            item.innerHTML = `
-                <select id="${selectId}" onchange="document.getElementById('${inputId}').value = this.value; saveFormData()">
-                    <option value="">Sélectionner</option>
-                    ${options.map(opt => `<option value="${opt}" ${opt === value && options.includes(value) ? 'selected' : ''}>${opt}</option>`).join('')}
-                </select>
-                <input type="text" id="${inputId}" placeholder="Ou valeur personnalisée" value="${value}" oninput="document.getElementById('${selectId}').value = ''; saveFormData()">
-                <button class="remove-btn" onclick="this.parentElement.remove(); saveFormData()">❌</button>
-            `;
-            container.appendChild(item);
-        }
-    
-        function addDynamicField(containerId, inputClass, value = '') {
-            const container = document.getElementById(containerId);
-            const item = document.createElement('div');
-            item.className = 'dynamic-list-item';
-            item.innerHTML = `
-                <input type="text" class="${inputClass}" value="${value}" oninput="saveFormData()">
-                <button class="remove-btn" onclick="this.parentElement.remove(); saveFormData()">❌</button>
-            `;
-            container.appendChild(item);
-        }
-    
-        function addPhotoField(containerId, inputClass, label) {
-             const container = document.getElementById(containerId);
-             const item = document.createElement('div');
-             item.className = 'dynamic-list-item';
-             item.innerHTML = `<label>${label}:</label><input type="file" class="${inputClass}" data-label="${label}" accept="image/*"><button class="remove-btn" onclick="this.parentElement.remove()">❌</button>`;
-             container.appendChild(item);
-        }
-        
-        function addCustomPhotoField(containerId) {
-             const container = document.getElementById(containerId);
-             const item = document.createElement('div');
-             item.className = 'dynamic-list-item';
-             item.innerHTML = `<input type="text" placeholder="Légende" class="photo-label-input"><input type="file" class="photo-input" accept="image/*"><button class="remove-btn" onclick="this.parentElement.remove()">❌</button>`;
-             container.appendChild(item);
+        function saveFormData() {
+            try {
+                const data = {};
+                document.querySelectorAll('input, textarea, select').forEach(field => {
+                    if (field.type !== 'file' && field.id) data[field.id] = field.value;
+                });
+                ['vehicules', 'armes', 'etat_esprit', 'volume', 'type_action'].forEach(key => {
+                    const container = document.getElementById(`${key.replace('_','_adversaire_')}_container`) || document.getElementById(`${key}_container`);
+                    if(container) data[`${key}_list`] = Array.from(container.querySelectorAll('.dynamic-input')).map(input => input.value);
+                });
+                data.patracdvr_rows = Array.from(document.querySelectorAll('#patracdvr_container .collapsible-container')).map(section => ({
+                    vehicle: section.querySelector('.patracdvr-vehicle-select').value,
+                    members: Array.from(section.querySelectorAll('.dynamic-list-item:not(:first-child)')).map(item => ({
+                        trigramme: item.children[0].value, equipement: item.children[1].value, fonction: item.children[2].value
+                    }))
+                }));
+                data.time_events = Array.from(document.querySelectorAll('#time_events_container .dynamic-list-item')).map(item => ({
+                    type: item.children[0].value, hour: item.children[1].value, description: item.children[2].value
+                }));
+                localStorage.setItem('oiFormData', JSON.stringify(data));
+            } catch (e) { console.error("Save Error:", e); }
         }
 
-        function addPatracdvrRow() {
-            const container = document.getElementById('patracdvr_container');
-            const vehicleId = `v_${Date.now()}`;
-            const row = document.createElement('div');
-            row.className = 'collapsible-container';
-            row.innerHTML = `
-                <div class="collapsible-header">
-                    <h3>Véhicule (cliquer pour déplier)</h3>
-                    <span class="material-icons">expand_more</span>
-                </div>
-                <div class="collapsible-content">
-                    <div class="dynamic-list-item">
-                        <select class="patracdvr-vehicle-select" onchange="saveFormData()">${availableVehicles.map(v => `<option value="${v}">${v}</option>`).join('')}</select>
-                        <button class="remove-btn" onclick="this.closest('.collapsible-container').remove(); saveFormData()">❌</button>
-                    </div>
-                    <div id="patracdvr_members_${vehicleId}"></div>
-                    <button class="add-btn" onclick="addPatracdvrMember('${vehicleId}')">Ajouter Personnel ➕</button>
-                </div>
-            `;
-            container.appendChild(row);
-            addPatracdvrMember(vehicleId); // Ajouter un membre par défaut
-            row.querySelector('.collapsible-header').addEventListener('click', (e) => {
-                e.currentTarget.parentElement.classList.toggle('open');
-            });
-        }
-
-        function addPatracdvrMember(vehicleId) {
-            const container = document.getElementById(`patracdvr_members_${vehicleId}`);
-            const item = document.createElement('div');
-            item.className = 'dynamic-list-item';
-            item.innerHTML = `<input type="text" placeholder="Trigramme" oninput="saveFormData()"><select onchange="saveFormData()">${['PIE', 'EFFRAC', 'LBD', 'UMP', 'G36', 'IL', 'GENL', 'MP7'].map(o => `<option>${o}</option>`).join('')}</select><select onchange="saveFormData()">${['Chef inter', 'Chef dispo', 'AO', 'Inter', 'DE'].map(o => `<option>${o}</option>`).join('')}</select><button class="remove-btn" onclick="this.parentElement.remove(); saveFormData()">❌</button>`;
-            container.appendChild(item);
-        }
-
-        function addTimeEvent() {
-            const container = document.getElementById('time_events_container');
-            const item = document.createElement('div');
-            item.className = 'dynamic-list-item';
-            item.innerHTML = `<select onchange="saveFormData()">${['T0', 'T1', 'T2', 'T3', 'T4', 'T5'].map(t => `<option>${t}</option>`).join('')}</select><input type="time" onchange="saveFormData()"><input type="text" placeholder="Description" oninput="saveFormData()"><button class="remove-btn" onclick="this.parentElement.remove(); saveFormData()">❌</button>`;
-            container.appendChild(item);
-        }
-        
-        // Dark Mode & Reset
-        document.getElementById('darkModeToggle').addEventListener('click', () => {
-            const body = document.body;
-            const icon = document.getElementById('darkModeIcon');
-            body.classList.toggle('light-mode');
-            body.classList.toggle('dark-mode');
-            if (body.classList.contains('dark-mode')) {
-                icon.textContent = 'nightlight';
-                localStorage.setItem('theme', 'dark');
-            } else {
-                icon.textContent = 'clear_day';
-                localStorage.setItem('theme', 'light');
+        function loadFormData() {
+            const savedData = localStorage.getItem('oiFormData');
+            if (!savedData) {
+                addDynamicField('armes_container', 'arme-input', 'RAS');
+                addDynamicFieldWithSelect('etat_esprit_container', 'État d\'esprit', ['Serein', 'Hostile', 'Conciliant']);
+                addPatracdvrRow();
+                addTimeEvent();
+                addPhotoField('adversaire_photos_container', 'adversaire-photo-input', 'Photo Adversaire');
+                addCustomPhotoField('operation_photos_container');
+                return;
             }
-        });
+            try {
+                const data = JSON.parse(savedData);
+                Object.keys(data).forEach(key => {
+                    const field = document.getElementById(key);
+                    if (field && typeof data[key] === 'string') field.value = data[key];
+                });
+                 Object.keys(data).filter(k => k.endsWith('_list')).forEach(key => {
+                    const listName = key.replace('_list', '');
+                    const containerId = (document.getElementById(`${listName}_adversaire_container`) ? `${listName}_adversaire_container` : `${listName}_container`);
+                    const container = document.getElementById(containerId);
+                    if (!container) return;
+                    container.innerHTML = '';
+                    const options = { etat_esprit: ['Serein', 'Hostile', 'Conciliant'], volume: ['Seul', 'Famille', 'BO', 'Conjointe'], type_action: ['en force', 'en souplesse'] }[listName];
+                    (data[key] || []).forEach(val => options ? addDynamicFieldWithSelect(containerId, listName, options, val) : addDynamicField(containerId, `${listName.slice(0, -1)}-input`, val));
+                });
+                document.getElementById('patracdvr_container').innerHTML = '';
+                (data.patracdvr_rows || []).forEach(row => addPatracdvrRow(row.vehicle, row.members));
+                document.getElementById('time_events_container').innerHTML = '';
+                (data.time_events || []).forEach(event => addTimeEvent(event.type, event.hour, event.description));
+                document.getElementById('adversaire_photos_container').innerHTML = '';
+                addPhotoField('adversaire_photos_container', 'adversaire-photo-input', 'Photo Adversaire');
+                document.getElementById('operation_photos_container').innerHTML = '';
+                addCustomPhotoField('operation_photos_container', 'Cheminement');
+                addCustomPhotoField('operation_photos_container', 'Terrain');
+            } catch (e) { console.error("Load Error:", e); }
+        }
         
         document.getElementById('resetBtn').addEventListener('click', () => {
             if (confirm("Voulez-vous vraiment réinitialiser tout le formulaire ?")) {
@@ -349,13 +289,151 @@
                 location.reload();
             }
         });
-
-        // La fonction de génération de PDF reste la même que la version finale précédente
-        document.getElementById('generatePdfBtn').addEventListener('click', async () => {
-            // ... Insérer ici la fonction de génération de PDF de la réponse précédente ...
-             alert("Génération du PDF lancée !");
+        document.getElementById('darkModeToggle').addEventListener('click', () => {
+            document.body.classList.toggle('light-mode');
+            document.body.classList.toggle('dark-mode');
+            const isDark = document.body.classList.contains('dark-mode');
+            document.getElementById('darkModeIcon').textContent = isDark ? 'nightlight' : 'clear_day';
+            localStorage.setItem('theme', isDark ? 'dark' : 'light');
         });
 
+        function addDynamicFieldWithSelect(cId, pHolder, opts, val = '') {
+            const c = document.getElementById(cId); c.insertAdjacentHTML('beforeend', `<div class="dynamic-list-item"><select onchange="this.nextElementSibling.value=this.value;saveFormData()"><option value="">Sélectionner</option>${opts.map(o=>`<option value="${o}" ${o===val&&opts.includes(val)?'selected':''}>${o}</option>`).join('')}</select><input type="text" class="dynamic-input" placeholder="Ou personnalisé" value="${val}" oninput="this.previousElementSibling.value='';saveFormData()"><button class="remove-btn" onclick="this.parentElement.remove();saveFormData()">❌</button></div>`);
+        }
+        function addDynamicField(cId, iClass, val = '') {
+            const c = document.getElementById(cId); c.insertAdjacentHTML('beforeend', `<div class="dynamic-list-item"><input type="text" class="${iClass} dynamic-input" value="${val}"><button class="remove-btn" onclick="this.parentElement.remove();saveFormData()">❌</button></div>`);
+        }
+        function addPhotoField(cId, iClass, label) {
+            const c = document.getElementById(cId); c.insertAdjacentHTML('beforeend', `<div class="dynamic-list-item"><label>${label}:</label><input type="file" class="${iClass}" data-label="${label}" accept="image/*"><button class="remove-btn" onclick="this.parentElement.remove()">❌</button></div>`);
+        }
+        function addCustomPhotoField(cId, label = '') {
+            const c = document.getElementById(cId); c.insertAdjacentHTML('beforeend', `<div class="dynamic-list-item"><input type="text" value="${label}" placeholder="Légende" class="photo-label-input"><input type="file" class="photo-input" accept="image/*"><button class="remove-btn" onclick="this.parentElement.remove()">❌</button></div>`);
+        }
+        function addPatracdvrRow(vehicle = availableVehicles[0], members = []) {
+            const c = document.getElementById('patracdvr_container');
+            const vId = `v_${Date.now()}`;
+            const row = document.createElement('div');
+            row.className = 'collapsible-container';
+            row.innerHTML = `<div class="collapsible-header"><h3>Véhicule : ${vehicle}</h3><span class="material-icons">expand_more</span></div><div class="collapsible-content"><div class="dynamic-list-item"><select class="patracdvr-vehicle-select" onchange="this.parentElement.parentElement.previousElementSibling.querySelector('h3').textContent='Véhicule : '+this.value;saveFormData()">${availableVehicles.map(v => `<option value="${v}" ${v===vehicle?'selected':''}>${v}</option>`).join('')}</select><button class="remove-btn" onclick="this.closest('.collapsible-container').remove();saveFormData()">❌ Véhicule</button></div><div id="patracdvr_members_${vId}"></div><button class="add-btn" onclick="addPatracdvrMember('${vId}')">➕ Personnel</button></div>`;
+            c.appendChild(row);
+            row.querySelector('.collapsible-header').addEventListener('click', e => e.currentTarget.parentElement.classList.toggle('open'));
+            (members.length ? members : [{}]).forEach(m => addPatracdvrMember(vId, m.trigramme, m.equipement, m.fonction));
+        }
+        function addPatracdvrMember(vId, tri = '', equi = 'PIE', fonc = 'Inter') {
+            const c = document.getElementById(`patracdvr_members_${vId}`);
+            c.insertAdjacentHTML('beforeend', `<div class="dynamic-list-item"><input type="text" placeholder="Trigramme" value="${tri}"><select>${['PIE','EFFRAC','LBD','UMP','G36','IL','GENL','MP7'].map(o=>`<option ${o===equi?'selected':''}>${o}</option>`).join('')}</select><select>${['Chef inter','Chef dispo','AO','Inter','DE'].map(o=>`<option ${o===fonc?'selected':''}>${o}</option>`).join('')}</select><button class="remove-btn" onclick="this.parentElement.remove();saveFormData()">❌</button></div>`);
+        }
+        function addTimeEvent(type = 'T0', hour = '', desc = '') {
+            const c = document.getElementById('time_events_container');
+            c.insertAdjacentHTML('beforeend', `<div class="dynamic-list-item"><select>${['T0','T1','T2','T3','T4','T5'].map(t=>`<option ${t===type?'selected':''}>${t}</option>`).join('')}</select><input type="time" value="${hour}"><input type="text" placeholder="Description" value="${desc}"><button class="remove-btn" onclick="this.parentElement.remove();saveFormData()">❌</button></div>`);
+        }
+        
+        document.getElementById('generatePdfBtn').addEventListener('click', async () => {
+             try {
+                const { jsPDF } = jspdf;
+                const doc = new jsPDF({ unit: 'pt', format: 'a4', orientation: 'portrait' });
+                const margin = 40;
+                const pageWidth = doc.internal.pageSize.getWidth();
+                const pageHeight = doc.internal.pageSize.getHeight();
+                let yPos = margin;
+                
+                saveFormData();
+                const formDataString = localStorage.getItem('oiFormData');
+                if (!formDataString) { alert("Aucune donnée à générer."); return; }
+                const formData = JSON.parse(formDataString);
+                const getVal = (id) => formData[id] || 'RAS';
+
+                const addHeaderAndFooter = (pageNumber, isLandscape = false) => {
+                    doc.setPage(pageNumber);
+                    const width = isLandscape ? pageHeight : pageWidth;
+                    const height = isLandscape ? pageWidth : pageHeight;
+                    doc.setFillColor(18, 18, 18); doc.rect(0, 0, width, height, 'F');
+                    doc.setFontSize(10).setTextColor('#e0e0e0').text(`Page ${pageNumber}`, width - margin, height - 20);
+                };
+                
+                doc.deletePage(1);
+                doc.addPage('a4', 'landscape');
+                const landscapeWidth = doc.internal.pageSize.getWidth();
+                const landscapeHeight = doc.internal.pageSize.getHeight();
+                const titleText = `Opération du ${getVal('date_op')}`;
+                doc.setFontSize(70);
+                const titleWidth = doc.getStringUnitWidth(titleText) * doc.internal.getFontSize() / doc.internal.scaleFactor;
+                if (titleWidth > landscapeWidth - margin * 4) doc.setFontSize((landscapeWidth - margin * 4) * doc.internal.scaleFactor / doc.getStringUnitWidth(titleText));
+                doc.setTextColor('#5b9bd5').text(titleText, landscapeWidth / 2, landscapeHeight / 2, { align: 'center', baseline: 'middle' });
+
+                const checkYPos = (space) => { if (yPos + space > pageHeight - margin) { doc.addPage('a4', 'portrait'); yPos = margin; return true; } return false; };
+                const addSectionTitle = (title) => {
+                    doc.addPage('a4', 'portrait'); yPos = margin;
+                    doc.setFontSize(27).setFont('helvetica', 'bold').setTextColor('#5b9bd5');
+                    const splitTitle = doc.splitTextToSize(title, pageWidth - margin * 2);
+                    doc.text(splitTitle, margin, yPos);
+                    yPos += splitTitle.length * 27 + 15;
+                };
+                const addText = (text) => {
+                    checkYPos(30);
+                    doc.setFontSize(12).setFont('helvetica', 'normal').setTextColor('#e0e0e0');
+                    const lines = doc.splitTextToSize(text, pageWidth - margin * 2);
+                    doc.text(lines, margin, yPos); yPos += lines.length * 15 + 10;
+                };
+                const tableConfig = { theme: 'grid', styles: { fontSize: 15, cellPadding: 5, textColor: [224, 224, 224], fillColor: [30, 30, 30] }, headStyles: { fontSize: 15, fillColor: [42, 42, 42], textColor: [255, 255, 255], fontStyle: 'bold' }, didDrawPage: (data) => yPos = data.cursor.y, margin: { left: margin, right: margin } };
+                const renderAutoTable = (config) => {
+                    checkYPos(60); doc.autoTable({ startY: yPos, ...tableConfig, ...config }); yPos = doc.autoTable.previous.finalY + 20;
+                };
+
+                addSectionTitle("1. SITUATION");
+                addText(getVal('situation_generale'));
+                addText(getVal('situation_particuliere'));
+                renderAutoTable({ head: [['ADVERSAIRE', 'DÉTAILS']], body: [['Nom/Prénom', getVal('nom_adversaire')], ['Domicile', getVal('domicile_adversaire')], ['Naissance', `${getVal('date_naissance')} à ${getVal('lieu_naissance')}`], ['Description', [getVal('stature_adversaire'), getVal('ethnie_adversaire'), getVal('signes_particuliers_adversaire')].join(' / ')], ['Profession', getVal('profession_adversaire')], ['Antécédents', getVal('antecedents_adversaire')], ['État d\'esprit', (formData.etat_esprit_list || []).join(', ') || 'RAS'], ['Attitude', getVal('attitude_adversaire')], ['Volume', (formData.volume_list || []).join(', ') || 'RAS'], ['Substances', getVal('substances_adversaire')], ['Véhicules', (formData.vehicules_list || []).join(', ') || 'RAS'], ['Armes', (formData.armes_list || []).join(', ') || 'RAS'], ['Modes d\'action', `ME1: ${getVal('mode_action_me1')}\nME2: ${getVal('mode_action_me2')}\nME3: ${getVal('mode_action_me3')}`]] });
+                await addImagesFromContainer('adversaire_photos_container');
+                renderAutoTable({ head: [['ENVIRONNEMENT', 'DÉTAILS']], body: [['Ami(e)s', getVal('amies')], ['Terrain', getVal('terrain_info')], ['Population', getVal('population')], ['Cadre juridique', getVal('cadre_juridique')]] });
+                addSectionTitle("2. MISSIONS du PSIG"); addText(getVal('missions_psig'));
+                addSectionTitle("3. EXÉCUTION");
+                renderAutoTable({ body: [['Date', getVal('date_execution')], ['Heure', getVal('heure_execution')], ['Type d\'action', (formData.type_action_list || []).join(', ') || 'RAS']] });
+                addSectionTitle("4. ARTICULATION");
+                addText(`Place du Chef: ${getVal('place_chef')}`);
+                renderAutoTable({ head: [['Type', 'Heure', 'Description']], body: (formData.time_events || []).map(e => [e.type, e.hour || 'RAS', e.description || 'RAS']) });
+                addSectionTitle("PATRACDVR");
+                (formData.patracdvr_rows || []).forEach(row => {
+                    const members = row.members.filter(m => m.trigramme);
+                    if (members.length > 0) renderAutoTable({ head: [[row.vehicle, 'Équipement', 'Fonction']], body: members.map(m => [m.trigramme, m.equipement, m.fonction]) });
+                });
+                await addImagesFromContainer('operation_photos_container', true);
+                
+                const pageCount = doc.internal.getNumberOfPages();
+                for (let i = 1; i <= pageCount; i++) { addHeaderAndFooter(i, doc.getPageInfo(i).pageContext.mediaBox.topRight[0] > doc.getPageInfo(i).pageContext.mediaBox.bottomRight[1]); }
+                
+                const fileName = `OI_${getVal('date_op').replace(/\//g, '-')}_${getVal('nom_adversaire').replace(/ /g, '_')}.pdf`;
+                doc.save(fileName);
+
+            } catch (error) { console.error("PDF Generation Error:", error); alert("Erreur lors de la génération du PDF."); }
+
+            async function addImagesFromContainer(containerId, newPage = false) {
+                const inputs = Array.from(document.querySelectorAll(`#${containerId} input[type="file"]`)).filter(i => i.files.length > 0);
+                if (inputs.length === 0) return;
+                if (newPage) addSectionTitle("Photos de l'opération");
+                const imagePromises = inputs.map(input => {
+                    const label = input.parentElement.querySelector('.photo-label-input')?.value || input.dataset.label || 'Image';
+                    return new Promise(resolve => {
+                        const reader = new FileReader(); reader.onload = e => resolve({ src: e.target.result, label }); reader.readAsDataURL(input.files[0]);
+                    });
+                });
+                const images = await Promise.all(imagePromises);
+                const drawImageRow = async (rowData) => {
+                    const padding = 10, availableWidth = pageWidth - margin * 2, imageWidth = (availableWidth - (padding * (rowData.length - 1))) / rowData.length; let maxHeight = 0; const processed = [];
+                    for (const data of rowData) {
+                        const img = new Image(); img.src = data.src; await new Promise(r => img.onload = r);
+                        const h = imageWidth * (img.height / img.width); maxHeight = Math.max(maxHeight, h); processed.push({ img, ...data, width: imageWidth, height: h });
+                    }
+                    checkYPos(maxHeight + 30); let x = margin;
+                    for (const p of processed) {
+                        doc.addImage(p.img, 'JPEG', x, yPos, p.width, p.height);
+                        doc.setFontSize(9).setTextColor('#95a5a6').text(p.label, x + p.width / 2, yPos + p.height + 15, { align: 'center' }); x += p.width + padding;
+                    }
+                    yPos += maxHeight + 30;
+                };
+                for (let i = 0; i < images.length; i += 2) await drawImageRow(images.slice(i, i + 2));
+            }
+        });
     </script>
 </body>
 </html>
