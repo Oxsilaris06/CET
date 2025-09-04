@@ -13,8 +13,9 @@
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: 'Arial', sans-serif; background-color: var(--bg-body); color: var(--text-primary); line-height: 1.6; padding: 15px; transition: background-color 0.5s, color 0.5s; }
         .container { max-width: 800px; margin: auto; background: var(--bg-container); padding: 20px 30px; border-radius: 8px; border: 1px solid var(--border-color); }
-        h1 { text-align: center; font-size: 2.5em; margin-bottom: 30px; color: var(--accent-blue); text-transform: uppercase; letter-spacing: 2px; font-weight: 400; }
+        h1 { text-align: center; font-size: 2.5em; margin-bottom: 10px; color: var(--accent-blue); text-transform: uppercase; letter-spacing: 2px; font-weight: 400; }
         h2 { color: var(--accent-blue); border-bottom: 2px solid var(--accent-blue); padding-bottom: 10px; margin-top: 20px; font-weight: 400; }
+        h3 { color: var(--text-primary); margin-top: 15px; margin-bottom: 10px; font-weight: 400; }
         .form-section { margin-bottom: 20px; }
         label { display: block; margin-bottom: 5px; font-weight: bold; color: var(--text-secondary); }
         input[type="text"], input[type="date"], input[type="time"], textarea, select {
@@ -30,17 +31,26 @@
         button.remove-btn { background-color: #c0392b; padding: 5px 10px; font-size: 14px; margin-top: 5px; }
         button.remove-btn:hover { background-color: #a93226; }
         .grid-container { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
-        .team-member-input { display: flex; align-items: center; gap: 10px; margin-bottom: 5px; }
-        .team-member-input label { margin-bottom: 0; flex-basis: 30px; }
-        .team-member-input input { margin-bottom: 0; flex-grow: 1; }
         .dynamic-list-item { display: flex; align-items: center; gap: 10px; margin-bottom: 5px; }
+        .time-item { display: flex; align-items: center; gap: 10px; margin-bottom: 5px; }
+        .time-item select, .time-item input, .time-item textarea { flex-grow: 1; margin: 0; }
+        .patracdvr-member-item { display: flex; align-items: center; gap: 10px; margin-bottom: 5px; }
+        .patracdvr-member-item select { margin-bottom: 0; }
+        .patracdvr-member-item input { margin-bottom: 0; }
+        
+        @media (max-width: 600px) {
+            .container { padding: 15px; }
+            .grid-container { grid-template-columns: 1fr; }
+            h1 { font-size: 2em; }
+            h2 { font-size: 1.5em; }
+        }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <button type="button" onclick="resetForm()">Réinitialiser le formulaire</button>
     <h1>Générateur d'Ordre Initial</h1>
+    <button type="button" onclick="resetForm()">Réinitialiser le formulaire</button>
 
     <div class="form-section">
         <h2>1. SITUATION</h2>
@@ -58,8 +68,12 @@
         <input type="text" id="nom_adversaire" placeholder="Nom/Prénom">
         <label for="domicile_adversaire">Domicile et Adresse de repli :</label>
         <textarea id="domicile_adversaire" rows="2" placeholder="Adresse complète..."></textarea>
-        <label for="date_naissance">Date/Lieu de naissance :</label>
-        <input type="text" id="date_naissance" placeholder="JJ/MM/AAAA à Ville">
+        <div class="dynamic-list-item">
+            <label for="date_naissance">Date de naissance :</label>
+            <input type="date" id="date_naissance">
+            <label for="lieu_naissance">Lieu de naissance :</label>
+            <input type="text" id="lieu_naissance" placeholder="Ville">
+        </div>
         
         <label for="stature_adversaire">Description (Stature) :</label>
         <input type="text" id="stature_adversaire" placeholder="Taille (ex: 1.72m)">
@@ -79,43 +93,56 @@
         <textarea id="antecedents_adversaire" rows="2" placeholder="TAJ: BT:"></textarea>
         
         <label for="etat_esprit_adversaire_label">État d'esprit :</label>
-        <select id="etat_esprit_adversaire_select" onchange="document.getElementById('etat_esprit_adversaire_input').value=this.value;">
-            <option value="">Sélectionner ou ajouter</option>
-            <option value="Serein">Serein</option>
-            <option value="Hostile">Hostile</option>
-            <option value="Conciliant">Conciliant</option>
-        </select>
-        <input type="text" id="etat_esprit_adversaire_input" placeholder="Ajouter un état d'esprit">
+        <div id="etat_esprit_container">
+            <div class="dynamic-list-item">
+                <select class="dynamic-select" onchange="this.nextElementSibling.value=this.value; saveFormData()">
+                    <option value="">Sélectionner</option>
+                    <option value="Serein">Serein</option>
+                    <option value="Hostile">Hostile</option>
+                    <option value="Conciliant">Conciliant</option>
+                </select>
+                <input type="text" class="dynamic-input" placeholder="Ajouter un état d'esprit" onchange="this.previousElementSibling.value=this.value; saveFormData()">
+                <button type="button" class="add-btn" onclick="addDynamicFieldWithSelect('etat_esprit_container', 'État d\'esprit', ['Serein', 'Hostile', 'Conciliant'])">➕</button>
+                <button type="button" class="remove-btn" onclick="this.parentNode.remove(); saveFormData()">❌</button>
+            </div>
+        </div>
+        
         <label for="attitude_adversaire">Attitude (Interpellations précédentes) :</label>
         <textarea id="attitude_adversaire" rows="2" placeholder="Réactions lors des précédentes interpellations"></textarea>
         
         <label for="volume_adversaire_label">Volume (Renfort) :</label>
-        <select id="volume_adversaire_select" onchange="document.getElementById('volume_adversaire_input').value=this.value;">
-            <option value="">Sélectionner</option>
-            <option value="Seul">Seul</option>
-            <option value="Famille">Famille</option>
-            <option value="BO">BO</option>
-            <option value="Conjointe">Conjointe</option>
-        </select>
-        <input type="text" id="volume_adversaire_input" placeholder="Ajouter un volume">
+        <div id="volume_adversaire_container">
+            <div class="dynamic-list-item">
+                <select class="dynamic-select" onchange="this.nextElementSibling.value=this.value; saveFormData()">
+                    <option value="">Sélectionner</option>
+                    <option value="Seul">Seul</option>
+                    <option value="Famille">Famille</option>
+                    <option value="BO">BO</option>
+                    <option value="Conjointe">Conjointe</option>
+                </select>
+                <input type="text" class="dynamic-input" placeholder="Ajouter un volume" onchange="this.previousElementSibling.value=this.value; saveFormData()">
+                <button type="button" class="add-btn" onclick="addDynamicFieldWithSelect('volume_adversaire_container', 'Volume', ['Seul', 'Famille', 'BO', 'Conjointe'])">➕</button>
+                <button type="button" class="remove-btn" onclick="this.parentNode.remove(); saveFormData()">❌</button>
+            </div>
+        </div>
         
         <label for="substances_adversaire">Substances :</label>
         <input type="text" id="substances_adversaire" placeholder="Alcool/Drogues...">
         
-        <label for="vehicules_container">Véhicules :</label>
+        <label for="vehicules_container_label">Véhicules :</label>
         <div id="vehicules_container">
             <div class="dynamic-list-item">
                 <input type="text" class="vehicule-input" placeholder="Immat modèle couleur">
-                <button type="button" class="remove-btn" onclick="this.parentNode.remove()">❌</button>
+                <button type="button" class="remove-btn" onclick="this.parentNode.remove(); saveFormData()">❌</button>
             </div>
         </div>
         <button type="button" class="add-btn" onclick="addDynamicField('vehicules_container', 'vehicule-input', 'Immat modèle couleur')">➕</button>
         
-        <label for="armes_container">Armes :</label>
+        <label for="armes_container_label">Armes :</label>
         <div id="armes_container">
             <div class="dynamic-list-item">
                 <input type="text" class="arme-input" value="RAS" placeholder="Armes (si connue) ou RAS">
-                <button type="button" class="remove-btn" onclick="this.parentNode.remove()">❌</button>
+                <button type="button" class="remove-btn" onclick="this.parentNode.remove(); saveFormData()">❌</button>
             </div>
         </div>
         <button type="button" class="add-btn" onclick="addDynamicField('armes_container', 'arme-input', 'Armes (si connue) ou RAS', 'RAS')">➕</button>
@@ -126,8 +153,15 @@
         <textarea id="mode_action_me2" rows="1" placeholder="Rébellion"></textarea>
         <label for="mode_action_me3">Mode d'action : ME3</label>
         <textarea id="mode_action_me3" rows="1" placeholder="Retranchement"></textarea>
-        <label for="photoAdversaire">Ajouter une photo de l'adversaire :</label>
-        <input type="file" id="photoAdversaire" accept="image/*">
+        
+        <label for="adversaire_photos_label">Photos de l'adversaire :</label>
+        <div id="adversaire_photos_container">
+            <div class="dynamic-list-item">
+                <input type="file" class="adversaire-photo-input" accept="image/*">
+                <button type="button" class="remove-btn" onclick="this.parentNode.remove(); saveFormData()">❌</button>
+            </div>
+        </div>
+        <button type="button" class="add-btn" onclick="addPhotoField('adversaire_photos_container', 'adversaire-photo-input')">➕</button>
     </div>
 
     <div class="form-section">
@@ -154,69 +188,117 @@
         <label for="heure_execution">Heure d'exécution :</label>
         <input type="time" id="heure_execution" value="06:00">
         <label for="type_action_label">Type d'action :</label>
-        <select id="type_action_select" onchange="document.getElementById('type_action_input').value=this.value;">
-            <option value="en force">en force</option>
-            <option value="en souplesse">en souplesse</option>
-        </select>
-        <input type="text" id="type_action_input" placeholder="Ajouter un type d'action">
+        <div id="type_action_container">
+            <div class="dynamic-list-item">
+                <select class="dynamic-select" onchange="this.nextElementSibling.value=this.value; saveFormData()">
+                    <option value="en force">en force</option>
+                    <option value="en souplesse">en souplesse</option>
+                </select>
+                <input type="text" class="dynamic-input" placeholder="Ajouter un type d'action" onchange="this.previousElementSibling.value=this.value; saveFormData()">
+                <button type="button" class="add-btn" onclick="addDynamicFieldWithSelect('type_action_container', 'Type d\'action', ['en force', 'en souplesse'])">➕</button>
+                <button type="button" class="remove-btn" onclick="this.parentNode.remove(); saveFormData()">❌</button>
+            </div>
+        </div>
     </div>
 
     <div class="form-section">
         <h2>4. ARTICULATION</h2>
-        <div class="grid-container">
-            <div>
-                <h3>ÉQUIPE INDIA (Interpellation)</h3>
-                <div id="india_members">
-                    <div class="team-member-input"><label>India 1:</label><input type="text" class="india-input" placeholder="Trigramme"><button type="button" class="remove-btn" onclick="removeTeamMember(this)">❌</button></div>
-                </div>
-                <button type="button" class="add-btn" onclick="addTeamMember('india')">➕</button>
-            </div>
-            <div>
-                <h3>ÉQUIPE OSCAR (Observation/Appui)</h3>
-                <div id="oscar_members">
-                    <div class="team-member-input"><label>Oscar 1:</label><input type="text" class="oscar-input" placeholder="Trigramme"><button type="button" class="remove-btn" onclick="removeTeamMember(this)">❌</button></div>
-                </div>
-                <button type="button" class="add-btn" onclick="addTeamMember('oscar')">➕</button>
-            </div>
-        </div>
         <label for="place_chef">Place du Chef :</label>
         <input type="text" id="place_chef" placeholder="En INDIA / Avec élément interpellation...">
-        <h3>Photos de l'opération</h3>
-        <label for="photoCheminement">Cheminement :</label>
-        <input type="file" id="photoCheminement" accept="image/*">
-        <label for="photoTerrain">Terrain / Environnement :</label>
-        <input type="file" id="photoTerrain" accept="image/*">
-        <label for="photoPorte">Porte / Point d'effraction :</label>
-        <input type="file" id="photoPorte" accept="image/*">
+        
+        <h3 style="margin-top: 20px;">Temps d'opération (T0 - T5)</h3>
+        <div id="time_events_container">
+            <div class="time-item">
+                <select class="time-type-select" onchange="saveFormData()">
+                    <option value="T0">T0</option><option value="T1">T1</option><option value="T2">T2</option><option value="T3">T3</option><option value="T4">T4</option><option value="T5">T5</option>
+                </select>
+                <input type="time" class="time-hour-input" onchange="saveFormData()">
+                <textarea class="time-description-input" placeholder="Description de l'événement" rows="1" onchange="saveFormData()"></textarea>
+                <button type="button" class="remove-btn" onclick="this.parentNode.remove(); saveFormData()">❌</button>
+            </div>
+        </div>
+        <button type="button" class="add-btn" onclick="addTimeEvent()">➕</button>
     </div>
+
+    <div class="form-section">
+        <h2>PATRACDVR</h2>
+        <div id="patracdvr_container">
+        </div>
+        <button type="button" class="add-btn" onclick="addPatracdvrRow()">Ajouter un véhicule ➕</button>
+    </div>
+    
+    <div class="form-section">
+        <h2>Photos de l'opération</h2>
+        <div id="operation_photos_container">
+            <div class="dynamic-list-item">
+                <label>Cheminement :</label>
+                <input type="file" class="photo-input" data-label="Cheminement" accept="image/*">
+                <button type="button" class="remove-btn" onclick="this.parentNode.remove(); saveFormData()">❌</button>
+            </div>
+            <div class="dynamic-list-item">
+                <label>Terrain :</label>
+                <input type="file" class="photo-input" data-label="Terrain" accept="image/*">
+                <button type="button" class="remove-btn" onclick="this.parentNode.remove(); saveFormData()">❌</button>
+            </div>
+            <div class="dynamic-list-item">
+                <label>Porte :</label>
+                <input type="file" class="photo-input" data-label="Porte" accept="image/*">
+                <button type="button" class="remove-btn" onclick="this.parentNode.remove(); saveFormData()">❌</button>
+            </div>
+        </div>
+        <button type="button" class="add-btn" onclick="addPhotoField('operation_photos_container')">➕</button>
+    </div>
+
     <button id="generatePdf">Générer le PDF</button>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
 <script>
+    const availableVehicles = ['Sharan', 'Kodiaq', '5008', 'Scénic', 'BT'];
+
     document.addEventListener('DOMContentLoaded', (event) => {
         loadFormData();
     });
 
-    const formFields = document.querySelectorAll('input, textarea, select');
-    formFields.forEach(field => {
-        field.addEventListener('change', (e) => {
-            saveFormData();
-        });
-    });
-
     function saveFormData() {
         const data = {};
-        formFields.forEach(field => {
-            if (field.type === 'file') {
-                // Not saving file content to local storage
-            } else if (field.tagName === 'SELECT') {
-                data[field.id] = field.value;
-            } else {
+        document.querySelectorAll('input, textarea, select').forEach(field => {
+            if (field.type !== 'file' && field.id) {
                 data[field.id] = field.value;
             }
         });
+        
+        data['vehicules_list'] = Array.from(document.querySelectorAll('.vehicule-input')).map(input => input.value);
+        data['armes_list'] = Array.from(document.querySelectorAll('.arme-input')).map(input => input.value);
+        
+        data['etat_esprit_list'] = Array.from(document.querySelectorAll('#etat_esprit_container .dynamic-select')).map(s => s.value);
+        data['volume_list'] = Array.from(document.querySelectorAll('#volume_adversaire_container .dynamic-select')).map(s => s.value);
+        data['type_action_list'] = Array.from(document.querySelectorAll('#type_action_container .dynamic-select')).map(s => s.value);
+        
+        data['patracdvr_rows'] = [];
+        document.querySelectorAll('#patracdvr_container > .form-section').forEach(section => {
+            const vehicle = section.querySelector('.patracdvr-vehicle-select').value;
+            const members = Array.from(section.querySelectorAll('.patracdvr-member-input')).map(input => {
+                const item = input.closest('.patracdvr-member-item');
+                return {
+                    trigramme: input.value,
+                    equipement: item.querySelector('.patracdvr-equipement-select').value,
+                    fonction: item.querySelector('.patracdvr-fonction-select').value
+                };
+            });
+            data['patracdvr_rows'].push({ vehicle, members });
+        });
+        
+        data['time_events'] = [];
+        document.querySelectorAll('#time_events_container > .time-item').forEach(item => {
+            data['time_events'].push({
+                type: item.querySelector('.time-type-select').value,
+                hour: item.querySelector('.time-hour-input').value,
+                description: item.querySelector('.time-description-input').value
+            });
+        });
+
         localStorage.setItem('oiFormData', JSON.stringify(data));
     }
 
@@ -228,96 +310,217 @@
                 const field = document.getElementById(key);
                 if (field) {
                     field.value = data[key];
-                    if (field.tagName === 'SELECT') {
-                         field.dispatchEvent(new Event('change'));
-                    }
                 }
             }
-            updateTeamLabels('india');
-            updateTeamLabels('oscar');
+
+            document.getElementById('vehicules_container').innerHTML = '';
+            if (data['vehicules_list'] && data['vehicules_list'].length > 0) {
+                data['vehicules_list'].forEach(vehicule => addDynamicField('vehicules_container', 'vehicule-input', 'Immat modèle couleur', vehicule));
+            } else {
+                addDynamicField('vehicules_container', 'vehicule-input', 'Immat modèle couleur');
+            }
+
+            document.getElementById('armes_container').innerHTML = '';
+            if (data['armes_list'] && data['armes_list'].length > 0) {
+                data['armes_list'].forEach(arme => addDynamicField('armes_container', 'arme-input', 'Armes (si connue) ou RAS', arme));
+            } else {
+                addDynamicField('armes_container', 'arme-input', 'Armes (si connue) ou RAS', 'RAS');
+            }
+
+            loadDynamicSelectField('etat_esprit_container', data['etat_esprit_list'], ['Serein', 'Hostile', 'Conciliant']);
+            loadDynamicSelectField('volume_adversaire_container', data['volume_list'], ['Seul', 'Famille', 'BO', 'Conjointe']);
+            loadDynamicSelectField('type_action_container', data['type_action_list'], ['en force', 'en souplesse']);
+
+            document.getElementById('patracdvr_container').innerHTML = '';
+            if (data['patracdvr_rows'] && data['patracdvr_rows'].length > 0) {
+                data['patracdvr_rows'].forEach(row => {
+                    addPatracdvrRow(row.vehicle, row.members);
+                });
+            } else {
+                addPatracdvrRow('Sharan', [{trigramme: '', equipement: 'PIE', fonction: 'Inter'}]);
+                addPatracdvrRow('Kodiaq', [{trigramme: '', equipement: 'LBD', fonction: 'AO'}]);
+            }
+
+            document.getElementById('time_events_container').innerHTML = '';
+            if (data['time_events'] && data['time_events'].length > 0) {
+                data['time_events'].forEach(event => addTimeEvent(event.type, event.hour, event.description));
+            } else {
+                addTimeEvent('T0', '05:30', 'Déplacement tous moyens réunis...');
+            }
+
+        } else {
+            addDynamicField('vehicules_container', 'vehicule-input', 'Immat modèle couleur');
+            addDynamicField('armes_container', 'arme-input', 'Armes (si connue) ou RAS', 'RAS');
+            addDynamicFieldWithSelect('etat_esprit_container', 'État d\'esprit', ['Serein', 'Hostile', 'Conciliant']);
+            addDynamicFieldWithSelect('volume_adversaire_container', 'Volume', ['Seul', 'Famille', 'BO', 'Conjointe']);
+            addDynamicFieldWithSelect('type_action_container', 'Type d\'action', ['en force', 'en souplesse']);
+            addPatracdvrRow('Sharan', [{trigramme: '', equipement: 'PIE', fonction: 'Inter'}]);
+            addPatracdvrRow('Kodiaq', [{trigramme: '', equipement: 'LBD', fonction: 'AO'}]);
+            addTimeEvent('T0', '05:30', 'Déplacement tous moyens réunis...');
+        }
+    }
+
+    function loadDynamicSelectField(containerId, values, initialOptions) {
+        const container = document.getElementById(containerId);
+        container.innerHTML = '';
+        if (values && values.length > 0) {
+            values.forEach(val => {
+                const newField = document.createElement('div');
+                newField.className = 'dynamic-list-item';
+                const selectHtml = `<select class="dynamic-select" onchange="this.nextElementSibling.value=this.value; saveFormData()">
+                    <option value="">Sélectionner</option>
+                    ${initialOptions.map(opt => `<option value="${opt}" ${opt === val ? 'selected' : ''}>${opt}</option>`).join('')}
+                </select>`;
+                newField.innerHTML = `${selectHtml}
+                    <input type="text" class="dynamic-input" placeholder="Ajouter un élément" onchange="this.previousElementSibling.value=this.value; saveFormData()">
+                    <button type="button" class="add-btn" onclick="addDynamicFieldWithSelect('${containerId}', '', ['${initialOptions.join("','")}'])">➕</button>
+                    <button type="button" class="remove-btn" onclick="this.parentNode.remove(); saveFormData()">❌</button>
+                `;
+                container.appendChild(newField);
+            });
+        } else {
+            addDynamicFieldWithSelect(containerId, '', initialOptions);
         }
     }
 
     function resetForm() {
         if (confirm('Voulez-vous vraiment réinitialiser tout le formulaire ?')) {
             localStorage.removeItem('oiFormData');
-            formFields.forEach(field => {
-                if (field.type === 'file') {
-                    field.value = '';
-                } else if (field.tagName === 'SELECT') {
-                    field.selectedIndex = 0;
-                } else {
-                    field.value = '';
-                }
-            });
-            // Reset dynamic fields
-            document.getElementById('india_members').innerHTML = '';
-            addTeamMember('india');
-            document.getElementById('oscar_members').innerHTML = '';
-            addTeamMember('oscar');
-            document.getElementById('vehicules_container').innerHTML = '';
-            addDynamicField('vehicules_container', 'vehicule-input', 'Immat modèle couleur');
-            document.getElementById('armes_container').innerHTML = '';
-            addDynamicField('armes_container', 'arme-input', 'Armes (si connue) ou RAS', 'RAS');
+            location.reload();
         }
     }
 
-    // Ajout de la fonctionnalité de listes déroulantes dynamiques
-    function addDynamicOption(selectId, inputId) {
-        const input = document.getElementById(inputId);
-        const select = document.getElementById(selectId);
-        input.addEventListener('change', () => {
-            const value = input.value.trim();
-            if (value && !Array.from(select.options).some(o => o.value === value)) {
-                const newOption = document.createElement('option');
-                newOption.value = value;
-                newOption.textContent = value;
-                select.appendChild(newOption);
-                select.value = value;
-                saveFormData();
-            }
-        });
-    }
-
-    addDynamicOption('etat_esprit_adversaire_select', 'etat_esprit_adversaire_input');
-    addDynamicOption('volume_adversaire_select', 'volume_adversaire_input');
-    addDynamicOption('type_action_select', 'type_action_input');
-
-    // Fonction pour ajouter un membre d'équipe
-    function addTeamMember(team) {
-        const container = document.getElementById(`${team}_members`);
-        const count = container.children.length + 1;
-        const newMember = document.createElement('div');
-        newMember.className = 'team-member-input';
-        newMember.innerHTML = `<label>${team.charAt(0).toUpperCase() + team.slice(1)} ${count}:</label><input type="text" class="${team}-input" placeholder="Trigramme"><button type="button" class="remove-btn" onclick="removeTeamMember(this)">❌</button>`;
-        container.appendChild(newMember);
-        updateTeamLabels(team);
-    }
-    
-    function removeTeamMember(button) {
-        button.parentNode.remove();
-        const team = button.parentNode.parentNode.id.replace('_members', '');
-        updateTeamLabels(team);
-        saveFormData();
-    }
-
-    function updateTeamLabels(team) {
-        const container = document.getElementById(`${team}_members`);
-        Array.from(container.children).forEach((child, index) => {
-            child.querySelector('label').textContent = `${team.charAt(0).toUpperCase() + team.slice(1)} ${index + 1}:`;
-        });
-    }
-
-    // Fonction pour ajouter un champ dynamique (armes/véhicules)
-    function addDynamicField(containerId, inputClass, placeholder, defaultValue = '') {
+    function addDynamicFieldWithSelect(containerId, placeholder, initialOptions, selectedValue = '') {
         const container = document.getElementById(containerId);
         const newField = document.createElement('div');
         newField.className = 'dynamic-list-item';
-        newField.innerHTML = `<input type="text" class="${inputClass}" placeholder="${placeholder}" value="${defaultValue}"><button type="button" class="remove-btn" onclick="this.parentNode.remove()">❌</button>`;
+        
+        const selectHtml = `<select class="dynamic-select" onchange="this.nextElementSibling.value=this.value; saveFormData()">
+            <option value="">Sélectionner</option>
+            ${initialOptions.map(opt => `<option value="${opt}" ${opt === selectedValue ? 'selected' : ''}>${opt}</option>`).join('')}
+        </select>`;
+        
+        newField.innerHTML = `${selectHtml}
+            <input type="text" class="dynamic-input" placeholder="Ajouter un ${placeholder.toLowerCase()}" onchange="this.previousElementSibling.value=this.value; saveFormData()">
+            <button type="button" class="add-btn" onclick="addDynamicFieldWithSelect('${containerId}', '${placeholder}', ['${initialOptions.join("','")}'])">➕</button>
+            <button type="button" class="remove-btn" onclick="this.parentNode.remove(); saveFormData()">❌</button>
+        `;
         container.appendChild(newField);
         saveFormData();
     }
     
+    function addDynamicField(containerId, inputClass, placeholder, defaultValue = '') {
+        const container = document.getElementById(containerId);
+        const newField = document.createElement('div');
+        newField.className = 'dynamic-list-item';
+        newField.innerHTML = `<input type="text" class="${inputClass}" placeholder="${placeholder}" value="${defaultValue}" onchange="saveFormData()"><button type="button" class="remove-btn" onclick="this.parentNode.remove(); saveFormData()">❌</button>`;
+        container.appendChild(newField);
+        saveFormData();
+    }
+    
+    function addPhotoField(containerId) {
+        const container = document.getElementById(containerId);
+        const newField = document.createElement('div');
+        newField.className = 'dynamic-list-item';
+        newField.innerHTML = `<input type="file" class="photo-input" data-label="Autre" accept="image/*" onchange="saveFormData()"><button type="button" class="remove-btn" onclick="this.parentNode.remove(); saveFormData()">❌</button>`;
+        container.appendChild(newField);
+        saveFormData();
+    }
+
+    function addPatracdvrRow(vehicle = '', membersData = []) {
+        const container = document.getElementById('patracdvr_container');
+        const vehicleToAdd = vehicle || availableVehicles.find(v => !document.getElementById(`patracdvr_members_${v.replace(/\s/g, '')}`));
+
+        if (!vehicleToAdd) {
+            alert('Tous les véhicules sont déjà utilisés.');
+            return;
+        }
+
+        const vehicleId = vehicleToAdd.replace(/\s/g, '');
+        const row = document.createElement('div');
+        row.className = 'form-section';
+        const vehicleSelectHtml = `<select class="patracdvr-vehicle-select" onchange="updatePatracdvrRow(this)">` +
+                              availableVehicles.map(v => `<option value="${v}" ${v === vehicleToAdd ? 'selected' : ''}>${v}</option>`).join('') + `</select>`;
+        row.innerHTML = `
+            <div>
+                <h3>Véhicule : ${vehicleSelectHtml}</h3>
+                <div id="patracdvr_members_${vehicleId}"></div>
+                <button type="button" class="add-btn" onclick="addPatracdvrMember('${vehicleId}')">➕</button>
+                <button type="button" class="remove-btn" onclick="this.parentNode.remove(); updateAllPatracdvrRows(); saveFormData()">❌</button>
+            </div>
+        `;
+        container.appendChild(row);
+
+        if (membersData.length > 0) {
+            membersData.forEach(member => addPatracdvrMember(vehicleId, member.trigramme, member.equipement, member.fonction));
+        } else {
+            addPatracdvrMember(vehicleId, '', 'PIE', 'Inter');
+        }
+        updateAllPatracdvrRows();
+        saveFormData();
+    }
+    
+    function updatePatracdvrRow(selectElement) {
+        const oldVehicleId = selectElement.closest('.form-section').querySelector('[id^="patracdvr_members_"]').id;
+        const newVehicleId = selectElement.value.replace(/\s/g, '');
+        selectElement.closest('.form-section').querySelector('[id^="patracdvr_members_"]').id = `patracdvr_members_${newVehicleId}`;
+        updateAllPatracdvrRows();
+        saveFormData();
+    }
+
+    function updateAllPatracdvrRows() {
+        const usedVehicles = new Set();
+        document.querySelectorAll('.patracdvr-vehicle-select').forEach(select => {
+            if (select.value) {
+                usedVehicles.add(select.value);
+            }
+        });
+        document.querySelectorAll('.patracdvr-vehicle-select').forEach(select => {
+            const currentValue = select.value;
+            const newOptions = availableVehicles.map(v => `<option value="${v}" ${v === currentValue ? 'selected' : ''} ${usedVehicles.has(v) && v !== currentValue ? 'disabled' : ''}>${v}</option>`).join('');
+            select.innerHTML = newOptions;
+        });
+    }
+
+    function addPatracdvrMember(vehicleId, trigramme = '', equipement = '', fonction = '') {
+        const container = document.getElementById(`patracdvr_members_${vehicleId}`);
+        if (!container) return;
+        const equipementOptions = ['PIE', 'EFFRAC', 'LBD', 'UMP', 'G36', 'IL', 'GENL', 'MP7'];
+        const fonctionOptions = ['Chef inter', 'Chef dispo', 'AO', 'Inter', 'DE'];
+        
+        const member = document.createElement('div');
+        member.className = 'patracdvr-member-item';
+        member.innerHTML = `
+            <input type="text" class="patracdvr-member-input" placeholder="Trigramme" value="${trigramme}" onchange="saveFormData()">
+            <select class="patracdvr-equipement-select" onchange="saveFormData()">
+                ${equipementOptions.map(o => `<option value="${o}" ${o === equipement ? 'selected' : ''}>${o}</option>`).join('')}
+            </select>
+            <select class="patracdvr-fonction-select" onchange="saveFormData()">
+                ${fonctionOptions.map(o => `<option value="${o}" ${o === fonction ? 'selected' : ''}>${o}</option>`).join('')}
+            </select>
+            <button type="button" class="remove-btn" onclick="this.parentNode.remove(); saveFormData()">❌</button>
+        `;
+        container.appendChild(member);
+        saveFormData();
+    }
+
+    function addTimeEvent(type = 'T0', hour = '', description = '') {
+        const container = document.getElementById('time_events_container');
+        const event = document.createElement('div');
+        event.className = 'time-item';
+        const timeTypes = ['T0', 'T1', 'T2', 'T3', 'T4', 'T5'];
+        event.innerHTML = `
+            <select class="time-type-select" onchange="saveFormData()">
+                ${timeTypes.map(t => `<option value="${t}" ${t === type ? 'selected' : ''}>${t}</option>`).join('')}
+            </select>
+            <input type="time" class="time-hour-input" value="${hour}" onchange="saveFormData()">
+            <textarea class="time-description-input" placeholder="Description de l'événement" rows="1" onchange="saveFormData()">${description}</textarea>
+            <button type="button" class="remove-btn" onclick="this.parentNode.remove(); saveFormData()">❌</button>
+        `;
+        container.appendChild(event);
+        saveFormData();
+    }
+
     document.getElementById('generatePdf').addEventListener('click', async () => {
         const doc = new jspdf.jsPDF('landscape', 'pt', 'a4');
         const margin = 50;
@@ -331,10 +534,15 @@
             doc.setFontSize(10);
             doc.setFont('Helvetica', 'normal');
             doc.setTextColor('#e0e0e0');
-            doc.text(`Page ${doc.internal.getNumberOfPages()} `, pageWidth - 70, pageHeight - 20);
+            doc.text(`Page ${doc.internal.getNumberOfPages()}`, pageWidth - 70, pageHeight - 20);
         };
 
         const addSectionTitle = (title) => {
+            if (yPos > pageHeight - 50) {
+                doc.addPage();
+                yPos = margin;
+                addHeaderAndFooter();
+            }
             doc.setFontSize(16);
             doc.setFont('Helvetica', 'bold');
             doc.setTextColor('#5b9bd5');
@@ -342,10 +550,15 @@
             yPos += 20;
         };
 
-        const addText = (label, value, isBold = false) => {
+        const addText = (label, value) => {
             if (value) {
+                if (yPos > pageHeight - 30) {
+                    doc.addPage();
+                    yPos = margin;
+                    addHeaderAndFooter();
+                }
                 doc.setFontSize(12);
-                doc.setFont('Helvetica', isBold ? 'bold' : 'normal');
+                doc.setFont('Helvetica', 'normal');
                 doc.setTextColor('#e0e0e0');
                 const text = `${label}: ${value}`;
                 const lines = doc.splitTextToSize(text, pageWidth - margin * 2);
@@ -354,10 +567,9 @@
             }
         };
 
-        const addPhoto = async (inputElementId, title) => {
-            const input = document.getElementById(inputElementId);
-            if (input.files.length > 0) {
-                const file = input.files[0];
+        const addPhoto = async (fileInput, title) => {
+            if (fileInput && fileInput.files.length > 0) {
+                const file = fileInput.files[0];
                 const reader = new FileReader();
                 reader.readAsDataURL(file);
                 await new Promise(resolve => reader.onload = resolve);
@@ -368,7 +580,7 @@
                 const imgWidth = 300;
                 const imgHeight = (img.height * imgWidth) / img.width;
 
-                addText(title, '', true);
+                addSectionTitle(title);
                 
                 if (yPos + imgHeight + 20 > pageHeight) {
                     doc.addPage();
@@ -391,7 +603,7 @@
 
         // Page 1
         yPos = 80;
-        addSectionTitle("1/ SITUATION");
+        addSectionTitle("1. SITUATION");
         addText(`Date de l'opération`, document.getElementById('date_op').value);
         addText("1.1 Générale", document.getElementById('situation_generale').value);
         addText("1.2 Particulière", document.getElementById('situation_particuliere').value);
@@ -408,13 +620,13 @@
         const adversaireData = [
             ['Nom/Prénom', document.getElementById('nom_adversaire').value],
             ['Domicile et Adresse de repli', document.getElementById('domicile_adversaire').value],
-            ['Date/Lieu de naissance', document.getElementById('date_naissance').value],
+            ['Date/Lieu de naissance', `${document.getElementById('date_naissance').value} à ${document.getElementById('lieu_naissance').value}`],
             ['Description', `${document.getElementById('stature_adversaire').value} / ${document.getElementById('ethnie_adversaire').value} / ${document.getElementById('signes_particuliers_adversaire').value}`],
             ['Profession', document.getElementById('profession_adversaire').value],
             ['Antécédents', document.getElementById('antecedents_adversaire').value],
-            ['État d\'esprit', document.getElementById('etat_esprit_adversaire_input').value || document.getElementById('etat_esprit_adversaire_select').value],
+            ['État d\'esprit', Array.from(document.querySelectorAll('#etat_esprit_container .dynamic-select')).map(s => s.value).filter(val => val).join(', ')],
             ['Attitude', document.getElementById('attitude_adversaire').value],
-            ['Volume', document.getElementById('volume_adversaire_input').value || document.getElementById('volume_adversaire_select').value],
+            ['Volume', Array.from(document.querySelectorAll('#volume_adversaire_container .dynamic-select')).map(s => s.value).filter(val => val).join(', ')],
             ['Substances', document.getElementById('substances_adversaire').value],
             ['Véhicules', vehiculesList],
             ['Armes', armesList],
@@ -428,12 +640,15 @@
             head: [['Position', 'Détails']],
             body: adversaireData,
             theme: 'plain',
-            styles: { fontSize: 10, cellPadding: 5, textColor: [224, 224, 224] },
+            styles: { fontSize: 10, cellPadding: 5, textColor: [224, 224, 224], fillColor: [30, 30, 30] },
             headStyles: { fillColor: [42, 42, 42], textColor: [255, 255, 255] },
             didDrawPage: (data) => { yPos = data.cursor.y + 10; }
         });
         
-        await addPhoto('photoAdversaire', 'Signes particuliers');
+        const photoAdversaireInputs = document.querySelectorAll('#adversaire_photos_container input[type="file"]');
+        for (const input of photoAdversaireInputs) {
+            await addPhoto(input, "Photo de l'adversaire");
+        }
 
         // Page 3
         doc.addPage();
@@ -455,25 +670,82 @@
         addSectionTitle("3. EXÉCUTION");
         addText("Date d'exécution", document.getElementById('date_execution').value);
         addText("Heure d'exécution", document.getElementById('heure_execution').value);
-        addText("Type d'action", document.getElementById('type_action_input').value || document.getElementById('type_action_select').value);
+        addText("Type d'action", Array.from(document.querySelectorAll('#type_action_container .dynamic-select')).map(s => s.value).filter(val => val).join(', '));
         
         // ARTICULATION
         doc.addPage();
         yPos = 80;
         addHeaderAndFooter();
         addSectionTitle("4. ARTICULATION");
-
-        const indiaMembers = Array.from(document.querySelectorAll('.india-input')).map(input => input.value).filter(val => val).join(', ');
-        addText("ÉQUIPE INDIA (Interpellation)", indiaMembers);
-
-        const oscarMembers = Array.from(document.querySelectorAll('.oscar-input')).map(input => input.value).filter(val => val).join(', ');
-        addText("ÉQUIPE OSCAR (Observation/Appui)", oscarMembers);
-        
         addText("Place du Chef", document.getElementById('place_chef').value);
+        
+        doc.addPage();
+        yPos = 80;
+        addHeaderAndFooter();
+        addSectionTitle("Temps d'opération (T0 - T5)");
+        const timeEvents = [];
+        document.querySelectorAll('#time_events_container .time-item').forEach(item => {
+            timeEvents.push([
+                item.querySelector('.time-type-select').value,
+                item.querySelector('.time-hour-input').value,
+                item.querySelector('.time-description-input').value
+            ]);
+        });
+        doc.autoTable({
+            startY: yPos,
+            head: [['Type', 'Heure', 'Description']],
+            body: timeEvents,
+            theme: 'plain',
+            styles: { fontSize: 10, cellPadding: 5, textColor: [224, 224, 224], fillColor: [30, 30, 30] },
+            headStyles: { fillColor: [42, 42, 42], textColor: [255, 255, 255] },
+            didDrawPage: (data) => { yPos = data.cursor.y + 10; }
+        });
 
-        await addPhoto('photoCheminement', 'Itinéraire extérieur India');
-        await addPhoto('photoTerrain', 'Baptême terrain');
-        await addPhoto('photoPorte', 'Porte / Point d\'effraction');
+        doc.addPage();
+        yPos = 80;
+        addHeaderAndFooter();
+        addSectionTitle("PATRACDVR");
+        
+        const patracdvrData = [];
+        document.querySelectorAll('#patracdvr_container > .form-section').forEach(section => {
+            const vehicle = section.querySelector('.patracdvr-vehicle-select').value;
+            const members = Array.from(section.querySelectorAll('.patracdvr-member-input')).map(input => {
+                const item = input.closest('.patracdvr-member-item');
+                const equipement = item.querySelector('.patracdvr-equipement-select').value;
+                const fonction = item.querySelector('.patracdvr-fonction-select').value;
+                return [input.value, equipement, fonction];
+            });
+            patracdvrData.push({vehicle, members});
+        });
+        
+        for (const row of patracdvrData) {
+            if (row.members.some(m => m[0])) {
+                doc.autoTable({
+                    startY: yPos,
+                    head: [[`${row.vehicle}`, 'Équipement', 'Fonction']],
+                    body: row.members,
+                    theme: 'plain',
+                    styles: { fontSize: 10, cellPadding: 5, textColor: [224, 224, 224], fillColor: [30, 30, 30] },
+                    headStyles: { fillColor: [42, 42, 42], textColor: [255, 255, 255] },
+                    didDrawPage: (data) => { yPos = data.cursor.y + 10; }
+                });
+                yPos += 10;
+            }
+        }
+        
+        const photoInputs = document.querySelectorAll('#operation_photos_container input[type="file"]');
+        for (const input of photoInputs) {
+            const title = input.getAttribute('data-label') || "Photo d'opération";
+            await addPhoto(input, title);
+        }
+
+        doc.addPage();
+        doc.setFillColor(0, 0, 0);
+        doc.rect(0, 0, pageWidth, pageHeight, 'F');
+        doc.setFontSize(46);
+        doc.setFont('Helvetica', 'bold');
+        doc.setTextColor('#5b9bd5');
+        doc.text("Avez-vous des questions?", pageWidth / 2, pageHeight / 2, { align: 'center' });
 
         doc.save('ordre_initial.pdf');
     });
