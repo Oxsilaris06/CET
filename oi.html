@@ -21,7 +21,7 @@
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: 'Oswald', sans-serif; background-color: var(--bg-body); color: var(--text-primary); line-height: 1.6; padding: 15px; transition: background-color 0.3s, color 0.3s; }
         .container { max-width: 800px; margin: auto; background: var(--bg-container); padding: 20px 30px; border-radius: 8px; border: 1px solid var(--border-color); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-        h1 { text-align: center; font-size: 2.5em; margin-bottom: 20px; color: var(--accent-blue); font-family: 'Saira Stencil One', sans-serif; }
+        h1 { text-align: center; font-size: 2.5em; margin-bottom: 20px; color: var(--accent-blue); font-family: 'Saira+Stencil+One', sans-serif; }
         h2 { color: var(--accent-blue); border-bottom: 2px solid var(--accent-blue); padding-bottom: 10px; margin-top: 20px; font-weight: 400; }
         h3 { color: var(--text-primary); margin-top: 15px; margin-bottom: 10px; font-weight: 400; }
 
@@ -138,7 +138,7 @@
             .wizard-progress-step { font-size: 0.6em; white-space: nowrap; word-break: keep-all; }
             .wizard-nav-btn { padding: 10px 15px; font-size: 1em; }
             .dynamic-list-item { flex-wrap: wrap; }
-            .dock-menu { display: none; }
+            /* La règle qui cachait le dock a été enlevée */
         }
     </style>
 </head>
@@ -279,7 +279,6 @@
 
         function changeStep(n) {
             saveFormData();
-            // Prevent moving to the next step if current step is invalid (optional validation logic can be added here)
             currentStep = Math.max(0, Math.min(currentStep + n, steps.length - 1));
             showStep(currentStep);
         }
@@ -430,6 +429,8 @@
                 document.body.classList.remove('dark-mode');
                 document.body.classList.add('light-mode');
                 document.getElementById('darkModeIcon').textContent = 'clear_day';
+            } else {
+                 document.getElementById('darkModeIcon').textContent = 'nightlight';
             }
             const isDockCollapsed = localStorage.getItem('dockCollapsed') !== 'false';
             dockMenu.classList.toggle('collapsed', isDockCollapsed);
@@ -445,8 +446,6 @@
                 const { jsPDF } = jspdf;
                 const doc = new jsPDF({ unit: 'pt', format: 'a4', orientation: 'portrait' });
                 const margin = 40;
-                let pageWidth = doc.internal.pageSize.getWidth();
-                let pageHeight = doc.internal.pageSize.getHeight();
                 let yPos = margin;
                 
                 saveFormData(); // Ensure latest data is saved
@@ -456,11 +455,22 @@
                 const getVal = (id) => formData[id] || 'RAS';
 
                 // --- PDF HELPER FUNCTIONS ---
+                const addDarkBackground = () => {
+                    const pageCount = doc.internal.getNumberOfPages();
+                    for (let i = 1; i <= pageCount; i++) {
+                        doc.setPage(i);
+                        const { width, height } = doc.internal.pageSize;
+                        doc.setFillColor(30, 30, 30); // Dark grey background
+                        doc.rect(0, 0, width, height, 'F');
+                    }
+                    doc.setPage(pageCount); // Return to current page
+                };
+                
                 const checkYPos = (spaceNeeded) => {
+                    const pageHeight = doc.internal.pageSize.getHeight();
                     if (yPos + spaceNeeded > pageHeight - margin) {
                         doc.addPage('a4', 'portrait');
-                        pageWidth = doc.internal.pageSize.getWidth();
-                        pageHeight = doc.internal.pageSize.getHeight();
+                        addDarkBackground();
                         yPos = margin;
                         return true;
                     }
@@ -469,44 +479,34 @@
 
                 const addSectionTitle = (title) => {
                     checkYPos(60);
-                    doc.setFontSize(22).setFont('helvetica', 'bold').setTextColor('#5b9bd5');
+                    doc.setFontSize(18).setFont('helvetica', 'bold').setTextColor('#5b9bd5');
                     doc.text(title, margin, yPos);
                     yPos += 30;
                 };
                 
                 const addSubTitle = (title) => {
                     checkYPos(40);
-                    doc.setFontSize(14).setFont('helvetica', 'bold').setTextColor('#95a5a6');
+                    doc.setFontSize(15).setFont('helvetica', 'bold').setTextColor('#95a5a6');
                     doc.text(title, margin, yPos);
-                    yPos += 20;
+                    yPos += 25;
                 }
 
                 const addText = (text) => {
                     if (!text || text.trim() === 'RAS' || text.trim() === '') return;
-                    doc.setFontSize(11).setFont('helvetica', 'normal').setTextColor('#e0e0e0');
-                    const lines = doc.splitTextToSize(text, pageWidth - margin * 2);
+                    doc.setFontSize(14).setFont('helvetica', 'normal').setTextColor('#e0e0e0');
+                    const lines = doc.splitTextToSize(text, doc.internal.pageSize.getWidth() - margin * 2);
                     checkYPos(lines.length * 15 + 10);
                     doc.text(lines, margin, yPos);
                     yPos += lines.length * 15 + 10;
                 };
                 
-                const tableConfig = {
-                    theme: 'grid', styles: { fontSize: 9, cellPadding: 5, textColor: [224, 224, 224], fillColor: [30, 30, 30] },
-                    headStyles: { fontSize: 10, fillColor: [42, 42, 42], textColor: [255, 255, 255], fontStyle: 'bold' },
-                    didDrawPage: (data) => { yPos = data.cursor.y; }, // Update yPos after table renders
-                    margin: { left: margin, right: margin }
-                };
-                
-                const renderAutoTable = (config) => {
-                    doc.autoTable({ startY: yPos, ...tableConfig, ...config });
-                    yPos = doc.autoTable.previous.finalY + 20;
-                };
-
                 const addImagesFromContainer = async (containerId, title) => {
                     const inputs = Array.from(document.querySelectorAll(`#${containerId} input[type="file"]`)).filter(i => i.files.length > 0);
                     if (inputs.length === 0) return;
                     
-                    checkYPos(50);
+                    doc.addPage('a4', 'portrait');
+                    addDarkBackground();
+                    yPos = margin;
                     addSectionTitle(title);
 
                     const imagePromises = inputs.map(input => {
@@ -523,7 +523,7 @@
                     for (let i = 0; i < images.length; i += 2) {
                         const rowData = images.slice(i, i + 2);
                         const padding = 10;
-                        const availableWidth = pageWidth - margin * 2;
+                        const availableWidth = doc.internal.pageSize.getWidth() - margin * 2;
                         const imageWidth = (availableWidth - (padding * (rowData.length - 1))) / rowData.length;
                         let maxHeightInRow = 0;
 
@@ -549,16 +549,19 @@
                 };
 
                 // --- PDF CONTENT GENERATION ---
+                addDarkBackground(); // Apply dark theme to the first page
+
                 // Page 1: Title
-                doc.setFontSize(40).setFont('Saira Stencil One', 'normal');
+                doc.setFontSize(40).setFont('Saira+Stencil+One', 'normal');
                 doc.setTextColor('#5b9bd5');
                 const titleText = `ORDRE INITIAL`;
-                doc.text(titleText, pageWidth / 2, pageHeight / 2 - 40, { align: 'center' });
+                doc.text(titleText, doc.internal.pageSize.getWidth() / 2, doc.internal.pageSize.getHeight() / 2 - 40, { align: 'center' });
                 doc.setFontSize(20).setFont('Oswald', 'normal');
                 doc.setTextColor('#e0e0e0');
-                doc.text(`Opération du ${getVal('date_op') || 'N/A'}`, pageWidth / 2, pageHeight / 2, { align: 'center' });
+                doc.text(`Opération du ${getVal('date_op') || 'N/A'}`, doc.internal.pageSize.getWidth() / 2, doc.internal.pageSize.getHeight() / 2, { align: 'center' });
 
                 doc.addPage();
+                addDarkBackground();
                 yPos = margin;
 
                 // Section 1: Situation
@@ -570,7 +573,8 @@
 
                 // Section 1.3: Adversaire
                 addSectionTitle("1.3 ADVERSAIRE");
-                renderAutoTable({
+                 doc.autoTable({
+                    startY: yPos,
                     head: [['ADVERSAIRE', 'DÉTAILS']],
                     body: [
                         ['Nom/Prénom', getVal('nom_adversaire')],
@@ -586,54 +590,91 @@
                         ['Véhicules', (formData.vehicules_list || []).join(', ') || 'RAS'],
                         ['Armes', (formData.armes_list || []).join(', ') || 'RAS'],
                         ['Modes d\'action', `ME1: ${getVal('mode_action_me1')}\nME2: ${getVal('mode_action_me2')}\nME3: ${getVal('mode_action_me3')}`]
-                    ]
+                    ],
+                    theme: 'grid', styles: { fontSize: 12, cellPadding: 5, textColor: [224, 224, 224], fillColor: [40, 40, 40] },
+                    headStyles: { fontSize: 13, fillColor: [42, 42, 42], textColor: [255, 255, 255], fontStyle: 'bold' },
+                    didDrawPage: (data) => { addDarkBackground(); yPos = data.cursor.y; },
+                    margin: { left: margin, right: margin }
                 });
-                
+                yPos = doc.autoTable.previous.finalY + 20;
+
                 // Section 1.4: Environnement
                 addSectionTitle("1.4 ENVIRONNEMENT");
-                renderAutoTable({
+                doc.autoTable({
+                    startY: yPos,
                     head: [['ENVIRONNEMENT', 'DÉTAILS']],
                     body: [
                         ['Ami(e)s (soutien)', getVal('amies')],
                         ['Terrain / Météo', getVal('terrain_info')],
                         ['Population', getVal('population')],
                         ['Cadre juridique', getVal('cadre_juridique')]
-                    ]
+                    ],
+                    theme: 'grid', styles: { fontSize: 12, cellPadding: 5, textColor: [224, 224, 224], fillColor: [40, 40, 40] },
+                    headStyles: { fontSize: 13, fillColor: [42, 42, 42], textColor: [255, 255, 255], fontStyle: 'bold' },
+                    didDrawPage: (data) => { addDarkBackground(); yPos = data.cursor.y; },
+                    margin: { left: margin, right: margin }
                 });
+                yPos = doc.autoTable.previous.finalY + 20;
 
                 // Section 2: Mission
                 addSectionTitle("2. MISSION");
                 addText(getVal('missions_psig'));
 
-                // Section 3: Exécution
+                // Section 3 & 4: Exécution & Articulation
+                doc.addPage();
+                addDarkBackground();
+                yPos = margin;
                 addSectionTitle("3. EXÉCUTION");
-                renderAutoTable({
+                doc.autoTable({
+                    startY: yPos,
                     body: [
                         ['Date d\'exécution', getVal('date_execution')],
                         ['Heure (H)', getVal('heure_execution')],
                         ['Type d\'action', (formData.type_action_list || []).join(', ') || 'RAS']
-                    ]
+                    ],
+                    theme: 'grid', styles: { fontSize: 12, cellPadding: 5, textColor: [224, 224, 224], fillColor: [40, 40, 40] },
+                    headStyles: { fontSize: 13, fillColor: [42, 42, 42], textColor: [255, 255, 255], fontStyle: 'bold' },
+                    didDrawPage: (data) => { addDarkBackground(); yPos = data.cursor.y; },
+                    margin: { left: margin, right: margin }
                 });
+                yPos = doc.autoTable.previous.finalY + 20;
                 
-                // Section 4: Articulation
                 addSectionTitle("4. ARTICULATION");
                 addSubTitle("Place du Chef");
                 addText(getVal('place_chef'));
                 addSubTitle("Chronologie");
-                renderAutoTable({
+                doc.autoTable({
+                    startY: yPos,
                     head: [['Type', 'Heure', 'Description']],
-                    body: (formData.time_events || []).map(e => [e.type, e.hour || 'N/A', e.description || 'N/A'])
+                    body: (formData.time_events || []).map(e => [e.type, e.hour || 'N/A', e.description || 'N/A']),
+                    theme: 'grid', 
+                    styles: { fontSize: 13, fontStyle: 'normal', cellPadding: 5, textColor: [224, 224, 224], fillColor: [40, 40, 40] },
+                    headStyles: { fontSize: 14, fontStyle: 'bold', fillColor: [42, 42, 42], textColor: [255, 255, 255] },
+                    didDrawPage: (data) => { addDarkBackground(); yPos = data.cursor.y; },
+                    margin: { left: margin, right: margin }
                 });
+                yPos = doc.autoTable.previous.finalY + 20;
 
                 // Section 5: Moyens (PATRACDVR)
+                doc.addPage();
+                addDarkBackground();
+                yPos = margin;
                 addSectionTitle("5. MOYENS ENGAGÉS (PATRACDVR)");
                 (formData.patracdvr_rows || []).forEach(row => {
                     const members = row.members.filter(m => m.trigramme);
                     if (members.length > 0) {
-                        renderAutoTable({
+                        checkYPos(members.length * 20 + 40);
+                        doc.autoTable({
+                            startY: yPos,
                             head: [[`Véhicule: ${row.vehicle}`, 'Équipement', 'Fonction']],
-                            body: members.map(m => [m.trigramme, m.equipement, m.fonction])
+                            body: members.map(m => [m.trigramme, m.equipement, m.fonction]),
+                            theme: 'grid', 
+                            styles: { fontSize: 13, fontStyle: 'normal', cellPadding: 5, textColor: [224, 224, 224], fillColor: [40, 40, 40] },
+                            headStyles: { fontSize: 14, fontStyle: 'bold', fillColor: [42, 42, 42], textColor: [255, 255, 255] },
+                            didDrawPage: (data) => { addDarkBackground(); yPos = data.cursor.y; },
+                            margin: { left: margin, right: margin }
                         });
+                        yPos = doc.autoTable.previous.finalY + 20;
                     }
                 });
 
@@ -642,7 +683,7 @@
                 await addImagesFromContainer('operation_photos_container', "Photos de l'opération");
 
                 // --- Finalize and Save ---
-                doc.save(`OI_${getVal('date_op').replace(/\//g, '-')}_${getVal('nom_adversaire').replace(/ /g, '_')}.pdf`);
+                doc.save(`OI_${getVal('date_op').replace(/[\/\\?%*:|"<>]/g, '-')}_${getVal('nom_adversaire').replace(/ /g, '_')}.pdf`);
 
             } catch (error) {
                 console.error("Erreur lors de la génération du PDF:", error);
