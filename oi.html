@@ -220,10 +220,9 @@
         </div>
     </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
     <script>
-        // --- WIZARD LOGIC ---
+        // --- WIZARD LOGIC & FORM MANAGEMENT (inchangé) ---
         let currentStep = 0;
         const steps = document.querySelectorAll(".wizard-step");
         const progressSteps = document.querySelectorAll(".wizard-progress-step");
@@ -231,12 +230,10 @@
         function showStep(n) {
             steps.forEach(step => step.classList.remove('active'));
             steps[n].classList.add('active');
-            
             progressSteps.forEach((step, index) => {
                 step.classList.toggle('active', index === n);
                 step.classList.toggle('completed', index < n);
             });
-
             document.getElementById("prevBtn").style.display = n === 0 ? "none" : "inline-block";
             document.getElementById("nextBtn").style.display = n === (steps.length - 1) ? "none" : "inline-block";
             document.getElementById("generatePdfBtn").style.display = n === (steps.length - 1) ? "inline-block" : "none";
@@ -247,10 +244,8 @@
             currentStep = Math.max(0, Math.min(currentStep + n, steps.length - 1));
             showStep(currentStep);
         }
-
-        // --- DYNAMIC FORM & DATA ---
+        
         const availableVehicles = ['Sharan', 'Kodiaq', '5008', 'Scénic', 'BT'];
-
         function saveFormData() {
             try {
                 const data = {};
@@ -354,7 +349,6 @@
             container.appendChild(item);
         }
 
-        // --- THEME & DOCK & RESET ---
         document.getElementById('darkModeToggle').addEventListener('click', () => {
             const body = document.body;
             body.classList.toggle('light-mode'); body.classList.toggle('dark-mode');
@@ -370,7 +364,6 @@
             }
         });
 
-        // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', () => {
             if (localStorage.getItem('theme') === 'light') {
                 document.body.classList.remove('dark-mode');
@@ -379,136 +372,164 @@
             } else {
                  document.getElementById('darkModeIcon').textContent = 'nightlight';
             }
-
             showStep(currentStep);
             loadFormData();
         });
         
-        // --- PDF GENERATION ---
+        // --- NOUVELLE IMPLEMENTATION PDF AVEC PDF-LIB ---
         document.getElementById('generatePdfBtn').addEventListener('click', async () => {
             try {
-                const { jsPDF } = jspdf;
-                const doc = new jsPDF({ unit: 'pt', format: 'a4', orientation: 'portrait' });
-                const margin = 40;
-                let yPos = margin;
+                // Initialisation
+                const { PDFDocument, StandardFonts, rgb } = PDFLib;
+                const pdfDoc = await PDFDocument.create();
+                const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
+                const helveticaBoldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
                 
+                // Collecte des données
                 saveFormData();
                 const formDataString = localStorage.getItem('oiFormData');
-                if (!formDataString) {
-                    alert("Aucune donnée à générer. Remplissez le formulaire.");
-                    return;
-                }
+                if (!formDataString) { alert("Aucune donnée à générer."); return; }
                 const formData = JSON.parse(formDataString);
                 const getVal = (id) => formData[id] || 'RAS';
 
-                // --- PDF HELPER FUNCTIONS ---
-
-                const addDarkBackground = (docInstance) => {
-                    const { width, height } = docInstance.internal.pageSize;
-                    docInstance.setFillColor(30, 30, 30);
-                    docInstance.rect(0, 0, width, height, 'F');
+                // Couleurs
+                const colors = {
+                    background: rgb(30/255, 30/255, 30/255),
+                    text: rgb(1, 1, 1),
+                    label: rgb(220/255, 220/255, 220/255),
+                    accent: rgb(91/255, 155/255, 213/255),
+                    tableHeader: rgb(42/255, 42/255, 42/255),
+                    tableFill: rgb(40/255, 40/255, 40/255)
                 };
+
+                // Contexte de rendu
+                let currentPage = pdfDoc.addPage();
+                const { width, height } = currentPage.getSize();
+                const margin = 40;
+                let y = height - margin;
+
+                // --- Fonctions utilitaires de rendu pour PDF-LIB ---
+
+                const addDarkBackground = () => currentPage.drawRectangle({ x: 0, y: 0, width, height, color: colors.background });
                 
-                const checkYPos = (spaceNeeded) => {
-                    const pageHeight = doc.internal.pageSize.getHeight();
-                    if (yPos + spaceNeeded > pageHeight - margin) {
-                        doc.addPage('a4', 'portrait');
-                        addDarkBackground(doc);
-                        yPos = margin;
-                        return true;
+                const checkY = (spaceNeeded) => {
+                    if (y - spaceNeeded < margin) {
+                        currentPage = pdfDoc.addPage();
+                        addDarkBackground();
+                        y = height - margin;
                     }
-                    return false;
                 };
 
-                const addSectionTitle = (title) => {
-                    checkYPos(60);
-                    doc.setFontSize(18).setFont('helvetica', 'bold').setTextColor('#5b9bd5');
-                    doc.text(title, margin, yPos);
-                    yPos += 35;
+                const drawSectionTitle = (text) => {
+                    checkY(40);
+                    y -= 35;
+                    currentPage.drawText(text, { x: margin, y: y, font: helveticaBoldFont, size: 18, color: colors.accent });
                 };
 
-                const addLabeledText = (label, value) => {
-                    checkYPos(30);
-                    doc.setFontSize(14).setFont('helvetica', 'bold').setTextColor(220, 220, 220);
+                const drawLabeledText = (label, value) => {
                     const labelText = `${label}: `;
-                    const labelWidth = doc.getStringUnitWidth(labelText) * doc.getFontSize() / doc.internal.scaleFactor;
-                    doc.text(labelText, margin, yPos);
-
-                    doc.setFont('helvetica', 'normal').setTextColor(255, 255, 255);
-                    const valueLines = doc.splitTextToSize(value, doc.internal.pageSize.getWidth() - margin * 2 - labelWidth);
-                    doc.text(valueLines, margin + labelWidth, yPos);
-                    yPos += (valueLines.length * 15) + 10;
-                };
-                
-                const addImagesFromContainer = async (containerId, title) => {
-                    const inputs = Array.from(document.querySelectorAll(`#${containerId} input[type="file"]`)).filter(i => i.files.length > 0);
-                    if (inputs.length === 0) return;
+                    const labelWidth = helveticaBoldFont.widthOfTextAtSize(labelText, 14);
+                    const valueLines = wrapText(value, helveticaFont, 14, width - margin * 2 - labelWidth);
+                    const totalHeight = valueLines.length * 15 + 10;
+                    checkY(totalHeight);
                     
-                    doc.addPage('a4', 'portrait');
-                    addDarkBackground(doc);
-                    yPos = margin;
-                    addSectionTitle(title);
+                    y -= 15;
+                    currentPage.drawText(labelText, { x: margin, y: y, font: helveticaBoldFont, size: 14, color: colors.label });
+                    
+                    valueLines.forEach((line, index) => {
+                         currentPage.drawText(line, { x: margin + labelWidth, y: y - (index * 15), font: helveticaFont, size: 14, color: colors.text });
+                    });
+                    y -= totalHeight - 15;
+                };
 
-                    const imagePromises = inputs.map(input => {
-                        const label = input.parentElement.querySelector('.photo-label-input')?.value || input.dataset.label || 'Image';
-                        return new Promise((resolve, reject) => {
-                            const reader = new FileReader();
-                            reader.onload = e => resolve({ src: e.target.result, label });
-                            reader.onerror = reject;
-                            reader.readAsDataURL(input.files[0]);
+                const wrapText = (text, font, size, maxWidth) => {
+                    const words = text.replace(/\n/g, ' \n ').split(' ');
+                    const lines = [];
+                    let currentLine = '';
+                    for (const word of words) {
+                        if (word === '\n') {
+                            lines.push(currentLine);
+                            currentLine = '';
+                            continue;
+                        }
+                        const lineWithWord = currentLine === '' ? word : `${currentLine} ${word}`;
+                        const lineWidth = font.widthOfTextAtSize(lineWithWord, size);
+                        if (lineWidth > maxWidth) {
+                            lines.push(currentLine);
+                            currentLine = word;
+                        } else {
+                            currentLine = lineWithWord;
+                        }
+                    }
+                    lines.push(currentLine);
+                    return lines;
+                };
+
+                const drawTable = (headers, rows, columnWidths, style) => {
+                    const rowPadding = 5;
+                    const availableWidth = width - margin * 2;
+                    
+                    const calculatedWidths = columnWidths 
+                        ? columnWidths.map(w => w * availableWidth)
+                        : Array(headers.length).fill(availableWidth / headers.length);
+                    
+                    const wrappedHeaders = headers.map((h, i) => wrapText(h, style.headFont, style.headSize, calculatedWidths[i] - rowPadding * 2));
+                    const headerHeight = Math.max(...wrappedHeaders.map(lines => lines.length)) * style.headSize + rowPadding * 2;
+                    
+                    checkY(headerHeight);
+                    y -= headerHeight;
+                    
+                    headers.forEach((_, i) => {
+                        const x = margin + calculatedWidths.slice(0, i).reduce((a, b) => a + b, 0);
+                        currentPage.drawRectangle({ x, y, width: calculatedWidths[i], height: headerHeight, color: colors.tableHeader });
+                        wrappedHeaders[i].forEach((line, lineIndex) => {
+                            const textY = y + headerHeight - rowPadding - style.headSize - (lineIndex * style.headSize);
+                            currentPage.drawText(line, { x: x + rowPadding, y: textY, font: style.headFont, size: style.headSize, color: colors.text });
                         });
                     });
-                    const images = await Promise.all(imagePromises);
 
-                    for (let i = 0; i < images.length; i += 2) {
-                        const rowData = images.slice(i, i + 2);
-                        const padding = 10;
-                        const availableWidth = doc.internal.pageSize.getWidth() - margin * 2;
-                        const imageWidth = (availableWidth - (padding * (rowData.length - 1))) / rowData.length;
-                        let maxHeightInRow = 0;
-
-                        const processed = [];
-                        for (const data of rowData) {
-                            const img = new Image();
-                            img.src = data.src;
-                            await new Promise(r => img.onload = r);
-                            const imageHeight = imageWidth * (img.height / img.width);
-                            maxHeightInRow = Math.max(maxHeightInRow, imageHeight);
-                            processed.push({ img, ...data, width: imageWidth, height: imageHeight });
-                        }
-
-                        checkYPos(maxHeightInRow + 30);
-                        let xPos = margin;
-                        for (const p of processed) {
-                            doc.addImage(p.img, 'JPEG', xPos, yPos, p.width, p.height);
-                            doc.setFontSize(9).setTextColor(255, 255, 255).text(p.label, xPos + p.width / 2, yPos + p.height + 15, { align: 'center' });
-                            xPos += p.width + padding;
-                        }
-                        yPos += maxHeightInRow + 30;
-                    }
+                    rows.forEach(row => {
+                        const wrappedRow = row.map((cell, i) => wrapText(String(cell), style.bodyFont, style.bodySize, calculatedWidths[i] - rowPadding * 2));
+                        const rowHeight = Math.max(...wrappedRow.map(lines => lines.length)) * style.bodySize + rowPadding * 2;
+                        
+                        checkY(rowHeight);
+                        y -= rowHeight;
+                        
+                        row.forEach((_, i) => {
+                            const x = margin + calculatedWidths.slice(0, i).reduce((a, b) => a + b, 0);
+                            currentPage.drawRectangle({ x, y, width: calculatedWidths[i], height: rowHeight, color: colors.tableFill });
+                             currentPage.drawRectangle({ x, y, width: calculatedWidths[i], height: rowHeight, borderColor: colors.background, borderWidth: 0.5 });
+                            wrappedRow[i].forEach((line, lineIndex) => {
+                                const textY = y + rowHeight - rowPadding - style.bodySize - (lineIndex * style.bodySize);
+                                currentPage.drawText(line, { x: x + rowPadding, y: textY, font: style.bodyFont, size: style.bodySize, color: colors.text });
+                            });
+                        });
+                    });
                 };
+                
+                // --- Construction du PDF ---
 
-                // --- PDF CONTENT GENERATION ---
-                addDarkBackground(doc);
+                addDarkBackground();
+                
+                // Page de titre
+                const title = 'ORDRE INITIAL';
+                const dateTitle = `Opération du ${getVal('date_op') || 'N/A'}`;
+                const titleWidth = helveticaBoldFont.widthOfTextAtSize(title, 40);
+                const dateTitleWidth = helveticaFont.widthOfTextAtSize(dateTitle, 20);
+                currentPage.drawText(title, { x: width / 2 - titleWidth / 2, y: height / 2, font: helveticaBoldFont, size: 40, color: colors.accent });
+                currentPage.drawText(dateTitle, { x: width / 2 - dateTitleWidth / 2, y: height / 2 - 40, font: helveticaFont, size: 20, color: colors.text });
 
-                doc.setFontSize(40).setFont('helvetica', 'bold').setTextColor('#5b9bd5');
-                doc.text('ORDRE INITIAL', doc.internal.pageSize.getWidth() / 2, doc.internal.pageSize.getHeight() / 2 - 40, { align: 'center' });
-                doc.setFontSize(20).setFont('helvetica', 'normal').setTextColor(255, 255, 255);
-                doc.text(`Opération du ${getVal('date_op') || 'N/A'}`, doc.internal.pageSize.getWidth() / 2, doc.internal.pageSize.getHeight() / 2, { align: 'center' });
+                currentPage = pdfDoc.addPage();
+                addDarkBackground();
+                y = height - margin;
 
-                doc.addPage();
-                addDarkBackground(doc);
-                yPos = margin;
+                // Sections
+                drawSectionTitle("1. SITUATION");
+                drawLabeledText("1.1 Générale", getVal('situation_generale'));
+                drawLabeledText("1.2 Particulière", getVal('situation_particuliere'));
 
-                addSectionTitle("1. SITUATION");
-                addLabeledText("1.1 Générale", getVal('situation_generale'));
-                addLabeledText("1.2 Particulière", getVal('situation_particuliere'));
-
-                addSectionTitle("1.3 ADVERSAIRE & 1.4 ENVIRONNEMENT");
-                 doc.autoTable({
-                    startY: yPos,
-                    head: [['Catégorie', 'Détails']],
-                    body: [
+                drawSectionTitle("1.3 ADVERSAIRE & 1.4 ENVIRONNEMENT");
+                drawTable(['Catégorie', 'Détails'], [
                         ['Nom/Prénom', getVal('nom_adversaire')], ['Domicile', getVal('domicile_adversaire')],
                         ['Naissance', `${getVal('date_naissance')} à ${getVal('lieu_naissance')}`],
                         ['Description', [getVal('stature_adversaire'), getVal('ethnie_adversaire'), getVal('signes_particuliers_adversaire')].filter(Boolean).join(' / ') || 'RAS'],
@@ -520,65 +541,50 @@
                         ['Modes d\'action', `ME1: ${getVal('mode_action_me1')}\nME2: ${getVal('mode_action_me2')}\nME3: ${getVal('mode_action_me3')}`],
                         ['Ami(e)s (soutien)', getVal('amies')], ['Terrain / Météo', getVal('terrain_info')],
                         ['Population', getVal('population')], ['Cadre juridique', getVal('cadre_juridique')]
-                    ],
-                    theme: 'grid', styles: { fontSize: 14, fontStyle: 'normal', cellPadding: 5, textColor: [255, 255, 255], fillColor: [40, 40, 40] },
-                    headStyles: { fontSize: 15, fontStyle: 'bold', fillColor: [42, 42, 42], textColor: [255, 255, 255] },
-                    didDrawPage: (data) => { addDarkBackground(doc); },
-                    margin: { left: margin, right: margin }
-                });
-                yPos = doc.autoTable.previous.finalY + 20;
-
-                addSectionTitle("2. MISSION");
-                addLabeledText("Mission principale", getVal('missions_psig'));
-
-                doc.addPage();
-                addDarkBackground(doc);
-                yPos = margin;
-
-                addSectionTitle("3. EXÉCUTION & 4. ARTICULATION");
-                addLabeledText("Date/Heure/Action", `Date: ${getVal('date_execution')} | Heure: ${getVal('heure_execution')} | Type: ${(formData.type_action_list || []).join(', ') || 'RAS'}`);
-                addLabeledText("Place du Chef", getVal('place_chef'));
+                    ], [0.3, 0.7], { headFont: helveticaBoldFont, headSize: 15, bodyFont: helveticaFont, bodySize: 14 });
                 
-                yPos += 10;
-                doc.autoTable({
-                    startY: yPos,
-                    head: [['Type', 'Heure', 'Description']],
-                    body: (formData.time_events || []).map(e => [e.type, e.hour || 'N/A', e.description || 'N/A']),
-                    theme: 'grid', 
-                    styles: { fontSize: 13, fontStyle: 'normal', cellPadding: 5, textColor: [255, 255, 255], fillColor: [40, 40, 40] },
-                    headStyles: { fontSize: 14, fontStyle: 'bold', fillColor: [42, 42, 42], textColor: [255, 255, 255] },
-                    didDrawPage: (data) => { addDarkBackground(doc); },
-                    margin: { left: margin, right: margin }
-                });
-                yPos = doc.autoTable.previous.finalY + 20;
+                y-= 20;
+                drawSectionTitle("2. MISSION");
+                drawLabeledText("Mission principale", getVal('missions_psig'));
+                
+                checkY(200); // Espace pour la prochaine section
+                drawSectionTitle("3. EXÉCUTION & 4. ARTICULATION");
+                drawLabeledText("Date/Heure/Action", `Date: ${getVal('date_execution')} | Heure: ${getVal('heure_execution')} | Type: ${(formData.type_action_list || []).join(', ') || 'RAS'}`);
+                drawLabeledText("Place du Chef", getVal('place_chef'));
+                y -= 10;
+                drawTable(
+                    ['Type', 'Heure', 'Description'], 
+                    (formData.time_events || []).map(e => [e.type, e.hour || 'N/A', e.description || 'N/A']), 
+                    [0.15, 0.2, 0.65], 
+                    { headFont: helveticaBoldFont, headSize: 14, bodyFont: helveticaFont, bodySize: 13 }
+                );
 
-                addSectionTitle("5. MOYENS ENGAGÉS (PATRACDVR)");
+                y-= 20;
+                drawSectionTitle("5. MOYENS ENGAGÉS (PATRACDVR)");
                 (formData.patracdvr_rows || []).forEach(row => {
                     const members = row.members.filter(m => m.trigramme);
                     if (members.length > 0) {
-                        checkYPos(members.length * 20 + 40);
-                        doc.autoTable({
-                            startY: yPos,
-                            head: [[`Véhicule: ${row.vehicle}`, 'Équipement', 'Fonction']],
-                            body: members.map(m => [m.trigramme, m.equipement, m.fonction]),
-                            theme: 'grid', 
-                            styles: { fontSize: 13, fontStyle: 'normal', cellPadding: 5, textColor: [255, 255, 255], fillColor: [40, 40, 40] },
-                            headStyles: { fontSize: 14, fontStyle: 'bold', fillColor: [42, 42, 42], textColor: [255, 255, 255] },
-                            didDrawPage: (data) => { addDarkBackground(doc); },
-                            margin: { left: margin, right: margin }
-                        });
-                        yPos = doc.autoTable.previous.finalY + 20;
+                        y -= 10;
+                        drawTable(
+                            [`Véhicule: ${row.vehicle}`, 'Équipement', 'Fonction'], 
+                            members.map(m => [m.trigramme, m.equipement, m.fonction]), 
+                            [0.33, 0.33, 0.34], 
+                            { headFont: helveticaBoldFont, headSize: 14, bodyFont: helveticaFont, bodySize: 13 }
+                        );
                     }
                 });
                 
-                await addImagesFromContainer('adversaire_photos_container', "Photos de l'adversaire");
-                await addImagesFromContainer('operation_photos_container', "Photos de l'opération");
-
-                doc.save(`OI_${getVal('date_op').replace(/[\/\\?%*:|"<>]/g, '-')}_${getVal('nom_adversaire').replace(/ /g, '_')}.pdf`);
+                // Sauvegarde
+                const pdfBytes = await pdfDoc.save();
+                const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = `OI_${getVal('date_op').replace(/[\/\\?%*:|"<>]/g, '-')}_${getVal('nom_adversaire').replace(/ /g, '_')}.pdf`;
+                link.click();
 
             } catch (error) {
                 console.error("Erreur critique lors de la génération du PDF:", error);
-                alert("Une erreur critique est survenue lors de la génération du PDF. Consultez la console pour plus de détails (F12).");
+                alert("Une erreur critique est survenue. Consultez la console (F12).");
             }
         });
     </script>
