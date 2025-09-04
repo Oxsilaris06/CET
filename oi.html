@@ -376,31 +376,25 @@
             loadFormData();
         });
         
-        // --- NOUVELLE IMPLEMENTATION PDF AVEC PDF-LIB (ROBUSTE) ---
+        // --- IMPLEMENTATION PDF PDF-LIB (ROBUSTE) ---
 
-        // Fonction principale de génération de PDF, séparée pour la clarté
         async function buildPdf() {
-            // Initialisation
-            const { PDFDocument, StandardFonts, rgb } = PDFLib;
+            const { PDFDocument, StandardFonts, rgb, PageSizes } = PDFLib;
             const pdfDoc = await PDFDocument.create();
             const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
             const helveticaBoldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
             
-            // Collecte des données
             saveFormData();
             const formDataString = localStorage.getItem('oiFormData');
-            if (!formDataString) {
-                alert("Aucune donnée à générer. Remplissez le formulaire.");
-                return null;
-            }
+            if (!formDataString) { alert("Aucune donnée à générer."); return null; }
             const formData = JSON.parse(formDataString);
             const getVal = (id) => formData[id] || 'RAS';
 
-            // Contexte de rendu
             const context = {
                 pdfDoc, helveticaFont, helveticaBoldFont,
-                currentPage: null,
-                width: 0, height: 0, margin: 40, y: 0,
+                currentPage: null, y: 0,
+                pageWidth: PageSizes.A4[0], pageHeight: PageSizes.A4[1],
+                margin: 40,
                 colors: {
                     background: rgb(30/255, 30/255, 30/255),
                     text: rgb(1, 1, 1),
@@ -410,25 +404,27 @@
                     tableFill: rgb(40/255, 40/255, 40/255)
                 }
             };
-            
-            // --- Fonctions utilitaires de rendu pour PDF-LIB ---
 
-            const addNewPage = () => {
-                context.currentPage = context.pdfDoc.addPage();
+            const addNewPage = (orientation = 'portrait') => {
+                const pageSize = orientation === 'landscape' ? [PageSizes.A4[1], PageSizes.A4[0]] : PageSizes.A4;
+                context.currentPage = context.pdfDoc.addPage(pageSize);
                 const { width, height } = context.currentPage.getSize();
-                context.width = width;
-                context.height = height;
+                context.pageWidth = width;
+                context.pageHeight = height;
                 context.y = height - context.margin;
                 context.currentPage.drawRectangle({ x: 0, y: 0, width, height, color: context.colors.background });
             };
 
-            const checkY = (spaceNeeded) => {
+            const checkY = (spaceNeeded, orientation = 'portrait') => {
                 if (context.y - spaceNeeded < context.margin) {
-                    addNewPage();
+                    addNewPage(orientation);
                 }
             };
 
-            const drawSectionTitle = (text) => {
+            const drawSectionTitle = (text, newPage = false) => {
+                if (newPage) {
+                    addNewPage();
+                }
                 checkY(40);
                 context.y -= 35;
                 context.currentPage.drawText(text, { x: context.margin, y: context.y, font: context.helveticaBoldFont, size: 18, color: context.colors.accent });
@@ -460,25 +456,22 @@
             const drawLabeledText = (label, value) => {
                 const labelText = `${label}: `;
                 const labelWidth = context.helveticaBoldFont.widthOfTextAtSize(labelText, 14);
-                const valueLines = wrapText(value, context.helveticaFont, 14, context.width - context.margin * 2 - labelWidth);
+                const valueLines = wrapText(value, context.helveticaFont, 14, context.pageWidth - context.margin * 2 - labelWidth);
                 const totalHeight = valueLines.length * 16 + 10;
                 checkY(totalHeight);
-                
                 context.y -= 16;
                 context.currentPage.drawText(labelText, { x: context.margin, y: context.y, font: context.helveticaBoldFont, size: 14, color: context.colors.label });
-                
                 valueLines.forEach((line, index) => {
                      context.currentPage.drawText(line, { x: context.margin + labelWidth, y: context.y - (index * 16), font: context.helveticaFont, size: 14, color: context.colors.text });
                 });
-                context.y -= totalHeight - 16;
+                context.y -= (totalHeight - 16);
             };
-
+            
             const drawTable = (headers, rows, columnWidths, style) => {
                 const rowPadding = 5;
-                const availableWidth = context.width - context.margin * 2;
+                const availableWidth = context.pageWidth - context.margin * 2;
                 const calculatedWidths = columnWidths.map(w => w * availableWidth);
 
-                // Dessiner l'en-tête
                 const wrappedHeaders = headers.map((h, i) => wrapText(h, style.headFont, style.headSize, calculatedWidths[i] - rowPadding * 2));
                 const headerHeight = Math.max(...wrappedHeaders.map(lines => lines.length)) * (style.headSize + 2) + rowPadding * 2;
                 checkY(headerHeight);
@@ -492,7 +485,6 @@
                     });
                 });
 
-                // Dessiner les lignes
                 rows.forEach(row => {
                     const wrappedRow = row.map((cell, i) => wrapText(String(cell), style.bodyFont, style.bodySize, calculatedWidths[i] - rowPadding * 2));
                     const rowHeight = Math.max(...wrappedRow.map(lines => lines.length)) * (style.bodySize + 2) + rowPadding * 2;
@@ -509,25 +501,55 @@
                 });
             };
             
+            const drawImages = async (containerId) => {
+                 const inputs = Array.from(document.querySelectorAll(`#${containerId} input[type="file"]`)).filter(i => i.files.length > 0);
+                if (inputs.length === 0) return;
+
+                for (const input of inputs) {
+                    addNewPage('landscape');
+                    const label = input.parentElement.querySelector('.photo-label-input')?.value || input.dataset.label || 'Image';
+                    
+                    const file = input.files[0];
+                    const imageBytes = await file.arrayBuffer();
+                    const image = await (file.type === 'image/jpeg' ? pdfDoc.embedJpg(imageBytes) : pdfDoc.embedPng(imageBytes));
+
+                    const pageW = context.pageWidth;
+                    const pageH = context.pageHeight;
+                    const paddedW = pageW - context.margin * 2;
+                    const paddedH = pageH - context.margin * 2 - 20; // Extra padding for description
+
+                    const scaled = image.scaleToFit(paddedW, paddedH);
+
+                    const x = (pageW - scaled.width) / 2;
+                    const y = (pageH - scaled.height + 20) / 2;
+                    
+                    context.currentPage.drawImage(image, { x, y, width: scaled.width, height: scaled.height });
+                    
+                    const descText = label;
+                    const textWidth = helveticaFont.widthOfTextAtSize(descText, 12);
+                    context.currentPage.drawText(descText, {
+                        x: pageW / 2 - textWidth / 2,
+                        y: y - 20,
+                        font: helveticaFont, size: 12, color: context.colors.text
+                    });
+                }
+            };
+            
             // --- Construction du PDF ---
             addNewPage();
             
-            // Page de titre
             const title = 'ORDRE INITIAL';
             const dateTitle = `Opération du ${getVal('date_op') || 'N/A'}`;
             const titleWidth = helveticaBoldFont.widthOfTextAtSize(title, 40);
             const dateTitleWidth = helveticaFont.widthOfTextAtSize(dateTitle, 20);
-            context.currentPage.drawText(title, { x: context.width / 2 - titleWidth / 2, y: context.height / 2, font: helveticaBoldFont, size: 40, color: context.colors.accent });
-            context.currentPage.drawText(dateTitle, { x: context.width / 2 - dateTitleWidth / 2, y: context.height / 2 - 40, font: helveticaFont, size: 20, color: context.colors.text });
+            context.currentPage.drawText(title, { x: context.pageWidth / 2 - titleWidth / 2, y: context.pageHeight / 2, font: helveticaBoldFont, size: 40, color: context.colors.accent });
+            context.currentPage.drawText(dateTitle, { x: context.pageWidth / 2 - dateTitleWidth / 2, y: context.pageHeight / 2 - 40, font: helveticaFont, size: 20, color: context.colors.text });
 
-            addNewPage();
-
-            // Sections
-            drawSectionTitle("1. SITUATION");
+            drawSectionTitle("1. SITUATION", true);
             drawLabeledText("1.1 Générale", getVal('situation_generale'));
             drawLabeledText("1.2 Particulière", getVal('situation_particuliere'));
 
-            drawSectionTitle("1.3 ADVERSAIRE & 1.4 ENVIRONNEMENT");
+            drawSectionTitle("1.3 ADVERSAIRE & 1.4 ENVIRONNEMENT", true);
             drawTable(['Catégorie', 'Détails'], [
                     ['Nom/Prénom', getVal('nom_adversaire')], ['Domicile', getVal('domicile_adversaire')],
                     ['Naissance', `${getVal('date_naissance')} à ${getVal('lieu_naissance')}`],
@@ -542,57 +564,40 @@
                     ['Population', getVal('population')], ['Cadre juridique', getVal('cadre_juridique')]
                 ], [0.3, 0.7], { headFont: helveticaBoldFont, headSize: 15, bodyFont: helveticaFont, bodySize: 14 });
             
-            context.y -= 20;
-            drawSectionTitle("2. MISSION");
+            drawSectionTitle("2. MISSION", true);
             drawLabeledText("Mission principale", getVal('missions_psig'));
             
-            addNewPage();
-
-            drawSectionTitle("3. EXÉCUTION & 4. ARTICULATION");
+            drawSectionTitle("3. EXÉCUTION & 4. ARTICULATION", true);
             drawLabeledText("Date/Heure/Action", `Date: ${getVal('date_execution')} | Heure: ${getVal('heure_execution')} | Type: ${(formData.type_action_list || []).join(', ') || 'RAS'}`);
             drawLabeledText("Place du Chef", getVal('place_chef'));
             context.y -= 10;
-            drawTable(
-                ['Type', 'Heure', 'Description'], 
-                (formData.time_events || []).map(e => [e.type, e.hour || 'N/A', e.description || 'N/A']), 
-                [0.15, 0.2, 0.65], 
-                { headFont: helveticaBoldFont, headSize: 14, bodyFont: helveticaFont, bodySize: 13 }
-            );
+            drawTable(['Type', 'Heure', 'Description'], (formData.time_events || []).map(e => [e.type, e.hour || 'N/A', e.description || 'N/A']), [0.15, 0.2, 0.65], { headFont: helveticaBoldFont, headSize: 14, bodyFont: helveticaFont, bodySize: 13 });
 
-            context.y -= 20;
-            drawSectionTitle("5. MOYENS ENGAGÉS (PATRACDVR)");
+            drawSectionTitle("5. MOYENS ENGAGÉS (PATRACDVR)", true);
             (formData.patracdvr_rows || []).forEach(row => {
                 const members = row.members.filter(m => m.trigramme);
                 if (members.length > 0) {
                     context.y -= 10;
-                    drawTable(
-                        [`Véhicule: ${row.vehicle}`, 'Équipement', 'Fonction'], 
-                        members.map(m => [m.trigramme, m.equipement, m.fonction]), 
-                        [0.33, 0.33, 0.34], 
-                        { headFont: helveticaBoldFont, headSize: 14, bodyFont: helveticaFont, bodySize: 13 }
-                    );
+                    drawTable([`Véhicule: ${row.vehicle}`, 'Équipement', 'Fonction'], members.map(m => [m.trigramme, m.equipement, m.fonction]), [0.33, 0.33, 0.34], { headFont: helveticaBoldFont, headSize: 14, bodyFont: helveticaFont, bodySize: 13 });
                 }
             });
             
-            // Sauvegarde
+            await drawImages('adversaire_photos_container');
+            await drawImages('operation_photos_container');
+
             const pdfBytes = await pdfDoc.save();
             return { pdfBytes, formData };
         }
 
 
         document.getElementById('generatePdfBtn').addEventListener('click', async () => {
-            // Étape 1: Vérifier si la bibliothèque est prête
             if (typeof PDFLib === 'undefined') {
                 alert("Erreur: La bibliothèque PDF n'est pas encore chargée. Veuillez patienter un instant et réessayer.");
                 return;
             }
-
             try {
-                // Étape 2: Lancer la construction du PDF
                 const result = await buildPdf();
-                if (!result) return; // S'arrête si buildPdf a retourné null (pas de données)
-
-                // Étape 3: Créer le lien de téléchargement et le déclencher
+                if (!result) return;
                 const { pdfBytes, formData } = result;
                 const getVal = (id) => formData[id] || 'RAS';
                 const blob = new Blob([pdfBytes], { type: 'application/pdf' });
@@ -602,7 +607,6 @@
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
-
             } catch (error) {
                 console.error("Erreur critique lors de la génération du PDF:", error);
                 alert("Une erreur critique est survenue. Consultez la console (F12) pour plus de détails.");
