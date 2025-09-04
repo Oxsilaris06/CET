@@ -368,7 +368,18 @@
         container.innerHTML = '';
         if (values && values.length > 0) {
             values.forEach(val => {
-                addDynamicFieldWithSelect(containerId, '', initialOptions, val);
+                const newField = document.createElement('div');
+                newField.className = 'dynamic-list-item';
+                const selectHtml = `<select class="dynamic-select" onchange="this.nextElementSibling.value=this.value; saveFormData()">
+                    <option value="">Sélectionner</option>
+                    ${initialOptions.map(opt => `<option value="${opt}" ${opt === val ? 'selected' : ''}>${opt}</option>`).join('')}
+                </select>`;
+                newField.innerHTML = `${selectHtml}
+                    <input type="text" class="dynamic-input" placeholder="Ajouter un élément" onchange="this.previousElementSibling.value=this.value; saveFormData()">
+                    <button type="button" class="add-btn" onclick="addDynamicFieldWithSelect('${containerId}', '', ['${initialOptions.join("','")}'])">➕</button>
+                    <button type="button" class="remove-btn" onclick="this.parentNode.remove(); saveFormData()">❌</button>
+                `;
+                container.appendChild(newField);
             });
         } else {
             addDynamicFieldWithSelect(containerId, '', initialOptions);
@@ -421,7 +432,7 @@
 
     function addPatracdvrRow(vehicle = '', membersData = []) {
         const container = document.getElementById('patracdvr_container');
-        const vehicleToAdd = vehicle || availableVehicles.find(v => !document.querySelector(`.patracdvr-vehicle-select[value="${v}"]`));
+        const vehicleToAdd = vehicle || availableVehicles.find(v => !document.getElementById(`patracdvr_members_${v.replace(/\s/g, '')}`));
 
         if (!vehicleToAdd) {
             alert('Tous les véhicules sont déjà utilisés.');
@@ -505,7 +516,7 @@
                 ${timeTypes.map(t => `<option value="${t}" ${t === type ? 'selected' : ''}>${t}</option>`).join('')}
             </select>
             <input type="time" class="time-hour-input" value="${hour}" onchange="saveFormData()">
-            <textarea class="time-description-input" placeholder="Description de l'événement" rows="1" onchange="saveFormData()">${description}</textarea>
+            <textarea class="time-description-input" placeholder="Description de l'événement" rows="1" onchange="saveFormData()"></textarea>
             <button type="button" class="remove-btn" onclick="this.parentNode.remove(); saveFormData()">❌</button>
         `;
         container.appendChild(event);
@@ -604,6 +615,7 @@
         };
 
         addHeaderAndFooter();
+
         doc.setFontSize(22);
         doc.setFont('Lato', 'bold');
         doc.setTextColor('#5b9bd5');
