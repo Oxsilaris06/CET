@@ -376,215 +376,236 @@
             loadFormData();
         });
         
-        // --- NOUVELLE IMPLEMENTATION PDF AVEC PDF-LIB ---
-        document.getElementById('generatePdfBtn').addEventListener('click', async () => {
-            try {
-                // Initialisation
-                const { PDFDocument, StandardFonts, rgb } = PDFLib;
-                const pdfDoc = await PDFDocument.create();
-                const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
-                const helveticaBoldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-                
-                // Collecte des données
-                saveFormData();
-                const formDataString = localStorage.getItem('oiFormData');
-                if (!formDataString) { alert("Aucune donnée à générer."); return; }
-                const formData = JSON.parse(formDataString);
-                const getVal = (id) => formData[id] || 'RAS';
+        // --- NOUVELLE IMPLEMENTATION PDF AVEC PDF-LIB (ROBUSTE) ---
 
-                // Couleurs
-                const colors = {
+        // Fonction principale de génération de PDF, séparée pour la clarté
+        async function buildPdf() {
+            // Initialisation
+            const { PDFDocument, StandardFonts, rgb } = PDFLib;
+            const pdfDoc = await PDFDocument.create();
+            const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
+            const helveticaBoldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+            
+            // Collecte des données
+            saveFormData();
+            const formDataString = localStorage.getItem('oiFormData');
+            if (!formDataString) {
+                alert("Aucune donnée à générer. Remplissez le formulaire.");
+                return null;
+            }
+            const formData = JSON.parse(formDataString);
+            const getVal = (id) => formData[id] || 'RAS';
+
+            // Contexte de rendu
+            const context = {
+                pdfDoc, helveticaFont, helveticaBoldFont,
+                currentPage: null,
+                width: 0, height: 0, margin: 40, y: 0,
+                colors: {
                     background: rgb(30/255, 30/255, 30/255),
                     text: rgb(1, 1, 1),
                     label: rgb(220/255, 220/255, 220/255),
                     accent: rgb(91/255, 155/255, 213/255),
                     tableHeader: rgb(42/255, 42/255, 42/255),
                     tableFill: rgb(40/255, 40/255, 40/255)
-                };
+                }
+            };
+            
+            // --- Fonctions utilitaires de rendu pour PDF-LIB ---
 
-                // Contexte de rendu
-                let currentPage = pdfDoc.addPage();
-                const { width, height } = currentPage.getSize();
-                const margin = 40;
-                let y = height - margin;
+            const addNewPage = () => {
+                context.currentPage = context.pdfDoc.addPage();
+                const { width, height } = context.currentPage.getSize();
+                context.width = width;
+                context.height = height;
+                context.y = height - context.margin;
+                context.currentPage.drawRectangle({ x: 0, y: 0, width, height, color: context.colors.background });
+            };
 
-                // --- Fonctions utilitaires de rendu pour PDF-LIB ---
+            const checkY = (spaceNeeded) => {
+                if (context.y - spaceNeeded < context.margin) {
+                    addNewPage();
+                }
+            };
 
-                const addDarkBackground = () => currentPage.drawRectangle({ x: 0, y: 0, width, height, color: colors.background });
-                
-                const checkY = (spaceNeeded) => {
-                    if (y - spaceNeeded < margin) {
-                        currentPage = pdfDoc.addPage();
-                        addDarkBackground();
-                        y = height - margin;
+            const drawSectionTitle = (text) => {
+                checkY(40);
+                context.y -= 35;
+                context.currentPage.drawText(text, { x: context.margin, y: context.y, font: context.helveticaBoldFont, size: 18, color: context.colors.accent });
+            };
+
+            const wrapText = (text, font, size, maxWidth) => {
+                const words = text.replace(/\n/g, ' \n ').split(' ');
+                const lines = [];
+                let currentLine = '';
+                for (const word of words) {
+                    if (word === '\n') {
+                        lines.push(currentLine);
+                        currentLine = '';
+                        continue;
                     }
-                };
-
-                const drawSectionTitle = (text) => {
-                    checkY(40);
-                    y -= 35;
-                    currentPage.drawText(text, { x: margin, y: y, font: helveticaBoldFont, size: 18, color: colors.accent });
-                };
-
-                const drawLabeledText = (label, value) => {
-                    const labelText = `${label}: `;
-                    const labelWidth = helveticaBoldFont.widthOfTextAtSize(labelText, 14);
-                    const valueLines = wrapText(value, helveticaFont, 14, width - margin * 2 - labelWidth);
-                    const totalHeight = valueLines.length * 15 + 10;
-                    checkY(totalHeight);
-                    
-                    y -= 15;
-                    currentPage.drawText(labelText, { x: margin, y: y, font: helveticaBoldFont, size: 14, color: colors.label });
-                    
-                    valueLines.forEach((line, index) => {
-                         currentPage.drawText(line, { x: margin + labelWidth, y: y - (index * 15), font: helveticaFont, size: 14, color: colors.text });
-                    });
-                    y -= totalHeight - 15;
-                };
-
-                const wrapText = (text, font, size, maxWidth) => {
-                    const words = text.replace(/\n/g, ' \n ').split(' ');
-                    const lines = [];
-                    let currentLine = '';
-                    for (const word of words) {
-                        if (word === '\n') {
-                            lines.push(currentLine);
-                            currentLine = '';
-                            continue;
-                        }
-                        const lineWithWord = currentLine === '' ? word : `${currentLine} ${word}`;
-                        const lineWidth = font.widthOfTextAtSize(lineWithWord, size);
-                        if (lineWidth > maxWidth) {
-                            lines.push(currentLine);
-                            currentLine = word;
-                        } else {
-                            currentLine = lineWithWord;
-                        }
+                    const lineWithWord = currentLine === '' ? word : `${currentLine} ${word}`;
+                    const lineWidth = font.widthOfTextAtSize(lineWithWord, size);
+                    if (lineWidth > maxWidth && currentLine !== '') {
+                        lines.push(currentLine);
+                        currentLine = word;
+                    } else {
+                        currentLine = lineWithWord;
                     }
-                    lines.push(currentLine);
-                    return lines;
-                };
+                }
+                lines.push(currentLine);
+                return lines;
+            };
 
-                const drawTable = (headers, rows, columnWidths, style) => {
-                    const rowPadding = 5;
-                    const availableWidth = width - margin * 2;
-                    
-                    const calculatedWidths = columnWidths 
-                        ? columnWidths.map(w => w * availableWidth)
-                        : Array(headers.length).fill(availableWidth / headers.length);
-                    
-                    const wrappedHeaders = headers.map((h, i) => wrapText(h, style.headFont, style.headSize, calculatedWidths[i] - rowPadding * 2));
-                    const headerHeight = Math.max(...wrappedHeaders.map(lines => lines.length)) * style.headSize + rowPadding * 2;
-                    
-                    checkY(headerHeight);
-                    y -= headerHeight;
-                    
-                    headers.forEach((_, i) => {
-                        const x = margin + calculatedWidths.slice(0, i).reduce((a, b) => a + b, 0);
-                        currentPage.drawRectangle({ x, y, width: calculatedWidths[i], height: headerHeight, color: colors.tableHeader });
-                        wrappedHeaders[i].forEach((line, lineIndex) => {
-                            const textY = y + headerHeight - rowPadding - style.headSize - (lineIndex * style.headSize);
-                            currentPage.drawText(line, { x: x + rowPadding, y: textY, font: style.headFont, size: style.headSize, color: colors.text });
-                        });
-                    });
-
-                    rows.forEach(row => {
-                        const wrappedRow = row.map((cell, i) => wrapText(String(cell), style.bodyFont, style.bodySize, calculatedWidths[i] - rowPadding * 2));
-                        const rowHeight = Math.max(...wrappedRow.map(lines => lines.length)) * style.bodySize + rowPadding * 2;
-                        
-                        checkY(rowHeight);
-                        y -= rowHeight;
-                        
-                        row.forEach((_, i) => {
-                            const x = margin + calculatedWidths.slice(0, i).reduce((a, b) => a + b, 0);
-                            currentPage.drawRectangle({ x, y, width: calculatedWidths[i], height: rowHeight, color: colors.tableFill });
-                             currentPage.drawRectangle({ x, y, width: calculatedWidths[i], height: rowHeight, borderColor: colors.background, borderWidth: 0.5 });
-                            wrappedRow[i].forEach((line, lineIndex) => {
-                                const textY = y + rowHeight - rowPadding - style.bodySize - (lineIndex * style.bodySize);
-                                currentPage.drawText(line, { x: x + rowPadding, y: textY, font: style.bodyFont, size: style.bodySize, color: colors.text });
-                            });
-                        });
-                    });
-                };
+            const drawLabeledText = (label, value) => {
+                const labelText = `${label}: `;
+                const labelWidth = context.helveticaBoldFont.widthOfTextAtSize(labelText, 14);
+                const valueLines = wrapText(value, context.helveticaFont, 14, context.width - context.margin * 2 - labelWidth);
+                const totalHeight = valueLines.length * 16 + 10;
+                checkY(totalHeight);
                 
-                // --- Construction du PDF ---
-
-                addDarkBackground();
+                context.y -= 16;
+                context.currentPage.drawText(labelText, { x: context.margin, y: context.y, font: context.helveticaBoldFont, size: 14, color: context.colors.label });
                 
-                // Page de titre
-                const title = 'ORDRE INITIAL';
-                const dateTitle = `Opération du ${getVal('date_op') || 'N/A'}`;
-                const titleWidth = helveticaBoldFont.widthOfTextAtSize(title, 40);
-                const dateTitleWidth = helveticaFont.widthOfTextAtSize(dateTitle, 20);
-                currentPage.drawText(title, { x: width / 2 - titleWidth / 2, y: height / 2, font: helveticaBoldFont, size: 40, color: colors.accent });
-                currentPage.drawText(dateTitle, { x: width / 2 - dateTitleWidth / 2, y: height / 2 - 40, font: helveticaFont, size: 20, color: colors.text });
-
-                currentPage = pdfDoc.addPage();
-                addDarkBackground();
-                y = height - margin;
-
-                // Sections
-                drawSectionTitle("1. SITUATION");
-                drawLabeledText("1.1 Générale", getVal('situation_generale'));
-                drawLabeledText("1.2 Particulière", getVal('situation_particuliere'));
-
-                drawSectionTitle("1.3 ADVERSAIRE & 1.4 ENVIRONNEMENT");
-                drawTable(['Catégorie', 'Détails'], [
-                        ['Nom/Prénom', getVal('nom_adversaire')], ['Domicile', getVal('domicile_adversaire')],
-                        ['Naissance', `${getVal('date_naissance')} à ${getVal('lieu_naissance')}`],
-                        ['Description', [getVal('stature_adversaire'), getVal('ethnie_adversaire'), getVal('signes_particuliers_adversaire')].filter(Boolean).join(' / ') || 'RAS'],
-                        ['Profession', getVal('profession_adversaire')],['Antécédents', getVal('antecedents_adversaire')],
-                        ['État d\'esprit', (formData.etat_esprit_list || []).join(', ') || 'RAS'],
-                        ['Attitude', getVal('attitude_adversaire')], ['Volume (renfort)', (formData.volume_list || []).join(', ') || 'RAS'],
-                        ['Substances', getVal('substances_adversaire')], ['Véhicules', (formData.vehicules_list || []).join(', ') || 'RAS'],
-                        ['Armes', (formData.armes_list || []).join(', ') || 'RAS'],
-                        ['Modes d\'action', `ME1: ${getVal('mode_action_me1')}\nME2: ${getVal('mode_action_me2')}\nME3: ${getVal('mode_action_me3')}`],
-                        ['Ami(e)s (soutien)', getVal('amies')], ['Terrain / Météo', getVal('terrain_info')],
-                        ['Population', getVal('population')], ['Cadre juridique', getVal('cadre_juridique')]
-                    ], [0.3, 0.7], { headFont: helveticaBoldFont, headSize: 15, bodyFont: helveticaFont, bodySize: 14 });
-                
-                y-= 20;
-                drawSectionTitle("2. MISSION");
-                drawLabeledText("Mission principale", getVal('missions_psig'));
-                
-                checkY(200); // Espace pour la prochaine section
-                drawSectionTitle("3. EXÉCUTION & 4. ARTICULATION");
-                drawLabeledText("Date/Heure/Action", `Date: ${getVal('date_execution')} | Heure: ${getVal('heure_execution')} | Type: ${(formData.type_action_list || []).join(', ') || 'RAS'}`);
-                drawLabeledText("Place du Chef", getVal('place_chef'));
-                y -= 10;
-                drawTable(
-                    ['Type', 'Heure', 'Description'], 
-                    (formData.time_events || []).map(e => [e.type, e.hour || 'N/A', e.description || 'N/A']), 
-                    [0.15, 0.2, 0.65], 
-                    { headFont: helveticaBoldFont, headSize: 14, bodyFont: helveticaFont, bodySize: 13 }
-                );
-
-                y-= 20;
-                drawSectionTitle("5. MOYENS ENGAGÉS (PATRACDVR)");
-                (formData.patracdvr_rows || []).forEach(row => {
-                    const members = row.members.filter(m => m.trigramme);
-                    if (members.length > 0) {
-                        y -= 10;
-                        drawTable(
-                            [`Véhicule: ${row.vehicle}`, 'Équipement', 'Fonction'], 
-                            members.map(m => [m.trigramme, m.equipement, m.fonction]), 
-                            [0.33, 0.33, 0.34], 
-                            { headFont: helveticaBoldFont, headSize: 14, bodyFont: helveticaFont, bodySize: 13 }
-                        );
-                    }
+                valueLines.forEach((line, index) => {
+                     context.currentPage.drawText(line, { x: context.margin + labelWidth, y: context.y - (index * 16), font: context.helveticaFont, size: 14, color: context.colors.text });
                 });
-                
-                // Sauvegarde
-                const pdfBytes = await pdfDoc.save();
+                context.y -= totalHeight - 16;
+            };
+
+            const drawTable = (headers, rows, columnWidths, style) => {
+                const rowPadding = 5;
+                const availableWidth = context.width - context.margin * 2;
+                const calculatedWidths = columnWidths.map(w => w * availableWidth);
+
+                // Dessiner l'en-tête
+                const wrappedHeaders = headers.map((h, i) => wrapText(h, style.headFont, style.headSize, calculatedWidths[i] - rowPadding * 2));
+                const headerHeight = Math.max(...wrappedHeaders.map(lines => lines.length)) * (style.headSize + 2) + rowPadding * 2;
+                checkY(headerHeight);
+                context.y -= headerHeight;
+                headers.forEach((_, i) => {
+                    const x = context.margin + calculatedWidths.slice(0, i).reduce((a, b) => a + b, 0);
+                    context.currentPage.drawRectangle({ x, y: context.y, width: calculatedWidths[i], height: headerHeight, color: context.colors.tableHeader });
+                    wrappedHeaders[i].forEach((line, lineIndex) => {
+                        const textY = context.y + headerHeight - rowPadding - style.headSize - (lineIndex * (style.headSize + 2));
+                        context.currentPage.drawText(line, { x: x + rowPadding, y: textY, font: style.headFont, size: style.headSize, color: context.colors.text });
+                    });
+                });
+
+                // Dessiner les lignes
+                rows.forEach(row => {
+                    const wrappedRow = row.map((cell, i) => wrapText(String(cell), style.bodyFont, style.bodySize, calculatedWidths[i] - rowPadding * 2));
+                    const rowHeight = Math.max(...wrappedRow.map(lines => lines.length)) * (style.bodySize + 2) + rowPadding * 2;
+                    checkY(rowHeight);
+                    context.y -= rowHeight;
+                    row.forEach((_, i) => {
+                        const x = context.margin + calculatedWidths.slice(0, i).reduce((a, b) => a + b, 0);
+                        context.currentPage.drawRectangle({ x, y: context.y, width: calculatedWidths[i], height: rowHeight, color: context.colors.tableFill, borderColor: context.colors.background, borderWidth: 0.5 });
+                        wrappedRow[i].forEach((line, lineIndex) => {
+                            const textY = context.y + rowHeight - rowPadding - style.bodySize - (lineIndex * (style.bodySize + 2));
+                            context.currentPage.drawText(line, { x: x + rowPadding, y: textY, font: style.bodyFont, size: style.bodySize, color: context.colors.text });
+                        });
+                    });
+                });
+            };
+            
+            // --- Construction du PDF ---
+            addNewPage();
+            
+            // Page de titre
+            const title = 'ORDRE INITIAL';
+            const dateTitle = `Opération du ${getVal('date_op') || 'N/A'}`;
+            const titleWidth = helveticaBoldFont.widthOfTextAtSize(title, 40);
+            const dateTitleWidth = helveticaFont.widthOfTextAtSize(dateTitle, 20);
+            context.currentPage.drawText(title, { x: context.width / 2 - titleWidth / 2, y: context.height / 2, font: helveticaBoldFont, size: 40, color: context.colors.accent });
+            context.currentPage.drawText(dateTitle, { x: context.width / 2 - dateTitleWidth / 2, y: context.height / 2 - 40, font: helveticaFont, size: 20, color: context.colors.text });
+
+            addNewPage();
+
+            // Sections
+            drawSectionTitle("1. SITUATION");
+            drawLabeledText("1.1 Générale", getVal('situation_generale'));
+            drawLabeledText("1.2 Particulière", getVal('situation_particuliere'));
+
+            drawSectionTitle("1.3 ADVERSAIRE & 1.4 ENVIRONNEMENT");
+            drawTable(['Catégorie', 'Détails'], [
+                    ['Nom/Prénom', getVal('nom_adversaire')], ['Domicile', getVal('domicile_adversaire')],
+                    ['Naissance', `${getVal('date_naissance')} à ${getVal('lieu_naissance')}`],
+                    ['Description', [getVal('stature_adversaire'), getVal('ethnie_adversaire'), getVal('signes_particuliers_adversaire')].filter(Boolean).join(' / ') || 'RAS'],
+                    ['Profession', getVal('profession_adversaire')],['Antécédents', getVal('antecedents_adversaire')],
+                    ['État d\'esprit', (formData.etat_esprit_list || []).join(', ') || 'RAS'],
+                    ['Attitude', getVal('attitude_adversaire')], ['Volume (renfort)', (formData.volume_list || []).join(', ') || 'RAS'],
+                    ['Substances', getVal('substances_adversaire')], ['Véhicules', (formData.vehicules_list || []).join(', ') || 'RAS'],
+                    ['Armes', (formData.armes_list || []).join(', ') || 'RAS'],
+                    ['Modes d\'action', `ME1: ${getVal('mode_action_me1')}\nME2: ${getVal('mode_action_me2')}\nME3: ${getVal('mode_action_me3')}`],
+                    ['Ami(e)s (soutien)', getVal('amies')], ['Terrain / Météo', getVal('terrain_info')],
+                    ['Population', getVal('population')], ['Cadre juridique', getVal('cadre_juridique')]
+                ], [0.3, 0.7], { headFont: helveticaBoldFont, headSize: 15, bodyFont: helveticaFont, bodySize: 14 });
+            
+            context.y -= 20;
+            drawSectionTitle("2. MISSION");
+            drawLabeledText("Mission principale", getVal('missions_psig'));
+            
+            addNewPage();
+
+            drawSectionTitle("3. EXÉCUTION & 4. ARTICULATION");
+            drawLabeledText("Date/Heure/Action", `Date: ${getVal('date_execution')} | Heure: ${getVal('heure_execution')} | Type: ${(formData.type_action_list || []).join(', ') || 'RAS'}`);
+            drawLabeledText("Place du Chef", getVal('place_chef'));
+            context.y -= 10;
+            drawTable(
+                ['Type', 'Heure', 'Description'], 
+                (formData.time_events || []).map(e => [e.type, e.hour || 'N/A', e.description || 'N/A']), 
+                [0.15, 0.2, 0.65], 
+                { headFont: helveticaBoldFont, headSize: 14, bodyFont: helveticaFont, bodySize: 13 }
+            );
+
+            context.y -= 20;
+            drawSectionTitle("5. MOYENS ENGAGÉS (PATRACDVR)");
+            (formData.patracdvr_rows || []).forEach(row => {
+                const members = row.members.filter(m => m.trigramme);
+                if (members.length > 0) {
+                    context.y -= 10;
+                    drawTable(
+                        [`Véhicule: ${row.vehicle}`, 'Équipement', 'Fonction'], 
+                        members.map(m => [m.trigramme, m.equipement, m.fonction]), 
+                        [0.33, 0.33, 0.34], 
+                        { headFont: helveticaBoldFont, headSize: 14, bodyFont: helveticaFont, bodySize: 13 }
+                    );
+                }
+            });
+            
+            // Sauvegarde
+            const pdfBytes = await pdfDoc.save();
+            return { pdfBytes, formData };
+        }
+
+
+        document.getElementById('generatePdfBtn').addEventListener('click', async () => {
+            // Étape 1: Vérifier si la bibliothèque est prête
+            if (typeof PDFLib === 'undefined') {
+                alert("Erreur: La bibliothèque PDF n'est pas encore chargée. Veuillez patienter un instant et réessayer.");
+                return;
+            }
+
+            try {
+                // Étape 2: Lancer la construction du PDF
+                const result = await buildPdf();
+                if (!result) return; // S'arrête si buildPdf a retourné null (pas de données)
+
+                // Étape 3: Créer le lien de téléchargement et le déclencher
+                const { pdfBytes, formData } = result;
+                const getVal = (id) => formData[id] || 'RAS';
                 const blob = new Blob([pdfBytes], { type: 'application/pdf' });
                 const link = document.createElement('a');
                 link.href = URL.createObjectURL(blob);
                 link.download = `OI_${getVal('date_op').replace(/[\/\\?%*:|"<>]/g, '-')}_${getVal('nom_adversaire').replace(/ /g, '_')}.pdf`;
+                document.body.appendChild(link);
                 link.click();
+                document.body.removeChild(link);
 
             } catch (error) {
                 console.error("Erreur critique lors de la génération du PDF:", error);
-                alert("Une erreur critique est survenue. Consultez la console (F12).");
+                alert("Une erreur critique est survenue. Consultez la console (F12) pour plus de détails.");
             }
         });
     </script>
