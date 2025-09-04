@@ -11,7 +11,7 @@
         :root {
             --bg-body: #121212; --bg-container: #1e1e1e; --bg-interactive: #2a2a2a;
             --text-primary: #e0e0e0; --text-secondary: #95a5a6; --border-color: #444444;
-            --accent-blue: #5b9bd5; --accent-hover: #4a7aa5; --danger-red: #c03জ্b;
+            --accent-blue: #5b9bd5; --accent-hover: #4a7aa5; --danger-red: #c0392b;
         }
         body.light-mode {
             --bg-body: #f0f2f5; --bg-container: #ffffff; --bg-interactive: #f8f9fa;
@@ -386,24 +386,19 @@
         
         // --- PDF GENERATION ---
         document.getElementById('generatePdfBtn').addEventListener('click', async () => {
-            console.log("Starting PDF generation process...");
             try {
                 const { jsPDF } = jspdf;
                 const doc = new jsPDF({ unit: 'pt', format: 'a4', orientation: 'portrait' });
                 const margin = 40;
                 let yPos = margin;
                 
-                console.log("Saving form data to localStorage...");
                 saveFormData();
                 const formDataString = localStorage.getItem('oiFormData');
                 if (!formDataString) {
                     alert("Aucune donnée à générer. Remplissez le formulaire.");
-                    console.error("No form data found in localStorage.");
                     return;
                 }
-                console.log("Form data retrieved from localStorage.");
                 const formData = JSON.parse(formDataString);
-                console.log("Form data object:", formData);
                 const getVal = (id) => formData[id] || 'RAS';
 
                 // --- PDF HELPER FUNCTIONS ---
@@ -429,16 +424,20 @@
                     checkYPos(60);
                     doc.setFontSize(18).setFont('helvetica', 'bold').setTextColor('#5b9bd5');
                     doc.text(title, margin, yPos);
-                    yPos += 30;
+                    yPos += 35;
                 };
 
-                const addText = (text) => {
-                    if (!text || text.trim() === '') return; // Allow 'RAS' to be printed
-                    doc.setFontSize(14).setFont('helvetica', 'normal').setTextColor(255, 255, 255);
-                    const lines = doc.splitTextToSize(text, doc.internal.pageSize.getWidth() - margin * 2);
-                    checkYPos(lines.length * 15 + 10);
-                    doc.text(lines, margin, yPos);
-                    yPos += lines.length * 15 + 10;
+                const addLabeledText = (label, value) => {
+                    checkYPos(30);
+                    doc.setFontSize(14).setFont('helvetica', 'bold').setTextColor(220, 220, 220);
+                    const labelText = `${label}: `;
+                    const labelWidth = doc.getStringUnitWidth(labelText) * doc.getFontSize() / doc.internal.scaleFactor;
+                    doc.text(labelText, margin, yPos);
+
+                    doc.setFont('helvetica', 'normal').setTextColor(255, 255, 255);
+                    const valueLines = doc.splitTextToSize(value, doc.internal.pageSize.getWidth() - margin * 2 - labelWidth);
+                    doc.text(valueLines, margin + labelWidth, yPos);
+                    yPos += (valueLines.length * 15) + 10;
                 };
                 
                 const addImagesFromContainer = async (containerId, title) => {
@@ -490,10 +489,8 @@
                 };
 
                 // --- PDF CONTENT GENERATION ---
-                console.log("Starting to build PDF pages...");
                 addDarkBackground(doc);
 
-                console.log("Building Title Page...");
                 doc.setFontSize(40).setFont('helvetica', 'bold').setTextColor('#5b9bd5');
                 doc.text('ORDRE INITIAL', doc.internal.pageSize.getWidth() / 2, doc.internal.pageSize.getHeight() / 2 - 40, { align: 'center' });
                 doc.setFontSize(20).setFont('helvetica', 'normal').setTextColor(255, 255, 255);
@@ -503,10 +500,9 @@
                 addDarkBackground(doc);
                 yPos = margin;
 
-                console.log("Building Section 1...");
                 addSectionTitle("1. SITUATION");
-                addText(getVal('situation_generale'));
-                addText(getVal('situation_particuliere'));
+                addLabeledText("1.1 Générale", getVal('situation_generale'));
+                addLabeledText("1.2 Particulière", getVal('situation_particuliere'));
 
                 addSectionTitle("1.3 ADVERSAIRE & 1.4 ENVIRONNEMENT");
                  doc.autoTable({
@@ -515,7 +511,7 @@
                     body: [
                         ['Nom/Prénom', getVal('nom_adversaire')], ['Domicile', getVal('domicile_adversaire')],
                         ['Naissance', `${getVal('date_naissance')} à ${getVal('lieu_naissance')}`],
-                        ['Description', [getVal('stature_adversaire'), getVal('ethnie_adversaire'), getVal('signes_particuliers_adversaire')].filter(Boolean).join(' / ')],
+                        ['Description', [getVal('stature_adversaire'), getVal('ethnie_adversaire'), getVal('signes_particuliers_adversaire')].filter(Boolean).join(' / ') || 'RAS'],
                         ['Profession', getVal('profession_adversaire')],['Antécédents', getVal('antecedents_adversaire')],
                         ['État d\'esprit', (formData.etat_esprit_list || []).join(', ') || 'RAS'],
                         ['Attitude', getVal('attitude_adversaire')], ['Volume (renfort)', (formData.volume_list || []).join(', ') || 'RAS'],
@@ -527,24 +523,23 @@
                     ],
                     theme: 'grid', styles: { fontSize: 14, fontStyle: 'normal', cellPadding: 5, textColor: [255, 255, 255], fillColor: [40, 40, 40] },
                     headStyles: { fontSize: 15, fontStyle: 'bold', fillColor: [42, 42, 42], textColor: [255, 255, 255] },
-                    didDrawPage: (data) => { addDarkBackground(doc); yPos = data.cursor.y; },
+                    didDrawPage: (data) => { addDarkBackground(doc); },
                     margin: { left: margin, right: margin }
                 });
                 yPos = doc.autoTable.previous.finalY + 20;
 
-                console.log("Building Section 2...");
                 addSectionTitle("2. MISSION");
-                addText(getVal('missions_psig'));
+                addLabeledText("Mission principale", getVal('missions_psig'));
 
                 doc.addPage();
                 addDarkBackground(doc);
                 yPos = margin;
 
-                console.log("Building Sections 3 & 4...");
                 addSectionTitle("3. EXÉCUTION & 4. ARTICULATION");
-                addText(`Date: ${getVal('date_execution')} | Heure: ${getVal('heure_execution')} | Type: ${(formData.type_action_list || []).join(', ') || 'RAS'}`);
-                addText(`Place du Chef: ${getVal('place_chef')}`);
+                addLabeledText("Date/Heure/Action", `Date: ${getVal('date_execution')} | Heure: ${getVal('heure_execution')} | Type: ${(formData.type_action_list || []).join(', ') || 'RAS'}`);
+                addLabeledText("Place du Chef", getVal('place_chef'));
                 
+                yPos += 10;
                 doc.autoTable({
                     startY: yPos,
                     head: [['Type', 'Heure', 'Description']],
@@ -552,15 +547,11 @@
                     theme: 'grid', 
                     styles: { fontSize: 13, fontStyle: 'normal', cellPadding: 5, textColor: [255, 255, 255], fillColor: [40, 40, 40] },
                     headStyles: { fontSize: 14, fontStyle: 'bold', fillColor: [42, 42, 42], textColor: [255, 255, 255] },
-                    didDrawPage: (data) => { addDarkBackground(doc); yPos = data.cursor.y; },
+                    didDrawPage: (data) => { addDarkBackground(doc); },
                     margin: { left: margin, right: margin }
                 });
                 yPos = doc.autoTable.previous.finalY + 20;
 
-                console.log("Building Section 5...");
-                doc.addPage();
-                addDarkBackground(doc);
-                yPos = margin;
                 addSectionTitle("5. MOYENS ENGAGÉS (PATRACDVR)");
                 (formData.patracdvr_rows || []).forEach(row => {
                     const members = row.members.filter(m => m.trigramme);
@@ -573,20 +564,17 @@
                             theme: 'grid', 
                             styles: { fontSize: 13, fontStyle: 'normal', cellPadding: 5, textColor: [255, 255, 255], fillColor: [40, 40, 40] },
                             headStyles: { fontSize: 14, fontStyle: 'bold', fillColor: [42, 42, 42], textColor: [255, 255, 255] },
-                            didDrawPage: (data) => { addDarkBackground(doc); yPos = data.cursor.y; },
+                            didDrawPage: (data) => { addDarkBackground(doc); },
                             margin: { left: margin, right: margin }
                         });
                         yPos = doc.autoTable.previous.finalY + 20;
                     }
                 });
                 
-                console.log("Processing images...");
                 await addImagesFromContainer('adversaire_photos_container', "Photos de l'adversaire");
                 await addImagesFromContainer('operation_photos_container', "Photos de l'opération");
 
-                console.log("Saving PDF file...");
                 doc.save(`OI_${getVal('date_op').replace(/[\/\\?%*:|"<>]/g, '-')}_${getVal('nom_adversaire').replace(/ /g, '_')}.pdf`);
-                console.log("PDF generation process finished.");
 
             } catch (error) {
                 console.error("Erreur critique lors de la génération du PDF:", error);
