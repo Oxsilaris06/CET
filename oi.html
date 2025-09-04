@@ -11,7 +11,7 @@
             --accent-blue: #5b9bd5; --accent-hover: #4a7aa5;
         }
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: 'Arial', sans-serif; background-color: var(--bg-body); color: var(--text-primary); line-height: 1.6; padding: 15px; transition: background-color 0.5s, color 0.5s; }
+        body { font-family: 'Arial', sans-serif; background-color: var(--bg-body); color: var(--text-primary); line-height: 1.6; padding: 15px; }
         .container { max-width: 800px; margin: auto; background: var(--bg-container); padding: 20px 30px; border-radius: 8px; border: 1px solid var(--border-color); }
         h1 { text-align: center; font-size: 2.5em; margin-bottom: 10px; color: var(--accent-blue); text-transform: uppercase; letter-spacing: 2px; font-weight: 400; }
         h2 { color: var(--accent-blue); border-bottom: 2px solid var(--accent-blue); padding-bottom: 10px; margin-top: 20px; font-weight: 400; }
@@ -24,23 +24,36 @@
         }
         button {
             background-color: var(--accent-blue); color: white; padding: 12px 20px; border: none; border-radius: 4px;
-            cursor: pointer; font-size: 16px; margin-top: 20px;
+            cursor: pointer; font-size: 16px; margin-top: 20px; width: 100%;
         }
-        button.add-btn { background-color: #27ae60; padding: 5px 10px; font-size: 14px; margin-top: 5px; }
+        button.add-btn, button.remove-btn {
+             width: auto; padding: 5px 10px; font-size: 14px; margin-top: 5px;
+        }
+        button.add-btn { background-color: #27ae60; }
         button.add-btn:hover { background-color: #229954; }
-        button.remove-btn { background-color: #c0392b; padding: 5px 10px; font-size: 14px; margin-top: 5px; }
+        button.remove-btn { background-color: #c0392b; }
         button.remove-btn:hover { background-color: #a93226; }
-        .grid-container { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
-        .dynamic-list-item { display: flex; align-items: center; gap: 10px; margin-bottom: 5px; }
-        .time-item { display: flex; align-items: center; gap: 10px; margin-bottom: 5px; }
-        .time-item select, .time-item input, .time-item textarea { flex-grow: 1; margin: 0; }
-        .patracdvr-member-item { display: flex; align-items: center; gap: 10px; margin-bottom: 5px; }
-        .patracdvr-member-item select { margin-bottom: 0; }
-        .patracdvr-member-item input { margin-bottom: 0; }
+        
+        .dynamic-list-item { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 5px; }
+        .dynamic-list-item > * { flex: 1 1 auto; }
+        .dynamic-list-item select, .dynamic-list-item input { min-width: 150px; }
+        .dynamic-list-item button { flex-grow: 0; }
+       
+        .patracdvr-member-item, .time-item {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 5px;
+        }
+        .patracdvr-member-item > *, .time-item > * {
+            flex: 1;
+            margin-bottom: 0;
+        }
         
         @media (max-width: 600px) {
             .container { padding: 15px; }
-            .grid-container { grid-template-columns: 1fr; }
+            .dynamic-list-item, .patracdvr-member-item, .time-item { flex-direction: column; align-items: stretch; }
+            .dynamic-list-item > *, .patracdvr-member-item > *, .time-item > * { width: 100%; margin-bottom: 10px; }
             h1 { font-size: 2em; }
             h2 { font-size: 1.5em; }
         }
@@ -50,7 +63,7 @@
 
 <div class="container">
     <h1>Générateur d'Ordre Initial</h1>
-    <button type="button" onclick="resetForm()">Réinitialiser le formulaire</button>
+    <button type="button" onclick="resetForm()" style="background-color: #c0392b; margin-bottom: 20px;">Réinitialiser le formulaire</button>
 
     <div class="form-section">
         <h2>1. SITUATION</h2>
@@ -92,76 +105,38 @@
         <label for="antecedents_adversaire">Antécédents :</label>
         <textarea id="antecedents_adversaire" rows="2" placeholder="TAJ: BT:"></textarea>
         
-        <label for="etat_esprit_adversaire_label">État d'esprit :</label>
-        <div id="etat_esprit_container">
-            <div class="dynamic-list-item">
-                <select class="dynamic-select" onchange="this.nextElementSibling.value=this.value; saveFormData()">
-                    <option value="">Sélectionner</option>
-                    <option value="Serein">Serein</option>
-                    <option value="Hostile">Hostile</option>
-                    <option value="Conciliant">Conciliant</option>
-                </select>
-                <input type="text" class="dynamic-input" placeholder="Ajouter un état d'esprit" onchange="this.previousElementSibling.value=this.value; saveFormData()">
-                <button type="button" class="add-btn" onclick="addDynamicFieldWithSelect('etat_esprit_container', 'État d\'esprit', ['Serein', 'Hostile', 'Conciliant'])">➕</button>
-                <button type="button" class="remove-btn" onclick="this.parentNode.remove(); saveFormData()">❌</button>
-            </div>
-        </div>
+        <label>État d'esprit :</label>
+        <div id="etat_esprit_container"></div>
+        <button type="button" class="add-btn" onclick="addDynamicFieldWithSelect('etat_esprit_container', 'État d\'esprit', ['Serein', 'Hostile', 'Conciliant'])">➕ Ajouter</button>
         
-        <label for="attitude_adversaire">Attitude (Interpellations précédentes) :</label>
+        <label>Attitude (Interpellations précédentes) :</label>
         <textarea id="attitude_adversaire" rows="2" placeholder="Réactions lors des précédentes interpellations"></textarea>
         
-        <label for="volume_adversaire_label">Volume (Renfort) :</label>
-        <div id="volume_adversaire_container">
-            <div class="dynamic-list-item">
-                <select class="dynamic-select" onchange="this.nextElementSibling.value=this.value; saveFormData()">
-                    <option value="">Sélectionner</option>
-                    <option value="Seul">Seul</option>
-                    <option value="Famille">Famille</option>
-                    <option value="BO">BO</option>
-                    <option value="Conjointe">Conjointe</option>
-                </select>
-                <input type="text" class="dynamic-input" placeholder="Ajouter un volume" onchange="this.previousElementSibling.value=this.value; saveFormData()">
-                <button type="button" class="add-btn" onclick="addDynamicFieldWithSelect('volume_adversaire_container', 'Volume', ['Seul', 'Famille', 'BO', 'Conjointe'])">➕</button>
-                <button type="button" class="remove-btn" onclick="this.parentNode.remove(); saveFormData()">❌</button>
-            </div>
-        </div>
+        <label>Volume (Renfort) :</label>
+        <div id="volume_adversaire_container"></div>
+        <button type="button" class="add-btn" onclick="addDynamicFieldWithSelect('volume_adversaire_container', 'Volume', ['Seul', 'Famille', 'BO', 'Conjointe'])">➕ Ajouter</button>
         
-        <label for="substances_adversaire">Substances :</label>
+        <label>Substances :</label>
         <input type="text" id="substances_adversaire" placeholder="Alcool/Drogues...">
         
-        <label for="vehicules_container_label">Véhicules :</label>
-        <div id="vehicules_container">
-            <div class="dynamic-list-item">
-                <input type="text" class="vehicule-input" placeholder="Immat modèle couleur">
-                <button type="button" class="remove-btn" onclick="this.parentNode.remove(); saveFormData()">❌</button>
-            </div>
-        </div>
-        <button type="button" class="add-btn" onclick="addDynamicField('vehicules_container', 'vehicule-input', 'Immat modèle couleur')">➕</button>
+        <label>Véhicules :</label>
+        <div id="vehicules_container"></div>
+        <button type="button" class="add-btn" onclick="addDynamicField('vehicules_container', 'vehicule-input', 'Immat modèle couleur')">➕ Ajouter</button>
         
-        <label for="armes_container_label">Armes :</label>
-        <div id="armes_container">
-            <div class="dynamic-list-item">
-                <input type="text" class="arme-input" value="RAS" placeholder="Armes (si connue) ou RAS">
-                <button type="button" class="remove-btn" onclick="this.parentNode.remove(); saveFormData()">❌</button>
-            </div>
-        </div>
-        <button type="button" class="add-btn" onclick="addDynamicField('armes_container', 'arme-input', 'Armes (si connue) ou RAS', 'RAS')">➕</button>
+        <label>Armes :</label>
+        <div id="armes_container"></div>
+        <button type="button" class="add-btn" onclick="addDynamicField('armes_container', 'arme-input', 'Armes (si connue) ou RAS', 'RAS')">➕ Ajouter</button>
         
-        <label for="mode_action_me1">Mode d'action : ME1 (+ probable)</label>
+        <label>Mode d'action : ME1 (+ probable)</label>
         <textarea id="mode_action_me1" rows="1" placeholder="Fuite"></textarea>
-        <label for="mode_action_me2">Mode d'action : ME2</label>
+        <label>Mode d'action : ME2</label>
         <textarea id="mode_action_me2" rows="1" placeholder="Rébellion"></textarea>
-        <label for="mode_action_me3">Mode d'action : ME3</label>
+        <label>Mode d'action : ME3</label>
         <textarea id="mode_action_me3" rows="1" placeholder="Retranchement"></textarea>
         
-        <label for="adversaire_photos_label">Photos de l'adversaire :</label>
-        <div id="adversaire_photos_container">
-            <div class="dynamic-list-item">
-                <input type="file" class="adversaire-photo-input" data-label="Photo de l'adversaire" accept="image/*">
-                <button type="button" class="remove-btn" onclick="this.parentNode.remove(); saveFormData()">❌</button>
-            </div>
-        </div>
-        <button type="button" class="add-btn" onclick="addPhotoField('adversaire_photos_container', 'adversaire-photo-input')">➕</button>
+        <label>Photos de l'adversaire :</label>
+        <div id="adversaire_photos_container"></div>
+        <button type="button" class="add-btn" onclick="addPhotoField('adversaire_photos_container', 'adversaire-photo-input')">➕ Ajouter</button>
     </div>
 
     <div class="form-section">
@@ -187,18 +162,10 @@
         <input type="date" id="date_execution">
         <label for="heure_execution">Heure d'exécution :</label>
         <input type="time" id="heure_execution" value="06:00">
-        <label for="type_action_label">Type d'action :</label>
-        <div id="type_action_container">
-            <div class="dynamic-list-item">
-                <select class="dynamic-select" onchange="this.nextElementSibling.value=this.value; saveFormData()">
-                    <option value="en force">en force</option>
-                    <option value="en souplesse">en souplesse</option>
-                </select>
-                <input type="text" class="dynamic-input" placeholder="Ajouter un type d'action" onchange="this.previousElementSibling.value=this.value; saveFormData()">
-                <button type="button" class="add-btn" onclick="addDynamicFieldWithSelect('type_action_container', 'Type d\'action', ['en force', 'en souplesse'])">➕</button>
-                <button type="button" class="remove-btn" onclick="this.parentNode.remove(); saveFormData()">❌</button>
-            </div>
-        </div>
+        <label>Type d'action :</label>
+        <div id="type_action_container"></div>
+        <button type="button" class="add-btn" onclick="addDynamicFieldWithSelect('type_action_container', 'Type d\'action', ['en force', 'en souplesse'])">➕ Ajouter</button>
+
     </div>
 
     <div class="form-section">
@@ -206,47 +173,21 @@
         <label for="place_chef">Place du Chef :</label>
         <input type="text" id="place_chef" placeholder="En INDIA / Avec élément interpellation...">
         
-        <h3 style="margin-top: 20px;">Temps d'opération (T0 - T5)</h3>
-        <div id="time_events_container">
-            <div class="time-item">
-                <select class="time-type-select" onchange="saveFormData()">
-                    <option value="T0">T0</option><option value="T1">T1</option><option value="T2">T2</option><option value="T3">T3</option><option value="T4">T4</option><option value="T5">T5</option>
-                </select>
-                <input type="time" class="time-hour-input" onchange="saveFormData()">
-                <textarea class="time-description-input" placeholder="Description de l'événement" rows="1" onchange="saveFormData()"></textarea>
-                <button type="button" class="remove-btn" onclick="this.parentNode.remove(); saveFormData()">❌</button>
-            </div>
-        </div>
-        <button type="button" class="add-btn" onclick="addTimeEvent()">➕</button>
+        <h3>Temps d'opération (T0 - T5)</h3>
+        <div id="time_events_container"></div>
+        <button type="button" class="add-btn" onclick="addTimeEvent()">➕ Ajouter</button>
     </div>
 
     <div class="form-section">
         <h2>PATRACDVR</h2>
-        <div id="patracdvr_container">
-        </div>
+        <div id="patracdvr_container"></div>
         <button type="button" class="add-btn" onclick="addPatracdvrRow()">Ajouter un véhicule ➕</button>
     </div>
     
     <div class="form-section">
         <h2>Photos de l'opération</h2>
-        <div id="operation_photos_container">
-            <div class="dynamic-list-item">
-                <label>Cheminement :</label>
-                <input type="file" class="photo-input" data-label="Cheminement" accept="image/*">
-                <button type="button" class="remove-btn" onclick="this.parentNode.remove(); saveFormData()">❌</button>
-            </div>
-            <div class="dynamic-list-item">
-                <label>Terrain :</label>
-                <input type="file" class="photo-input" data-label="Terrain" accept="image/*">
-                <button type="button" class="remove-btn" onclick="this.parentNode.remove(); saveFormData()">❌</button>
-            </div>
-            <div class="dynamic-list-item">
-                <label>Porte :</label>
-                <input type="file" class="photo-input" data-label="Porte" accept="image/*">
-                <button type="button" class="remove-btn" onclick="this.parentNode.remove(); saveFormData()">❌</button>
-            </div>
-        </div>
-        <button type="button" class="add-btn" onclick="addCustomPhotoField('operation_photos_container')">➕ Ajouter une photo personnalisée</button>
+        <div id="operation_photos_container"></div>
+        <button type="button" class="add-btn" onclick="addCustomPhotoField('operation_photos_container')">➕ Ajouter une photo</button>
     </div>
 
     <button id="generatePdf">Générer le PDF</button>
@@ -258,15 +199,12 @@
 <script>
     const availableVehicles = ['Sharan', 'Kodiaq', '5008', 'Scénic', 'BT'];
 
-    document.addEventListener('DOMContentLoaded', (event) => {
+    // Initialisation au chargement de la page
+    document.addEventListener('DOMContentLoaded', () => {
         loadFormData();
     });
     
-    function getValue(elementId) {
-        const element = document.getElementById(elementId);
-        return (element && element.value.trim() !== '') ? element.value : 'RAS';
-    }
-
+    // Fonctions de sauvegarde et de chargement des données
     function saveFormData() {
         const data = {};
         document.querySelectorAll('input, textarea, select').forEach(field => {
@@ -275,302 +213,236 @@
             }
         });
         
-        data['vehicules_list'] = Array.from(document.querySelectorAll('.vehicule-input')).map(input => input.value);
-        data['armes_list'] = Array.from(document.querySelectorAll('.arme-input')).map(input => input.value);
-        
-        data['etat_esprit_list'] = Array.from(document.querySelectorAll('#etat_esprit_container .dynamic-select')).map(s => s.value);
-        data['volume_list'] = Array.from(document.querySelectorAll('#volume_adversaire_container .dynamic-select')).map(s => s.value);
-        data['type_action_list'] = Array.from(document.querySelectorAll('#type_action_container .dynamic-select')).map(s => s.value);
-        
-        data['patracdvr_rows'] = [];
-        document.querySelectorAll('#patracdvr_container > .form-section').forEach(section => {
-            const vehicle = section.querySelector('.patracdvr-vehicle-select').value;
-            const members = Array.from(section.querySelectorAll('.patracdvr-member-input')).map(input => {
-                const item = input.closest('.patracdvr-member-item');
-                return {
-                    trigramme: input.value,
-                    equipement: item.querySelector('.patracdvr-equipement-select').value,
-                    fonction: item.querySelector('.patracdvr-fonction-select').value
-                };
-            });
-            data['patracdvr_rows'].push({ vehicle, members });
+        // Sauvegarde des listes dynamiques
+        ['vehicules', 'armes', 'etat_esprit', 'volume', 'type_action'].forEach(key => {
+            const container = document.getElementById(`${key.replace('_','_adversaire_')}_container`) || document.getElementById(`${key}_container`);
+            data[`${key}_list`] = Array.from(container.querySelectorAll('.dynamic-input')).map(input => input.value);
         });
         
-        data['time_events'] = [];
-        document.querySelectorAll('#time_events_container > .time-item').forEach(item => {
-            data['time_events'].push({
-                type: item.querySelector('.time-type-select').value,
-                hour: item.querySelector('.time-hour-input').value,
-                description: item.querySelector('.time-description-input').value
-            });
-        });
+        // Sauvegarde PATRACDVR et Temps d'opération
+        data.patracdvr_rows = Array.from(document.querySelectorAll('#patracdvr_container .form-section')).map(section => ({
+            vehicle: section.querySelector('.patracdvr-vehicle-select').value,
+            members: Array.from(section.querySelectorAll('.patracdvr-member-item')).map(item => ({
+                trigramme: item.querySelector('.patracdvr-member-input').value,
+                equipement: item.querySelector('.patracdvr-equipement-select').value,
+                fonction: item.querySelector('.patracdvr-fonction-select').value
+            }))
+        }));
+        
+        data.time_events = Array.from(document.querySelectorAll('#time_events_container .time-item')).map(item => ({
+            type: item.querySelector('.time-type-select').value,
+            hour: item.querySelector('.time-hour-input').value,
+            description: item.querySelector('.time-description-input').value
+        }));
 
         localStorage.setItem('oiFormData', JSON.stringify(data));
     }
 
     function loadFormData() {
         const savedData = localStorage.getItem('oiFormData');
-        if (savedData) {
-            const data = JSON.parse(savedData);
-            for (const key in data) {
-                const field = document.getElementById(key);
-                if (field) {
-                    field.value = data[key];
-                }
-            }
-
-            document.getElementById('vehicules_container').innerHTML = '';
-            if (data['vehicules_list'] && data['vehicules_list'].length > 0) {
-                data['vehicules_list'].forEach(vehicule => addDynamicField('vehicules_container', 'vehicule-input', 'Immat modèle couleur', vehicule));
-            } else {
-                addDynamicField('vehicules_container', 'vehicule-input', 'Immat modèle couleur');
-            }
-
-            document.getElementById('armes_container').innerHTML = '';
-            if (data['armes_list'] && data['armes_list'].length > 0) {
-                data['armes_list'].forEach(arme => addDynamicField('armes_container', 'arme-input', 'Armes (si connue) ou RAS', arme));
-            } else {
-                addDynamicField('armes_container', 'arme-input', 'Armes (si connue) ou RAS', 'RAS');
-            }
-
-            loadDynamicSelectField('etat_esprit_container', data['etat_esprit_list'], ['Serein', 'Hostile', 'Conciliant']);
-            loadDynamicSelectField('volume_adversaire_container', data['volume_list'], ['Seul', 'Famille', 'BO', 'Conjointe']);
-            loadDynamicSelectField('type_action_container', data['type_action_list'], ['en force', 'en souplesse']);
-
-            document.getElementById('patracdvr_container').innerHTML = '';
-            if (data['patracdvr_rows'] && data['patracdvr_rows'].length > 0) {
-                data['patracdvr_rows'].forEach(row => {
-                    addPatracdvrRow(row.vehicle, row.members);
-                });
-            } else {
-                addPatracdvrRow('Sharan', [{trigramme: '', equipement: 'PIE', fonction: 'Inter'}]);
-                addPatracdvrRow('Kodiaq', [{trigramme: '', equipement: 'LBD', fonction: 'AO'}]);
-            }
-
-            document.getElementById('time_events_container').innerHTML = '';
-            if (data['time_events'] && data['time_events'].length > 0) {
-                data['time_events'].forEach(event => addTimeEvent(event.type, event.hour, event.description));
-            } else {
-                addTimeEvent('T0', '05:30', 'Déplacement tous moyens réunis...');
-            }
-
-        } else {
-            addDynamicField('vehicules_container', 'vehicule-input', 'Immat modèle couleur');
+        if (!savedData) {
+            // Initialiser les champs par défaut si aucune donnée n'est sauvegardée
             addDynamicField('armes_container', 'arme-input', 'Armes (si connue) ou RAS', 'RAS');
-            addDynamicFieldWithSelect('etat_esprit_container', 'État d\'esprit', ['Serein', 'Hostile', 'Conciliant']);
-            addDynamicFieldWithSelect('volume_adversaire_container', 'Volume', ['Seul', 'Famille', 'BO', 'Conjointe']);
-            addDynamicFieldWithSelect('type_action_container', 'Type d\'action', ['en force', 'en souplesse']);
-            addPatracdvrRow('Sharan', [{trigramme: '', equipement: 'PIE', fonction: 'Inter'}]);
-            addPatracdvrRow('Kodiaq', [{trigramme: '', equipement: 'LBD', fonction: 'AO'}]);
+            addDynamicFieldWithSelect('etat_esprit_container', 'État d\'esprit', ['Serein', 'Hostile', 'Conciliant'], 'Serein');
+            addPatracdvrRow();
             addTimeEvent('T0', '05:30', 'Déplacement tous moyens réunis...');
+            addPhotoField('adversaire_photos_container', 'adversaire-photo-input');
+            addCustomPhotoField('operation_photos_container', 'Cheminement');
+            return;
         }
-    }
 
-    function loadDynamicSelectField(containerId, values, initialOptions) {
-        const container = document.getElementById(containerId);
-        container.innerHTML = '';
-        if (values && values.length > 0) {
-            values.forEach(val => {
-                addDynamicFieldWithSelect(containerId, '', initialOptions, val);
-            });
-        } else {
-            addDynamicFieldWithSelect(containerId, '', initialOptions);
+        const data = JSON.parse(savedData);
+        for (const key in data) {
+            const field = document.getElementById(key);
+            if (field && typeof data[key] === 'string') {
+                field.value = data[key];
+            }
         }
-    }
 
+        // Chargement des listes dynamiques
+        Object.keys(data).filter(k => k.endsWith('_list')).forEach(key => {
+            const listName = key.replace('_list', '');
+            const containerId = (document.getElementById(`${listName}_adversaire_container`) ? `${listName}_adversaire_container` : `${listName}_container`);
+            const container = document.getElementById(containerId);
+            container.innerHTML = '';
+            
+            if (listName.match(/etat_esprit|volume|type_action/)) {
+                const options = { etat_esprit: ['Serein', 'Hostile', 'Conciliant'], volume: ['Seul', 'Famille', 'BO', 'Conjointe'], type_action: ['en force', 'en souplesse'] }[listName];
+                data[key].forEach(val => addDynamicFieldWithSelect(containerId, listName, options, val));
+            } else {
+                 data[key].forEach(val => addDynamicField(containerId, `${listName.slice(0, -1)}-input`, '...', val));
+            }
+        });
+
+        // Chargement PATRACDVR et Temps d'opération
+        document.getElementById('patracdvr_container').innerHTML = '';
+        data.patracdvr_rows?.forEach(row => addPatracdvrRow(row.vehicle, row.members));
+        document.getElementById('time_events_container').innerHTML = '';
+        data.time_events?.forEach(event => addTimeEvent(event.type, event.hour, event.description));
+        
+        // Initialiser les champs de photo vides car on ne peut pas sauvegarder les fichiers
+        addPhotoField('adversaire_photos_container', 'adversaire-photo-input');
+        addCustomPhotoField('operation_photos_container', 'Cheminement');
+        addCustomPhotoField('operation_photos_container', 'Terrain');
+        addCustomPhotoField('operation_photos_container', 'Porte');
+    }
+    
     function resetForm() {
         if (confirm('Voulez-vous vraiment réinitialiser tout le formulaire ?')) {
             localStorage.removeItem('oiFormData');
             location.reload();
         }
     }
+    
+    // Fonctions pour ajouter des champs dynamiques
+    function addDynamicFieldWithSelect(containerId, placeholder, options, value = '') {
+        const container = document.getElementById(containerId);
+        const item = document.createElement('div');
+        item.className = 'dynamic-list-item';
+        const selectId = `select_${containerId}_${Date.now()}`;
+        const inputId = `input_${containerId}_${Date.now()}`;
 
-    function addDynamicFieldWithSelect(containerId, placeholder, initialOptions, selectedValue = '') {
-        const container = document.getElementById(containerId);
-        const newField = document.createElement('div');
-        newField.className = 'dynamic-list-item';
-        
-        const selectHtml = `<select class="dynamic-select" onchange="this.nextElementSibling.value=this.value; saveFormData()">
-            <option value="">Sélectionner</option>
-            ${initialOptions.map(opt => `<option value="${opt}" ${opt === selectedValue ? 'selected' : ''}>${opt}</option>`).join('')}
-        </select>`;
-        
-        newField.innerHTML = `${selectHtml}
-            <input type="text" class="dynamic-input" placeholder="Ajouter un ${placeholder.toLowerCase()}" onchange="this.previousElementSibling.value=this.value; saveFormData()">
-            <button type="button" class="add-btn" onclick="addDynamicFieldWithSelect('${containerId}', '${placeholder}', ['${initialOptions.join("','")}'])">➕</button>
-            <button type="button" class="remove-btn" onclick="this.parentNode.remove(); saveFormData()">❌</button>
+        item.innerHTML = `
+            <select id="${selectId}" class="dynamic-select" onchange="document.getElementById('${inputId}').value = this.value; saveFormData()">
+                <option value="">Sélectionner</option>
+                ${options.map(opt => `<option value="${opt}" ${opt === value ? 'selected' : ''}>${opt}</option>`).join('')}
+            </select>
+            <input type="text" id="${inputId}" class="dynamic-input" placeholder="Ou valeur personnalisée" value="${value}" oninput="document.getElementById('${selectId}').value = ''; saveFormData()">
+            <button type="button" class="remove-btn" onclick="this.parentElement.remove(); saveFormData()">❌</button>
         `;
-        container.appendChild(newField);
-        saveFormData();
+        container.appendChild(item);
     }
     
-    function addDynamicField(containerId, inputClass, placeholder, defaultValue = '') {
+    function addDynamicField(containerId, inputClass, placeholder, value = '') {
         const container = document.getElementById(containerId);
-        const newField = document.createElement('div');
-        newField.className = 'dynamic-list-item';
-        newField.innerHTML = `<input type="text" class="${inputClass}" placeholder="${placeholder}" value="${defaultValue}" onchange="saveFormData()"><button type="button" class="remove-btn" onclick="this.parentNode.remove(); saveFormData()">❌</button>`;
-        container.appendChild(newField);
-        saveFormData();
+        const item = document.createElement('div');
+        item.className = 'dynamic-list-item';
+        item.innerHTML = `
+            <input type="text" class="dynamic-input ${inputClass}" placeholder="${placeholder}" value="${value}" oninput="saveFormData()">
+            <button type="button" class="remove-btn" onclick="this.parentElement.remove(); saveFormData()">❌</button>
+        `;
+        container.appendChild(item);
     }
-    
+
     function addPhotoField(containerId, inputClass) {
         const container = document.getElementById(containerId);
-        const newField = document.createElement('div');
-        newField.className = 'dynamic-list-item';
-        newField.innerHTML = `<input type="file" class="${inputClass}" data-label="Photo de l'adversaire" accept="image/*"><button type="button" class="remove-btn" onclick="this.parentNode.remove()">❌</button>`;
-        container.appendChild(newField);
+        const item = document.createElement('div');
+        item.className = 'dynamic-list-item';
+        item.innerHTML = `
+            <input type="file" class="${inputClass}" data-label="Photo de l'adversaire" accept="image/*">
+            <button type="button" class="remove-btn" onclick="this.parentElement.remove()">❌</button>
+        `;
+        container.appendChild(item);
     }
     
-    function addCustomPhotoField(containerId) {
+    function addCustomPhotoField(containerId, label = '') {
         const container = document.getElementById(containerId);
-        const newField = document.createElement('div');
-        newField.className = 'dynamic-list-item';
-        newField.innerHTML = `
-            <input type="text" placeholder="Légende de la photo" class="photo-label-input" style="flex-grow: 1;">
-            <input type="file" class="photo-input" accept="image/*" style="flex-grow: 2;">
-            <button type="button" class="remove-btn" onclick="this.parentNode.remove()">❌</button>
+        const item = document.createElement('div');
+        item.className = 'dynamic-list-item';
+        item.innerHTML = `
+            <input type="text" placeholder="Légende de la photo" class="photo-label-input" value="${label}">
+            <input type="file" class="photo-input" accept="image/*">
+            <button type="button" class="remove-btn" onclick="this.parentElement.remove()">❌</button>
         `;
-        container.appendChild(newField);
+        container.appendChild(item);
     }
 
-    function addPatracdvrRow(vehicle = '', membersData = []) {
+    function addPatracdvrRow(vehicle = '', members = []) {
         const container = document.getElementById('patracdvr_container');
-        const vehicleToAdd = vehicle || availableVehicles.find(v => !document.querySelector(`.patracdvr-vehicle-select[value="${v}"]`));
-
-        if (!vehicleToAdd) {
-            alert('Tous les véhicules sont déjà utilisés.');
-            return;
-        }
-
         const vehicleId = `v_${Date.now()}`;
         const row = document.createElement('div');
         row.className = 'form-section';
-        const vehicleSelectHtml = `<select class="patracdvr-vehicle-select" onchange="updateAllPatracdvrRows(); saveFormData()">` +
-                              availableVehicles.map(v => `<option value="${v}" ${v === vehicleToAdd ? 'selected' : ''}>${v}</option>`).join('') + `</select>`;
         row.innerHTML = `
-            <div>
-                <h3>Véhicule : ${vehicleSelectHtml}</h3>
-                <div id="patracdvr_members_${vehicleId}"></div>
-                <button type="button" class="add-btn" onclick="addPatracdvrMember('${vehicleId}')">➕</button>
-                <button type="button" class="remove-btn" onclick="this.parentNode.parentNode.remove(); updateAllPatracdvrRows(); saveFormData()">❌</button>
+            <div class="dynamic-list-item">
+                <select class="patracdvr-vehicle-select" onchange="saveFormData()">
+                    ${availableVehicles.map(v => `<option value="${v}" ${v === vehicle ? 'selected' : ''}>${v}</option>`).join('')}
+                </select>
+                <button type="button" class="add-btn" onclick="addPatracdvrMember('${vehicleId}')">➕ Personnel</button>
+                <button type="button" class="remove-btn" onclick="this.parentElement.parentElement.remove(); saveFormData()">❌ Véhicule</button>
             </div>
+            <div id="patracdvr_members_${vehicleId}"></div>
         `;
         container.appendChild(row);
-
-        if (membersData.length > 0) {
-            membersData.forEach(member => addPatracdvrMember(vehicleId, member.trigramme, member.equipement, member.fonction));
+        if (members.length > 0) {
+            members.forEach(m => addPatracdvrMember(vehicleId, m.trigramme, m.equipement, m.fonction));
         } else {
-            addPatracdvrMember(vehicleId, '', 'PIE', 'Inter');
+            addPatracdvrMember(vehicleId);
         }
-        updateAllPatracdvrRows();
-        saveFormData();
     }
 
-    function updateAllPatracdvrRows() {
-        const usedVehicles = new Set();
-        document.querySelectorAll('.patracdvr-vehicle-select').forEach(select => {
-            if (select.value) {
-                usedVehicles.add(select.value);
-            }
-        });
-        document.querySelectorAll('.patracdvr-vehicle-select').forEach(select => {
-            const currentValue = select.value;
-            for (const option of select.options) {
-                if (usedVehicles.has(option.value) && option.value !== currentValue) {
-                    option.disabled = true;
-                } else {
-                    option.disabled = false;
-                }
-            }
-        });
-    }
-
-    function addPatracdvrMember(vehicleId, trigramme = '', equipement = '', fonction = '') {
+    function addPatracdvrMember(vehicleId, trigramme = '', equipement = 'PIE', fonction = 'Inter') {
         const container = document.getElementById(`patracdvr_members_${vehicleId}`);
-        if (!container) return;
-        const equipementOptions = ['PIE', 'EFFRAC', 'LBD', 'UMP', 'G36', 'IL', 'GENL', 'MP7'];
-        const fonctionOptions = ['Chef inter', 'Chef dispo', 'AO', 'Inter', 'DE'];
-        
-        const member = document.createElement('div');
-        member.className = 'patracdvr-member-item';
-        member.innerHTML = `
-            <input type="text" class="patracdvr-member-input" placeholder="Trigramme" value="${trigramme}" onchange="saveFormData()">
+        const item = document.createElement('div');
+        item.className = 'patracdvr-member-item';
+        item.innerHTML = `
+            <input type="text" class="patracdvr-member-input" placeholder="Trigramme" value="${trigramme}" oninput="saveFormData()">
             <select class="patracdvr-equipement-select" onchange="saveFormData()">
-                ${equipementOptions.map(o => `<option value="${o}" ${o === equipement ? 'selected' : ''}>${o}</option>`).join('')}
+                ${['PIE', 'EFFRAC', 'LBD', 'UMP', 'G36', 'IL', 'GENL', 'MP7'].map(o => `<option value="${o}" ${o === equipement ? 'selected' : ''}>${o}</option>`).join('')}
             </select>
             <select class="patracdvr-fonction-select" onchange="saveFormData()">
-                ${fonctionOptions.map(o => `<option value="${o}" ${o === fonction ? 'selected' : ''}>${o}</option>`).join('')}
+                ${['Chef inter', 'Chef dispo', 'AO', 'Inter', 'DE'].map(o => `<option value="${o}" ${o === fonction ? 'selected' : ''}>${o}</option>`).join('')}
             </select>
-            <button type="button" class="remove-btn" onclick="this.parentNode.remove(); saveFormData()">❌</button>
+            <button type="button" class="remove-btn" onclick="this.parentElement.remove(); saveFormData()">❌</button>
         `;
-        container.appendChild(member);
-        saveFormData();
+        container.appendChild(item);
     }
 
     function addTimeEvent(type = 'T0', hour = '', description = '') {
         const container = document.getElementById('time_events_container');
-        const event = document.createElement('div');
-        event.className = 'time-item';
-        const timeTypes = ['T0', 'T1', 'T2', 'T3', 'T4', 'T5'];
-        event.innerHTML = `
+        const item = document.createElement('div');
+        item.className = 'time-item';
+        item.innerHTML = `
             <select class="time-type-select" onchange="saveFormData()">
-                ${timeTypes.map(t => `<option value="${t}" ${t === type ? 'selected' : ''}>${t}</option>`).join('')}
+                ${['T0', 'T1', 'T2', 'T3', 'T4', 'T5'].map(t => `<option value="${t}" ${t === type ? 'selected' : ''}>${t}</option>`).join('')}
             </select>
             <input type="time" class="time-hour-input" value="${hour}" onchange="saveFormData()">
-            <textarea class="time-description-input" placeholder="Description de l'événement" rows="1" onchange="saveFormData()">${description}</textarea>
-            <button type="button" class="remove-btn" onclick="this.parentNode.remove(); saveFormData()">❌</button>
+            <textarea class="time-description-input" placeholder="Description" rows="1" oninput="saveFormData()">${description}</textarea>
+            <button type="button" class="remove-btn" onclick="this.parentElement.remove(); saveFormData()">❌</button>
         `;
-        container.appendChild(event);
-        saveFormData();
+        container.appendChild(item);
     }
-
+    
+    // Génération du PDF
     document.getElementById('generatePdf').addEventListener('click', async () => {
         const { jsPDF } = jspdf;
-        const doc = new jsPDF('portrait', 'pt', 'a4');
-        const margin = 30;
+        const doc = new jsPDF({ unit: 'pt', format: 'a4', orientation: 'portrait' });
+        const margin = 40;
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
         let yPos = margin;
         
         const getVal = (id) => document.getElementById(id).value.trim() || 'RAS';
 
-        const addHeaderAndFooter = (isLandscape = false) => {
-            const pageCount = doc.internal.getNumberOfPages();
-            if (pageCount === 0) return; // No pages yet
-            doc.setPage(pageCount);
-            
+        const addHeaderAndFooter = (pageNumber, isLandscape = false) => {
+            doc.setPage(pageNumber);
             const width = isLandscape ? pageHeight : pageWidth;
             const height = isLandscape ? pageWidth : pageHeight;
             doc.setFillColor(18, 18, 18);
             doc.rect(0, 0, width, height, 'F');
             doc.setFontSize(10);
             doc.setTextColor('#e0e0e0');
-            doc.text(`Page ${pageCount}`, width - 70, height - 20);
+            doc.text(`Page ${pageNumber}`, width - margin, height - 20);
         };
         
+        doc.deletePage(1); // Supprimer la page par défaut
+
         // --- PAGE DE GARDE ---
         doc.addPage('a4', 'landscape');
-        doc.deletePage(1);
-        addHeaderAndFooter(true);
         const landscapeWidth = doc.internal.pageSize.getWidth();
         const landscapeHeight = doc.internal.pageSize.getHeight();
-        const dateOp = getValue('date_op');
-        const titleText = `Opération du ${dateOp}`;
+        const titleText = `Opération du ${getVal('date_op')}`;
         doc.setFontSize(70);
         const titleWidth = doc.getStringUnitWidth(titleText) * doc.internal.getFontSize() / doc.internal.scaleFactor;
         if (titleWidth > landscapeWidth - margin * 4) {
-             const newSize = (landscapeWidth - margin * 4) * doc.internal.scaleFactor / doc.getStringUnitWidth(titleText);
-             doc.setFontSize(newSize);
+             doc.setFontSize((landscapeWidth - margin * 4) * doc.internal.scaleFactor / doc.getStringUnitWidth(titleText));
         }
         doc.setTextColor('#5b9bd5');
         doc.text(titleText, landscapeWidth / 2, landscapeHeight / 2, { align: 'center', baseline: 'middle' });
-
 
         // --- Fonctions utilitaires ---
         const checkYPos = (spaceNeeded) => {
             if (yPos + spaceNeeded > pageHeight - margin) {
                 doc.addPage('a4', 'portrait');
-                addHeaderAndFooter();
                 yPos = margin;
                 return true;
             }
@@ -579,36 +451,42 @@
 
         const addSectionTitle = (title) => {
             doc.addPage('a4', 'portrait');
-            addHeaderAndFooter();
             yPos = margin;
-            doc.setFontSize(27);
-            doc.setFont('helvetica', 'bold');
-            doc.setTextColor('#5b9bd5');
+            doc.setFontSize(27).setFont('helvetica', 'bold').setTextColor('#5b9bd5');
             doc.text(title, margin, yPos);
             yPos += 40;
         };
 
         const addSubsectionTitle = (title) => {
-            checkYPos(40);
-            yPos += 20; // Espace avant le sous-titre
-            doc.setFontSize(21);
-            doc.setFont('helvetica', 'bold');
-            doc.setTextColor('#a0c8e8'); // Couleur plus claire pour sous-titre
+            checkYPos(60);
+            yPos += 20;
+            doc.setFontSize(21).setFont('helvetica', 'bold').setTextColor('#a0c8e8');
             doc.text(title, margin, yPos);
             yPos += 30;
         };
 
         const addText = (text) => {
             checkYPos(30);
-            doc.setFontSize(12);
-            doc.setFont('helvetica', 'normal');
-            doc.setTextColor('#e0e0e0');
+            doc.setFontSize(12).setFont('helvetica', 'normal').setTextColor('#e0e0e0');
             const lines = doc.splitTextToSize(text, pageWidth - margin * 2);
             doc.text(lines, margin, yPos);
             yPos += lines.length * 15 + 10;
         };
+
+        const renderAutoTable = (config) => {
+            doc.autoTable({
+                startY: yPos,
+                theme: 'plain',
+                styles: { fontSize: 12, cellPadding: 5, textColor: [224, 224, 224] },
+                headStyles: { fontSize: 16.5, fillColor: [42, 42, 42], textColor: [255, 255, 255], fontStyle: 'bold' },
+                columnStyles: { 0: { fontStyle: 'bold', textColor: [91, 155, 213] } },
+                ...config,
+                didDrawPage: (data) => { yPos = data.cursor.y; },
+            });
+            yPos = doc.autoTable.previous.finalY + 20;
+        };
         
-        // --- DÉBUT DU CONTENU ---
+        // --- CONTENU ---
         addSectionTitle("1. SITUATION");
         addSubsectionTitle("1.1 Générale");
         addText(getVal('situation_generale'));
@@ -617,185 +495,114 @@
         addText(getVal('situation_particuliere'));
 
         addSubsectionTitle("1.3 ADVERSAIRE(S)");
-        const adversaireData = [
-            ['Nom/Prénom', getVal('nom_adversaire')],
-            ['Domicile', getVal('domicile_adversaire')],
-            ['Naissance', `${getVal('date_naissance')} à ${getVal('lieu_naissance')}`],
-            ['Description', `${getVal('stature_adversaire')} / ${document.getElementById('ethnie_adversaire').value} / ${getVal('signes_particuliers_adversaire')}`],
-            ['Profession', getVal('profession_adversaire')],
-            ['Antécédents', getVal('antecedents_adversaire')],
-            ['État d\'esprit', Array.from(document.querySelectorAll('#etat_esprit_container .dynamic-select')).map(s => s.value).filter(v => v).join(', ') || 'RAS'],
-            ['Attitude', getVal('attitude_adversaire')],
-            ['Volume', Array.from(document.querySelectorAll('#volume_adversaire_container .dynamic-select')).map(s => s.value).filter(v => v).join(', ') || 'RAS'],
-            ['Substances', getVal('substances_adversaire')],
-            ['Véhicules', Array.from(document.querySelectorAll('.vehicule-input')).map(i => i.value).filter(v => v).join(', ') || 'RAS'],
-            ['Armes', Array.from(document.querySelectorAll('.arme-input')).map(i => i.value).filter(v => v).join(', ') || 'RAS'],
-            ['Mode d\'action (ME1)', getVal('mode_action_me1')],
-            ['Mode d\'action (ME2)', getVal('mode_action_me2')],
-            ['Mode d\'action (ME3)', getVal('mode_action_me3')]
-        ];
-        
-        doc.autoTable({
-            startY: yPos,
-            body: adversaireData,
-            theme: 'plain',
-            styles: { fontSize: 12, cellPadding: 5, textColor: [224, 224, 224], font: 'helvetica' },
-            columnStyles: { 0: { fontStyle: 'bold', textColor: [91, 155, 213] } },
-            didDrawPage: (data) => { yPos = data.cursor.y; addHeaderAndFooter(); }
+        renderAutoTable({
+            body: [
+                ['Nom/Prénom', getVal('nom_adversaire')],
+                ['Domicile', getVal('domicile_adversaire')],
+                ['Naissance', `${getVal('date_naissance')} à ${getVal('lieu_naissance')}`],
+                ['Description', [getVal('stature_adversaire'), getVal('ethnie_adversaire'), getVal('signes_particuliers_adversaire')].join(' / ')],
+                ['Profession', getVal('profession_adversaire')],
+                ['Antécédents', getVal('antecedents_adversaire')],
+                ['État d\'esprit', Array.from(document.querySelectorAll('#etat_esprit_container .dynamic-input')).map(i=>i.value).join(', ') || 'RAS'],
+                ['Attitude', getVal('attitude_adversaire')],
+                ['Volume', Array.from(document.querySelectorAll('#volume_adversaire_container .dynamic-input')).map(i=>i.value).join(', ') || 'RAS'],
+                ['Substances', getVal('substances_adversaire')],
+                ['Véhicules', Array.from(document.querySelectorAll('.vehicule-input')).map(i=>i.value).join(', ') || 'RAS'],
+                ['Armes', Array.from(document.querySelectorAll('.arme-input')).map(i=>i.value).join(', ') || 'RAS'],
+                ['Modes d\'action', `ME1: ${getVal('mode_action_me1')}\nME2: ${getVal('mode_action_me2')}\nME3: ${getVal('mode_action_me3')}`],
+            ]
         });
-        yPos = doc.autoTable.previous.finalY + 20;
+        
+        await addImagesFromContainer('adversaire_photos_container', "Photo de l'adversaire");
 
-        const adversairePhotoInputs = Array.from(document.querySelectorAll('#adversaire_photos_container input[type="file"]'));
-        if (adversairePhotoInputs.some(input => input.files.length > 0)) {
-            addSubsectionTitle("Photo de l'adversaire");
-            await addImagesToPage(adversairePhotoInputs);
-        }
-
-        addSubsectionTitle("1.4 Ami(e)s");
-        addText(getVal('amies'));
-        addSubsectionTitle("1.5 Terrain / Environnement");
-        addText(getVal('terrain_info'));
-        addSubsectionTitle("1.6 Population");
-        addText(getVal('population'));
-        addSubsectionTitle("1.7 Cadre juridique");
-        addText(getVal('cadre_juridique'));
+        addSubsectionTitle("1.4 Environnement");
+        renderAutoTable({
+            body: [
+                ['Ami(e)s', getVal('amies')],
+                ['Terrain', getVal('terrain_info')],
+                ['Population', getVal('population')],
+                ['Cadre juridique', getVal('cadre_juridique')],
+            ]
+        });
         
         addSectionTitle("2. MISSIONS du PSIG");
         addText(getVal('missions_psig'));
 
         addSectionTitle("3. EXÉCUTION");
-        doc.autoTable({
-            startY: yPos,
-            body: [
-                ['Date', getVal('date_execution')],
-                ['Heure', getVal('heure_execution')],
-                ['Type d\'action', Array.from(document.querySelectorAll('#type_action_container .dynamic-select')).map(s => s.value).filter(v => v).join(', ') || 'RAS']
-            ],
-            theme: 'plain',
-            styles: { fontSize: 12, cellPadding: 5, textColor: [224, 224, 224] },
-            columnStyles: { 0: { fontStyle: 'bold', textColor: [91, 155, 213] } },
-            didDrawPage: (data) => { yPos = data.cursor.y; addHeaderAndFooter(); }
-        });
-        yPos = doc.autoTable.previous.finalY + 20;
+        renderAutoTable({ body: [['Date', getVal('date_execution')], ['Heure', getVal('heure_execution')], ['Type d\'action', Array.from(document.querySelectorAll('#type_action_container .dynamic-input')).map(i=>i.value).join(', ') || 'RAS']] });
 
         addSectionTitle("4. ARTICULATION");
         addSubsectionTitle("Place du Chef");
         addText(getVal('place_chef'));
+        addSubsectionTitle("Temps d'opération");
+        renderAutoTable({ theme: 'grid', head: [['Type', 'Heure', 'Description']], body: JSON.parse(localStorage.getItem('oiFormData')).time_events.map(e => [e.type, e.hour, e.description]) });
         
-        addSubsectionTitle("Temps d'opération (T0 - T5)");
-        const timeEvents = Array.from(document.querySelectorAll('#time_events_container .time-item')).map(item => [
-            item.querySelector('.time-type-select').value,
-            item.querySelector('.time-hour-input').value || 'RAS',
-            item.querySelector('.time-description-input').value || 'RAS'
-        ]);
-        if (timeEvents.length > 0 && timeEvents[0][1] !== 'RAS') {
-             doc.autoTable({
-                startY: yPos, head: [['Type', 'Heure', 'Description']], body: timeEvents, theme: 'grid',
-                styles: { fontSize: 11, cellPadding: 5, textColor: [224, 224, 224], fillColor: [30, 30, 30] },
-                headStyles: { fontSize: 16.5, fillColor: [42, 42, 42], textColor: [255, 255, 255], fontStyle: 'bold' },
-                didDrawPage: (data) => { yPos = data.cursor.y; addHeaderAndFooter(); }
-            });
-            yPos = doc.autoTable.previous.finalY + 20;
-        }
-
         addSectionTitle("PATRACDVR");
-        const patracdvrSections = document.querySelectorAll('#patracdvr_container > .form-section');
-        patracdvrSections.forEach(section => {
-            const vehicle = section.querySelector('.patracdvr-vehicle-select').value;
-            const members = Array.from(section.querySelectorAll('.patracdvr-member-item'))
-                .map(item => [
-                    item.querySelector('.patracdvr-member-input').value,
-                    item.querySelector('.patracdvr-equipement-select').value,
-                    item.querySelector('.patracdvr-fonction-select').value
-                ]).filter(member => member[0].trim() !== '');
-
-            if (members.length > 0) {
-                checkYPos(members.length * 30 + 40);
-                doc.autoTable({
-                    startY: yPos, head: [[vehicle, 'Équipement', 'Fonction']], body: members, theme: 'grid',
-                    styles: { fontSize: 11, cellPadding: 5, textColor: [224, 224, 224], fillColor: [30, 30, 30] },
-                    headStyles: { fontSize: 16.5, fillColor: [42, 42, 42], textColor: [255, 255, 255], fontStyle: 'bold' },
-                    didDrawPage: (data) => { yPos = data.cursor.y; addHeaderAndFooter(); }
-                });
-                yPos = doc.autoTable.previous.finalY + 20;
+        JSON.parse(localStorage.getItem('oiFormData')).patracdvr_rows.forEach(row => {
+            if (row.members.some(m => m.trigramme)) {
+                renderAutoTable({ theme: 'grid', head: [[row.vehicle, 'Équipement', 'Fonction']], body: row.members.map(m => [m.trigramme, m.equipement, m.fonction]) });
             }
         });
-        
-        const operationPhotoInputs = Array.from(document.querySelectorAll('#operation_photos_container .dynamic-list-item')).map(item => {
-            const input = item.querySelector('.photo-input');
-            const labelInput = item.querySelector('.photo-label-input');
-            if (input && labelInput) { input.dataset.label = labelInput.value || 'Photo personnalisée'; }
-            return input;
-        }).filter(Boolean);
-        
-        if (operationPhotoInputs.some(input => input.files.length > 0)) {
-            addSectionTitle("Photos de l'opération");
-            await addImagesToPage(operationPhotoInputs);
-        }
 
-        async function addImagesToPage(fileInputs) {
-            const imagePromises = fileInputs.filter(input => input.files.length > 0).map(input => {
+        await addImagesFromContainer('operation_photos_container', "Photos de l'opération", true);
+        
+        // Finaliser avec les en-têtes/pieds de page
+        const pageCount = doc.internal.getNumberOfPages();
+        for (let i = 1; i <= pageCount; i++) {
+             addHeaderAndFooter(i, doc.getPageInfo(i).pageContext.mediaBox.topRight[0] > doc.getPageInfo(i).pageContext.mediaBox.bottomRight[1]);
+        }
+        
+        // Sauvegarde
+        const fileName = `OI_${getVal('date_op').replace(/\//g, '-')}_${getVal('nom_adversaire').replace(/ /g, '_')}.pdf`;
+        doc.save(fileName);
+
+        async function addImagesFromContainer(containerId, sectionTitle, newPage = false) {
+            const inputs = Array.from(document.querySelectorAll(`#${containerId} input[type="file"]`)).filter(i => i.files.length > 0);
+            if (inputs.length === 0) return;
+
+            if (newPage) addSectionTitle(sectionTitle);
+            else addSubsectionTitle(sectionTitle);
+
+            const imagePromises = inputs.map(input => {
+                const label = input.parentElement.querySelector('.photo-label-input')?.value || input.dataset.label || 'Image';
                 return new Promise(resolve => {
-                    const file = input.files[0];
                     const reader = new FileReader();
-                    reader.onload = (e) => resolve({ src: e.target.result, label: input.dataset.label || 'Image' });
-                    reader.readAsDataURL(file);
+                    reader.onload = e => resolve({ src: e.target.result, label });
+                    reader.readAsDataURL(input.files[0]);
                 });
             });
             const images = await Promise.all(imagePromises);
-            if (images.length === 0) return;
 
-            const maxImagesPerRow = 2;
-            const padding = 10;
-            const availableWidth = pageWidth - margin * 2;
-            
-            let currentRow = [];
-            for (const imgData of images) {
-                currentRow.push(imgData);
-                if (currentRow.length === maxImagesPerRow) {
-                    await drawImageRow(currentRow);
-                    currentRow = [];
-                }
-            }
-            if (currentRow.length > 0) {
-                await drawImageRow(currentRow);
-            }
-
-            async function drawImageRow(rowData) {
+            const drawImageRow = async (rowData) => {
+                const padding = 10;
+                const availableWidth = pageWidth - margin * 2;
                 const imageWidth = (availableWidth - (padding * (rowData.length - 1))) / rowData.length;
                 let maxHeightInRow = 0;
-                const processedImages = [];
+                const processed = [];
 
-                for (const imgData of rowData) {
+                for (const data of rowData) {
                     const img = new Image();
-                    img.src = imgData.src;
+                    img.src = data.src;
                     await new Promise(r => img.onload = r);
-                    const ratio = img.height / img.width;
-                    const imageHeight = imageWidth * ratio;
+                    const imageHeight = imageWidth * (img.height / img.width);
                     maxHeightInRow = Math.max(maxHeightInRow, imageHeight);
-                    processedImages.push({ img, width: imageWidth, height: imageHeight, label: imgData.label });
+                    processed.push({ img, ...data, width: imageWidth, height: imageHeight });
                 }
 
                 checkYPos(maxHeightInRow + 30);
                 let xPos = margin;
-
-                for (const pImg of processedImages) {
-                    doc.addImage(pImg.img, 'JPEG', xPos, yPos, pImg.width, pImg.height);
-                    doc.setFontSize(9);
-                    doc.setTextColor('#95a5a6');
-                    doc.text(pImg.label, xPos + pImg.width / 2, yPos + pImg.height + 15, { align: 'center' });
-                    xPos += pImg.width + padding;
+                for (const p of processed) {
+                    doc.addImage(p.img, 'JPEG', xPos, yPos, p.width, p.height);
+                    doc.setFontSize(9).setTextColor('#95a5a6').text(p.label, xPos + p.width / 2, yPos + p.height + 15, { align: 'center' });
+                    xPos += p.width + padding;
                 }
                 yPos += maxHeightInRow + 30;
+            };
+
+            for (let i = 0; i < images.length; i += 2) {
+                await drawImageRow(images.slice(i, i + 2));
             }
         }
-        
-        // --- SAUVEGARDE DU PDF ---
-        const opDate = document.getElementById('date_op').value.replace(/\//g, '-') || 'date';
-        const advName = document.getElementById('nom_adversaire').value.replace(/ /g, '_') || 'adversaire';
-        const fileName = `OI_${opDate}_${advName}.pdf`;
-
-        doc.save(fileName);
     });
 
 </script>
