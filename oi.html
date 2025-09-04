@@ -34,26 +34,12 @@
         .team-member-input label { margin-bottom: 0; flex-basis: 30px; }
         .team-member-input input { margin-bottom: 0; flex-grow: 1; }
         .dynamic-list-item { display: flex; align-items: center; gap: 10px; margin-bottom: 5px; }
-        
-        @media (max-width: 600px) {
-            .container {
-                padding: 15px;
-            }
-            .grid-container {
-                grid-template-columns: 1fr;
-            }
-            h1 {
-                font-size: 2em;
-            }
-            h2 {
-                font-size: 1.5em;
-            }
-        }
     </style>
 </head>
 <body>
 
 <div class="container">
+    <button type="button" onclick="resetForm()">Réinitialiser le formulaire</button>
     <h1>Générateur d'Ordre Initial</h1>
 
     <div class="form-section">
@@ -209,6 +195,73 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
 <script>
+    document.addEventListener('DOMContentLoaded', (event) => {
+        loadFormData();
+    });
+
+    const formFields = document.querySelectorAll('input, textarea, select');
+    formFields.forEach(field => {
+        field.addEventListener('change', (e) => {
+            saveFormData();
+        });
+    });
+
+    function saveFormData() {
+        const data = {};
+        formFields.forEach(field => {
+            if (field.type === 'file') {
+                // Not saving file content to local storage
+            } else if (field.tagName === 'SELECT') {
+                data[field.id] = field.value;
+            } else {
+                data[field.id] = field.value;
+            }
+        });
+        localStorage.setItem('oiFormData', JSON.stringify(data));
+    }
+
+    function loadFormData() {
+        const savedData = localStorage.getItem('oiFormData');
+        if (savedData) {
+            const data = JSON.parse(savedData);
+            for (const key in data) {
+                const field = document.getElementById(key);
+                if (field) {
+                    field.value = data[key];
+                    if (field.tagName === 'SELECT') {
+                         field.dispatchEvent(new Event('change'));
+                    }
+                }
+            }
+            updateTeamLabels('india');
+            updateTeamLabels('oscar');
+        }
+    }
+
+    function resetForm() {
+        if (confirm('Voulez-vous vraiment réinitialiser tout le formulaire ?')) {
+            localStorage.removeItem('oiFormData');
+            formFields.forEach(field => {
+                if (field.type === 'file') {
+                    field.value = '';
+                } else if (field.tagName === 'SELECT') {
+                    field.selectedIndex = 0;
+                } else {
+                    field.value = '';
+                }
+            });
+            // Reset dynamic fields
+            document.getElementById('india_members').innerHTML = '';
+            addTeamMember('india');
+            document.getElementById('oscar_members').innerHTML = '';
+            addTeamMember('oscar');
+            document.getElementById('vehicules_container').innerHTML = '';
+            addDynamicField('vehicules_container', 'vehicule-input', 'Immat modèle couleur');
+            document.getElementById('armes_container').innerHTML = '';
+            addDynamicField('armes_container', 'arme-input', 'Armes (si connue) ou RAS', 'RAS');
+        }
+    }
+
     // Ajout de la fonctionnalité de listes déroulantes dynamiques
     function addDynamicOption(selectId, inputId) {
         const input = document.getElementById(inputId);
@@ -221,6 +274,7 @@
                 newOption.textContent = value;
                 select.appendChild(newOption);
                 select.value = value;
+                saveFormData();
             }
         });
     }
@@ -244,6 +298,7 @@
         button.parentNode.remove();
         const team = button.parentNode.parentNode.id.replace('_members', '');
         updateTeamLabels(team);
+        saveFormData();
     }
 
     function updateTeamLabels(team) {
@@ -260,6 +315,7 @@
         newField.className = 'dynamic-list-item';
         newField.innerHTML = `<input type="text" class="${inputClass}" placeholder="${placeholder}" value="${defaultValue}"><button type="button" class="remove-btn" onclick="this.parentNode.remove()">❌</button>`;
         container.appendChild(newField);
+        saveFormData();
     }
     
     document.getElementById('generatePdf').addEventListener('click', async () => {
@@ -275,9 +331,7 @@
             doc.setFontSize(10);
             doc.setFont('Helvetica', 'normal');
             doc.setTextColor('#e0e0e0');
-            doc.text(`Page ${doc.internal.getNumberOfPages()} / `, pageWidth - 70, pageHeight - 20);
-            doc.text("PSIG SABRE", margin, pageHeight - 20);
-            doc.text("GILETTE", pageWidth - 70, pageHeight - 20);
+            doc.text(`Page ${doc.internal.getNumberOfPages()} `, pageWidth - 70, pageHeight - 20);
         };
 
         const addSectionTitle = (title) => {
