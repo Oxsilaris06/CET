@@ -524,73 +524,51 @@
     }
 
     document.getElementById('generatePdf').addEventListener('click', async () => {
-        const doc = new jspdf.jsPDF('portrait', 'pt', 'a4');
+        const doc = new jspdf.jsPDF('landscape', 'pt', 'a4');
         const margin = 50;
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
-        let yPos = margin;
+        let yPos = 80;
 
         const addHeaderAndFooter = () => {
             doc.setFillColor(0, 0, 0);
             doc.rect(0, 0, pageWidth, pageHeight, 'F');
             doc.setFontSize(10);
-            doc.setFont('Arial', 'normal');
+            doc.setFont('Helvetica', 'normal');
             doc.setTextColor('#e0e0e0');
             doc.text(`Page ${doc.internal.getNumberOfPages()}`, pageWidth - 70, pageHeight - 20);
         };
-        
+
         const addSectionTitle = (title) => {
-            if (doc.internal.getNumberOfPages() > 1 || yPos > margin) {
-                doc.addPage();
-            }
-            yPos = margin;
-            addHeaderAndFooter();
-            doc.setFontSize(18);
-            doc.setFont('Arial', 'bold');
-            doc.setTextColor('#5b9bd5');
-            doc.text(title, margin, yPos);
-            yPos += 30;
-        };
-
-        const addSubsectionTitle = (title) => {
-            if (doc.internal.getNumberOfPages() > 1 || yPos > margin) {
-                doc.addPage();
-            }
-            yPos = margin;
-            addHeaderAndFooter();
-            doc.setFontSize(18);
-            doc.setFont('Arial', 'bold');
-            doc.setTextColor('#5b9bd5');
-            doc.text(title, margin, yPos);
-            yPos += 30;
-        };
-
-        const addText = (label, value) => {
-            if (!value) return;
-
             if (yPos > pageHeight - 50) {
                 doc.addPage();
                 yPos = margin;
                 addHeaderAndFooter();
             }
-            
-            doc.setFontSize(14);
-            doc.setFont('Arial', 'bold');
-            doc.setTextColor('#e0e0e0');
-            let labelText = `${label}: `;
-            let labelWidth = doc.getStringUnitWidth(labelText) * doc.getFontSize();
-            doc.text(labelText, margin, yPos);
-            
-            doc.setFontSize(14);
-            doc.setFont('Arial', 'normal');
-            let valueText = value;
-            let textWidth = pageWidth - margin * 2 - labelWidth;
-            let valueLines = doc.splitTextToSize(valueText, textWidth);
-            
-            doc.text(valueLines, margin + labelWidth, yPos);
-            yPos += (valueLines.length * 15) + 5;
+            doc.setFontSize(16);
+            doc.setFont('Helvetica', 'bold');
+            doc.setTextColor('#5b9bd5');
+            doc.text(title, margin, yPos);
+            yPos += 20;
         };
-        
+
+        const addText = (label, value) => {
+            if (value) {
+                if (yPos > pageHeight - 30) {
+                    doc.addPage();
+                    yPos = margin;
+                    addHeaderAndFooter();
+                }
+                doc.setFontSize(12);
+                doc.setFont('Helvetica', 'normal');
+                doc.setTextColor('#e0e0e0');
+                const text = `${label}: ${value}`;
+                const lines = doc.splitTextToSize(text, pageWidth - margin * 2);
+                doc.text(lines, margin, yPos);
+                yPos += (lines.length * 15) + 5;
+            }
+        };
+
         const addPhoto = async (fileInput, title) => {
             if (fileInput && fileInput.files.length > 0) {
                 const file = fileInput.files[0];
@@ -601,11 +579,17 @@
                 img.src = reader.result;
                 await new Promise(resolve => img.onload = resolve);
                 
-                const imgWidth = pageWidth - margin * 2;
+                const imgWidth = 300;
                 const imgHeight = (img.height * imgWidth) / img.width;
 
-                addSubsectionTitle(title);
+                addSectionTitle(title);
                 
+                if (yPos + imgHeight + 20 > pageHeight) {
+                    doc.addPage();
+                    yPos = margin;
+                    addHeaderAndFooter();
+                }
+
                 doc.addImage(reader.result, 'JPEG', margin, yPos, imgWidth, imgHeight);
                 yPos += imgHeight + 20;
             }
@@ -614,36 +598,54 @@
         addHeaderAndFooter();
 
         doc.setFontSize(22);
-        doc.setFont('Arial', 'bold');
+        doc.setFont('Helvetica', 'bold');
         doc.setTextColor('#5b9bd5');
         doc.text("OPÉRATION DE POLICE JUDICIAIRE", pageWidth / 2, 40, { align: 'center' });
-        
-        // 1. SITUATION
-        addSectionTitle("1. SITUATION");
-        addSubsectionTitle("1.1 Générale");
-        addText(`Date de l'opération`, document.getElementById('date_op').value);
-        addText("Contenu", document.getElementById('situation_generale').value);
-        
-        addSubsectionTitle("1.2 Particulière");
-        addText("Contenu", document.getElementById('situation_particuliere').value);
+        yPos = 60;
 
-        // 1.3 ADVERSAIRE
+        // Page 1
+        yPos = 80;
+        addSectionTitle("1. SITUATION");
+        addText(`Date de l'opération`, document.getElementById('date_op').value);
+        addText("1.1 Générale", document.getElementById('situation_generale').value);
+        addText("1.2 Particulière", document.getElementById('situation_particuliere').value);
+
+        // Page 2
+        doc.addPage();
+        yPos = 80;
+        addHeaderAndFooter();
         addSectionTitle("1.3 ADVERSAIRE(S)");
-        addText('Nom/Prénom', document.getElementById('nom_adversaire').value);
-        addText('Domicile et Adresse de repli', document.getElementById('domicile_adversaire').value);
-        addText('Date/Lieu de naissance', `${document.getElementById('date_naissance').value} à ${document.getElementById('lieu_naissance').value}`);
-        addText('Description', `${document.getElementById('stature_adversaire').value} / ${document.getElementById('ethnie_adversaire').value} / ${document.getElementById('signes_particuliers_adversaire').value}`);
-        addText('Profession', document.getElementById('profession_adversaire').value);
-        addText('Antécédents', document.getElementById('antecedents_adversaire').value);
-        addText('État d\'esprit', Array.from(document.querySelectorAll('#etat_esprit_container .dynamic-select')).map(s => s.value).filter(val => val).join(', '));
-        addText('Attitude', document.getElementById('attitude_adversaire').value);
-        addText('Volume', Array.from(document.querySelectorAll('#volume_adversaire_container .dynamic-select')).map(s => s.value).filter(val => val).join(', '));
-        addText('Substances', document.getElementById('substances_adversaire').value);
-        addText('Véhicules', Array.from(document.querySelectorAll('.vehicule-input')).map(input => input.value).filter(val => val).join(', '));
-        addText('Armes', Array.from(document.querySelectorAll('.arme-input')).map(input => input.value).filter(val => val).join(', '));
-        addText('Modes d\'actions', `ME1: ${document.getElementById('mode_action_me1').value}`);
-        addText('', `ME2: ${document.getElementById('mode_action_me2').value}`);
-        addText('', `ME3: ${document.getElementById('mode_action_me3').value}`);
+        
+        const vehiculesList = Array.from(document.querySelectorAll('.vehicule-input')).map(input => input.value).filter(val => val).join(', ');
+        const armesList = Array.from(document.querySelectorAll('.arme-input')).map(input => input.value).filter(val => val).join(', ');
+
+        const adversaireData = [
+            ['Nom/Prénom', document.getElementById('nom_adversaire').value],
+            ['Domicile et Adresse de repli', document.getElementById('domicile_adversaire').value],
+            ['Date/Lieu de naissance', `${document.getElementById('date_naissance').value} à ${document.getElementById('lieu_naissance').value}`],
+            ['Description', `${document.getElementById('stature_adversaire').value} / ${document.getElementById('ethnie_adversaire').value} / ${document.getElementById('signes_particuliers_adversaire').value}`],
+            ['Profession', document.getElementById('profession_adversaire').value],
+            ['Antécédents', document.getElementById('antecedents_adversaire').value],
+            ['État d\'esprit', Array.from(document.querySelectorAll('#etat_esprit_container .dynamic-select')).map(s => s.value).filter(val => val).join(', ')],
+            ['Attitude', document.getElementById('attitude_adversaire').value],
+            ['Volume', Array.from(document.querySelectorAll('#volume_adversaire_container .dynamic-select')).map(s => s.value).filter(val => val).join(', ')],
+            ['Substances', document.getElementById('substances_adversaire').value],
+            ['Véhicules', vehiculesList],
+            ['Armes', armesList],
+            ['Modes d\'actions', `ME1: ${document.getElementById('mode_action_me1').value}`],
+            ['', `ME2: ${document.getElementById('mode_action_me2').value}`],
+            ['', `ME3: ${document.getElementById('mode_action_me3').value}`]
+        ].filter(row => row[1]);
+
+        doc.autoTable({
+            startY: yPos,
+            head: [['Position', 'Détails']],
+            body: adversaireData,
+            theme: 'plain',
+            styles: { fontSize: 10, cellPadding: 5, textColor: [224, 224, 224], fillColor: [30, 30, 30], font: 'Helvetica', fontStyle: 'normal' },
+            headStyles: { fillColor: [42, 42, 42], textColor: [255, 255, 255], font: 'Helvetica', fontStyle: 'bold' },
+            didDrawPage: (data) => { yPos = data.cursor.y + 10; }
+        });
         
         const photoAdversaireInputs = document.querySelectorAll('#adversaire_photos_container input[type="file"]');
         for (const input of photoAdversaireInputs) {
@@ -686,8 +688,8 @@
                 head: [['Type', 'Heure', 'Description']],
                 body: timeEvents,
                 theme: 'plain',
-                styles: { fontSize: 13, cellPadding: 5, textColor: [224, 224, 224], fillColor: [30, 30, 30], font: 'Arial', fontStyle: 'normal' },
-                headStyles: { fillColor: [42, 42, 42], textColor: [255, 255, 255], font: 'Arial', fontStyle: 'bold' },
+                styles: { fontSize: 13, cellPadding: 5, textColor: [224, 224, 224], fillColor: [30, 30, 30], font: 'Helvetica', fontStyle: 'normal' },
+                headStyles: { fillColor: [42, 42, 42], textColor: [255, 255, 255], font: 'Helvetica', fontStyle: 'bold' },
                 didDrawPage: (data) => { yPos = data.cursor.y + 10; }
             });
         }
@@ -718,8 +720,8 @@
                     head: [[`${row.vehicle}`, 'Équipement', 'Fonction']],
                     body: row.members,
                     theme: 'plain',
-                    styles: { fontSize: 13, cellPadding: 5, textColor: [224, 224, 224], fillColor: [30, 30, 30], font: 'Arial', fontStyle: 'normal' },
-                    headStyles: { fillColor: [42, 42, 42], textColor: [255, 255, 255], font: 'Arial', fontStyle: 'bold' },
+                    styles: { fontSize: 13, cellPadding: 5, textColor: [224, 224, 224], fillColor: [30, 30, 30], font: 'Helvetica', fontStyle: 'normal' },
+                    headStyles: { fillColor: [42, 42, 42], textColor: [255, 255, 255], font: 'Helvetica', fontStyle: 'bold' },
                     didDrawPage: (data) => { yPos = data.cursor.y + 10; }
                 });
                 yPos += 10;
