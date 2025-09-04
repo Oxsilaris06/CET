@@ -21,7 +21,7 @@
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: 'Oswald', sans-serif; background-color: var(--bg-body); color: var(--text-primary); line-height: 1.6; padding: 15px; transition: background-color 0.3s, color 0.3s; }
         .container { max-width: 800px; margin: auto; background: var(--bg-container); padding: 20px 30px; border-radius: 8px; border: 1px solid var(--border-color); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-        h1 { text-align: center; font-size: 2.5em; margin-bottom: 20px; color: var(--accent-blue); font-family: 'Saira+Stencil+One', sans-serif; }
+        h1 { text-align: center; font-size: 2.5em; margin-bottom: 20px; color: var(--accent-blue); font-family: 'Saira Stencil One', sans-serif; }
         h2 { color: var(--accent-blue); border-bottom: 2px solid var(--accent-blue); padding-bottom: 10px; margin-top: 20px; font-weight: 400; }
         h3 { color: var(--text-primary); margin-top: 15px; margin-bottom: 10px; font-weight: 400; }
 
@@ -59,7 +59,6 @@
         .collapsible-header .material-icons { transition: transform 0.3s; }
         .collapsible-container.open .material-icons { transform: rotate(180deg); }
 
-        /* Dock Menu - Styles from configurateur.html */
         .dock-menu {
             position: fixed;
             top: 50%;
@@ -138,7 +137,6 @@
             .wizard-progress-step { font-size: 0.6em; white-space: nowrap; word-break: keep-all; }
             .wizard-nav-btn { padding: 10px 15px; font-size: 1em; }
             .dynamic-list-item { flex-wrap: wrap; }
-            /* La règle qui cachait le dock a été enlevée */
         }
     </style>
 </head>
@@ -406,7 +404,7 @@
         });
 
         const dockMenu = document.getElementById('dockMenu');
-        const dockToggleBtn = document.getElementById('dockToggleBtn').firstElementChild; // Targeting the span icon
+        const dockToggleBtn = document.getElementById('dockToggleBtn').firstElementChild;
         
         document.getElementById('dockToggleBtn').addEventListener('click', (e) => {
             e.stopPropagation();
@@ -448,29 +446,28 @@
                 const margin = 40;
                 let yPos = margin;
                 
-                saveFormData(); // Ensure latest data is saved
+                saveFormData();
                 const formDataString = localStorage.getItem('oiFormData');
                 if (!formDataString) { alert("Aucune donnée à générer."); return; }
                 const formData = JSON.parse(formDataString);
                 const getVal = (id) => formData[id] || 'RAS';
 
-                // --- PDF HELPER FUNCTIONS ---
-                const addDarkBackground = () => {
-                    const pageCount = doc.internal.getNumberOfPages();
+                const addDarkBackground = (docInstance) => {
+                    const pageCount = docInstance.internal.getNumberOfPages();
                     for (let i = 1; i <= pageCount; i++) {
-                        doc.setPage(i);
-                        const { width, height } = doc.internal.pageSize;
-                        doc.setFillColor(30, 30, 30); // Dark grey background
-                        doc.rect(0, 0, width, height, 'F');
+                        docInstance.setPage(i);
+                        const { width, height } = docInstance.internal.pageSize;
+                        docInstance.setFillColor(30, 30, 30);
+                        docInstance.rect(0, 0, width, height, 'F');
                     }
-                    doc.setPage(pageCount); // Return to current page
+                    docInstance.setPage(pageCount);
                 };
                 
                 const checkYPos = (spaceNeeded) => {
                     const pageHeight = doc.internal.pageSize.getHeight();
                     if (yPos + spaceNeeded > pageHeight - margin) {
                         doc.addPage('a4', 'portrait');
-                        addDarkBackground();
+                        addDarkBackground(doc);
                         yPos = margin;
                         return true;
                     }
@@ -483,17 +480,10 @@
                     doc.text(title, margin, yPos);
                     yPos += 30;
                 };
-                
-                const addSubTitle = (title) => {
-                    checkYPos(40);
-                    doc.setFontSize(15).setFont('helvetica', 'bold').setTextColor('#95a5a6');
-                    doc.text(title, margin, yPos);
-                    yPos += 25;
-                }
 
                 const addText = (text) => {
                     if (!text || text.trim() === 'RAS' || text.trim() === '') return;
-                    doc.setFontSize(14).setFont('helvetica', 'normal').setTextColor('#e0e0e0');
+                    doc.setFontSize(14).setFont('helvetica', 'normal').setTextColor(255, 255, 255);
                     const lines = doc.splitTextToSize(text, doc.internal.pageSize.getWidth() - margin * 2);
                     checkYPos(lines.length * 15 + 10);
                     doc.text(lines, margin, yPos);
@@ -505,7 +495,7 @@
                     if (inputs.length === 0) return;
                     
                     doc.addPage('a4', 'portrait');
-                    addDarkBackground();
+                    addDarkBackground(doc);
                     yPos = margin;
                     addSectionTitle(title);
 
@@ -541,7 +531,7 @@
                         let xPos = margin;
                         for (const p of processed) {
                             doc.addImage(p.img, 'JPEG', xPos, yPos, p.width, p.height);
-                            doc.setFontSize(9).setTextColor('#95a5a6').text(p.label, xPos + p.width / 2, yPos + p.height + 15, { align: 'center' });
+                            doc.setFontSize(9).setTextColor(255, 255, 255).text(p.label, xPos + p.width / 2, yPos + p.height + 15, { align: 'center' });
                             xPos += p.width + padding;
                         }
                         yPos += maxHeightInRow + 30;
@@ -549,115 +539,70 @@
                 };
 
                 // --- PDF CONTENT GENERATION ---
-                addDarkBackground(); // Apply dark theme to the first page
+                addDarkBackground(doc);
 
-                // Page 1: Title
-                doc.setFontSize(40).setFont('Saira+Stencil+One', 'normal');
-                doc.setTextColor('#5b9bd5');
-                const titleText = `ORDRE INITIAL`;
-                doc.text(titleText, doc.internal.pageSize.getWidth() / 2, doc.internal.pageSize.getHeight() / 2 - 40, { align: 'center' });
-                doc.setFontSize(20).setFont('Oswald', 'normal');
-                doc.setTextColor('#e0e0e0');
+                doc.setFontSize(40).setFont('Saira Stencil One', 'normal').setTextColor('#5b9bd5');
+                doc.text('ORDRE INITIAL', doc.internal.pageSize.getWidth() / 2, doc.internal.pageSize.getHeight() / 2 - 40, { align: 'center' });
+                doc.setFontSize(20).setFont('Oswald', 'normal').setTextColor(255, 255, 255);
                 doc.text(`Opération du ${getVal('date_op') || 'N/A'}`, doc.internal.pageSize.getWidth() / 2, doc.internal.pageSize.getHeight() / 2, { align: 'center' });
 
                 doc.addPage();
-                addDarkBackground();
+                addDarkBackground(doc);
                 yPos = margin;
 
-                // Section 1: Situation
                 addSectionTitle("1. SITUATION");
-                addSubTitle("1.1 Situation Générale");
                 addText(getVal('situation_generale'));
-                addSubTitle("1.2 Situation Particulière");
                 addText(getVal('situation_particuliere'));
 
-                // Section 1.3: Adversaire
-                addSectionTitle("1.3 ADVERSAIRE");
+                addSectionTitle("1.3 ADVERSAIRE & 1.4 ENVIRONNEMENT");
                  doc.autoTable({
                     startY: yPos,
-                    head: [['ADVERSAIRE', 'DÉTAILS']],
+                    head: [['Catégorie', 'Détails']],
                     body: [
-                        ['Nom/Prénom', getVal('nom_adversaire')],
-                        ['Domicile', getVal('domicile_adversaire')],
+                        ['Nom/Prénom', getVal('nom_adversaire')], ['Domicile', getVal('domicile_adversaire')],
                         ['Naissance', `${getVal('date_naissance')} à ${getVal('lieu_naissance')}`],
                         ['Description', [getVal('stature_adversaire'), getVal('ethnie_adversaire'), getVal('signes_particuliers_adversaire')].filter(Boolean).join(' / ')],
-                        ['Profession', getVal('profession_adversaire')],
-                        ['Antécédents', getVal('antecedents_adversaire')],
+                        ['Profession', getVal('profession_adversaire')],['Antécédents', getVal('antecedents_adversaire')],
                         ['État d\'esprit', (formData.etat_esprit_list || []).join(', ') || 'RAS'],
-                        ['Attitude', getVal('attitude_adversaire')],
-                        ['Volume (renfort)', (formData.volume_list || []).join(', ') || 'RAS'],
-                        ['Substances', getVal('substances_adversaire')],
-                        ['Véhicules', (formData.vehicules_list || []).join(', ') || 'RAS'],
+                        ['Attitude', getVal('attitude_adversaire')], ['Volume (renfort)', (formData.volume_list || []).join(', ') || 'RAS'],
+                        ['Substances', getVal('substances_adversaire')], ['Véhicules', (formData.vehicules_list || []).join(', ') || 'RAS'],
                         ['Armes', (formData.armes_list || []).join(', ') || 'RAS'],
-                        ['Modes d\'action', `ME1: ${getVal('mode_action_me1')}\nME2: ${getVal('mode_action_me2')}\nME3: ${getVal('mode_action_me3')}`]
+                        ['Modes d\'action', `ME1: ${getVal('mode_action_me1')}\nME2: ${getVal('mode_action_me2')}\nME3: ${getVal('mode_action_me3')}`],
+                        ['Ami(e)s (soutien)', getVal('amies')], ['Terrain / Météo', getVal('terrain_info')],
+                        ['Population', getVal('population')], ['Cadre juridique', getVal('cadre_juridique')]
                     ],
-                    theme: 'grid', styles: { fontSize: 12, cellPadding: 5, textColor: [224, 224, 224], fillColor: [40, 40, 40] },
-                    headStyles: { fontSize: 13, fillColor: [42, 42, 42], textColor: [255, 255, 255], fontStyle: 'bold' },
-                    didDrawPage: (data) => { addDarkBackground(); yPos = data.cursor.y; },
+                    theme: 'grid', styles: { fontSize: 14, fontStyle: 'normal', cellPadding: 5, textColor: [255, 255, 255], fillColor: [40, 40, 40] },
+                    headStyles: { fontSize: 15, fontStyle: 'bold', fillColor: [42, 42, 42], textColor: [255, 255, 255] },
+                    didDrawPage: (data) => { addDarkBackground(doc); yPos = data.cursor.y; },
                     margin: { left: margin, right: margin }
                 });
                 yPos = doc.autoTable.previous.finalY + 20;
 
-                // Section 1.4: Environnement
-                addSectionTitle("1.4 ENVIRONNEMENT");
-                doc.autoTable({
-                    startY: yPos,
-                    head: [['ENVIRONNEMENT', 'DÉTAILS']],
-                    body: [
-                        ['Ami(e)s (soutien)', getVal('amies')],
-                        ['Terrain / Météo', getVal('terrain_info')],
-                        ['Population', getVal('population')],
-                        ['Cadre juridique', getVal('cadre_juridique')]
-                    ],
-                    theme: 'grid', styles: { fontSize: 12, cellPadding: 5, textColor: [224, 224, 224], fillColor: [40, 40, 40] },
-                    headStyles: { fontSize: 13, fillColor: [42, 42, 42], textColor: [255, 255, 255], fontStyle: 'bold' },
-                    didDrawPage: (data) => { addDarkBackground(); yPos = data.cursor.y; },
-                    margin: { left: margin, right: margin }
-                });
-                yPos = doc.autoTable.previous.finalY + 20;
-
-                // Section 2: Mission
                 addSectionTitle("2. MISSION");
                 addText(getVal('missions_psig'));
 
-                // Section 3 & 4: Exécution & Articulation
                 doc.addPage();
-                addDarkBackground();
+                addDarkBackground(doc);
                 yPos = margin;
-                addSectionTitle("3. EXÉCUTION");
-                doc.autoTable({
-                    startY: yPos,
-                    body: [
-                        ['Date d\'exécution', getVal('date_execution')],
-                        ['Heure (H)', getVal('heure_execution')],
-                        ['Type d\'action', (formData.type_action_list || []).join(', ') || 'RAS']
-                    ],
-                    theme: 'grid', styles: { fontSize: 12, cellPadding: 5, textColor: [224, 224, 224], fillColor: [40, 40, 40] },
-                    headStyles: { fontSize: 13, fillColor: [42, 42, 42], textColor: [255, 255, 255], fontStyle: 'bold' },
-                    didDrawPage: (data) => { addDarkBackground(); yPos = data.cursor.y; },
-                    margin: { left: margin, right: margin }
-                });
-                yPos = doc.autoTable.previous.finalY + 20;
+
+                addSectionTitle("3. EXÉCUTION & 4. ARTICULATION");
+                addText(`Date: ${getVal('date_execution')} | Heure: ${getVal('heure_execution')} | Type: ${(formData.type_action_list || []).join(', ') || 'RAS'}`);
+                addText(`Place du Chef: ${getVal('place_chef')}`);
                 
-                addSectionTitle("4. ARTICULATION");
-                addSubTitle("Place du Chef");
-                addText(getVal('place_chef'));
-                addSubTitle("Chronologie");
                 doc.autoTable({
                     startY: yPos,
                     head: [['Type', 'Heure', 'Description']],
                     body: (formData.time_events || []).map(e => [e.type, e.hour || 'N/A', e.description || 'N/A']),
                     theme: 'grid', 
-                    styles: { fontSize: 13, fontStyle: 'normal', cellPadding: 5, textColor: [224, 224, 224], fillColor: [40, 40, 40] },
+                    styles: { fontSize: 13, fontStyle: 'normal', cellPadding: 5, textColor: [255, 255, 255], fillColor: [40, 40, 40] },
                     headStyles: { fontSize: 14, fontStyle: 'bold', fillColor: [42, 42, 42], textColor: [255, 255, 255] },
-                    didDrawPage: (data) => { addDarkBackground(); yPos = data.cursor.y; },
+                    didDrawPage: (data) => { addDarkBackground(doc); yPos = data.cursor.y; },
                     margin: { left: margin, right: margin }
                 });
                 yPos = doc.autoTable.previous.finalY + 20;
 
-                // Section 5: Moyens (PATRACDVR)
                 doc.addPage();
-                addDarkBackground();
+                addDarkBackground(doc);
                 yPos = margin;
                 addSectionTitle("5. MOYENS ENGAGÉS (PATRACDVR)");
                 (formData.patracdvr_rows || []).forEach(row => {
@@ -669,20 +614,18 @@
                             head: [[`Véhicule: ${row.vehicle}`, 'Équipement', 'Fonction']],
                             body: members.map(m => [m.trigramme, m.equipement, m.fonction]),
                             theme: 'grid', 
-                            styles: { fontSize: 13, fontStyle: 'normal', cellPadding: 5, textColor: [224, 224, 224], fillColor: [40, 40, 40] },
+                            styles: { fontSize: 13, fontStyle: 'normal', cellPadding: 5, textColor: [255, 255, 255], fillColor: [40, 40, 40] },
                             headStyles: { fontSize: 14, fontStyle: 'bold', fillColor: [42, 42, 42], textColor: [255, 255, 255] },
-                            didDrawPage: (data) => { addDarkBackground(); yPos = data.cursor.y; },
+                            didDrawPage: (data) => { addDarkBackground(doc); yPos = data.cursor.y; },
                             margin: { left: margin, right: margin }
                         });
                         yPos = doc.autoTable.previous.finalY + 20;
                     }
                 });
 
-                // Photos
                 await addImagesFromContainer('adversaire_photos_container', "Photos de l'adversaire");
                 await addImagesFromContainer('operation_photos_container', "Photos de l'opération");
 
-                // --- Finalize and Save ---
                 doc.save(`OI_${getVal('date_op').replace(/[\/\\?%*:|"<>]/g, '-')}_${getVal('nom_adversaire').replace(/ /g, '_')}.pdf`);
 
             } catch (error) {
