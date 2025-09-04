@@ -531,31 +531,36 @@
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
         let yPos = margin;
+        
+        const getVal = (id) => document.getElementById(id).value.trim() || 'RAS';
 
         const addHeaderAndFooter = (isLandscape = false) => {
+            const pageCount = doc.internal.getNumberOfPages();
+            if (pageCount === 0) return; // No pages yet
+            doc.setPage(pageCount);
+            
             const width = isLandscape ? pageHeight : pageWidth;
             const height = isLandscape ? pageWidth : pageHeight;
             doc.setFillColor(18, 18, 18);
             doc.rect(0, 0, width, height, 'F');
             doc.setFontSize(10);
             doc.setTextColor('#e0e0e0');
-            doc.text(`Page ${doc.internal.getNumberOfPages()}`, width - 70, height - 20);
+            doc.text(`Page ${pageCount}`, width - 70, height - 20);
         };
         
         // --- PAGE DE GARDE ---
         doc.addPage('a4', 'landscape');
-        doc.deletePage(1); // Supprimer la première page vide par défaut
+        doc.deletePage(1);
         addHeaderAndFooter(true);
         const landscapeWidth = doc.internal.pageSize.getWidth();
         const landscapeHeight = doc.internal.pageSize.getHeight();
         const dateOp = getValue('date_op');
         const titleText = `Opération du ${dateOp}`;
-        doc.setFontSize(70); // Grande taille de base
+        doc.setFontSize(70);
         const titleWidth = doc.getStringUnitWidth(titleText) * doc.internal.getFontSize() / doc.internal.scaleFactor;
-        // Ajuster la taille de la police pour qu'elle s'adapte à la largeur
-        if (titleWidth > landscapeWidth - margin * 2) {
-            const newSize = (landscapeWidth - margin * 2) / doc.getStringUnitWidth(titleText) * doc.internal.scaleFactor;
-            doc.setFontSize(newSize * 0.95);
+        if (titleWidth > landscapeWidth - margin * 4) {
+             const newSize = (landscapeWidth - margin * 4) * doc.internal.scaleFactor / doc.getStringUnitWidth(titleText);
+             doc.setFontSize(newSize);
         }
         doc.setTextColor('#5b9bd5');
         doc.text(titleText, landscapeWidth / 2, landscapeHeight / 2, { align: 'center', baseline: 'middle' });
@@ -564,19 +569,19 @@
         // --- Fonctions utilitaires ---
         const checkYPos = (spaceNeeded) => {
             if (yPos + spaceNeeded > pageHeight - margin) {
-                doc.addPage();
+                doc.addPage('a4', 'portrait');
                 addHeaderAndFooter();
                 yPos = margin;
-                return true; // Page added
+                return true;
             }
-            return false; // No page added
+            return false;
         };
 
         const addSectionTitle = (title) => {
-            doc.addPage();
+            doc.addPage('a4', 'portrait');
             addHeaderAndFooter();
             yPos = margin;
-            doc.setFontSize(27); // 18 * 1.5
+            doc.setFontSize(27);
             doc.setFont('helvetica', 'bold');
             doc.setTextColor('#5b9bd5');
             doc.text(title, margin, yPos);
@@ -584,28 +589,25 @@
         };
 
         const addSubsectionTitle = (title) => {
-            doc.addPage();
-            addHeaderAndFooter();
-            yPos = margin;
-            doc.setFontSize(27); // 18 * 1.5
+            checkYPos(40);
+            yPos += 20; // Espace avant le sous-titre
+            doc.setFontSize(21);
             doc.setFont('helvetica', 'bold');
-            doc.setTextColor('#5b9bd5');
+            doc.setTextColor('#a0c8e8'); // Couleur plus claire pour sous-titre
             doc.text(title, margin, yPos);
-            yPos += 40;
+            yPos += 30;
         };
 
-        const addText = (text, isRAS = false) => {
+        const addText = (text) => {
             checkYPos(30);
             doc.setFontSize(12);
             doc.setFont('helvetica', 'normal');
-            doc.setTextColor(isRAS ? '#95a5a6' : '#e0e0e0');
+            doc.setTextColor('#e0e0e0');
             const lines = doc.splitTextToSize(text, pageWidth - margin * 2);
             doc.text(lines, margin, yPos);
             yPos += lines.length * 15 + 10;
         };
         
-        const getVal = (id) => document.getElementById(id).value.trim() || 'RAS';
-
         // --- DÉBUT DU CONTENU ---
         addSectionTitle("1. SITUATION");
         addSubsectionTitle("1.1 Générale");
@@ -614,7 +616,6 @@
         addSubsectionTitle("1.2 Particulière");
         addText(getVal('situation_particuliere'));
 
-        // 1.3 ADVERSAIRE (Tableau)
         addSubsectionTitle("1.3 ADVERSAIRE(S)");
         const adversaireData = [
             ['Nom/Prénom', getVal('nom_adversaire')],
@@ -640,20 +641,16 @@
             theme: 'plain',
             styles: { fontSize: 12, cellPadding: 5, textColor: [224, 224, 224], font: 'helvetica' },
             columnStyles: { 0: { fontStyle: 'bold', textColor: [91, 155, 213] } },
-            didDrawPage: (data) => { yPos = data.cursor.y + 10; }
+            didDrawPage: (data) => { yPos = data.cursor.y; addHeaderAndFooter(); }
         });
         yPos = doc.autoTable.previous.finalY + 20;
 
-        // Photo de l'adversaire après le tableau
         const adversairePhotoInputs = Array.from(document.querySelectorAll('#adversaire_photos_container input[type="file"]'));
         if (adversairePhotoInputs.some(input => input.files.length > 0)) {
-            checkYPos(200); // Espace pour les photos
-            addSectionTitle("Photo de l'adversaire");
+            addSubsectionTitle("Photo de l'adversaire");
             await addImagesToPage(adversairePhotoInputs);
         }
 
-        // 1.4 ENVIRONNEMENT
-        addSectionTitle("1.4 ENVIRONNEMENT");
         addSubsectionTitle("1.4 Ami(e)s");
         addText(getVal('amies'));
         addSubsectionTitle("1.5 Terrain / Environnement");
@@ -663,47 +660,44 @@
         addSubsectionTitle("1.7 Cadre juridique");
         addText(getVal('cadre_juridique'));
         
-        // 2. MISSIONS du PSIG
         addSectionTitle("2. MISSIONS du PSIG");
         addText(getVal('missions_psig'));
 
-        // 3. EXÉCUTION
         addSectionTitle("3. EXÉCUTION");
-        const executionData = [
-            ['Date', getVal('date_execution')],
-            ['Heure', getVal('heure_execution')],
-            ['Type d\'action', Array.from(document.querySelectorAll('#type_action_container .dynamic-select')).map(s => s.value).filter(v => v).join(', ') || 'RAS']
-        ];
-        doc.autoTable({ startY: yPos, body: executionData, theme: 'plain', styles: { fontSize: 12 }, columnStyles: { 0: { fontStyle: 'bold', textColor: [91, 155, 213] } } });
+        doc.autoTable({
+            startY: yPos,
+            body: [
+                ['Date', getVal('date_execution')],
+                ['Heure', getVal('heure_execution')],
+                ['Type d\'action', Array.from(document.querySelectorAll('#type_action_container .dynamic-select')).map(s => s.value).filter(v => v).join(', ') || 'RAS']
+            ],
+            theme: 'plain',
+            styles: { fontSize: 12, cellPadding: 5, textColor: [224, 224, 224] },
+            columnStyles: { 0: { fontStyle: 'bold', textColor: [91, 155, 213] } },
+            didDrawPage: (data) => { yPos = data.cursor.y; addHeaderAndFooter(); }
+        });
         yPos = doc.autoTable.previous.finalY + 20;
 
-        // 4. ARTICULATION
         addSectionTitle("4. ARTICULATION");
         addSubsectionTitle("Place du Chef");
         addText(getVal('place_chef'));
         
-        // Temps d'opération
         addSubsectionTitle("Temps d'opération (T0 - T5)");
         const timeEvents = Array.from(document.querySelectorAll('#time_events_container .time-item')).map(item => [
             item.querySelector('.time-type-select').value,
             item.querySelector('.time-hour-input').value || 'RAS',
             item.querySelector('.time-description-input').value || 'RAS'
         ]);
-
-        if (timeEvents.length > 0) {
-            doc.autoTable({
-                startY: yPos,
-                head: [['Type', 'Heure', 'Description']],
-                body: timeEvents,
-                theme: 'grid',
-                styles: { fontSize: 11, cellPadding: 5, textColor: [224, 224, 224], fillColor: [30, 30, 30], font: 'helvetica' },
-                headStyles: { fontSize: 16.5, fillColor: [42, 42, 42], textColor: [255, 255, 255], font: 'helvetica', fontStyle: 'bold' },
-                didDrawPage: (data) => { yPos = data.cursor.y + 10; }
+        if (timeEvents.length > 0 && timeEvents[0][1] !== 'RAS') {
+             doc.autoTable({
+                startY: yPos, head: [['Type', 'Heure', 'Description']], body: timeEvents, theme: 'grid',
+                styles: { fontSize: 11, cellPadding: 5, textColor: [224, 224, 224], fillColor: [30, 30, 30] },
+                headStyles: { fontSize: 16.5, fillColor: [42, 42, 42], textColor: [255, 255, 255], fontStyle: 'bold' },
+                didDrawPage: (data) => { yPos = data.cursor.y; addHeaderAndFooter(); }
             });
             yPos = doc.autoTable.previous.finalY + 20;
         }
 
-        // PATRACDVR
         addSectionTitle("PATRACDVR");
         const patracdvrSections = document.querySelectorAll('#patracdvr_container > .form-section');
         patracdvrSections.forEach(section => {
@@ -713,33 +707,26 @@
                     item.querySelector('.patracdvr-member-input').value,
                     item.querySelector('.patracdvr-equipement-select').value,
                     item.querySelector('.patracdvr-fonction-select').value
-                ])
-                .filter(member => member[0].trim() !== ''); // Filtrer les membres sans trigramme
+                ]).filter(member => member[0].trim() !== '');
 
             if (members.length > 0) {
                 checkYPos(members.length * 30 + 40);
                 doc.autoTable({
-                    startY: yPos,
-                    head: [[vehicle, 'Équipement', 'Fonction']],
-                    body: members,
-                    theme: 'grid',
+                    startY: yPos, head: [[vehicle, 'Équipement', 'Fonction']], body: members, theme: 'grid',
                     styles: { fontSize: 11, cellPadding: 5, textColor: [224, 224, 224], fillColor: [30, 30, 30] },
-                    headStyles: { fontSize: 16.5, fillColor: [42, 42, 42], textColor: [255, 255, 255], font: 'helvetica', fontStyle: 'bold' },
-                    didDrawPage: (data) => { yPos = data.cursor.y; }
+                    headStyles: { fontSize: 16.5, fillColor: [42, 42, 42], textColor: [255, 255, 255], fontStyle: 'bold' },
+                    didDrawPage: (data) => { yPos = data.cursor.y; addHeaderAndFooter(); }
                 });
                 yPos = doc.autoTable.previous.finalY + 20;
             }
         });
         
-        // Photos de l'opération
         const operationPhotoInputs = Array.from(document.querySelectorAll('#operation_photos_container .dynamic-list-item')).map(item => {
             const input = item.querySelector('.photo-input');
             const labelInput = item.querySelector('.photo-label-input');
-            if(labelInput) { // champ personnalisé
-                input.dataset.label = labelInput.value || 'Photo';
-            }
+            if (input && labelInput) { input.dataset.label = labelInput.value || 'Photo personnalisée'; }
             return input;
-        });
+        }).filter(Boolean);
         
         if (operationPhotoInputs.some(input => input.files.length > 0)) {
             addSectionTitle("Photos de l'opération");
@@ -747,57 +734,59 @@
         }
 
         async function addImagesToPage(fileInputs) {
-            const imagePromises = fileInputs
-                .filter(input => input.files.length > 0)
-                .map(input => {
-                    return new Promise(resolve => {
-                        const file = input.files[0];
-                        const reader = new FileReader();
-                        reader.onload = (e) => resolve({ src: e.target.result, label: input.dataset.label || 'Image' });
-                        reader.readAsDataURL(file);
-                    });
+            const imagePromises = fileInputs.filter(input => input.files.length > 0).map(input => {
+                return new Promise(resolve => {
+                    const file = input.files[0];
+                    const reader = new FileReader();
+                    reader.onload = (e) => resolve({ src: e.target.result, label: input.dataset.label || 'Image' });
+                    reader.readAsDataURL(file);
                 });
-            
+            });
             const images = await Promise.all(imagePromises);
             if (images.length === 0) return;
 
             const maxImagesPerRow = 2;
             const padding = 10;
             const availableWidth = pageWidth - margin * 2;
-            const imageWidth = (availableWidth - (padding * (maxImagesPerRow - 1))) / maxImagesPerRow;
-
-            let xPos = margin;
-            let rowMaxHeight = 0;
-
-            for (let i = 0; i < images.length; i++) {
-                const imgData = images[i];
-                const img = new Image();
-                img.src = imgData.src;
-                await new Promise(resolve => img.onload = resolve);
-
-                const ratio = img.width / img.height;
-                const imageHeight = imageWidth / ratio;
-                
-                if (checkYPos(imageHeight + 30)) { // +30 pour légende
-                    xPos = margin;
-                    rowMaxHeight = 0;
+            
+            let currentRow = [];
+            for (const imgData of images) {
+                currentRow.push(imgData);
+                if (currentRow.length === maxImagesPerRow) {
+                    await drawImageRow(currentRow);
+                    currentRow = [];
                 }
-                
-                doc.addImage(imgData.src, 'JPEG', xPos, yPos, imageWidth, imageHeight);
-                
-                doc.setFontSize(9);
-                doc.setTextColor('#95a5a6');
-                doc.text(imgData.label, xPos + imageWidth / 2, yPos + imageHeight + 15, { align: 'center' });
-                
-                rowMaxHeight = Math.max(rowMaxHeight, imageHeight + 30);
+            }
+            if (currentRow.length > 0) {
+                await drawImageRow(currentRow);
+            }
 
-                if ((i + 1) % maxImagesPerRow === 0 || i === images.length - 1) {
-                    yPos += rowMaxHeight + padding;
-                    xPos = margin;
-                    rowMaxHeight = 0;
-                } else {
-                    xPos += imageWidth + padding;
+            async function drawImageRow(rowData) {
+                const imageWidth = (availableWidth - (padding * (rowData.length - 1))) / rowData.length;
+                let maxHeightInRow = 0;
+                const processedImages = [];
+
+                for (const imgData of rowData) {
+                    const img = new Image();
+                    img.src = imgData.src;
+                    await new Promise(r => img.onload = r);
+                    const ratio = img.height / img.width;
+                    const imageHeight = imageWidth * ratio;
+                    maxHeightInRow = Math.max(maxHeightInRow, imageHeight);
+                    processedImages.push({ img, width: imageWidth, height: imageHeight, label: imgData.label });
                 }
+
+                checkYPos(maxHeightInRow + 30);
+                let xPos = margin;
+
+                for (const pImg of processedImages) {
+                    doc.addImage(pImg.img, 'JPEG', xPos, yPos, pImg.width, pImg.height);
+                    doc.setFontSize(9);
+                    doc.setTextColor('#95a5a6');
+                    doc.text(pImg.label, xPos + pImg.width / 2, yPos + pImg.height + 15, { align: 'center' });
+                    xPos += pImg.width + padding;
+                }
+                yPos += maxHeightInRow + 30;
             }
         }
         
