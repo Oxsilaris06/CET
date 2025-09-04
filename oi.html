@@ -22,7 +22,6 @@
             width: 100%; padding: 10px; margin-bottom: 10px; border: 1px solid var(--border-color);
             border-radius: 4px; box-sizing: border-box; font-size: 1em; background-color: var(--bg-interactive); color: var(--text-primary);
         }
-        textarea { resize: vertical; }
         button {
             background-color: var(--accent-blue); color: white; padding: 12px 20px; border: none; border-radius: 4px;
             cursor: pointer; font-size: 16px; margin-top: 20px;
@@ -44,8 +43,6 @@
             .grid-container { grid-template-columns: 1fr; }
             h1 { font-size: 2em; }
             h2 { font-size: 1.5em; }
-            .dynamic-list-item { flex-direction: column; align-items: stretch; }
-            .dynamic-list-item input, .dynamic-list-item select, .dynamic-list-item button { width: 100%; }
         }
     </style>
 </head>
@@ -160,7 +157,7 @@
         <label for="adversaire_photos_label">Photos de l'adversaire :</label>
         <div id="adversaire_photos_container">
             <div class="dynamic-list-item">
-                <input type="file" class="adversaire-photo-input" accept="image/*">
+                <input type="file" class="adversaire-photo-input" data-label="Photo de l'adversaire" accept="image/*">
                 <button type="button" class="remove-btn" onclick="this.parentNode.remove(); saveFormData()">❌</button>
             </div>
         </div>
@@ -249,7 +246,7 @@
                 <button type="button" class="remove-btn" onclick="this.parentNode.remove(); saveFormData()">❌</button>
             </div>
         </div>
-        <button type="button" class="add-btn" onclick="addPhotoField('operation_photos_container')">➕</button>
+        <button type="button" class="add-btn" onclick="addCustomPhotoField('operation_photos_container')">➕ Ajouter une photo personnalisée</button>
     </div>
 
     <button id="generatePdf">Générer le PDF</button>
@@ -257,12 +254,18 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
+
 <script>
     const availableVehicles = ['Sharan', 'Kodiaq', '5008', 'Scénic', 'BT'];
 
     document.addEventListener('DOMContentLoaded', (event) => {
         loadFormData();
     });
+    
+    function getValue(elementId) {
+        const element = document.getElementById(elementId);
+        return (element && element.value.trim() !== '') ? element.value : 'RAS';
+    }
 
     function saveFormData() {
         const data = {};
@@ -368,18 +371,7 @@
         container.innerHTML = '';
         if (values && values.length > 0) {
             values.forEach(val => {
-                const newField = document.createElement('div');
-                newField.className = 'dynamic-list-item';
-                const selectHtml = `<select class="dynamic-select" onchange="this.nextElementSibling.value=this.value; saveFormData()">
-                    <option value="">Sélectionner</option>
-                    ${initialOptions.map(opt => `<option value="${opt}" ${opt === val ? 'selected' : ''}>${opt}</option>`).join('')}
-                </select>`;
-                newField.innerHTML = `${selectHtml}
-                    <input type="text" class="dynamic-input" placeholder="Ajouter un élément" onchange="this.previousElementSibling.value=this.value; saveFormData()">
-                    <button type="button" class="add-btn" onclick="addDynamicFieldWithSelect('${containerId}', '', ['${initialOptions.join("','")}'])">➕</button>
-                    <button type="button" class="remove-btn" onclick="this.parentNode.remove(); saveFormData()">❌</button>
-                `;
-                container.appendChild(newField);
+                addDynamicFieldWithSelect(containerId, '', initialOptions, val);
             });
         } else {
             addDynamicFieldWithSelect(containerId, '', initialOptions);
@@ -421,13 +413,24 @@
         saveFormData();
     }
     
-    function addPhotoField(containerId) {
+    function addPhotoField(containerId, inputClass) {
         const container = document.getElementById(containerId);
         const newField = document.createElement('div');
         newField.className = 'dynamic-list-item';
-        newField.innerHTML = `<input type="file" class="photo-input" data-label="Autre" accept="image/*" onchange="saveFormData()"><button type="button" class="remove-btn" onclick="this.parentNode.remove(); saveFormData()">❌</button>`;
+        newField.innerHTML = `<input type="file" class="${inputClass}" data-label="Photo de l'adversaire" accept="image/*"><button type="button" class="remove-btn" onclick="this.parentNode.remove()">❌</button>`;
         container.appendChild(newField);
-        saveFormData();
+    }
+    
+    function addCustomPhotoField(containerId) {
+        const container = document.getElementById(containerId);
+        const newField = document.createElement('div');
+        newField.className = 'dynamic-list-item';
+        newField.innerHTML = `
+            <input type="text" placeholder="Légende de la photo" class="photo-label-input" style="flex-grow: 1;">
+            <input type="file" class="photo-input" accept="image/*" style="flex-grow: 2;">
+            <button type="button" class="remove-btn" onclick="this.parentNode.remove()">❌</button>
+        `;
+        container.appendChild(newField);
     }
 
     function addPatracdvrRow(vehicle = '', membersData = []) {
@@ -439,17 +442,17 @@
             return;
         }
 
-        const vehicleId = vehicleToAdd.replace(/\s/g, '');
+        const vehicleId = `v_${Date.now()}`;
         const row = document.createElement('div');
         row.className = 'form-section';
-        const vehicleSelectHtml = `<select class="patracdvr-vehicle-select" onchange="updatePatracdvrRow(this)">` +
+        const vehicleSelectHtml = `<select class="patracdvr-vehicle-select" onchange="updateAllPatracdvrRows(); saveFormData()">` +
                               availableVehicles.map(v => `<option value="${v}" ${v === vehicleToAdd ? 'selected' : ''}>${v}</option>`).join('') + `</select>`;
         row.innerHTML = `
             <div>
                 <h3>Véhicule : ${vehicleSelectHtml}</h3>
                 <div id="patracdvr_members_${vehicleId}"></div>
                 <button type="button" class="add-btn" onclick="addPatracdvrMember('${vehicleId}')">➕</button>
-                <button type="button" class="remove-btn" onclick="this.parentNode.remove(); updateAllPatracdvrRows(); saveFormData()">❌</button>
+                <button type="button" class="remove-btn" onclick="this.parentNode.parentNode.remove(); updateAllPatracdvrRows(); saveFormData()">❌</button>
             </div>
         `;
         container.appendChild(row);
@@ -459,13 +462,6 @@
         } else {
             addPatracdvrMember(vehicleId, '', 'PIE', 'Inter');
         }
-        updateAllPatracdvrRows();
-        saveFormData();
-    }
-    
-    function updatePatracdvrRow(selectElement) {
-        const newVehicleId = selectElement.value.replace(/\s/g, '');
-        selectElement.closest('.form-section').querySelector('[id^="patracdvr_members_"]').id = `patracdvr_members_${newVehicleId}`;
         updateAllPatracdvrRows();
         saveFormData();
     }
@@ -479,8 +475,13 @@
         });
         document.querySelectorAll('.patracdvr-vehicle-select').forEach(select => {
             const currentValue = select.value;
-            const newOptions = availableVehicles.map(v => `<option value="${v}" ${v === currentValue ? 'selected' : ''} ${usedVehicles.has(v) && v !== currentValue ? 'disabled' : ''}>${v}</option>`).join('');
-            select.innerHTML = newOptions;
+            for (const option of select.options) {
+                if (usedVehicles.has(option.value) && option.value !== currentValue) {
+                    option.disabled = true;
+                } else {
+                    option.disabled = false;
+                }
+            }
         });
     }
 
@@ -516,7 +517,7 @@
                 ${timeTypes.map(t => `<option value="${t}" ${t === type ? 'selected' : ''}>${t}</option>`).join('')}
             </select>
             <input type="time" class="time-hour-input" value="${hour}" onchange="saveFormData()">
-            <textarea class="time-description-input" placeholder="Description de l'événement" rows="1" onchange="saveFormData()"></textarea>
+            <textarea class="time-description-input" placeholder="Description de l'événement" rows="1" onchange="saveFormData()">${description}</textarea>
             <button type="button" class="remove-btn" onclick="this.parentNode.remove(); saveFormData()">❌</button>
         `;
         container.appendChild(event);
@@ -524,216 +525,290 @@
     }
 
     document.getElementById('generatePdf').addEventListener('click', async () => {
-        const doc = new jspdf.jsPDF('landscape', 'pt', 'a4');
-        const margin = 50;
+        const { jsPDF } = jspdf;
+        const doc = new jsPDF('portrait', 'pt', 'a4');
+        const margin = 30;
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
         let yPos = margin;
 
-        const addHeaderAndFooter = () => {
-            doc.setFillColor(0, 0, 0);
-            doc.rect(0, 0, pageWidth, pageHeight, 'F');
+        const addHeaderAndFooter = (isLandscape = false) => {
+            const width = isLandscape ? pageHeight : pageWidth;
+            const height = isLandscape ? pageWidth : pageHeight;
+            doc.setFillColor(18, 18, 18);
+            doc.rect(0, 0, width, height, 'F');
             doc.setFontSize(10);
-            doc.setFont('Helvetica', 'normal');
             doc.setTextColor('#e0e0e0');
-            doc.text(`Page ${doc.internal.getNumberOfPages()}`, pageWidth - 70, pageHeight - 20);
+            doc.text(`Page ${doc.internal.getNumberOfPages()}`, width - 70, height - 20);
         };
         
-        const addSectionTitle = (title) => {
-            if (doc.internal.getNumberOfPages() > 1 || yPos > margin) {
+        // --- PAGE DE GARDE ---
+        doc.addPage('a4', 'landscape');
+        doc.deletePage(1); // Supprimer la première page vide par défaut
+        addHeaderAndFooter(true);
+        const landscapeWidth = doc.internal.pageSize.getWidth();
+        const landscapeHeight = doc.internal.pageSize.getHeight();
+        const dateOp = getValue('date_op');
+        const titleText = `Opération du ${dateOp}`;
+        doc.setFontSize(70); // Grande taille de base
+        const titleWidth = doc.getStringUnitWidth(titleText) * doc.internal.getFontSize() / doc.internal.scaleFactor;
+        // Ajuster la taille de la police pour qu'elle s'adapte à la largeur
+        if (titleWidth > landscapeWidth - margin * 2) {
+            const newSize = (landscapeWidth - margin * 2) / doc.getStringUnitWidth(titleText) * doc.internal.scaleFactor;
+            doc.setFontSize(newSize * 0.95);
+        }
+        doc.setTextColor('#5b9bd5');
+        doc.text(titleText, landscapeWidth / 2, landscapeHeight / 2, { align: 'center', baseline: 'middle' });
+
+
+        // --- Fonctions utilitaires ---
+        const checkYPos = (spaceNeeded) => {
+            if (yPos + spaceNeeded > pageHeight - margin) {
                 doc.addPage();
+                addHeaderAndFooter();
+                yPos = margin;
+                return true; // Page added
             }
-            yPos = margin;
+            return false; // No page added
+        };
+
+        const addSectionTitle = (title) => {
+            doc.addPage();
             addHeaderAndFooter();
-            doc.setFontSize(18);
-            doc.setFont('Helvetica', 'bold');
+            yPos = margin;
+            doc.setFontSize(27); // 18 * 1.5
+            doc.setFont('helvetica', 'bold');
             doc.setTextColor('#5b9bd5');
             doc.text(title, margin, yPos);
-            yPos += 30;
+            yPos += 40;
         };
 
         const addSubsectionTitle = (title) => {
-            if (yPos > margin) {
-                doc.addPage();
-            }
-            yPos = margin;
+            doc.addPage();
             addHeaderAndFooter();
-            doc.setFontSize(18);
-            doc.setFont('Helvetica', 'bold');
+            yPos = margin;
+            doc.setFontSize(27); // 18 * 1.5
+            doc.setFont('helvetica', 'bold');
             doc.setTextColor('#5b9bd5');
             doc.text(title, margin, yPos);
-            yPos += 30;
+            yPos += 40;
         };
 
-        const addText = (label, value) => {
-            if (!value) return;
-
-            if (yPos > pageHeight - 50) {
-                doc.addPage();
-                yPos = margin;
-                addHeaderAndFooter();
-            }
-            
-            doc.setFontSize(14);
-            doc.setFont('Helvetica', 'bold');
-            doc.setTextColor('#e0e0e0');
-            let labelText = `${label}: `;
-            let labelWidth = doc.getStringUnitWidth(labelText) * doc.getFontSize();
-            doc.text(labelText, margin, yPos);
-            
-            doc.setFontSize(14);
-            doc.setFont('Helvetica', 'normal');
-            let valueText = value;
-            let textWidth = pageWidth - margin * 2 - labelWidth;
-            let valueLines = doc.splitTextToSize(valueText, textWidth);
-            
-            doc.text(valueLines, margin + labelWidth, yPos);
-            yPos += (valueLines.length * 15) + 5;
+        const addText = (text, isRAS = false) => {
+            checkYPos(30);
+            doc.setFontSize(12);
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(isRAS ? '#95a5a6' : '#e0e0e0');
+            const lines = doc.splitTextToSize(text, pageWidth - margin * 2);
+            doc.text(lines, margin, yPos);
+            yPos += lines.length * 15 + 10;
         };
         
-        const addPhoto = async (fileInput, title) => {
-            if (fileInput && fileInput.files.length > 0) {
-                const file = fileInput.files[0];
-                const reader = new FileReader();
-                reader.readAsDataURL(file);
-                await new Promise(resolve => reader.onload = resolve);
-                const img = new Image();
-                img.src = reader.result;
-                await new Promise(resolve => img.onload = resolve);
-                
-                const imgWidth = pageWidth - margin * 2;
-                const imgHeight = (img.height * imgWidth) / img.width;
+        const getVal = (id) => document.getElementById(id).value.trim() || 'RAS';
 
-                addSubsectionTitle(title);
-                
-                doc.addImage(reader.result, 'JPEG', margin, yPos, imgWidth, imgHeight);
-                yPos += imgHeight + 20;
-            }
-        };
-
-        addHeaderAndFooter();
-
-        doc.setFontSize(22);
-        doc.setFont('Helvetica', 'bold');
-        doc.setTextColor('#5b9bd5');
-        doc.text("OPÉRATION DE POLICE JUDICIAIRE", pageWidth / 2, 40, { align: 'center' });
-        
-        // 1. SITUATION
+        // --- DÉBUT DU CONTENU ---
         addSectionTitle("1. SITUATION");
         addSubsectionTitle("1.1 Générale");
-        addText(`Date de l'opération`, document.getElementById('date_op').value);
-        addText("Contenu", document.getElementById('situation_generale').value);
+        addText(getVal('situation_generale'));
         
         addSubsectionTitle("1.2 Particulière");
-        addText("Contenu", document.getElementById('situation_particuliere').value);
+        addText(getVal('situation_particuliere'));
 
-        // 1.3 ADVERSAIRE
-        addSectionTitle("1.3 ADVERSAIRE(S)");
-        addText('Nom/Prénom', document.getElementById('nom_adversaire').value);
-        addText('Domicile et Adresse de repli', document.getElementById('domicile_adversaire').value);
-        addText('Date/Lieu de naissance', `${document.getElementById('date_naissance').value} à ${document.getElementById('lieu_naissance').value}`);
-        addText('Description', `${document.getElementById('stature_adversaire').value} / ${document.getElementById('ethnie_adversaire').value} / ${document.getElementById('signes_particuliers_adversaire').value}`);
-        addText('Profession', document.getElementById('profession_adversaire').value);
-        addText('Antécédents', document.getElementById('antecedents_adversaire').value);
-        addText('État d\'esprit', Array.from(document.querySelectorAll('#etat_esprit_container .dynamic-select')).map(s => s.value).filter(val => val).join(', '));
-        addText('Attitude', document.getElementById('attitude_adversaire').value);
-        addText('Volume', Array.from(document.querySelectorAll('#volume_adversaire_container .dynamic-select')).map(s => s.value).filter(val => val).join(', '));
-        addText('Substances', document.getElementById('substances_adversaire').value);
-        addText('Véhicules', Array.from(document.querySelectorAll('.vehicule-input')).map(input => input.value).filter(val => val).join(', '));
-        addText('Armes', Array.from(document.querySelectorAll('.arme-input')).map(input => input.value).filter(val => val).join(', '));
-        addText('Modes d\'actions', `ME1: ${document.getElementById('mode_action_me1').value}`);
-        addText('', `ME2: ${document.getElementById('mode_action_me2').value}`);
-        addText('', `ME3: ${document.getElementById('mode_action_me3').value}`);
+        // 1.3 ADVERSAIRE (Tableau)
+        addSubsectionTitle("1.3 ADVERSAIRE(S)");
+        const adversaireData = [
+            ['Nom/Prénom', getVal('nom_adversaire')],
+            ['Domicile', getVal('domicile_adversaire')],
+            ['Naissance', `${getVal('date_naissance')} à ${getVal('lieu_naissance')}`],
+            ['Description', `${getVal('stature_adversaire')} / ${document.getElementById('ethnie_adversaire').value} / ${getVal('signes_particuliers_adversaire')}`],
+            ['Profession', getVal('profession_adversaire')],
+            ['Antécédents', getVal('antecedents_adversaire')],
+            ['État d\'esprit', Array.from(document.querySelectorAll('#etat_esprit_container .dynamic-select')).map(s => s.value).filter(v => v).join(', ') || 'RAS'],
+            ['Attitude', getVal('attitude_adversaire')],
+            ['Volume', Array.from(document.querySelectorAll('#volume_adversaire_container .dynamic-select')).map(s => s.value).filter(v => v).join(', ') || 'RAS'],
+            ['Substances', getVal('substances_adversaire')],
+            ['Véhicules', Array.from(document.querySelectorAll('.vehicule-input')).map(i => i.value).filter(v => v).join(', ') || 'RAS'],
+            ['Armes', Array.from(document.querySelectorAll('.arme-input')).map(i => i.value).filter(v => v).join(', ') || 'RAS'],
+            ['Mode d\'action (ME1)', getVal('mode_action_me1')],
+            ['Mode d\'action (ME2)', getVal('mode_action_me2')],
+            ['Mode d\'action (ME3)', getVal('mode_action_me3')]
+        ];
         
-        const photoAdversaireInputs = document.querySelectorAll('#adversaire_photos_container input[type="file"]');
-        for (const input of photoAdversaireInputs) {
-            await addPhoto(input, "Photo de l'adversaire");
+        doc.autoTable({
+            startY: yPos,
+            body: adversaireData,
+            theme: 'plain',
+            styles: { fontSize: 12, cellPadding: 5, textColor: [224, 224, 224], font: 'helvetica' },
+            columnStyles: { 0: { fontStyle: 'bold', textColor: [91, 155, 213] } },
+            didDrawPage: (data) => { yPos = data.cursor.y + 10; }
+        });
+        yPos = doc.autoTable.previous.finalY + 20;
+
+        // Photo de l'adversaire après le tableau
+        const adversairePhotoInputs = Array.from(document.querySelectorAll('#adversaire_photos_container input[type="file"]'));
+        if (adversairePhotoInputs.some(input => input.files.length > 0)) {
+            checkYPos(200); // Espace pour les photos
+            addSectionTitle("Photo de l'adversaire");
+            await addImagesToPage(adversairePhotoInputs);
         }
 
         // 1.4 ENVIRONNEMENT
         addSectionTitle("1.4 ENVIRONNEMENT");
-        addText("Ami(e)s", document.getElementById('amies').value);
-        addText("Terrain / Environnement", document.getElementById('terrain_info').value);
-        addText("Population", document.getElementById('population').value);
-        addText("Cadre juridique", document.getElementById('cadre_juridique').value);
+        addSubsectionTitle("1.4 Ami(e)s");
+        addText(getVal('amies'));
+        addSubsectionTitle("1.5 Terrain / Environnement");
+        addText(getVal('terrain_info'));
+        addSubsectionTitle("1.6 Population");
+        addText(getVal('population'));
+        addSubsectionTitle("1.7 Cadre juridique");
+        addText(getVal('cadre_juridique'));
         
         // 2. MISSIONS du PSIG
         addSectionTitle("2. MISSIONS du PSIG");
-        addText("Contenu", document.getElementById('missions_psig').value);
+        addText(getVal('missions_psig'));
 
         // 3. EXÉCUTION
         addSectionTitle("3. EXÉCUTION");
-        addText("Date d'exécution", document.getElementById('date_execution').value);
-        addText("Heure d'exécution", document.getElementById('heure_execution').value);
-        addText("Type d'action", Array.from(document.querySelectorAll('#type_action_container .dynamic-select')).map(s => s.value).filter(val => val).join(', '));
-        
+        const executionData = [
+            ['Date', getVal('date_execution')],
+            ['Heure', getVal('heure_execution')],
+            ['Type d\'action', Array.from(document.querySelectorAll('#type_action_container .dynamic-select')).map(s => s.value).filter(v => v).join(', ') || 'RAS']
+        ];
+        doc.autoTable({ startY: yPos, body: executionData, theme: 'plain', styles: { fontSize: 12 }, columnStyles: { 0: { fontStyle: 'bold', textColor: [91, 155, 213] } } });
+        yPos = doc.autoTable.previous.finalY + 20;
+
         // 4. ARTICULATION
         addSectionTitle("4. ARTICULATION");
-        addText("Place du Chef", document.getElementById('place_chef').value);
+        addSubsectionTitle("Place du Chef");
+        addText(getVal('place_chef'));
         
         // Temps d'opération
         addSubsectionTitle("Temps d'opération (T0 - T5)");
-        const timeEvents = Array.from(document.querySelectorAll('#time_events_container .time-item')).map(item => {
-            return [
-                item.querySelector('.time-type-select').value,
-                item.querySelector('.time-hour-input').value,
-                item.querySelector('.time-description-input').value
-            ];
-        });
+        const timeEvents = Array.from(document.querySelectorAll('#time_events_container .time-item')).map(item => [
+            item.querySelector('.time-type-select').value,
+            item.querySelector('.time-hour-input').value || 'RAS',
+            item.querySelector('.time-description-input').value || 'RAS'
+        ]);
+
         if (timeEvents.length > 0) {
             doc.autoTable({
                 startY: yPos,
                 head: [['Type', 'Heure', 'Description']],
                 body: timeEvents,
-                theme: 'plain',
-                styles: { fontSize: 13, cellPadding: 5, textColor: [224, 224, 224], fillColor: [30, 30, 30], font: 'Helvetica', fontStyle: 'normal' },
-                headStyles: { fillColor: [42, 42, 42], textColor: [255, 255, 255], font: 'Helvetica', fontStyle: 'bold' },
+                theme: 'grid',
+                styles: { fontSize: 11, cellPadding: 5, textColor: [224, 224, 224], fillColor: [30, 30, 30], font: 'helvetica' },
+                headStyles: { fontSize: 16.5, fillColor: [42, 42, 42], textColor: [255, 255, 255], font: 'helvetica', fontStyle: 'bold' },
                 didDrawPage: (data) => { yPos = data.cursor.y + 10; }
             });
+            yPos = doc.autoTable.previous.finalY + 20;
         }
 
         // PATRACDVR
         addSectionTitle("PATRACDVR");
-        const patracdvrData = [];
-        document.querySelectorAll('#patracdvr_container > .form-section').forEach(section => {
+        const patracdvrSections = document.querySelectorAll('#patracdvr_container > .form-section');
+        patracdvrSections.forEach(section => {
             const vehicle = section.querySelector('.patracdvr-vehicle-select').value;
-            const members = Array.from(section.querySelectorAll('.patracdvr-member-input')).map(input => {
-                const item = input.closest('.patracdvr-member-item');
-                const equipement = item.querySelector('.patracdvr-equipement-select').value;
-                const fonction = item.querySelector('.patracdvr-fonction-select').value;
-                return [input.value, equipement, fonction];
-            });
-            patracdvrData.push({vehicle, members});
-        });
-        
-        for (const row of patracdvrData) {
-            if (row.members.some(m => m[0])) {
-                if (yPos > pageHeight - 100) {
-                     doc.addPage();
-                     yPos = margin;
-                     addHeaderAndFooter();
-                }
+            const members = Array.from(section.querySelectorAll('.patracdvr-member-item'))
+                .map(item => [
+                    item.querySelector('.patracdvr-member-input').value,
+                    item.querySelector('.patracdvr-equipement-select').value,
+                    item.querySelector('.patracdvr-fonction-select').value
+                ])
+                .filter(member => member[0].trim() !== ''); // Filtrer les membres sans trigramme
+
+            if (members.length > 0) {
+                checkYPos(members.length * 30 + 40);
                 doc.autoTable({
                     startY: yPos,
-                    head: [[`${row.vehicle}`, 'Équipement', 'Fonction']],
-                    body: row.members,
-                    theme: 'plain',
-                    styles: { fontSize: 13, cellPadding: 5, textColor: [224, 224, 224], fillColor: [30, 30, 30], font: 'Helvetica', fontStyle: 'normal' },
-                    headStyles: { fillColor: [42, 42, 42], textColor: [255, 255, 255], font: 'Helvetica', fontStyle: 'bold' },
-                    didDrawPage: (data) => { yPos = data.cursor.y + 10; }
+                    head: [[vehicle, 'Équipement', 'Fonction']],
+                    body: members,
+                    theme: 'grid',
+                    styles: { fontSize: 11, cellPadding: 5, textColor: [224, 224, 224], fillColor: [30, 30, 30] },
+                    headStyles: { fontSize: 16.5, fillColor: [42, 42, 42], textColor: [255, 255, 255], font: 'helvetica', fontStyle: 'bold' },
+                    didDrawPage: (data) => { yPos = data.cursor.y; }
                 });
-                yPos += 10;
+                yPos = doc.autoTable.previous.finalY + 20;
+            }
+        });
+        
+        // Photos de l'opération
+        const operationPhotoInputs = Array.from(document.querySelectorAll('#operation_photos_container .dynamic-list-item')).map(item => {
+            const input = item.querySelector('.photo-input');
+            const labelInput = item.querySelector('.photo-label-input');
+            if(labelInput) { // champ personnalisé
+                input.dataset.label = labelInput.value || 'Photo';
+            }
+            return input;
+        });
+        
+        if (operationPhotoInputs.some(input => input.files.length > 0)) {
+            addSectionTitle("Photos de l'opération");
+            await addImagesToPage(operationPhotoInputs);
+        }
+
+        async function addImagesToPage(fileInputs) {
+            const imagePromises = fileInputs
+                .filter(input => input.files.length > 0)
+                .map(input => {
+                    return new Promise(resolve => {
+                        const file = input.files[0];
+                        const reader = new FileReader();
+                        reader.onload = (e) => resolve({ src: e.target.result, label: input.dataset.label || 'Image' });
+                        reader.readAsDataURL(file);
+                    });
+                });
+            
+            const images = await Promise.all(imagePromises);
+            if (images.length === 0) return;
+
+            const maxImagesPerRow = 2;
+            const padding = 10;
+            const availableWidth = pageWidth - margin * 2;
+            const imageWidth = (availableWidth - (padding * (maxImagesPerRow - 1))) / maxImagesPerRow;
+
+            let xPos = margin;
+            let rowMaxHeight = 0;
+
+            for (let i = 0; i < images.length; i++) {
+                const imgData = images[i];
+                const img = new Image();
+                img.src = imgData.src;
+                await new Promise(resolve => img.onload = resolve);
+
+                const ratio = img.width / img.height;
+                const imageHeight = imageWidth / ratio;
+                
+                if (checkYPos(imageHeight + 30)) { // +30 pour légende
+                    xPos = margin;
+                    rowMaxHeight = 0;
+                }
+                
+                doc.addImage(imgData.src, 'JPEG', xPos, yPos, imageWidth, imageHeight);
+                
+                doc.setFontSize(9);
+                doc.setTextColor('#95a5a6');
+                doc.text(imgData.label, xPos + imageWidth / 2, yPos + imageHeight + 15, { align: 'center' });
+                
+                rowMaxHeight = Math.max(rowMaxHeight, imageHeight + 30);
+
+                if ((i + 1) % maxImagesPerRow === 0 || i === images.length - 1) {
+                    yPos += rowMaxHeight + padding;
+                    xPos = margin;
+                    rowMaxHeight = 0;
+                } else {
+                    xPos += imageWidth + padding;
+                }
             }
         }
         
-        const photoInputs = document.querySelectorAll('#operation_photos_container input[type="file"]');
-        for (const input of photoInputs) {
-            const title = input.getAttribute('data-label') || "Photo d'opération";
-            await addPhoto(input, title);
-        }
+        // --- SAUVEGARDE DU PDF ---
+        const opDate = document.getElementById('date_op').value.replace(/\//g, '-') || 'date';
+        const advName = document.getElementById('nom_adversaire').value.replace(/ /g, '_') || 'adversaire';
+        const fileName = `OI_${opDate}_${advName}.pdf`;
 
-        doc.save('ordre_initial.pdf');
+        doc.save(fileName);
     });
+
 </script>
 
 </body>
