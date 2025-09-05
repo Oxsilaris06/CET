@@ -497,12 +497,24 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 }
             };
             
+            let backgroundImage = null;
+            try {
+                const bgImageUrl = 'Fd.png';
+                const bgImageBytes = await fetch(bgImageUrl).then(res => res.arrayBuffer());
+                backgroundImage = await pdfDoc.embedPng(bgImageBytes);
+            } catch (e) {
+                console.warn("L'image de fond 'Fd.png' n'a pas pu être chargée. Le PDF sera généré sans elle.", e);
+            }
+            
             const addNewPage = () => {
                 context.currentPage = context.pdfDoc.addPage([PageSizes.A4[1], PageSizes.A4[0]]); // Paysage
                 const { width, height } = context.currentPage.getSize();
                 context.pageWidth = width; context.pageHeight = height;
                 context.y = height - context.margin;
-                context.currentPage.drawRectangle({ x: 0, y: 0, width, height, color: context.colors.background });
+                // Do not draw default background color if a background image will be used
+                if (!backgroundImage) {
+                    context.currentPage.drawRectangle({ x: 0, y: 0, width, height, color: context.colors.background });
+                }
             };
 
             const checkY = (spaceNeeded) => {
@@ -625,6 +637,11 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             
             // --- Construction du PDF ---
             addNewPage();
+            if (backgroundImage) {
+                context.currentPage.drawImage(backgroundImage, { x: 0, y: 0, width: context.pageWidth, height: context.pageHeight });
+            } else {
+                context.currentPage.drawRectangle({ x: 0, y: 0, width: context.pageWidth, height: context.pageHeight, color: context.colors.background });
+            }
             const mainTitle = "OPÉRATION DE POLICE JUDICIAIRE";
             const dateTitle = `DU ${getVal('date_op') || '(DATE)'}`;
             const titleWidth = helveticaBoldFont.widthOfTextAtSize(mainTitle, 24);
@@ -749,6 +766,11 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             drawWrappedText(getVal('cat_liaison'), {x: context.margin});
 
             addNewPage();
+            if (backgroundImage) {
+                context.currentPage.drawImage(backgroundImage, { x: 0, y: 0, width: context.pageWidth, height: context.pageHeight });
+            } else {
+                 context.currentPage.drawRectangle({ x: 0, y: 0, width: context.pageWidth, height: context.pageHeight, color: context.colors.background });
+            }
             const finalText = "Avez vous des questions?";
             const finalTextWidth = helveticaBoldFont.widthOfTextAtSize(finalText, 48);
             context.currentPage.drawText(finalText, { x: context.pageWidth / 2 - finalTextWidth / 2, y: context.pageHeight / 2, font: helveticaBoldFont, size: 48, color: context.colors.accent });
