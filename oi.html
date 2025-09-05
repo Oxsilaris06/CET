@@ -213,6 +213,11 @@
                         <button type="button" class="add-btn" onclick="addPhotoInput('photo_container_transport_domicile')">Ajouter Photo ➕</button>
                     </div>
                     <div class="form-section">
+                        <h3>Baptême terrain</h3>
+                        <div id="photo_container_bapteme_terrain"></div>
+                        <button type="button" class="add-btn" onclick="addPhotoInput('photo_container_bapteme_terrain')">Ajouter Photo ➕</button>
+                    </div>
+                    <div class="form-section">
                         <h3>Emplacement AO</h3>
                         <div id="photo_container_emplacement_ao"></div>
                         <button type="button" class="add-btn" onclick="addPhotoInput('photo_container_emplacement_ao')">Ajouter Photo ➕</button>
@@ -605,33 +610,22 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             let photoBottomY = initialAdversaireY;
             const photoInput = document.getElementById('photo_adversaire');
 
-            // Draw photo first, if it exists
             if (photoInput && photoInput.files.length > 0) {
                 const photoBoxWidth = 200;
                 const photoBoxX = context.pageWidth - context.margin - photoBoxWidth;
-                
                 const file = photoInput.files[0];
                 const imageBytes = await file.arrayBuffer();
                 const image = await (file.type === 'image/jpeg' ? pdfDoc.embedJpg(imageBytes) : pdfDoc.embedPng(imageBytes));
                 const scaled = image.scaleToFit(photoBoxWidth - 10, context.pageHeight);
                 const photoBoxHeight = scaled.height + 10;
-
                 const frameY = initialAdversaireY - photoBoxHeight;
-                if (frameY < context.margin) {
-                    addNewPage(); // Not enough space, this is a simplified check
+                if (frameY >= context.margin) {
+                    context.currentPage.drawRectangle({ x: photoBoxX, y: frameY, width: photoBoxWidth, height: photoBoxHeight, borderColor: context.colors.accent, borderWidth: 1 });
+                    context.currentPage.drawImage(image, { x: photoBoxX + 5, y: frameY + 5, width: scaled.width, height: scaled.height });
+                    photoBottomY = frameY;
                 }
-                
-                context.currentPage.drawRectangle({
-                    x: photoBoxX, y: frameY, width: photoBoxWidth, height: photoBoxHeight,
-                    borderColor: context.colors.accent, borderWidth: 1
-                });
-                context.currentPage.drawImage(image, {
-                    x: photoBoxX + 5, y: frameY + 5, width: scaled.width, height: scaled.height
-                });
-                photoBottomY = frameY;
             }
 
-            // Draw table
             const adversaireHeaders = ["Information", "Détail"];
             const adversaireRows = [
                 ['Nom/Prénom', getVal('nom_adversaire')], ['Domicile', getVal('domicile_adversaire')],
@@ -644,21 +638,21 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 ['Armes', getVal('armes_connues')],
             ];
             const tableWidth = context.pageWidth - context.margin * 2 - (photoInput.files.length > 0 ? 210 : 0);
-            context.y = initialAdversaireY; // Reset Y for table drawing
+            context.y = initialAdversaireY;
             const tableBottomY = await drawTable(adversaireHeaders, adversaireRows, [150, tableWidth - 150], context.margin);
-            
             context.y = Math.min(tableBottomY, photoBottomY);
 
             addNewPage();
             drawTitle("1.4 ENVIRONNEMENT");
-            drawList([
-                { label: 'Ami(e)s (soutien)', value: getVal('amies') }, { label: 'Terrain / Météo', value: getVal('terrain_info') },
-                { label: 'Population', value: getVal('population') }, { label: 'Cadre juridique', value: getVal('cadre_juridique') },
-            ]);
+            drawList([ { label: 'Ami(e)s (soutien)', value: getVal('amies') }, { label: 'Terrain / Météo', value: getVal('terrain_info') }, { label: 'Population', value: getVal('population') }, { label: 'Cadre juridique', value: getVal('cadre_juridique') }, ]);
             
             addNewPage();
             drawTitle("2. MISSION");
             drawWrappedText(getVal('missions_psig'), { font: helveticaBoldFont, size: 30, x: context.margin });
+
+            await drawImagesFromContainer('photo_container_transport_pr', 'Transport PSIG vers PR');
+            await drawImagesFromContainer('photo_container_transport_domicile', 'Transport PR vers Domicile');
+            await drawImagesFromContainer('photo_container_bapteme_terrain', 'Baptême terrain');
 
             addNewPage();
             drawTitle("3. EXÉCUTION");
@@ -670,11 +664,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             context.y = await drawTable(chronoHeaders, chronoRows, [80, 120, 550], context.margin);
             
             drawSubTitle("Hypothèses");
-            drawList([
-                {label: "H1", value: getVal('hypothese_h1')},
-                {label: "H2", value: getVal('hypothese_h2')},
-                {label: "H3", value: getVal('hypothese_h3')}
-            ]);
+            drawList([ {label: "H1", value: getVal('hypothese_h1')}, {label: "H2", value: getVal('hypothese_h2')}, {label: "H3", value: getVal('hypothese_h3')} ]);
 
             addNewPage();
             drawTitle("4. ARTICULATION");
@@ -686,6 +676,10 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             drawSubTitle("Itinéraire"); drawWrappedText(getVal('india_itineraire'));
             drawSubTitle("Points Particuliers"); drawWrappedText(getVal('india_points_particuliers'));
             drawSubTitle("Conduite à Tenir"); drawWrappedText(getVal('india_cat'));
+
+            await drawImagesFromContainer('photo_container_itineraire_exterieur', 'Itinéraire Extérieur India');
+            await drawImagesFromContainer('photo_container_itineraire_interieur', 'Itinéraire Intérieur India');
+            await drawImagesFromContainer('photo_container_cellule_effraction', 'Cellule Effraction');
             
             addNewPage();
             drawTitle("4. ARTICULATION (Suite)");
@@ -695,6 +689,8 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             drawSubTitle("Itinéraire"); drawWrappedText(getVal('ao_itineraire'));
             drawSubTitle("Points Particuliers"); drawWrappedText(getVal('ao_points_particuliers'));
             drawSubTitle("Conduite à Tenir"); drawWrappedText(getVal('ao_cat'));
+
+            await drawImagesFromContainer('photo_container_emplacement_ao', 'Emplacement AO');
             
             addNewPage();
             drawTitle("5. PATRACDVR");
@@ -702,22 +698,13 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             for (const row of (formData.patracdvr_rows || [])) {
                 if(row.vehicle) {
                     drawSubTitle(`Véhicule: ${row.vehicle}`);
-                    const patracRows = row.members
-                        .filter(m => m.trigramme)
-                        .map(m => [m.trigramme, m.fonction, m.equipement]);
+                    const patracRows = row.members.filter(m => m.trigramme).map(m => [m.trigramme, m.fonction, m.equipement]);
                     if (patracRows.length > 0) {
                         context.y = await drawTable(patracHeaders, patracRows, [150, 300, 300], context.margin);
                     }
                 }
             }
             
-            await drawImagesFromContainer('photo_container_transport_pr', 'Transport PSIG vers PR');
-            await drawImagesFromContainer('photo_container_transport_domicile', 'Transport PR vers Domicile');
-            await drawImagesFromContainer('photo_container_emplacement_ao', 'Emplacement AO');
-            await drawImagesFromContainer('photo_container_itineraire_exterieur', 'Itinéraire Extérieur India');
-            await drawImagesFromContainer('photo_container_itineraire_interieur', 'Itinéraire Intérieur India');
-            await drawImagesFromContainer('photo_container_cellule_effraction', 'Cellule Effraction');
-
             addNewPage();
             drawTitle("Conduites à tenir générales");
             drawWrappedText(getVal('cat_generales'), {x: context.margin});
@@ -763,4 +750,3 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
     </script>
 </body>
 </html>
-    
