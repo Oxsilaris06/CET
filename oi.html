@@ -500,6 +500,49 @@
                 }
             };
             
+            const drawTable = async (headers, rows, columnWidths) => {
+                const tableWidth = columnWidths.reduce((a, b) => a + b, 0);
+                const startX = (context.pageWidth - tableWidth) / 2;
+                let currentY = context.y;
+                const rowPadding = 5;
+                const fontSize = 10;
+                const headerFontSize = 12;
+
+                const drawRow = (rowData, isHeader) => {
+                    const font = isHeader ? helveticaBoldFont : helveticaFont;
+                    const size = isHeader ? headerFontSize : fontSize;
+                    const cellContents = rowData.map((text, i) => wrapText(text, font, size, columnWidths[i] - 2 * rowPadding));
+                    const maxLines = Math.max(...cellContents.map(lines => lines.length));
+                    const rowHeight = maxLines * (size + 2) + 2 * rowPadding;
+
+                    checkY(rowHeight + 2); 
+                    currentY -= rowHeight;
+                    
+                    let currentX = startX;
+                    rowData.forEach((_, i) => {
+                        context.currentPage.drawRectangle({
+                            x: currentX, y: currentY,
+                            width: columnWidths[i], height: rowHeight,
+                            borderColor: context.colors.accent, borderWidth: 0.5,
+                        });
+                        
+                        const lines = cellContents[i];
+                        lines.forEach((line, lineIndex) => {
+                            context.currentPage.drawText(line, {
+                                x: currentX + rowPadding,
+                                y: currentY + rowHeight - rowPadding - (lineIndex + 1) * (size + 2) + 2,
+                                font, size, color: context.colors.text
+                            });
+                        });
+                        currentX += columnWidths[i];
+                    });
+                };
+
+                drawRow(headers, true);
+                rows.forEach(row => drawRow(row, false));
+                context.y = currentY - 20; // Update context.y after the table
+            };
+
             const drawImagesFromContainer = async (containerId, title) => {
                 const inputs = Array.from(document.querySelectorAll(`#${containerId} input[type="file"]`)).filter(i => i.files.length > 0);
                 for (const input of inputs) {
@@ -530,21 +573,30 @@
 
             drawTitle("1. SITUATION");
             drawSubTitle("1.1 Situation Générale");
+            context.y -= 10;
             drawWrappedText(getVal('situation_generale'), { size: 14 });
             drawSubTitle("1.2 Situation Particulière");
+            context.y -= 10;
             drawWrappedText(getVal('situation_particuliere'), { size: 14 });
             
             drawTitle("1.3 ADVERSAIRE");
-            drawList([
-                { label: 'Nom/Prénom', value: getVal('nom_adversaire') }, { label: 'Domicile', value: getVal('domicile_adversaire') },
-                { label: 'Naissance', value: `${getVal('date_naissance')} à ${getVal('lieu_naissance')}` },
-                { label: 'Description', value: `${getVal('stature_adversaire')} / ${getVal('ethnie_adversaire')}` },
-                { label: 'Signes particuliers', value: getVal('signes_particuliers') }, { label: 'Profession', value: getVal('profession_adversaire') },
-                { label: 'Antécédents', value: getVal('antecedents_adversaire') }, { label: 'État d\'esprit', value: (formData.etat_esprit_list || []).join(', ') },
-                { label: 'Attitude', value: getVal('attitude_adversaire') }, { label: 'Volume (renfort)', value: (formData.volume_list || []).join(', ') },
-                { label: 'Substances', value: getVal('substances_adversaire') }, { label: 'Véhicules', value: (formData.vehicules_list || []).join(', ') },
-                { label: 'Armes', value: getVal('armes_connues') },
-            ]);
+            const adversaireHeaders = ["Information", "Détail"];
+            const adversaireRows = [
+                ['Nom/Prénom', getVal('nom_adversaire')],
+                ['Domicile', getVal('domicile_adversaire')],
+                ['Naissance', `${getVal('date_naissance')} à ${getVal('lieu_naissance')}`],
+                ['Description', `${getVal('stature_adversaire')} / ${getVal('ethnie_adversaire')}`],
+                ['Signes particuliers', getVal('signes_particuliers')],
+                ['Profession', getVal('profession_adversaire')],
+                ['Antécédents', getVal('antecedents_adversaire')],
+                ['État d\'esprit', (formData.etat_esprit_list || []).join(', ')],
+                ['Attitude', getVal('attitude_adversaire')],
+                ['Volume (renfort)', (formData.volume_list || []).join(', ')],
+                ['Substances', getVal('substances_adversaire')],
+                ['Véhicules', (formData.vehicules_list || []).join(', ')],
+                ['Armes', getVal('armes_connues')],
+            ];
+            await drawTable(adversaireHeaders, adversaireRows, [200, 550]);
 
             drawTitle("1.4 ENVIRONNEMENT");
             drawList([
@@ -553,14 +605,20 @@
             ]);
             
             drawTitle("2. MISSION");
+            context.y -= 10;
             drawWrappedText(getVal('missions_psig'), { font: helveticaBoldFont, size: 30 });
 
             drawTitle("3. EXÉCUTION");
             drawWrappedText(`Date: ${getVal('date_execution')} | Heure: ${getVal('heure_execution')} | Type: ${getVal('type_action')}`, { size: 14 });
             context.y -= 20;
             drawSubTitle("Chronologie des temps");
-            drawList((formData.time_events || []).map(e => ({ label: `${e.type} (${e.hour || 'N/A'})`, value: e.description || 'N/A' })));
+            context.y -= 10;
+            const chronoHeaders = ["Type", "Heure", "Description"];
+            const chronoRows = (formData.time_events || []).map(e => [e.type || 'N/A', e.hour || 'N/A', e.description || 'N/A']);
+            await drawTable(chronoHeaders, chronoRows, [80, 120, 550]);
+            
             drawSubTitle("Hypothèses");
+            context.y -= 10;
             drawList([
                 {label: "H1", value: getVal('hypothese_h1')},
                 {label: "H2", value: getVal('hypothese_h2')},
@@ -570,12 +628,16 @@
             drawTitle("4. ARTICULATION");
             drawWrappedText(`Place du Chef: ${getVal('place_chef')}`, { size: 14 });
             drawSubTitle("Équipe INDIA (INTER)");
+            context.y -= 10;
             drawList([
                 {label: "Mission", value: getVal('india_mission')}, {label: "Objectif", value: getVal('india_objectif')},
                 {label: "Itinéraire", value: getVal('india_itineraire')}, {label: "Points Particuliers", value: getVal('india_points_particuliers')},
                 {label: "Conduite à Tenir", value: getVal('india_cat')}
             ]);
+            
+            addNewPage();
             drawSubTitle("Équipe Appui/Observation (AO)");
+            context.y -= 10;
              drawList([
                 {label: "Mission", value: getVal('ao_mission')}, {label: "Objectif", value: getVal('ao_objectif')},
                 {label: "Itinéraire", value: getVal('ao_itineraire')}, {label: "Points Particuliers", value: getVal('ao_points_particuliers')},
@@ -583,12 +645,19 @@
             ]);
             
             drawTitle("5. PATRACDVR");
-            (formData.patracdvr_rows || []).forEach(row => {
+            const patracHeaders = ["Trigramme", "Fonction", "Équipement"];
+            for (const row of (formData.patracdvr_rows || [])) {
                 if(row.vehicle) {
                     drawSubTitle(`Véhicule: ${row.vehicle}`);
-                    drawList(row.members.filter(m => m.trigramme).map(m => ({ label: `${m.trigramme} (${m.fonction})`, value: m.equipement })));
+                    context.y -= 10;
+                    const patracRows = row.members
+                        .filter(m => m.trigramme)
+                        .map(m => [m.trigramme, m.fonction, m.equipement]);
+                    if (patracRows.length > 0) {
+                        await drawTable(patracHeaders, patracRows, [150, 300, 300]);
+                    }
                 }
-            });
+            }
             
             await drawImagesFromContainer('photo_container_transport_pr', 'Transport PSIG vers PR');
             await drawImagesFromContainer('photo_container_transport_domicile', 'Transport PR vers Domicile');
