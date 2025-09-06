@@ -391,7 +391,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             const vehicleId = `v_${Date.now()}`;
             const row = document.createElement('div');
             row.className = 'collapsible-container';
-            
             const membersContainerId = `patracdvr_members_${vehicleId}`;
 
             row.innerHTML = `<div class="collapsible-header"><h3>Véhicule</h3><span class="material-icons">expand_more</span></div>
@@ -406,7 +405,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             
             container.appendChild(row);
 
-            // Add event listeners programmatically for better isolation
             row.querySelector('.remove-btn').addEventListener('click', () => { row.remove(); saveFormData(); });
             row.querySelector('.collapsible-header').addEventListener('click', (e) => e.currentTarget.parentElement.classList.toggle('open'));
             row.querySelector('.add-btn').addEventListener('click', () => addPatracdvrMember(membersContainerId));
@@ -427,8 +425,8 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             const createSelect = (className, options, selectedValue) => 
                 `<select class="${className}" onchange="saveFormData()">${options.map(o => `<option value="${o}" ${o === selectedValue ? 'selected':''}>${o}</option>`).join('')}</select>`;
 
-            const armementOptions = ['UMP9', 'G36', 'PIE', 'FAP'];
-            const equipementOptions = ['BBAL', 'GENL', 'EFFRAC', 'MP7', 'IL', 'Lacry'];
+            const armementOptions = ['Sans', 'UMP9', 'G36', 'PIE', 'FAP'];
+            const equipementOptions = ['Sans', 'BBAL', 'GENL', 'EFFRAC', 'MP7', 'IL', 'Lacry'];
             const tenueOptions = ['UBAS', '4S', 'bleu', 'treillis', 'civil'];
             const gpbOptions = ['GPBL', 'GPBPD'];
             const fonctionOptions = ['Chef inter','Chef dispo','AO','Inter','DE'];
@@ -685,58 +683,102 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             if (meText) {
                 drawWrappedText(meText, { size: 12, font: helveticaBoldFont, x: context.margin });
             }
+            const initialAdversaireY = context.y;
+            let photoBottomY = initialAdversaireY;
+            const photoInput = document.getElementById('photo_adversaire');
 
-            // ... (adversaire table and photo logic)
+            if (photoInput && photoInput.files.length > 0) {
+                const photoBoxWidth = 200;
+                const photoBoxX = context.pageWidth - context.margin - photoBoxWidth;
+                const file = photoInput.files[0];
+                const imageBytes = await processImage(file);
+                const image = await pdfDoc.embedJpg(imageBytes);
+                const scaled = image.scaleToFit(photoBoxWidth - 10, context.pageHeight);
+                const photoBoxHeight = scaled.height + 10;
+                const frameY = initialAdversaireY - photoBoxHeight;
+                if (frameY >= context.margin) {
+                    context.currentPage.drawRectangle({ x: photoBoxX, y: frameY, width: photoBoxWidth, height: photoBoxHeight, borderColor: context.colors.accent, borderWidth: 1 });
+                    context.currentPage.drawImage(image, { x: photoBoxX + 5, y: frameY + 5, width: scaled.width, height: scaled.height });
+                    photoBottomY = frameY;
+                }
+            }
+            const adversaireHeaders = ["Information", "Détail"];
+            const adversaireRows = [
+                ['Nom/Prénom', getVal('nom_adversaire')], ['Domicile', getVal('domicile_adversaire')],
+                ['Naissance', `${getVal('date_naissance')} à ${getVal('lieu_naissance')}`],
+                ['Description', `${getVal('stature_adversaire')} / ${getVal('ethnie_adversaire')}`],
+                ['Signes particuliers', getVal('signes_particuliers')], ['Profession', getVal('profession_adversaire')],
+                ['Antécédents', getVal('antecedents_adversaire')], ['État d\'esprit', (formData.etat_esprit_list || []).join(', ')],
+                ['Attitude', getVal('attitude_adversaire')], ['Volume (renfort)', (formData.volume_list || []).join(', ')],
+                ['Substances', getVal('substances_adversaire')], ['Véhicules', (formData.vehicules_list || []).join(', ')],
+                ['Armes', getVal('armes_connues')],
+            ];
+            const tableWidth = context.pageWidth - context.margin * 2 - (photoInput.files.length > 0 ? 210 : 0);
+            context.y = initialAdversaireY;
+            const tableBottomY = await drawTable(adversaireHeaders, adversaireRows, [150, tableWidth - 150], context.margin);
+            context.y = Math.min(tableBottomY, photoBottomY);
+
+            addNewPage();
+            drawTitle("1.4 ENVIRONNEMENT");
+            drawSubTitle("Ami(e)s (soutien)"); drawWrappedText(getVal('amies'), { size: 14 });
+            drawSubTitle("Terrain / Météo"); drawWrappedText(getVal('terrain_info'), { size: 14 });
+            drawSubTitle("Population"); drawWrappedText(getVal('population'), { size: 14 });
+            drawSubTitle("Cadre juridique"); drawWrappedText(getVal('cadre_juridique'), { size: 14 });
             
+            addNewPage();
+            drawTitle("2. MISSION");
+            drawWrappedText(getVal('missions_psig'), { font: helveticaBoldFont, size: 30, x: context.margin });
+
+            await drawImagesFromContainer('photo_container_transport_pr', 'Transport PSIG vers PR');
+            await drawImagesFromContainer('photo_container_transport_domicile', 'Transport PR vers Domicile');
+            await drawImagesFromContainer('photo_container_bapteme_terrain', 'Baptême terrain');
+
             addNewPage();
             drawTitle("3. EXÉCUTION");
             const baseFontSize = 14;
             const highlightFontSize = 16;
             const redColor = rgb(1, 0, 0);
             let currentX = context.margin;
-            const line1 = "En vue ";
-            const line2 = "d'appréhender le mis en cause et empêcher la déperdition des preuves,";
-            const line3 = "Je veux";
-            const line4 = `, le `;
-            const line5 = `${getVal('date_execution') || '(date)'}`;
-            const line6 = ` à partir de `;
-            const line7 = `${getVal('heure_execution') || '(heure)'}`;
-            const line8 = `, pour une action `;
-            const line9 = `${getVal('type_action') || '(type d\'action)'}`;
-            const line10 = ` investir le domicile`;
-            const line11 = `présumé de `;
-            const line12 = `${getVal('nom_adversaire') || '(nom de l\'adversaire)'}`;
-            const line13 = ` après avoir bouclé celui-ci.`;
+            
+            const parts = [
+                { text: "En vue ", isHighlight: true },
+                { text: "d'appréhender le mis en cause et empêcher la déperdition des preuves,\n", isHighlight: false },
+                { text: "Je veux", isHighlight: true },
+                { text: ", le ", isHighlight: false },
+                { text: `${getVal('date_execution') || '(date)'}`, isHighlight: true },
+                { text: " à partir de ", isHighlight: false },
+                { text: `${getVal('heure_execution') || '(heure)'}`, isHighlight: true },
+                { text: ", pour une action ", isHighlight: false },
+                { text: `${getVal('type_action') || '(type d\'action)'}`, isHighlight: true },
+                { text: " investir le domicile\nprésumé de ", isHighlight: false },
+                { text: `${getVal('nom_adversaire') || '(nom de l\'adversaire)'}`, isHighlight: true },
+                { text: " après avoir bouclé celui-ci.", isHighlight: false },
+            ];
+            
+            checkY(70);
+            
+            parts.forEach(part => {
+                const font = part.isHighlight ? helveticaBoldFont : helveticaFont;
+                const size = part.isHighlight ? highlightFontSize : baseFontSize;
+                const color = part.isHighlight ? redColor : context.colors.text;
 
-            checkY(60);
-            const initialY = context.y;
-            context.currentPage.drawText(line1, { x: currentX, y: initialY, font: helveticaBoldFont, size: highlightFontSize, color: redColor });
-            currentX += helveticaBoldFont.widthOfTextAtSize(line1, highlightFontSize);
-            context.currentPage.drawText(line2, { x: currentX, y: initialY, font: helveticaFont, size: baseFontSize, color: context.colors.text });
-            currentX = context.margin;
-            context.currentPage.drawText(line3, { x: currentX, y: initialY - (baseFontSize + 4), font: helveticaBoldFont, size: highlightFontSize, color: redColor });
-            currentX += helveticaBoldFont.widthOfTextAtSize(line3, highlightFontSize);
-            context.currentPage.drawText(line4, { x: currentX, y: initialY - (baseFontSize + 4), font: helveticaFont, size: baseFontSize, color: context.colors.text });
-            currentX += helveticaFont.widthOfTextAtSize(line4, baseFontSize);
-            context.currentPage.drawText(line5, { x: currentX, y: initialY - (baseFontSize + 4), font: helveticaBoldFont, size: highlightFontSize, color: redColor });
-            currentX += helveticaBoldFont.widthOfTextAtSize(line5, highlightFontSize);
-            context.currentPage.drawText(line6, { x: currentX, y: initialY - (baseFontSize + 4), font: helveticaFont, size: baseFontSize, color: context.colors.text });
-            currentX += helveticaFont.widthOfTextAtSize(line6, baseFontSize);
-            context.currentPage.drawText(line7, { x: currentX, y: initialY - (baseFontSize + 4), font: helveticaBoldFont, size: highlightFontSize, color: redColor });
-            currentX += helveticaBoldFont.widthOfTextAtSize(line7, highlightFontSize);
-            context.currentPage.drawText(line8, { x: currentX, y: initialY - (baseFontSize + 4), font: helveticaFont, size: baseFontSize, color: context.colors.text });
-            currentX += helveticaFont.widthOfTextAtSize(line8, baseFontSize);
-            context.currentPage.drawText(line9, { x: currentX, y: initialY - (baseFontSize + 4), font: helveticaBoldFont, size: highlightFontSize, color: redColor });
-            currentX += helveticaBoldFont.widthOfTextAtSize(line9, highlightFontSize);
-            context.currentPage.drawText(line10, { x: currentX, y: initialY - (baseFontSize + 4), font: helveticaFont, size: baseFontSize, color: context.colors.text });
-            currentX = context.margin;
-            context.currentPage.drawText(line11, { x: currentX, y: initialY - 2 * (baseFontSize + 4), font: helveticaFont, size: baseFontSize, color: context.colors.text });
-            currentX += helveticaFont.widthOfTextAtSize(line11, baseFontSize);
-            context.currentPage.drawText(line12, { x: currentX, y: initialY - 2 * (baseFontSize + 4), font: helveticaBoldFont, size: highlightFontSize, color: redColor });
-            currentX += helveticaBoldFont.widthOfTextAtSize(line12, highlightFontSize);
-            context.currentPage.drawText(line13, { x: currentX, y: initialY - 2 * (baseFontSize + 4), font: helveticaFont, size: baseFontSize, color: context.colors.text });
+                const lines = part.text.split('\n');
+                lines.forEach((line, index) => {
+                    const textWidth = font.widthOfTextAtSize(line, size);
+                    if (currentX + textWidth > context.pageWidth - context.margin) {
+                        context.y -= (baseFontSize + 4);
+                        currentX = context.margin;
+                    }
+                    context.currentPage.drawText(line, { x: currentX, y: context.y, font, size, color });
+                    currentX += textWidth;
+                    if (index < lines.length - 1) {
+                        context.y -= (baseFontSize + 4);
+                        currentX = context.margin;
+                    }
+                });
+            });
+            context.y -= (baseFontSize + 4) * 2;
 
-            context.y -= 3 * (baseFontSize + 4) + 20;
 
             drawSubTitle("Chronologie des temps");
             const chronoHeaders = ["Type", "Heure", "Description"];
@@ -744,8 +786,53 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             context.y = await drawTable(chronoHeaders, chronoRows, [80, 120, 550], context.margin);
             
             drawSubTitle("Hypothèses");
-            // ... (Rest of the PDF generation)
+            drawWrappedText(`H1: ${getVal('hypothese_h1')}\nH2: ${getVal('hypothese_h2')}\nH3: ${getVal('hypothese_h3')}`, { size: 14 });
+
+            addNewPage();
+            drawTitle("4. ARTICULATION");
+            drawWrappedText(`Place du Chef: ${getVal('place_chef')}`, { size: 14, x: context.margin });
             
+            drawSubTitle("Équipe INDIA (INTER)");
+            drawSubTitle("Mission"); drawWrappedText(getVal('india_mission'));
+            drawSubTitle("Objectif"); drawWrappedText(getVal('india_objectif'));
+            drawSubTitle("Itinéraire"); drawWrappedText(getVal('india_itineraire'));
+            drawSubTitle("Points Particuliers"); drawWrappedText(getVal('india_points_particuliers'));
+            drawSubTitle("Conduite à Tenir"); drawWrappedText(getVal('india_cat'));
+
+            await drawImagesFromContainer('photo_container_itineraire_exterieur', 'Itinéraire Extérieur India');
+            await drawImagesFromContainer('photo_container_itineraire_interieur', 'Itinéraire Intérieur India');
+            await drawImagesFromContainer('photo_container_cellule_effraction', 'Cellule Effraction');
+            
+            addNewPage();
+            drawTitle("4. ARTICULATION (Suite)");
+            drawSubTitle("Équipe Appui/Observation (AO)");
+            drawSubTitle("Mission"); drawWrappedText(getVal('ao_mission'));
+            drawSubTitle("Objectif"); drawWrappedText(getVal('ao_objectif'));
+            drawSubTitle("Itinéraire"); drawWrappedText(getVal('ao_itineraire'));
+            drawSubTitle("Points Particuliers"); drawWrappedText(getVal('ao_points_particuliers'));
+            drawSubTitle("Conduite à Tenir"); drawWrappedText(getVal('ao_cat'));
+
+            await drawImagesFromContainer('photo_container_emplacement_ao', 'Emplacement AO');
+            
+            addNewPage();
+            drawTitle("5. PATRACDVR");
+            const patracHeaders = ["Trigramme", "Fonction", "Armement", "Équipement", "Tenue", "GPB"];
+            for (const row of (formData.patracdvr_rows || [])) {
+                if(row.vehicle) {
+                    drawSubTitle(`Véhicule: ${row.vehicle}`);
+                    const patracRows = row.members.filter(m => m.trigramme).map(m => [m.trigramme, m.fonction, m.armement, m.equipement, m.tenue, m.gpb]);
+                    if (patracRows.length > 0) {
+                        context.y = await drawTable(patracHeaders, patracRows, [100, 110, 110, 110, 110, 110], context.margin);
+                    }
+                }
+            }
+            
+            addNewPage();
+            drawTitle("Conduites à tenir générales");
+            drawWrappedText(getVal('cat_generales'), {x: context.margin, font: helveticaBoldFont});
+            drawSubTitle("Liaison");
+            drawWrappedText(getVal('cat_liaison'), {x: context.margin, font: helveticaBoldFont});
+
             addNewPage();
             if (backgroundImage) {
                 context.currentPage.drawImage(backgroundImage, { x: 0, y: 0, width: context.pageWidth, height: context.pageHeight });
@@ -788,4 +875,3 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
     </script>
 </body>
 </html>
-    
