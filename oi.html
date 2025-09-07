@@ -428,7 +428,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             }
         }
         function addPatracdvrMember(containerId, data = {}) {
-            const { trigramme = '', fonction = 'Inter', armement = 'PIE', equipement = 'BBAL', equipement2 = 'Cale', tenue = 'Treillis', gpb = 'GPBL' } = data;
+            const { trigramme = '', fonction = 'Inter', armement = 'Sans', equipement = 'BBAL', equipement2 = 'Sans', tenue = 'Treillis', gpb = 'GPBL' } = data;
             const container = document.getElementById(containerId);
             const item = document.createElement('div');
             item.className = 'dynamic-list-item patracdvr-member-item';
@@ -437,9 +437,9 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             const createSelect = (className, options, selectedValue) => 
                 `<select class="${className}" onchange="saveFormData()">${options.map(o => `<option value="${o}" ${o === selectedValue ? 'selected':''}>${o}</option>`).join('')}</select>`;
 
-            const armementOptions = ['UMP9', 'G36', 'PIE', 'LBD40', 'FAP'];
+            const armementOptions = ['Sans', 'UMP9', 'G36', 'PIE', 'LBD40', 'FAP'];
             const equipementOptions = ['BBAL', 'GENL', 'EFFRAC', 'MP7', 'IL'];
-            const equipement2Options = ['Échelle', 'Stop stick', 'Lacry', 'Cale'];
+            const equipement2Options = ['Sans', 'Échelle', 'Stop stick', 'Lacry', 'Cale'];
             const tenueOptions = ['UBAS', '4S', 'Bleu', 'Treillis', 'Civil'];
             const gpbOptions = ['GPBL', 'GPBPD'];
             const fonctionOptions = ['Chef inter','Chef dispo','AO','Inter','DE'];
@@ -611,12 +611,11 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
 
             const drawWrappedText = (text, options = {}) => {
                 const { font = helveticaFont, size = 12, color = context.colors.text, x = context.margin + 15 } = options;
-                // --- FIX: Dynamic max width calculation based on actual x position ---
                 const maxWidth = context.pageWidth - x - context.margin;
                 const lines = wrapText(text, font, size, maxWidth);
                 const totalHeight = lines.length * (size + 4);
                 if (checkY(totalHeight + 10)) {
-                    context.y -= (size + 4); // Add a little space after page break
+                    context.y -= (size + 4); 
                 }
                 lines.forEach((line, index) => {
                     context.currentPage.drawText(line, { x, y: context.y - (index * (size + 4)), font, size, color });
@@ -697,10 +696,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             
             addNewPage();
             drawTitle("1.3 ADVERSAIRE");
-            const meText = (formData.me_list || []).map((me, i) => `ME${i+1}: ${me}`).join(' | ');
-            if (meText) {
-                drawWrappedText(meText, { size: 12, font: helveticaBoldFont, x: context.margin });
-            }
             const initialAdversaireY = context.y;
             let photoBottomY = initialAdversaireY;
             const photoInput = document.getElementById('photo_adversaire');
@@ -720,20 +715,28 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     photoBottomY = frameY;
                 }
             }
+            
+            const meText = (formData.me_list || []).map((me, i) => `ME${i+1}: ${me}`).join('\n');
             const adversaireHeaders = ["Information", "Détail"];
             const adversaireRows = [
-                ['Nom/Prénom', getVal('nom_adversaire')], ['Domicile', getVal('domicile_adversaire')],
+                ['Nom/Prénom', getVal('nom_adversaire')], 
+                ['Moyens Employés', meText],
+                ['Domicile', getVal('domicile_adversaire')],
                 ['Naissance', `${getVal('date_naissance')} à ${getVal('lieu_naissance')}`],
                 ['Description', `${getVal('stature_adversaire')} / ${getVal('ethnie_adversaire')}`],
-                ['Signes particuliers', getVal('signes_particuliers')], ['Profession', getVal('profession_adversaire')],
-                ['Antécédents', getVal('antecedents_adversaire')], ['État d\'esprit', (formData.etat_esprit_list || []).join(', ')],
-                ['Attitude', getVal('attitude_adversaire')], ['Volume (renfort)', (formData.volume_list || []).join(', ')],
-                ['Substances', getVal('substances_adversaire')], ['Véhicules', (formData.vehicules_list || []).join(', ')],
+                ['Signes particuliers', getVal('signes_particuliers')], 
+                ['Profession', getVal('profession_adversaire')],
+                ['Antécédents', getVal('antecedents_adversaire')], 
+                ['État d\'esprit', (formData.etat_esprit_list || []).join(', ')],
+                ['Attitude', getVal('attitude_adversaire')], 
+                ['Volume (renfort)', (formData.volume_list || []).join(', ')],
+                ['Substances', getVal('substances_adversaire')], 
+                ['Véhicules', (formData.vehicules_list || []).join(', ')],
                 ['Armes', getVal('armes_connues')],
             ];
             const tableWidth = context.pageWidth - context.margin * 2 - (photoInput.files.length > 0 ? 210 : 0);
             context.y = initialAdversaireY;
-            drawTable(adversaireHeaders, adversaireRows.filter(r => r[1] && r[1].trim() !== 'à'), [150, tableWidth - 150], context.margin);
+            drawTable(adversaireHeaders, adversaireRows.filter(r => r[1] && r[1].trim() !== 'à' && r[1].trim() !== '/'), [150, tableWidth - 150], context.margin);
             context.y = Math.min(context.y, photoBottomY);
 
             addNewPage();
@@ -889,7 +892,12 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
 
             try {
                 const result = await buildPdf();
-                if (!result) return;
+                if (!result) {
+                    // Re-enable button if buildPdf fails early
+                    btn.textContent = originalText;
+                    btn.disabled = false;
+                    return;
+                }
                 
                 const { pdfBytes, formData } = result;
                 const blob = new Blob([pdfBytes], { type: 'application/pdf' });
@@ -905,7 +913,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     document.body.appendChild(link);
                     link.click();
                     document.body.removeChild(link);
-                    // No need to revoke URL for download link, browser handles it.
                 }
 
             } catch (error) {
