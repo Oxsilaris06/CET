@@ -610,17 +610,21 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             };
 
             const drawWrappedText = (text, options = {}) => {
-                const { font = helveticaFont, size = 12, color = context.colors.text, x = context.margin + 15, maxWidth = context.pageWidth - context.margin * 2 - 15 } = options;
+                const { font = helveticaFont, size = 12, color = context.colors.text, x = context.margin + 15 } = options;
+                // --- FIX: Dynamic max width calculation based on actual x position ---
+                const maxWidth = context.pageWidth - x - context.margin;
                 const lines = wrapText(text, font, size, maxWidth);
                 const totalHeight = lines.length * (size + 4);
-                checkY(totalHeight + 10);
+                if (checkY(totalHeight + 10)) {
+                    context.y -= (size + 4); // Add a little space after page break
+                }
                 lines.forEach((line, index) => {
                     context.currentPage.drawText(line, { x, y: context.y - (index * (size + 4)), font, size, color });
                 });
                 context.y -= (totalHeight + 10);
             };
             
-            const drawTable = async (headers, rows, columnWidths, startX) => {
+            const drawTable = (headers, rows, columnWidths, startX) => {
                 let currentY = context.y;
                 const rowPadding = 5;
                 const headerFontSize = 10;
@@ -729,7 +733,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             ];
             const tableWidth = context.pageWidth - context.margin * 2 - (photoInput.files.length > 0 ? 210 : 0);
             context.y = initialAdversaireY;
-            await drawTable(adversaireHeaders, adversaireRows.filter(r => r[1] && r[1].trim() !== 'à'), [150, tableWidth - 150], context.margin);
+            drawTable(adversaireHeaders, adversaireRows.filter(r => r[1] && r[1].trim() !== 'à'), [150, tableWidth - 150], context.margin);
             context.y = Math.min(context.y, photoBottomY);
 
             addNewPage();
@@ -797,7 +801,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             drawSubTitle("Chronologie des temps");
             const chronoHeaders = ["Type", "Heure", "Description"];
             const chronoRows = (formData.time_events || []).map(e => [e.type || 'N/A', e.hour || 'N/A', e.description || 'N/A']);
-            await drawTable(chronoHeaders, chronoRows, [80, 120, 550], context.margin);
+            drawTable(chronoHeaders, chronoRows, [80, 120, 550], context.margin);
             
             drawSubTitle("Hypothèses");
             drawWrappedText(`H1: ${getVal('hypothese_h1')}\nH2: ${getVal('hypothese_h2')}\nH3: ${getVal('hypothese_h3')}`, { size: 14 });
@@ -836,7 +840,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     drawSubTitle(`Véhicule: ${row.vehicle}`);
                     const patracRows = row.members.filter(m => m.trigramme).map(m => [m.trigramme, m.fonction, m.armement, m.equipement, m.equipement2, m.tenue, m.gpb]);
                     if (patracRows.length > 0) {
-                        await drawTable(patracHeaders, patracRows, [90, 100, 90, 100, 100, 90, 90], context.margin);
+                        drawTable(patracHeaders, patracRows, [90, 100, 90, 100, 100, 90, 90], context.margin);
                     }
                 }
             }
