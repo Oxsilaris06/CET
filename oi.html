@@ -323,7 +323,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
     </div>
 
     <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
-    <script src="https://unpkg.com/@pdf-lib/fontkit/dist/fontkit.umd.min.js"></script>
     <script>
         // --- GLOBAL CONFIG ---
         const memberConfig = {
@@ -439,12 +438,11 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             container.appendChild(item);
         }
 
-        // --- PATRACDVR & MEMBER MODAL MANAGEMENT ---
+        // --- PATRACDVR & MEMBER MODAL MANAGEMENT (BUG FIXED) ---
         function addPatracdvrRow(vehicle = availableVehicles[0], members = []) {
             const container = document.getElementById('patracdvr_container');
             const row = document.createElement('div');
             row.className = 'collapsible-container';
-            const membersContainerId = `patracdvr_members_${Date.now()}`;
 
             row.innerHTML = `<div class="collapsible-header"><h3>Véhicule</h3><span class="material-icons">expand_more</span></div>
                              <div class="collapsible-content">
@@ -452,26 +450,28 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                                      <select class="patracdvr-vehicle-select" onchange="saveFormData()">${availableVehicles.map(v => `<option value="${v}" ${v === vehicle ? 'selected':''}>${v}</option>`).join('')}</select>
                                      <button type="button" class="remove-btn">❌ Véhicule</button>
                                  </div>
-                                 <div id="${membersContainerId}" class="patracdvr-members-container"></div>
-                                 <button type="button" class="add-btn" data-target-container="${membersContainerId}">➕ Personnel</button>
+                                 <div class="patracdvr-members-container"></div>
+                                 <button type="button" class="add-btn">➕ Personnel</button>
                              </div>`;
             container.appendChild(row);
+            
+            const membersContainer = row.querySelector('.patracdvr-members-container');
+            const addMemberButton = row.querySelector('.add-btn');
 
             row.querySelector('.remove-btn').addEventListener('click', () => { row.remove(); saveFormData(); });
             row.querySelector('.collapsible-header').addEventListener('click', e => e.currentTarget.parentElement.classList.toggle('open'));
             
-            row.querySelector('.add-btn').addEventListener('click', (event) => {
-                const targetId = event.currentTarget.dataset.targetContainer;
-                addPatracdvrMember(targetId);
+            addMemberButton.addEventListener('click', () => {
+                addPatracdvrMember(membersContainer); // Pass the element directly
             });
             
-            enableDragAndDrop(`#${membersContainerId}`);
-            members.forEach(m => addPatracdvrMember(membersContainerId, m));
+            enableDragAndDrop(membersContainer); // Pass the element to the drag and drop handler
+            members.forEach(m => addPatracdvrMember(membersContainer, m));
         }
 
-        function addPatracdvrMember(containerId, data = {}) {
-            const container = document.getElementById(containerId);
-            if (!container) return;
+        function addPatracdvrMember(containerElement, data = {}) { // Accepts an element, not an ID
+            if (!containerElement) return;
+
             const btn = document.createElement('button');
             btn.type = 'button';
             btn.className = 'patracdvr-member-btn draggable';
@@ -486,7 +486,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             Object.keys(memberData).forEach(key => btn.dataset[key] = memberData[key]);
             
             updateMemberButtonVisuals(btn);
-            container.appendChild(btn);
+            containerElement.appendChild(btn);
             btn.addEventListener('click', () => openMemberModal(btn.id));
         }
         
@@ -565,8 +565,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
         }
 
         // --- DRAG & DROP ---
-        function enableDragAndDrop(containerSelector) {
-            const container = document.querySelector(containerSelector);
+        function enableDragAndDrop(container) { // Accepts element directly
             if (!container) return;
             let draggedItem = null;
             container.addEventListener('dragstart', e => {
@@ -586,10 +585,12 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             container.addEventListener('dragover', e => {
                 e.preventDefault();
                 const afterElement = getDragAfterElement(container, e.clientY);
-                if (afterElement == null) {
-                    container.appendChild(draggedItem);
-                } else {
-                    container.insertBefore(draggedItem, afterElement);
+                if (draggedItem) {
+                    if (afterElement == null) {
+                        container.appendChild(draggedItem);
+                    } else {
+                        container.insertBefore(draggedItem, afterElement);
+                    }
                 }
             });
             container.addEventListener('drop', e => {
@@ -675,35 +676,19 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             }
 
             addPhotoInput('adversary_photo_container', true);
-            enableDragAndDrop('#time_events_container');
+            enableDragAndDrop(document.querySelector('#time_events_container'));
             loadFormData();
             showStep(currentStep);
         });
         
-        // --- PDF GENERATION ---
+        // --- PDF GENERATION (FONT UPDATED) ---
         async function buildPdf() {
-            const { PDFDocument, rgb, PageSizes } = PDFLib;
+            const { PDFDocument, rgb, PageSizes, StandardFonts } = PDFLib;
             const pdfDoc = await PDFDocument.create();
-            pdfDoc.registerFontkit(fontkit);
             
-            const oswaldRegUrl = 'https://fonts.gstatic.com/s/oswald/v40/YTox.Ak5mFlFk9UTi35U.ttf';
-            const oswaldBoldUrl = 'https://fonts.gstatic.com/s/oswald/v40/YTox.Ak5mFlFk9URI35U.ttf'; // Using a variant that is likely bold
-
-            let oswaldRegularFont, oswaldBoldFont;
-            try {
-                const [oswaldRegBytes, oswaldBoldBytes] = await Promise.all([
-                    fetch(oswaldRegUrl).then(res => res.arrayBuffer()),
-                    fetch(oswaldBoldUrl).then(res => res.arrayBuffer())
-                ]);
-                oswaldRegularFont = await pdfDoc.embedFont(oswaldRegBytes);
-                oswaldBoldFont = await pdfDoc.embedFont(oswaldBoldBytes);
-            } catch (e) {
-                console.error("Font loading failed, falling back to Helvetica:", e);
-                alert("Impossible de charger les polices personnalisées. Le PDF sera généré avec une police standard.");
-                const { StandardFonts } = PDFLib;
-                oswaldRegularFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
-                oswaldBoldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-            }
+            // Using standard, readable Helvetica font
+            const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
+            const helveticaBoldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
             
             saveFormData();
             const formDataString = localStorage.getItem('oiFormData');
@@ -713,7 +698,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
 
             const isDarkMode = document.body.classList.contains('dark-mode');
             const context = {
-                pdfDoc, oswaldRegularFont, oswaldBoldFont,
+                pdfDoc, helveticaFont, helveticaBoldFont,
                 currentPage: null, y: 0,
                 pageWidth: 0, pageHeight: 0, margin: 40,
                 colors: isDarkMode ? {
@@ -745,13 +730,13 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
 
             const drawTitle = (text) => {
                 checkY(30);
-                context.currentPage.drawText(text, { x: context.margin, y: context.y, font: context.oswaldBoldFont, size: 18, color: context.colors.accent });
+                context.currentPage.drawText(text, { x: context.margin, y: context.y, font: context.helveticaBoldFont, size: 18, color: context.colors.accent });
                 context.y -= 30;
             };
 
             const drawSubTitle = (text) => {
                 if (checkY(25)) { context.y -= 10; }
-                context.currentPage.drawText(text, { x: context.margin, y: context.y, font: context.oswaldBoldFont, size: 14, color: context.colors.accent });
+                context.currentPage.drawText(text, { x: context.margin, y: context.y, font: context.helveticaBoldFont, size: 14, color: context.colors.accent });
                 context.y -= 25;
             };
 
@@ -771,7 +756,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             };
             
             const drawWrappedText = (text, options = {}) => {
-                const { font = context.oswaldRegularFont, size = 12, color = context.colors.text, x = context.margin + 15, lineHeight = 4 } = options;
+                const { font = context.helveticaFont, size = 12, color = context.colors.text, x = context.margin + 15, lineHeight = 4 } = options;
                 const maxWidth = context.pageWidth - x - context.margin;
                 const lines = wrapText(text, font, size, maxWidth);
                 const totalHeight = lines.length * (size + lineHeight);
@@ -787,7 +772,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 const rowPadding = 5; const headerFontSize = 10; const contentFontSize = 10;
                 
                 const drawRow = (rowData, isHeader) => {
-                    const font = isHeader ? context.oswaldBoldFont : context.oswaldRegularFont;
+                    const font = isHeader ? context.helveticaBoldFont : context.helveticaFont;
                     const size = isHeader ? headerFontSize : contentFontSize;
                     const cellContents = rowData.map((text, i) => wrapText(text, font, size, columnWidths[i] - 2 * rowPadding));
                     const maxLines = Math.max(...cellContents.map(lines => lines.length || 1));
@@ -860,8 +845,8 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                         const x = (width - scaled.width) / 2;
                         const y = (height - scaled.height) / 2 + 15;
                         context.currentPage.drawImage(image, { x, y, width: scaled.width, height: scaled.height });
-                        const textWidth = context.oswaldBoldFont.widthOfTextAtSize(title, 14);
-                        context.currentPage.drawText(title, { x: width / 2 - textWidth / 2, y: y - 20, font: context.oswaldBoldFont, size: 14, color: context.colors.text });
+                        const textWidth = context.helveticaBoldFont.widthOfTextAtSize(title, 14);
+                        context.currentPage.drawText(title, { x: width / 2 - textWidth / 2, y: y - 20, font: context.helveticaBoldFont, size: 14, color: context.colors.text });
                     } catch (e) {
                         console.error("Could not process or embed image:", e);
                         drawTitle("Erreur d'image");
@@ -875,8 +860,8 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             addNewPage();
             const mainTitle = "OPÉRATION DE POLICE JUDICIAIRE";
             const dateTitle = `DU ${getVal('date_op') || '(DATE)'}`;
-            context.currentPage.drawText(mainTitle, { x: context.pageWidth / 2 - context.oswaldBoldFont.widthOfTextAtSize(mainTitle, 24) / 2, y: context.pageHeight / 2 + 10, font: context.oswaldBoldFont, size: 24, color: context.colors.accent });
-            context.currentPage.drawText(dateTitle, { x: context.pageWidth / 2 - context.oswaldBoldFont.widthOfTextAtSize(dateTitle, 18) / 2, y: context.pageHeight / 2 - 20, font: context.oswaldBoldFont, size: 18, color: context.colors.text });
+            context.currentPage.drawText(mainTitle, { x: context.pageWidth / 2 - context.helveticaBoldFont.widthOfTextAtSize(mainTitle, 24) / 2, y: context.pageHeight / 2 + 10, font: context.helveticaBoldFont, size: 24, color: context.colors.accent });
+            context.currentPage.drawText(dateTitle, { x: context.pageWidth / 2 - context.helveticaBoldFont.widthOfTextAtSize(dateTitle, 18) / 2, y: context.pageHeight / 2 - 20, font: context.helveticaBoldFont, size: 18, color: context.colors.text });
 
             // Page 2: Situation
             addNewPage();
@@ -934,7 +919,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             // Page 5: Mission
             addNewPage();
             drawTitle("2. MISSION");
-            drawWrappedText(getVal('missions_psig'), { font: context.oswaldBoldFont, size: 28, x: context.margin });
+            drawWrappedText(getVal('missions_psig'), { font: context.helveticaBoldFont, size: 28, x: context.margin });
             
             // Page 6: Exécution
             addNewPage();
@@ -981,14 +966,14 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             addNewPage();
             drawTitle("Conduites à tenir");
             drawSubTitle("Générales");
-            drawWrappedText(getVal('cat_generales'), {x: context.margin, font: context.oswaldBoldFont});
+            drawWrappedText(getVal('cat_generales'), {x: context.margin, font: context.helveticaBoldFont});
             const noGoText = getVal('no_go');
             if (noGoText) {
                 drawSubTitle("NO GO");
-                drawWrappedText(noGoText, { x: context.margin, font: context.oswaldBoldFont, size: 14.4, color: rgb(1, 0.2, 0.2) });
+                drawWrappedText(noGoText, { x: context.margin, font: context.helveticaBoldFont, size: 14.4, color: rgb(1, 0.2, 0.2) });
             }
             drawSubTitle("Liaison");
-            drawWrappedText(getVal('cat_liaison'), {x: context.margin, font: context.oswaldBoldFont});
+            drawWrappedText(getVal('cat_liaison'), {x: context.margin, font: context.helveticaBoldFont});
 
             // Photo Pages
             await drawImagesFromContainer('photo_container_transport_pr', 'Transport PSIG vers PR');
@@ -1002,8 +987,8 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             // Final Page
             addNewPage();
             const finalText = "Avez vous des questions ?";
-            const finalTextWidth = context.oswaldBoldFont.widthOfTextAtSize(finalText, 48);
-            context.currentPage.drawText(finalText, { x: context.pageWidth / 2 - finalTextWidth / 2, y: context.pageHeight / 2, font: context.oswaldBoldFont, size: 48, color: context.colors.accent });
+            const finalTextWidth = context.helveticaBoldFont.widthOfTextAtSize(finalText, 48);
+            context.currentPage.drawText(finalText, { x: context.pageWidth / 2 - finalTextWidth / 2, y: context.pageHeight / 2, font: context.helveticaBoldFont, size: 48, color: context.colors.accent });
 
             const pdfBytes = await pdfDoc.save();
             return { pdfBytes, formData };
