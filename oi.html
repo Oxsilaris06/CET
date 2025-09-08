@@ -429,17 +429,43 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             item.innerHTML = `<label>ME${container.children.length + 1}:</label><input type="text" class="me-input" value="${value}" oninput="saveFormData()"><button type="button" class="remove-btn" onclick="this.parentElement.remove(); saveFormData();">❌</button>`;
             container.appendChild(item);
         }
-        function addTimeEvent(type='T0', hour='', desc='') {
+        
+        function addTimeEvent(type_from_load, hour_from_load = '', desc_from_load) {
             const container = document.getElementById('time_events_container');
+            const isLoadingFromFile = type_from_load !== undefined;
+
+            let type, hour = hour_from_load, desc;
+
+            if (isLoadingFromFile) {
+                type = type_from_load;
+                desc = desc_from_load;
+            } else {
+                const currentEventCount = container.children.length;
+                const prefilledData = [
+                    { type: 'T0', desc: 'Rasso PSIG' },
+                    { type: 'T1', desc: 'Départ PR' },
+                    { type: 'T2', desc: 'Départ LE' },
+                    { type: 'T3', desc: 'MEP TERMINÉ' },
+                    { type: 'T4', desc: 'TOP ACTION' },
+                ];
+                const defaultValues = prefilledData[currentEventCount] || { type: `T${currentEventCount}`, desc: ''};
+                type = defaultValues.type;
+                desc = defaultValues.desc;
+            }
+
             const item = document.createElement('div');
             item.className = 'dynamic-list-item time-item draggable';
             item.id = `event_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
             item.setAttribute('draggable', 'true');
-            item.innerHTML = `<select class="time-type-select" onchange="saveFormData()">${['T0','T1','T2','T3','T4','T5'].map(t=>`<option value="${t}" ${t===type?'selected':''}>${t}</option>`).join('')}</select><input type="time" class="time-hour-input" value="${hour}" onchange="saveFormData()"><input type="text" class="time-description-input" placeholder="Description" value="${desc}" oninput="saveFormData()"><button type="button" class="remove-btn" onclick="this.parentElement.remove(); saveFormData();">❌</button>`;
+            const optionsHtml = ['T0','T1','T2','T3','T4','T5'].map(t => 
+                `<option value="${t}" ${t === type ? 'selected' : ''}>${t}</option>`
+            ).join('');
+            item.innerHTML = `<select class="time-type-select" onchange="saveFormData()">${optionsHtml}</select><input type="time" class="time-hour-input" value="${hour}" onchange="saveFormData()"><input type="text" class="time-description-input" placeholder="Description" value="${desc || ''}" oninput="saveFormData()"><button type="button" class="remove-btn" onclick="this.parentElement.remove(); saveFormData();">❌</button>`;
             container.appendChild(item);
         }
 
-        // --- PATRACDVR & MEMBER MODAL MANAGEMENT (BUG FIXED) ---
+
+        // --- PATRACDVR & MEMBER MODAL MANAGEMENT ---
         function addPatracdvrRow(vehicle = availableVehicles[0], members = []) {
             const container = document.getElementById('patracdvr_container');
             const row = document.createElement('div');
@@ -460,17 +486,16 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             const addMemberButton = row.querySelector('.add-btn');
 
             row.querySelector('.remove-btn').addEventListener('click', () => { row.remove(); saveFormData(); });
-            row.querySelector('.collapsible-header').addEventListener('click', e => e.currentTarget.parentElement.classList.toggle('open'));
             
             addMemberButton.addEventListener('click', () => {
-                addPatracdvrMember(membersContainer); // Pass the element directly
+                addPatracdvrMember(membersContainer);
             });
             
-            enableDragAndDrop(membersContainer); // Pass the element to the drag and drop handler
+            enableDragAndDrop(membersContainer);
             members.forEach(m => addPatracdvrMember(membersContainer, m));
         }
 
-        function addPatracdvrMember(containerElement, data = {}) { // Accepts an element, not an ID
+        function addPatracdvrMember(containerElement, data = {}) {
             if (!containerElement) return;
 
             const btn = document.createElement('button');
@@ -566,7 +591,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
         }
 
         // --- DRAG & DROP ---
-        function enableDragAndDrop(container) { // Accepts element directly
+        function enableDragAndDrop(container) {
             if (!container) return;
             let draggedItem = null;
             container.addEventListener('dragstart', e => {
@@ -616,6 +641,16 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
 
         // --- EVENT LISTENERS & INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', () => {
+            document.querySelector('.container').addEventListener('click', (event) => {
+                const header = event.target.closest('.collapsible-header');
+                if (header) {
+                    const container = header.parentElement;
+                    if (container && container.classList.contains('collapsible-container')) {
+                        container.classList.toggle('open');
+                    }
+                }
+            });
+            
             const modal = document.getElementById('editMemberModal');
             const form = document.getElementById('editMemberForm');
             document.getElementById('modal_saveBtn').addEventListener('click', () => {
@@ -682,12 +717,11 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             showStep(currentStep);
         });
         
-        // --- PDF GENERATION (FONT UPDATED) ---
+        // --- PDF GENERATION ---
         async function buildPdf() {
             const { PDFDocument, rgb, PageSizes, StandardFonts } = PDFLib;
             const pdfDoc = await PDFDocument.create();
             
-            // Using standard, readable Helvetica font
             const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
             const helveticaBoldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
             
@@ -714,7 +748,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             };
             
             const addNewPage = () => {
-                context.currentPage = context.pdfDoc.addPage([PageSizes.A4[1], PageSizes.A4[0]]); // Landscape
+                context.currentPage = context.pdfDoc.addPage([PageSizes.A4[1], PageSizes.A4[0]]);
                 const { width, height } = context.currentPage.getSize();
                 context.pageWidth = width; context.pageHeight = height;
                 context.y = height - context.margin;
@@ -780,7 +814,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     const rowHeight = maxLines * (size + 2) + 2 * rowPadding;
                     if (currentY - rowHeight < context.margin) {
                         addNewPage(); currentY = context.y;
-                        drawRow(headers, true); // Redraw header on new page
+                        drawRow(headers, true);
                     }
                     currentY -= rowHeight;
                     let currentX = startX;
@@ -841,7 +875,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                         const image = await pdfDoc.embedJpg(imageBytes);
                         const { width, height } = context.currentPage.getSize();
                         const paddedW = width - context.margin * 2;
-                        const paddedH = height - context.margin * 2 - 30; // space for title
+                        const paddedH = height - context.margin * 2 - 30;
                         const scaled = image.scaleToFit(paddedW, paddedH);
                         const x = (width - scaled.width) / 2;
                         const y = (height - scaled.height) / 2 + 15;
@@ -857,14 +891,12 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             };
             
             // --- PDF CONSTRUCTION ---
-            // Page 1: Title
             addNewPage();
             const mainTitle = "OPÉRATION DE POLICE JUDICIAIRE";
             const dateTitle = `DU ${getVal('date_op') || '(DATE)'}`;
             context.currentPage.drawText(mainTitle, { x: context.pageWidth / 2 - context.helveticaBoldFont.widthOfTextAtSize(mainTitle, 24) / 2, y: context.pageHeight / 2 + 10, font: context.helveticaBoldFont, size: 24, color: context.colors.accent });
             context.currentPage.drawText(dateTitle, { x: context.pageWidth / 2 - context.helveticaBoldFont.widthOfTextAtSize(dateTitle, 18) / 2, y: context.pageHeight / 2 - 20, font: context.helveticaBoldFont, size: 18, color: context.colors.text });
 
-            // Page 2: Situation
             addNewPage();
             drawTitle("1. SITUATION");
             drawSubTitle("1.1 Situation Générale");
@@ -872,7 +904,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             drawSubTitle("1.2 Situation Particulière");
             drawWrappedText(getVal('situation_particuliere'), { size: 14 });
 
-            // Page 3: Adversaire
             addNewPage();
             drawTitle("1.3 ADVERSAIRE");
             const photoInput = document.querySelector('#adversary_photo_container .photo-input');
@@ -909,7 +940,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             drawTable(adversaireHeaders, adversaireRows.filter(r => r[1] && r[1].trim() !== 'à'), [150, tableWidth - 150], context.margin);
             context.y = Math.min(context.y, photoBottomY - 20);
             
-            // Page 4: Environnement
             addNewPage();
             drawTitle("1.4 ENVIRONNEMENT");
             drawSubTitle("Ami(e)s (soutien)"); drawWrappedText(getVal('amies'), { size: 14 });
@@ -917,12 +947,10 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             drawSubTitle("Population"); drawWrappedText(getVal('population'), { size: 14 });
             drawSubTitle("Cadre juridique"); drawWrappedText(getVal('cadre_juridique'), { size: 14 });
             
-            // Page 5: Mission
             addNewPage();
             drawTitle("2. MISSION");
             drawWrappedText(getVal('missions_psig'), { font: context.helveticaBoldFont, size: 28, x: context.margin });
             
-            // Page 6: Exécution
             addNewPage();
             drawTitle("3. EXÉCUTION");
             const execText = `En vue d'appréhender le mis en cause et empêcher la déperdition des preuves,\nJe veux, le ${getVal('date_execution') || '(date)'} à partir de ${getVal('heure_execution') || '(heure)'}, pour une action ${getVal('type_action') || '(type d\'action)'} investir le domicile\nprésumé de ${getVal('nom_adversaire') || '(nom de l\'adversaire)'} après avoir bouclé celui-ci.`;
@@ -936,20 +964,17 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             drawSubTitle("Hypothèses");
             drawWrappedText(`H1: ${getVal('hypothese_h1')}\nH2: ${getVal('hypothese_h2')}\nH3: ${getVal('hypothese_h3')}`, { size: 14 });
 
-            // Page 7: Articulation (INDIA)
             addNewPage();
             drawTitle("4. ARTICULATION");
             drawWrappedText(`Place du Chef (Générale): ${getVal('place_chef')}`, { size: 14, x: context.margin });
             drawSubTitle("Équipe INDIA (INTER)");
             drawWrappedText(`Mission: ${getVal('india_mission')}\nObjectif: ${getVal('india_objectif')}\nItinéraire: ${getVal('india_itineraire')}\nPoints Particuliers: ${getVal('india_points_particuliers')}\n\nConduite à Tenir:\n${getVal('india_cat')}`);
             
-            // Page 8: Articulation (AO)
             addNewPage();
             drawTitle("4. ARTICULATION (Suite)");
             drawSubTitle("Équipe Appui/Observation (AO) - ZMSPCP");
             drawWrappedText(`Zone d'installation (Z): ${getVal('ao_zone_installation')}\nMission (M): ${getVal('ao_mission')}\nSecteur de surveillance (S): ${getVal('ao_secteur_surveillance')}\nPoints Particuliers (P): ${getVal('ao_points_particuliers')}\nPlace du Chef (P): ${getVal('ao_place_chef')}\n\nConduite à Tenir (C):\n${getVal('ao_cat')}`);
 
-            // Page 9: PATRACDVR
             addNewPage();
             drawTitle("5. PATRACDVR");
             const patracHeaders = ["Trigramme", "Fonction", "Armement", "Équip. 1", "Équip. 2", "Tenue", "GPB"];
@@ -963,7 +988,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 }
             }
             
-            // Page 10: CAT
             addNewPage();
             drawTitle("Conduites à tenir");
             drawSubTitle("Générales");
@@ -976,7 +1000,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             drawSubTitle("Liaison");
             drawWrappedText(getVal('cat_liaison'), {x: context.margin, font: context.helveticaBoldFont});
 
-            // Photo Pages
             await drawImagesFromContainer('photo_container_transport_pr', 'Transport PSIG vers PR');
             await drawImagesFromContainer('photo_container_transport_domicile', 'Transport PR vers Domicile');
             await drawImagesFromContainer('photo_container_itineraire_exterieur', 'Itinéraire Extérieur India');
@@ -985,7 +1008,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             await drawImagesFromContainer('photo_container_bapteme_terrain', 'Baptême terrain');
             await drawImagesFromContainer('photo_container_emplacement_ao', 'Emplacement AO');
 
-            // Final Page
             addNewPage();
             const finalText = "Avez vous des questions ?";
             const finalTextWidth = context.helveticaBoldFont.widthOfTextAtSize(finalText, 48);
