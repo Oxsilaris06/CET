@@ -731,6 +731,15 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
             const helveticaBoldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
             
+            let backgroundImage = null;
+            try {
+                const bgImageUrl = 'Fd.png';
+                const bgImageBytes = await fetch(bgImageUrl).then(res => res.arrayBuffer());
+                backgroundImage = await pdfDoc.embedPng(bgImageBytes);
+            } catch (e) {
+                console.warn("L'image de fond 'Fd.png' n'a pas pu être chargée.", e);
+            }
+
             saveFormData();
             const formDataString = localStorage.getItem('oiFormData');
             if (!formDataString) { alert("Aucune donnée à générer."); return null; }
@@ -810,53 +819,44 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             
             const drawRichText = (parts, options = {}) => {
                 let { x = context.margin, size = 12, lineHeight = 4 } = options;
+                if (!parts || parts.length === 0) return;
                 checkY(size + lineHeight + 10);
-                let currentX = x;
+                
+                const fullText = parts.map(p => p.text).join('');
+                const lines = wrapText(fullText, context.helveticaFont, size, context.pageWidth - x - context.margin);
+                
+                let partIndex = 0;
+                let charIndexInPart = 0;
 
-                const lines = [];
-                let currentLine = [];
-                const maxWidth = context.pageWidth - context.margin - x;
+                for(const line of lines){
+                    if(checkY(size + lineHeight)) { }
+                    let currentX = x;
+                    let remainingLine = line;
 
-                const measureLine = (line) => line.reduce((acc, part) => acc + part.font.widthOfTextAtSize(part.text, size), 0);
-
-                for (const part of parts) {
-                    const font = part.bold ? context.helveticaBoldFont : context.helveticaFont;
-                    const words = part.text.split(/(\s+)/); // Split on spaces but keep them
-
-                    for (const word of words) {
-                        if (word.includes('\n')) {
-                            const subWords = word.split('\n');
-                            currentLine.push({ ...part, text: subWords[0], font });
-                            lines.push(currentLine);
-                            currentLine = [];
-                            if(subWords.length > 1 && subWords[1]){
-                                currentLine.push({ ...part, text: subWords[1], font});
-                            }
-                            continue;
+                    while(remainingLine.length > 0 && partIndex < parts.length){
+                        const part = parts[partIndex];
+                        const font = part.bold ? context.helveticaBoldFont : context.helveticaFont;
+                        const color = part.color || context.colors.text;
+                        const partText = part.text.substring(charIndexInPart);
+                        
+                        let textToDraw = partText;
+                        if(partText.length > remainingLine.length){
+                            textToDraw = partText.substring(0, remainingLine.length);
                         }
 
-                        const wordWidth = font.widthOfTextAtSize(word, size);
-                        if (measureLine(currentLine) + wordWidth > maxWidth && currentLine.length > 0) {
-                            lines.push(currentLine);
-                            currentLine = [];
-                        }
-                        currentLine.push({ ...part, text: word, font });
-                    }
-                }
-                lines.push(currentLine);
+                        context.currentPage.drawText(textToDraw, {x: currentX, y: context.y, font, size, color});
+                        currentX += font.widthOfTextAtSize(textToDraw, size);
+                        remainingLine = remainingLine.substring(textToDraw.length);
+                        charIndexInPart += textToDraw.length;
 
-                for (const line of lines) {
-                    if (checkY(size + lineHeight)) {
-                       currentX = x;
-                    }
-                    for (const part of line) {
-                        context.currentPage.drawText(part.text, { x: currentX, y: context.y, font: part.font, size, color: part.color || context.colors.text });
-                        currentX += part.font.widthOfTextAtSize(part.text, size);
+                        if(charIndexInPart >= part.text.length){
+                            partIndex++;
+                            charIndexInPart = 0;
+                        }
                     }
                     context.y -= (size + lineHeight);
-                    currentX = x;
                 }
-                context.y -= 10;
+                 context.y -= 10;
             };
 
             const drawTable = (headers, rows, columnWidths, startX) => {
@@ -953,10 +953,13 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             const defaultColor = context.colors.text;
 
             addNewPage();
+            if (backgroundImage) {
+                context.currentPage.drawImage(backgroundImage, { x: 0, y: 0, width: context.pageWidth, height: context.pageHeight });
+            }
             const mainTitle = "OPÉRATION DE POLICE JUDICIAIRE";
             const dateTitle = `DU ${getVal('date_op') || '(DATE)'}`;
-            context.currentPage.drawText(mainTitle, { x: context.pageWidth / 2 - context.helveticaBoldFont.widthOfTextAtSize(mainTitle, 24) / 2, y: context.pageHeight / 2 + 10, font: context.helveticaBoldFont, size: 24, color: context.colors.accent });
-            context.currentPage.drawText(dateTitle, { x: context.pageWidth / 2 - context.helveticaBoldFont.widthOfTextAtSize(dateTitle, 18) / 2, y: context.pageHeight / 2 - 20, font: context.helveticaBoldFont, size: 18, color: context.colors.text });
+            context.currentPage.drawText(mainTitle, { x: context.pageWidth / 2 - context.helveticaBoldFont.widthOfTextAtSize(mainTitle, 24) / 2, y: context.pageHeight / 2 + 10, font: context.helveticaBoldFont, size: 24, color: blueColor });
+            context.currentPage.drawText(dateTitle, { x: context.pageWidth / 2 - context.helveticaBoldFont.widthOfTextAtSize(dateTitle, 18) / 2, y: context.pageHeight / 2 - 20, font: context.helveticaBoldFont, size: 18, color: defaultColor });
 
             addNewPage();
             drawTitle("1. SITUATION");
@@ -1038,7 +1041,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             drawRichText([{ text: "Objectif (O): ", bold: true, color: blueColor }, { text: getVal('india_objectif'), color: defaultColor }], { x: context.margin + 15 });
             drawRichText([{ text: "Itinéraire (I): ", bold: true, color: blueColor }, { text: getVal('india_itineraire'), color: defaultColor }], { x: context.margin + 15 });
             drawRichText([{ text: "Points Particuliers (P): ", bold: true, color: blueColor }, { text: getVal('india_points_particuliers'), color: defaultColor }], { x: context.margin + 15 });
-            drawRichText([{ text: "Conduite à Tenir (C):\n", bold: true, color: blueColor }]);
+            drawRichText([{ text: "Conduite à Tenir (C):\n", bold: true, color: blueColor }], { x: context.margin + 15 });
             drawRichText([
                 { text: "- Si décelé", bold: true, color: redColor }, { text: ", dynamiser jusqu'au domicile.\n", color: defaultColor },
                 { text: "- Si présence tierce personne", bold: true, color: redColor }, { text: " lors de la progression, contrôler.\n", color: defaultColor },
@@ -1059,13 +1062,13 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             drawRichText([{ text: "Secteur de surveillance (S): ", bold: true, color: blueColor }, { text: getVal('ao_secteur_surveillance'), color: defaultColor }], { x: context.margin + 15 });
             drawRichText([{ text: "Points Particuliers (P): ", bold: true, color: blueColor }, { text: getVal('ao_points_particuliers'), color: defaultColor }], { x: context.margin + 15 });
             drawRichText([{ text: "Place du Chef (P): ", bold: true, color: blueColor }, { text: getVal('ao_place_chef'), color: defaultColor }], { x: context.margin + 15 });
-            drawRichText([{ text: "Conduite à Tenir (C):\n", bold: true, color: blueColor }]);
+            drawRichText([{ text: "Conduite à Tenir (C):\n", bold: true, color: blueColor }], { x: context.margin + 15 });
             drawRichText([
-                { text: "- Compte rendu de mise en place.\n", bold: true, color: redColor },
-                { text: "- Renseigner régulièrement.\n", bold: true, color: redColor },
+                { text: "- Compte rendu de mise en place.", bold: true, color: redColor }, { text: "\n", color: defaultColor },
+                { text: "- Renseigner régulièrement.", bold: true, color: redColor }, { text: "\n", color: defaultColor },
                 { text: "- Si décelé", bold: true, color: redColor },{ text: ", CR.\n", color: defaultColor },
-                { text: "- Si fuite", bold: true, color: redColor }, { text: ", CR direction fuite + interpellation ", color: defaultColor }, { text: "si rapport de force favorable.\n", bold: true, color: redColor },
-                { text: "- Si rébellion", bold: true, color: redColor }, { text: ", usage du strict minimum de force nécessaire.", color: defaultColor },
+                { text: "- Si fuite", bold: true, color: redColor }, { text: ", CR direction fuite + interpellation ", color: defaultColor }, { text: "si rapport de force favorable.", bold: true, color: redColor }, { text: "\n", color: defaultColor },
+                { text: "- Si rébellion,", bold: true, color: redColor }, { text: " usage du strict minimum de force nécessaire.", color: defaultColor },
             ], { x: context.margin + 15 });
 
             await drawImagesFromContainer('photo_container_emplacement_ao', 'Emplacement AO');
@@ -1102,9 +1105,12 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             drawWrappedText(getVal('cat_liaison'), {x: context.margin, font: context.helveticaBoldFont});
             
             addNewPage();
+             if (backgroundImage) {
+                context.currentPage.drawImage(backgroundImage, { x: 0, y: 0, width: context.pageWidth, height: context.pageHeight });
+            }
             const finalText = "Avez vous des questions ?";
             const finalTextWidth = context.helveticaBoldFont.widthOfTextAtSize(finalText, 48);
-            context.currentPage.drawText(finalText, { x: context.pageWidth / 2 - finalTextWidth / 2, y: context.pageHeight / 2, font: context.helveticaBoldFont, size: 48, color: context.colors.accent });
+            context.currentPage.drawText(finalText, { x: context.pageWidth / 2 - finalTextWidth / 2, y: context.pageHeight / 2, font: context.helveticaBoldFont, size: 48, color: blueColor });
 
             const pdfBytes = await pdfDoc.save();
             return { pdfBytes, formData };
