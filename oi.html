@@ -801,7 +801,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 });
                 context.y -= (totalHeight + 10);
             };
-            
+
             const drawRichText = (parts, options = {}) => {
                 let { x = context.margin, size = 12, lineHeight = 4 } = options;
                 if (!parts || parts.length === 0) return;
@@ -813,33 +813,26 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 for (const part of parts) {
                     const font = part.bold ? context.helveticaBoldFont : context.helveticaFont;
                     const color = part.color || context.colors.text;
-                    const words = part.text.split(/(\s+)/);
+                    const tokens = part.text.split(/(\s+|\n)/).filter(t => t);
 
-                    for (const word of words) {
-                        if (word === '') continue;
-                        
-                        const wordWidth = font.widthOfTextAtSize(word, size);
-                        const isNewline = word.includes('\n');
+                    for (const token of tokens) {
+                        if (token.match(/^\n+$/)) { // If the token is one or more newlines
+                            context.y -= (size + lineHeight) * token.length;
+                            currentX = x;
+                            checkY(size + lineHeight);
+                            continue;
+                        }
 
-                        if (currentX > x && !isNewline && currentX + wordWidth > maxWidth) {
+                        const tokenWidth = font.widthOfTextAtSize(token, size);
+
+                        if (currentX > x && !token.match(/^\s+$/) && currentX + tokenWidth > maxWidth) {
                             context.y -= (size + lineHeight);
                             currentX = x;
                             checkY(size + lineHeight);
                         }
                         
-                        const segments = word.split('\n');
-                        for(let i=0; i < segments.length; i++) {
-                            const segment = segments[i];
-                            if (i > 0) {
-                                context.y -= (size + lineHeight);
-                                currentX = x;
-                                checkY(size + lineHeight);
-                            }
-                            if(segment) {
-                                context.currentPage.drawText(segment, { x: currentX, y: context.y, font, size, color });
-                                currentX += font.widthOfTextAtSize(segment, size);
-                            }
-                        }
+                        context.currentPage.drawText(token, { x: currentX, y: context.y, font, size, color });
+                        currentX += tokenWidth;
                     }
                 }
                 context.y -= (size + lineHeight + 10);
@@ -1027,7 +1020,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             drawRichText([{ text: "Objectif (O): ", bold: true, color: blueColor }, { text: getVal('india_objectif'), color: defaultColor }], { x: context.margin + 15 });
             drawRichText([{ text: "Itinéraire (I): ", bold: true, color: blueColor }, { text: getVal('india_itineraire'), color: defaultColor }], { x: context.margin + 15 });
             drawRichText([{ text: "Points Particuliers (P): ", bold: true, color: blueColor }, { text: getVal('india_points_particuliers'), color: defaultColor }], { x: context.margin + 15 });
-            drawRichText([{ text: "Conduite à Tenir (C):", bold: true, color: blueColor }], { x: context.margin + 15 });
+            drawRichText([{ text: "Conduite à Tenir (C):\n", bold: true, color: blueColor }], { x: context.margin + 15 });
             drawRichText([
                 { text: "- Si décelé", bold: true, color: redColor }, { text: ", dynamiser jusqu'au domicile.\n", color: defaultColor },
                 { text: "- Si présence tierce personne", bold: true, color: redColor }, { text: " lors de la progression, contrôler.\n", color: defaultColor },
@@ -1048,7 +1041,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             drawRichText([{ text: "Secteur de surveillance (S): ", bold: true, color: blueColor }, { text: getVal('ao_secteur_surveillance'), color: defaultColor }], { x: context.margin + 15 });
             drawRichText([{ text: "Points Particuliers (P): ", bold: true, color: blueColor }, { text: getVal('ao_points_particuliers'), color: defaultColor }], { x: context.margin + 15 });
             drawRichText([{ text: "Place du Chef (P): ", bold: true, color: blueColor }, { text: getVal('ao_place_chef'), color: defaultColor }], { x: context.margin + 15 });
-            drawRichText([{ text: "Conduite à Tenir (C):", bold: true, color: blueColor }], { x: context.margin + 15 });
+            drawRichText([{ text: "Conduite à Tenir (C):\n", bold: true, color: blueColor }], { x: context.margin + 15 });
             drawRichText([
                 { text: "- Compte rendu de mise en place.\n", bold: true, color: redColor },
                 { text: "- Renseigner régulièrement.\n", bold: true, color: redColor },
