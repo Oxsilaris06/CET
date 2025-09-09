@@ -723,7 +723,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             showStep(currentStep);
         });
         
-        // --- PDF GENERATION ---
+        // --- PDF GENERATION (STABLE VERSION) ---
         async function buildPdf() {
             const { PDFDocument, StandardFonts, rgb, PageSizes } = PDFLib;
             const pdfDoc = await PDFDocument.create();
@@ -784,7 +784,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             };
 
             const drawSubTitle = (text) => {
-                if (checkY(25)) { context.y -= 10; } // Adjusted for better spacing
+                if (checkY(25)) { context.y -= 10; }
                 context.currentPage.drawText(text, { x: context.margin, y: context.y, font: helveticaBoldFont, size: 14, color: context.colors.accent });
                 context.y -= 25;
             };
@@ -869,35 +869,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     context.currentPage.drawText(title, { x: width / 2 - textWidth / 2, y: y - 20, font: helveticaBoldFont, size: 14, color: context.colors.text });
                 }
             };
-
-             const processImage = async (file, maxWidth = 1280, quality = 0.85) => {
-                return new Promise((resolve, reject) => {
-                    const reader = new FileReader();
-                    reader.readAsDataURL(file);
-                    reader.onload = (event) => {
-                        const img = new Image();
-                        img.src = event.target.result;
-                        img.onload = () => {
-                            const canvas = document.createElement('canvas');
-                            const ctx = canvas.getContext('2d');
-                            let { width, height } = img;
-                            if (width > maxWidth) {
-                                height = (maxWidth / width) * height;
-                                width = maxWidth;
-                            }
-                            canvas.width = width;
-                            canvas.height = height;
-                            ctx.drawImage(img, 0, 0, width, height);
-                            canvas.toBlob(blob => {
-                                const blobReader = new FileReader();
-                                blobReader.onloadend = () => resolve(blobReader.result);
-                                blobReader.readAsArrayBuffer(blob);
-                             }, 'image/jpeg', quality);
-                        };
-                        img.onerror = reject;
-                    }
-                });
-            };
             
             // --- Construction du PDF ---
             addNewPage();
@@ -970,10 +941,10 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             drawTitle("2. MISSION");
             drawWrappedText(getVal('missions_psig'), { font: helveticaBoldFont, size: 30, x: context.margin });
             
+            // --- PHOTO ORDER RE-ARRANGED AS PER REQUEST ---
             await drawImagesFromContainer('photo_container_transport_pr', 'Transport PSIG vers PR');
             await drawImagesFromContainer('photo_container_transport_domicile', 'Transport PR vers Domicile');
             await drawImagesFromContainer('photo_container_bapteme_terrain', 'Baptême terrain');
-            await drawImagesFromContainer('photo_container_emplacement_ao', 'Emplacement AO');
 
             addNewPage();
             drawTitle("3. EXÉCUTION");
@@ -982,7 +953,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             const redColor = rgb(1, 0, 0);
             let currentX = context.margin;
             
-            const parts = [
+            const exec_parts = [
                 { text: "En vue ", isHighlight: false },
                 { text: "d'appréhender le mis en cause et empêcher la déperdition des preuves,\n", isHighlight: false },
                 { text: "Je veux", isHighlight: true },
@@ -996,18 +967,15 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 { text: `${getVal('nom_adversaire') || '(nom de l\'adversaire)'}`, isHighlight: true },
                 { text: " après avoir bouclé celui-ci.", isHighlight: false },
             ];
-            
             checkY(70);
-            
-            parts.forEach(part => {
+            exec_parts.forEach(part => {
                 const font = part.isHighlight ? helveticaBoldFont : helveticaFont;
                 const size = part.isHighlight ? highlightFontSize : baseFontSize;
                 const color = part.isHighlight ? redColor : context.colors.text;
-
                 const lines = part.text.split('\n');
                 lines.forEach((line, index) => {
                     const textWidth = font.widthOfTextAtSize(line, size);
-                    if (currentX + textWidth > context.pageWidth - context.margin) {
+                    if (currentX > context.margin && currentX + textWidth > context.pageWidth - context.margin) {
                         context.y -= (baseFontSize + 4);
                         currentX = context.margin;
                     }
@@ -1021,7 +989,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             });
             context.y -= (baseFontSize + 4) * 2;
 
-
             drawSubTitle("Chronologie des temps");
             const chronoHeaders = ["Type", "Heure", "Description"];
             const chronoRows = (formData.time_events || []).map(e => [e.type || 'N/A', e.hour || 'N/A', e.description || 'N/A']);
@@ -1032,27 +999,41 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
 
             addNewPage();
             drawTitle("4. ARTICULATION");
-            drawWrappedText(`Place du Chef: ${getVal('place_chef')}`, { size: 14, x: context.margin });
+            drawWrappedText(`Place du Chef (Générale): ${getVal('place_chef')}`, { size: 14, x: context.margin });
             
             drawSubTitle("Équipe INDIA (INTER)");
-            drawWrappedText(`Mission: ${getVal('india_mission')}`);
-            drawWrappedText(`Objectif: ${getVal('india_objectif')}`);
-            drawWrappedText(`Itinéraire: ${getVal('india_itineraire')}`);
-            drawWrappedText(`Points Particuliers: ${getVal('india_points_particuliers')}`);
-            drawWrappedText(`Conduite à Tenir:\n${getVal('india_cat')}`);
-
+            drawSubTitle("Mission:");
+            drawWrappedText(getVal('india_mission'));
+            drawSubTitle("Objectif:");
+            drawWrappedText(getVal('india_objectif'));
+            drawSubTitle("Itinéraire:");
+            drawWrappedText(getVal('india_itineraire'));
+            drawSubTitle("Points Particuliers:");
+            drawWrappedText(getVal('india_points_particuliers'));
+            drawSubTitle("Conduite à Tenir:");
+            drawWrappedText(getVal('india_cat'));
+            
             await drawImagesFromContainer('photo_container_itineraire_exterieur', 'Itinéraire Extérieur India');
             await drawImagesFromContainer('photo_container_itineraire_interieur', 'Itinéraire Intérieur India');
             await drawImagesFromContainer('photo_container_cellule_effraction', 'Cellule Effraction');
             
             addNewPage();
             drawTitle("4. ARTICULATION (Suite)");
-            drawSubTitle("Équipe Appui/Observation (AO)");
-            drawWrappedText(`Mission: ${getVal('ao_mission')}`);
-            drawWrappedText(`Objectif: ${getVal('ao_objectif')}`);
-            drawWrappedText(`Itinéraire: ${getVal('ao_itineraire')}`);
-            drawWrappedText(`Points Particuliers: ${getVal('ao_points_particuliers')}`);
-            drawWrappedText(`Conduite à Tenir:\n${getVal('ao_cat')}`);
+            drawSubTitle("Équipe Appui/Observation (AO) - ZMSPCP");
+            drawSubTitle("Zone d'installation (Z):");
+            drawWrappedText(getVal('ao_zone_installation'));
+            drawSubTitle("Mission (M):");
+            drawWrappedText(getVal('ao_mission'));
+            drawSubTitle("Secteur de surveillance (S):");
+            drawWrappedText(getVal('ao_secteur_surveillance'));
+            drawSubTitle("Points Particuliers (P):");
+            drawWrappedText(getVal('ao_points_particuliers'));
+            drawSubTitle("Place du Chef (P):");
+            drawWrappedText(getVal('ao_place_chef'));
+            drawSubTitle("Conduite à Tenir (C):");
+            drawWrappedText(getVal('ao_cat'));
+            
+            await drawImagesFromContainer('photo_container_emplacement_ao', 'Emplacement AO');
             
             addNewPage();
             drawTitle("5. PATRACDVR");
@@ -1075,12 +1056,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             const noGoText = getVal('no_go');
             if (noGoText) {
                 drawSubTitle("NO GO");
-                drawWrappedText(noGoText, {
-                    x: context.margin, 
-                    font: helveticaBoldFont, 
-                    size: 14.4,
-                    color: rgb(1, 0.2, 0.2)
-                });
+                drawWrappedText(noGoText, { x: context.margin, font: helveticaBoldFont, size: 14.4, color: rgb(1, 0.2, 0.2) });
             }
 
             drawSubTitle("Liaison");
