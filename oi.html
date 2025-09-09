@@ -789,21 +789,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 context.currentPage.drawText(text, { x: context.margin, y: context.y, font: context.helveticaBoldFont, size: 14, color: context.colors.accent });
                 context.y -= 25;
             };
-
-            const wrapText = (text, font, size, maxWidth) => {
-                const words = String(text || '').replace(/\n/g, ' \n ').split(' ');
-                let lines = []; let currentLine = '';
-                for (const word of words) {
-                    if (word === '\n') { lines.push(currentLine); currentLine = ''; continue; }
-                    const lineWithWord = currentLine === '' ? word : `${currentLine} ${word}`;
-                    if (font.widthOfTextAtSize(lineWithWord, size) > maxWidth && currentLine !== '') {
-                        lines.push(currentLine);
-                        currentLine = word;
-                    } else { currentLine = lineWithWord; }
-                }
-                lines.push(currentLine);
-                return lines;
-            };
             
             const drawWrappedText = (text, options = {}) => {
                 const { font = context.helveticaFont, size = 12, color = context.colors.text, x = context.margin + 15, lineHeight = 4 } = options;
@@ -820,43 +805,44 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             const drawRichText = (parts, options = {}) => {
                 let { x = context.margin, size = 12, lineHeight = 4 } = options;
                 if (!parts || parts.length === 0) return;
+
                 checkY(size + lineHeight + 10);
-                
-                const fullText = parts.map(p => p.text).join('');
-                const lines = wrapText(fullText, context.helveticaFont, size, context.pageWidth - x - context.margin);
-                
-                let partIndex = 0;
-                let charIndexInPart = 0;
+                let currentX = x;
+                const maxWidth = context.pageWidth - x - context.margin;
 
-                for(const line of lines){
-                    if(checkY(size + lineHeight)) { }
-                    let currentX = x;
-                    let remainingLine = line;
+                for (const part of parts) {
+                    const font = part.bold ? context.helveticaBoldFont : context.helveticaFont;
+                    const color = part.color || context.colors.text;
+                    const words = part.text.split(/(\s+)/);
 
-                    while(remainingLine.length > 0 && partIndex < parts.length){
-                        const part = parts[partIndex];
-                        const font = part.bold ? context.helveticaBoldFont : context.helveticaFont;
-                        const color = part.color || context.colors.text;
-                        const partText = part.text.substring(charIndexInPart);
+                    for (const word of words) {
+                        if (word === '') continue;
                         
-                        let textToDraw = partText;
-                        if(partText.length > remainingLine.length){
-                            textToDraw = partText.substring(0, remainingLine.length);
+                        const wordWidth = font.widthOfTextAtSize(word, size);
+                        const isNewline = word.includes('\n');
+
+                        if (currentX > x && !isNewline && currentX + wordWidth > maxWidth) {
+                            context.y -= (size + lineHeight);
+                            currentX = x;
+                            checkY(size + lineHeight);
                         }
-
-                        context.currentPage.drawText(textToDraw, {x: currentX, y: context.y, font, size, color});
-                        currentX += font.widthOfTextAtSize(textToDraw, size);
-                        remainingLine = remainingLine.substring(textToDraw.length);
-                        charIndexInPart += textToDraw.length;
-
-                        if(charIndexInPart >= part.text.length){
-                            partIndex++;
-                            charIndexInPart = 0;
+                        
+                        const segments = word.split('\n');
+                        for(let i=0; i < segments.length; i++) {
+                            const segment = segments[i];
+                            if (i > 0) {
+                                context.y -= (size + lineHeight);
+                                currentX = x;
+                                checkY(size + lineHeight);
+                            }
+                            if(segment) {
+                                context.currentPage.drawText(segment, { x: currentX, y: context.y, font, size, color });
+                                currentX += font.widthOfTextAtSize(segment, size);
+                            }
                         }
                     }
-                    context.y -= (size + lineHeight);
                 }
-                 context.y -= 10;
+                context.y -= (size + lineHeight + 10);
             };
 
             const drawTable = (headers, rows, columnWidths, startX) => {
@@ -1041,7 +1027,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             drawRichText([{ text: "Objectif (O): ", bold: true, color: blueColor }, { text: getVal('india_objectif'), color: defaultColor }], { x: context.margin + 15 });
             drawRichText([{ text: "Itinéraire (I): ", bold: true, color: blueColor }, { text: getVal('india_itineraire'), color: defaultColor }], { x: context.margin + 15 });
             drawRichText([{ text: "Points Particuliers (P): ", bold: true, color: blueColor }, { text: getVal('india_points_particuliers'), color: defaultColor }], { x: context.margin + 15 });
-            drawRichText([{ text: "Conduite à Tenir (C):\n", bold: true, color: blueColor }], { x: context.margin + 15 });
+            drawRichText([{ text: "Conduite à Tenir (C):", bold: true, color: blueColor }], { x: context.margin + 15 });
             drawRichText([
                 { text: "- Si décelé", bold: true, color: redColor }, { text: ", dynamiser jusqu'au domicile.\n", color: defaultColor },
                 { text: "- Si présence tierce personne", bold: true, color: redColor }, { text: " lors de la progression, contrôler.\n", color: defaultColor },
@@ -1062,12 +1048,12 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             drawRichText([{ text: "Secteur de surveillance (S): ", bold: true, color: blueColor }, { text: getVal('ao_secteur_surveillance'), color: defaultColor }], { x: context.margin + 15 });
             drawRichText([{ text: "Points Particuliers (P): ", bold: true, color: blueColor }, { text: getVal('ao_points_particuliers'), color: defaultColor }], { x: context.margin + 15 });
             drawRichText([{ text: "Place du Chef (P): ", bold: true, color: blueColor }, { text: getVal('ao_place_chef'), color: defaultColor }], { x: context.margin + 15 });
-            drawRichText([{ text: "Conduite à Tenir (C):\n", bold: true, color: blueColor }], { x: context.margin + 15 });
+            drawRichText([{ text: "Conduite à Tenir (C):", bold: true, color: blueColor }], { x: context.margin + 15 });
             drawRichText([
-                { text: "- Compte rendu de mise en place.", bold: true, color: redColor }, { text: "\n", color: defaultColor },
-                { text: "- Renseigner régulièrement.", bold: true, color: redColor }, { text: "\n", color: defaultColor },
+                { text: "- Compte rendu de mise en place.\n", bold: true, color: redColor },
+                { text: "- Renseigner régulièrement.\n", bold: true, color: redColor },
                 { text: "- Si décelé", bold: true, color: redColor },{ text: ", CR.\n", color: defaultColor },
-                { text: "- Si fuite", bold: true, color: redColor }, { text: ", CR direction fuite + interpellation ", color: defaultColor }, { text: "si rapport de force favorable.", bold: true, color: redColor }, { text: "\n", color: defaultColor },
+                { text: "- Si fuite", bold: true, color: redColor }, { text: ", CR direction fuite + interpellation ", color: defaultColor }, { text: "si rapport de force favorable.\n", bold: true, color: redColor },
                 { text: "- Si rébellion,", bold: true, color: redColor }, { text: " usage du strict minimum de force nécessaire.", color: defaultColor },
             ], { x: context.margin + 15 });
 
