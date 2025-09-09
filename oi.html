@@ -199,7 +199,13 @@
 
                 <div class="wizard-step">
                     <h2>2. Mission du PSIG</h2>
-                    <textarea id="missions_psig" rows="8"></textarea>
+                    <textarea id="missions_psig" rows="8">
+
+INTERPELLER L'OBJECTIF.
+
+ASSISTER LORS DE LA PERQUISITION.
+
+CONDUITE AU LIEU DE GAV.</textarea>
                 </div>
 
                 <div class="wizard-step">
@@ -297,7 +303,7 @@
                     <textarea id="cat_generales" rows="6">- Si rébellion, user du strict niveau de force nécessaire
 - Si retranché, alerter en mesure de se ré-articuler
 - Si tente de fuir, alerter en mesure de jalonner/interpeller
-- UDA : Article L435-1 du CSI + légitime défense</textarea>
+- UDA : Article L435-1 du CSI + légitime défense</textarea>
                     
                     <h3>NO GO</h3>
                     <textarea id="no_go" rows="3" placeholder="Saisir les conditions de désengagement..."></textarea>
@@ -801,6 +807,57 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 });
                 context.y -= (totalHeight + 10);
             };
+            
+            const drawRichText = (parts, options = {}) => {
+                let { x = context.margin, size = 12, lineHeight = 4 } = options;
+                checkY(size + lineHeight + 10);
+                let currentX = x;
+
+                const lines = [];
+                let currentLine = [];
+                const maxWidth = context.pageWidth - context.margin - x;
+
+                const measureLine = (line) => line.reduce((acc, part) => acc + part.font.widthOfTextAtSize(part.text, size), 0);
+
+                for (const part of parts) {
+                    const font = part.bold ? context.helveticaBoldFont : context.helveticaFont;
+                    const words = part.text.split(/(\s+)/); // Split on spaces but keep them
+
+                    for (const word of words) {
+                        if (word.includes('\n')) {
+                            const subWords = word.split('\n');
+                            currentLine.push({ ...part, text: subWords[0], font });
+                            lines.push(currentLine);
+                            currentLine = [];
+                            if(subWords.length > 1 && subWords[1]){
+                                currentLine.push({ ...part, text: subWords[1], font});
+                            }
+                            continue;
+                        }
+
+                        const wordWidth = font.widthOfTextAtSize(word, size);
+                        if (measureLine(currentLine) + wordWidth > maxWidth && currentLine.length > 0) {
+                            lines.push(currentLine);
+                            currentLine = [];
+                        }
+                        currentLine.push({ ...part, text: word, font });
+                    }
+                }
+                lines.push(currentLine);
+
+                for (const line of lines) {
+                    if (checkY(size + lineHeight)) {
+                       currentX = x;
+                    }
+                    for (const part of line) {
+                        context.currentPage.drawText(part.text, { x: currentX, y: context.y, font: part.font, size, color: part.color || context.colors.text });
+                        currentX += part.font.widthOfTextAtSize(part.text, size);
+                    }
+                    context.y -= (size + lineHeight);
+                    currentX = x;
+                }
+                context.y -= 10;
+            };
 
             const drawTable = (headers, rows, columnWidths, startX) => {
                 let currentY = context.y;
@@ -891,6 +948,10 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             };
             
             // --- PDF CONSTRUCTION ---
+            const redColor = rgb(1, 0.2, 0.2);
+            const blueColor = context.colors.accent;
+            const defaultColor = context.colors.text;
+
             addNewPage();
             const mainTitle = "OPÉRATION DE POLICE JUDICIAIRE";
             const dateTitle = `DU ${getVal('date_op') || '(DATE)'}`;
@@ -951,6 +1012,10 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             drawTitle("2. MISSION");
             drawWrappedText(getVal('missions_psig'), { font: context.helveticaBoldFont, size: 28, x: context.margin });
             
+            await drawImagesFromContainer('photo_container_transport_pr', 'Transport PSIG vers PR');
+            await drawImagesFromContainer('photo_container_transport_domicile', 'Transport PR vers Domicile');
+            await drawImagesFromContainer('photo_container_bapteme_terrain', 'Baptême terrain');
+
             addNewPage();
             drawTitle("3. EXÉCUTION");
             const execText = `En vue d'appréhender le mis en cause et empêcher la déperdition des preuves,\nJe veux, le ${getVal('date_execution') || '(date)'} à partir de ${getVal('heure_execution') || '(heure)'}, pour une action ${getVal('type_action') || '(type d\'action)'} investir le domicile\nprésumé de ${getVal('nom_adversaire') || '(nom de l\'adversaire)'} après avoir bouclé celui-ci.`;
@@ -967,13 +1032,43 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             addNewPage();
             drawTitle("4. ARTICULATION");
             drawWrappedText(`Place du Chef (Générale): ${getVal('place_chef')}`, { size: 14, x: context.margin });
-            drawSubTitle("Équipe INDIA (INTER)");
-            drawWrappedText(`Mission: ${getVal('india_mission')}\nObjectif: ${getVal('india_objectif')}\nItinéraire: ${getVal('india_itineraire')}\nPoints Particuliers: ${getVal('india_points_particuliers')}\n\nConduite à Tenir:\n${getVal('india_cat')}`);
+            
+            drawSubTitle("Équipe INDIA (INTER) - MOIPC");
+            drawRichText([{ text: "Mission (M): ", bold: true, color: blueColor }, { text: getVal('india_mission'), color: defaultColor }], { x: context.margin + 15 });
+            drawRichText([{ text: "Objectif (O): ", bold: true, color: blueColor }, { text: getVal('india_objectif'), color: defaultColor }], { x: context.margin + 15 });
+            drawRichText([{ text: "Itinéraire (I): ", bold: true, color: blueColor }, { text: getVal('india_itineraire'), color: defaultColor }], { x: context.margin + 15 });
+            drawRichText([{ text: "Points Particuliers (P): ", bold: true, color: blueColor }, { text: getVal('india_points_particuliers'), color: defaultColor }], { x: context.margin + 15 });
+            drawRichText([{ text: "Conduite à Tenir (C):\n", bold: true, color: blueColor }]);
+            drawRichText([
+                { text: "- Si décelé", bold: true, color: redColor }, { text: ", dynamiser jusqu'au domicile.\n", color: defaultColor },
+                { text: "- Si présence tierce personne", bold: true, color: redColor }, { text: " lors de la progression, contrôler.\n", color: defaultColor },
+                { text: "- Si fuite", bold: true, color: redColor }, { text: ", CR direction fuite + interpellation.\n", color: defaultColor },
+                { text: "- Si rébellion", bold: true, color: redColor }, { text: ", usage du strict niveau de force nécessaire.\n", color: defaultColor },
+                { text: "- Si retranchement", bold: true, color: redColor }, { text: ", CR + réarticulation pour fixer l'adversaire.", color: defaultColor },
+            ], { x: context.margin + 15 });
+
+            await drawImagesFromContainer('photo_container_itineraire_exterieur', 'Itinéraire Extérieur India');
+            await drawImagesFromContainer('photo_container_itineraire_interieur', 'Itinéraire Intérieur India');
+            await drawImagesFromContainer('photo_container_cellule_effraction', 'Cellule Effraction');
             
             addNewPage();
             drawTitle("4. ARTICULATION (Suite)");
             drawSubTitle("Équipe Appui/Observation (AO) - ZMSPCP");
-            drawWrappedText(`Zone d'installation (Z): ${getVal('ao_zone_installation')}\nMission (M): ${getVal('ao_mission')}\nSecteur de surveillance (S): ${getVal('ao_secteur_surveillance')}\nPoints Particuliers (P): ${getVal('ao_points_particuliers')}\nPlace du Chef (P): ${getVal('ao_place_chef')}\n\nConduite à Tenir (C):\n${getVal('ao_cat')}`);
+            drawRichText([{ text: "Zone d'installation (Z): ", bold: true, color: blueColor }, { text: getVal('ao_zone_installation'), color: defaultColor }], { x: context.margin + 15 });
+            drawRichText([{ text: "Mission (M): ", bold: true, color: blueColor }, { text: getVal('ao_mission'), color: defaultColor }], { x: context.margin + 15 });
+            drawRichText([{ text: "Secteur de surveillance (S): ", bold: true, color: blueColor }, { text: getVal('ao_secteur_surveillance'), color: defaultColor }], { x: context.margin + 15 });
+            drawRichText([{ text: "Points Particuliers (P): ", bold: true, color: blueColor }, { text: getVal('ao_points_particuliers'), color: defaultColor }], { x: context.margin + 15 });
+            drawRichText([{ text: "Place du Chef (P): ", bold: true, color: blueColor }, { text: getVal('ao_place_chef'), color: defaultColor }], { x: context.margin + 15 });
+            drawRichText([{ text: "Conduite à Tenir (C):\n", bold: true, color: blueColor }]);
+            drawRichText([
+                { text: "- Compte rendu de mise en place.\n", bold: true, color: redColor },
+                { text: "- Renseigner régulièrement.\n", bold: true, color: redColor },
+                { text: "- Si décelé", bold: true, color: redColor },{ text: ", CR.\n", color: defaultColor },
+                { text: "- Si fuite", bold: true, color: redColor }, { text: ", CR direction fuite + interpellation ", color: defaultColor }, { text: "si rapport de force favorable.\n", bold: true, color: redColor },
+                { text: "- Si rébellion", bold: true, color: redColor }, { text: ", usage du strict minimum de force nécessaire.", color: defaultColor },
+            ], { x: context.margin + 15 });
+
+            await drawImagesFromContainer('photo_container_emplacement_ao', 'Emplacement AO');
 
             addNewPage();
             drawTitle("5. PATRACDVR");
@@ -991,23 +1086,21 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             addNewPage();
             drawTitle("Conduites à tenir");
             drawSubTitle("Générales");
-            drawWrappedText(getVal('cat_generales'), {x: context.margin, font: context.helveticaBoldFont});
+            drawRichText([
+                { text: "- Si rébellion", bold: true, color: redColor }, { text: ", user du strict niveau de force nécessaire\n", color: defaultColor },
+                { text: "- Si retranché", bold: true, color: redColor }, { text: ", alerter en mesure de se ré-articuler\n", color: defaultColor },
+                { text: "- Si tente de fuir", bold: true, color: redColor }, { text: ", alerter en mesure de jalonner/interpeller\n", color: defaultColor },
+                { text: "- UDA", bold: true, color: redColor }, { text: " : Article L435-1 du CSI + légitime défense", color: defaultColor },
+            ], {x: context.margin + 15});
+
             const noGoText = getVal('no_go');
             if (noGoText) {
                 drawSubTitle("NO GO");
-                drawWrappedText(noGoText, { x: context.margin, font: context.helveticaBoldFont, size: 14.4, color: rgb(1, 0.2, 0.2) });
+                drawWrappedText(noGoText, { x: context.margin, font: context.helveticaBoldFont, size: 14.4, color: redColor });
             }
             drawSubTitle("Liaison");
             drawWrappedText(getVal('cat_liaison'), {x: context.margin, font: context.helveticaBoldFont});
-
-            await drawImagesFromContainer('photo_container_transport_pr', 'Transport PSIG vers PR');
-            await drawImagesFromContainer('photo_container_transport_domicile', 'Transport PR vers Domicile');
-            await drawImagesFromContainer('photo_container_itineraire_exterieur', 'Itinéraire Extérieur India');
-            await drawImagesFromContainer('photo_container_itineraire_interieur', 'Itinéraire Intérieur India');
-            await drawImagesFromContainer('photo_container_cellule_effraction', 'Cellule Effraction');
-            await drawImagesFromContainer('photo_container_bapteme_terrain', 'Baptême terrain');
-            await drawImagesFromContainer('photo_container_emplacement_ao', 'Emplacement AO');
-
+            
             addNewPage();
             const finalText = "Avez vous des questions ?";
             const finalTextWidth = context.helveticaBoldFont.widthOfTextAtSize(finalText, 48);
