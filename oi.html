@@ -851,60 +851,22 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 context.y = currentY - 20;
             };
 
-            const processImage = async (file, maxWidth = 1280, quality = 0.85) => {
-                return new Promise((resolve, reject) => {
-                    const img = new Image();
-                    const objectUrl = URL.createObjectURL(file);
-                    img.src = objectUrl;
-                    img.onload = () => {
-                        URL.revokeObjectURL(objectUrl);
-                        const canvas = document.createElement('canvas');
-                        const ctx = canvas.getContext('2d');
-                        let { width, height } = img;
-
-                        if (width > maxWidth) {
-                            height = (maxWidth / width) * height;
-                            width = maxWidth;
-                        }
-
-                        canvas.width = width;
-                        canvas.height = height;
-                        ctx.drawImage(img, 0, 0, width, height);
-
-                        canvas.toBlob(blob => {
-                            if (!blob) return reject(new Error('Canvas to Blob conversion failed'));
-                            resolve(blob.arrayBuffer());
-                        }, 'image/jpeg', quality);
-                    };
-                    img.onerror = (err) => {
-                        URL.revokeObjectURL(objectUrl);
-                        reject(err);
-                    };
-                });
-            };
-            
             const drawImagesFromContainer = async (containerId, title) => {
                 const inputs = Array.from(document.querySelectorAll(`#${containerId} .photo-input`)).filter(i => i.files.length > 0);
                 for (const input of inputs) {
                     addNewPage();
                     const file = input.files[0];
-                    try {
-                        const imageBytes = await processImage(file);
-                        const image = await pdfDoc.embedJpg(imageBytes);
-                        const { width, height } = context.currentPage.getSize();
-                        const paddedW = width - context.margin * 2;
-                        const paddedH = height - context.margin * 2 - 30;
-                        const scaled = image.scaleToFit(paddedW, paddedH);
-                        const x = (width - scaled.width) / 2;
-                        const y = (height - scaled.height) / 2 + 15;
-                        context.currentPage.drawImage(image, { x, y, width: scaled.width, height: scaled.height });
-                        const textWidth = helveticaBoldFont.widthOfTextAtSize(title, 14);
-                        context.currentPage.drawText(title, { x: width / 2 - textWidth / 2, y: y - 20, font: helveticaBoldFont, size: 14, color: context.colors.text });
-                    } catch (e) {
-                        console.error("Impossible de traiter ou d'intégrer l'image:", e);
-                        drawTitle("Erreur d'image");
-                        drawWrappedText(`Impossible de charger l'image pour : ${title}`);
-                    }
+                    const imageBytes = await processImage(file);
+                    const image = await pdfDoc.embedJpg(imageBytes);
+                    const { width, height } = context.currentPage.getSize();
+                    const paddedW = width - context.margin * 2;
+                    const paddedH = height - context.margin * 2 - 30;
+                    const scaled = image.scaleToFit(paddedW, paddedH);
+                    const x = (width - scaled.width) / 2;
+                    const y = (height - scaled.height) / 2 + 15;
+                    context.currentPage.drawImage(image, { x, y, width: scaled.width, height: scaled.height });
+                    const textWidth = helveticaBoldFont.widthOfTextAtSize(title, 14);
+                    context.currentPage.drawText(title, { x: width / 2 - textWidth / 2, y: y - 20, font: helveticaBoldFont, size: 14, color: context.colors.text });
                 }
             };
             
@@ -929,9 +891,29 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             
             addNewPage();
             drawTitle("1.3 ADVERSAIRE");
+            
+            const initialAdversaireY = context.y;
+            let photoBottomY = initialAdversaireY;
             const photoInput = document.querySelector('#adversary_photo_container .photo-input');
+
+            if (photoInput && photoInput.files.length > 0) {
+                const photoBoxWidth = 200;
+                const photoBoxX = context.pageWidth - context.margin - photoBoxWidth;
+                const file = photoInput.files[0];
+                const imageBytes = await processImage(file);
+                const image = await pdfDoc.embedJpg(imageBytes);
+                const scaled = image.scaleToFit(photoBoxWidth - 10, context.pageHeight);
+                const photoBoxHeight = scaled.height + 10;
+                const frameY = initialAdversaireY - photoBoxHeight;
+                if (frameY >= context.margin) {
+                    context.currentPage.drawRectangle({ x: photoBoxX, y: frameY, width: photoBoxWidth, height: photoBoxHeight, borderColor: context.colors.accent, borderWidth: 1 });
+                    context.currentPage.drawImage(image, { x: photoBoxX + 5, y: frameY + 5, width: scaled.width, height: scaled.height });
+                    photoBottomY = frameY;
+                }
+            }
             const adversaireHeaders = ["Information", "Détail"];
             const meText = (formData.me_list || []).map((me, i) => `ME${i+1}: ${me}`).join(' | ');
+
             const adversaireRows = [
                 ['Nom/Prénom', getVal('nom_adversaire')], ['Domicile', getVal('domicile_adversaire')],
                 ['Naissance', `${getVal('date_naissance')} à ${getVal('lieu_naissance')}`],
@@ -943,44 +925,10 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 ['Armes', getVal('armes_connues')],
                 ['Moyens Employés', meText],
             ];
-
-            if (photoInput && photoInput.files.length > 0) {
-                const initialAdversaireY = context.y;
-                const photoBoxWidth = 200;
-                const photoMargin = 10;
-                const tableWidth = context.pageWidth - context.margin * 2 - photoBoxWidth - photoMargin;
-                
-                context.y = initialAdversaireY;
-                drawTable(adversaireHeaders, adversaireRows.filter(r => r[1] && r[1].trim() !== 'à'), [150, tableWidth - 150], context.margin);
-                const tableBottomY = context.y;
-
-                let photoBottomY = 0;
-                const photoBoxX = context.margin + tableWidth + photoMargin;
-                const file = photoInput.files[0];
-                
-                try {
-                    const imageBytes = await processImage(file);
-                    const image = await pdfDoc.embedJpg(imageBytes);
-                    const scaled = image.scaleToFit(photoBoxWidth - 10, initialAdversaireY - context.margin);
-                    const photoBoxHeight = scaled.height + 10;
-                    const frameY = initialAdversaireY - photoBoxHeight;
-
-                    if(frameY >= context.margin) {
-                        context.currentPage.drawRectangle({ x: photoBoxX, y: frameY, width: photoBoxWidth, height: photoBoxHeight, borderColor: context.colors.accent, borderWidth: 1 });
-                        context.currentPage.drawImage(image, { x: photoBoxX + 5, y: frameY + 5, width: scaled.width, height: scaled.height });
-                        photoBottomY = frameY;
-                    } else {
-                        photoBottomY = tableBottomY;
-                    }
-                } catch(e) {
-                    console.error("Échec du traitement de la photo de l'adversaire:", e);
-                    photoBottomY = tableBottomY;
-                }
-                context.y = Math.min(tableBottomY, photoBottomY);
-            } else {
-                const tableWidth = context.pageWidth - context.margin * 2;
-                drawTable(adversaireHeaders, adversaireRows.filter(r => r[1] && r[1].trim() !== 'à'), [150, tableWidth - 150], context.margin);
-            }
+            const tableWidth = context.pageWidth - context.margin * 2 - (photoInput.files.length > 0 ? 210 : 0);
+            context.y = initialAdversaireY;
+            drawTable(adversaireHeaders, adversaireRows.filter(r => r[1] && r[1].trim() !== 'à'), [150, tableWidth - 150], context.margin);
+            context.y = Math.min(context.y, photoBottomY);
 
             addNewPage();
             drawTitle("1.4 ENVIRONNEMENT");
@@ -999,8 +947,47 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
 
             addNewPage();
             drawTitle("3. EXÉCUTION");
-            const execText = `En vue d'appréhender le mis en cause et empêcher la déperdition des preuves,\nJe veux, le ${getVal('date_execution') || '(date)'} à partir de ${getVal('heure_execution') || '(heure)'}, pour une action de type ${getVal('type_action') || '(type d\'action)'}, investir le domicile\nprésumé de ${getVal('nom_adversaire') || '(nom de l\'adversaire)'} après avoir bouclé celui-ci.`;
-            drawWrappedText(execText, { size: 16, x: context.margin, lineHeight: 8 });
+            const baseFontSize = 14;
+            const highlightFontSize = 16;
+            const redColor = rgb(1, 0, 0);
+            let currentX = context.margin;
+            
+            const exec_parts = [
+                { text: "En vue ", isHighlight: false },
+                { text: "d'appréhender le mis en cause et empêcher la déperdition des preuves,\n", isHighlight: false },
+                { text: "Je veux", isHighlight: true },
+                { text: ", le ", isHighlight: false },
+                { text: `${getVal('date_execution') || '(date)'}`, isHighlight: true },
+                { text: " à partir de ", isHighlight: false },
+                { text: `${getVal('heure_execution') || '(heure)'}`, isHighlight: true },
+                { text: ", pour une action ", isHighlight: false },
+                { text: `${getVal('type_action') || '(type d\'action)'}`, isHighlight: true },
+                { text: " investir le domicile\nprésumé de ", isHighlight: false },
+                { text: `${getVal('nom_adversaire') || '(nom de l\'adversaire)'}`, isHighlight: true },
+                { text: " après avoir bouclé celui-ci.", isHighlight: false },
+            ];
+            checkY(70);
+            exec_parts.forEach(part => {
+                const font = part.isHighlight ? helveticaBoldFont : helveticaFont;
+                const size = part.isHighlight ? highlightFontSize : baseFontSize;
+                const color = part.isHighlight ? redColor : context.colors.text;
+                const lines = part.text.split('\n');
+                lines.forEach((line, index) => {
+                    const textWidth = font.widthOfTextAtSize(line, size);
+                    if (currentX > context.margin && currentX + textWidth > context.pageWidth - context.margin) {
+                        context.y -= (baseFontSize + 4);
+                        currentX = context.margin;
+                    }
+                    context.currentPage.drawText(line, { x: currentX, y: context.y, font, size, color });
+                    currentX += textWidth;
+                    if (index < lines.length - 1) {
+                        context.y -= (baseFontSize + 4);
+                        currentX = context.margin;
+                    }
+                });
+            });
+            context.y -= (baseFontSize + 4) * 2;
+
 
             drawSubTitle("Chronologie des temps");
             const chronoHeaders = ["Type", "Heure", "Description"];
@@ -1054,4 +1041,81 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             for (const row of (formData.patracdvr_rows || [])) {
                 if(row.vehicle) {
                     drawSubTitle(`Véhicule: ${row.vehicle}`);
-                    const patracRows = row.members.filter(m => m.trigramme).map(m => 
+                    const patracRows = row.members.filter(m => m.trigramme).map(m => [m.trigramme, m.fonction, m.armement, m.equipement, m.equipement2, m.tenue, m.gpb]);
+                    if (patracRows.length > 0) {
+                        drawTable(patracHeaders, patracRows, [90, 100, 90, 100, 100, 90, 90], context.margin);
+                    }
+                }
+            }
+            
+            addNewPage();
+            drawTitle("Conduites à tenir");
+            drawSubTitle("Générales");
+            drawWrappedText(getVal('cat_generales'), {x: context.margin, font: helveticaBoldFont});
+
+            const noGoText = getVal('no_go');
+            if (noGoText) {
+                drawSubTitle("NO GO");
+                drawWrappedText(noGoText, { x: context.margin, font: helveticaBoldFont, size: 14.4, color: rgb(1, 0.2, 0.2) });
+            }
+
+            drawSubTitle("Liaison");
+            drawWrappedText(getVal('cat_liaison'), {x: context.margin, font: helveticaBoldFont});
+
+            addNewPage();
+            if (backgroundImage) {
+                context.currentPage.drawImage(backgroundImage, { x: 0, y: 0, width: context.pageWidth, height: context.pageHeight });
+            }
+            const finalText = "Avez vous des questions?";
+            const finalTextWidth = helveticaBoldFont.widthOfTextAtSize(finalText, 48);
+            context.currentPage.drawText(finalText, { x: context.pageWidth / 2 - finalTextWidth / 2, y: context.pageHeight / 2, font: helveticaBoldFont, size: 48, color: context.colors.accent });
+
+            const pdfBytes = await pdfDoc.save();
+            return { pdfBytes, formData };
+        }
+
+        async function handlePdfAction(isPreview) {
+            if (typeof PDFLib === 'undefined') {
+                alert("Erreur: La bibliothèque PDF n'est pas encore chargée.");
+                return;
+            }
+            
+            const btn = isPreview ? previewBtn : generatePdfBtn;
+            const originalText = btn.textContent;
+            btn.textContent = 'Génération...';
+            btn.disabled = true;
+
+            try {
+                const result = await buildPdf();
+                if (!result) return;
+                
+                const { pdfBytes, formData } = result;
+                const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+                const url = URL.createObjectURL(blob);
+
+                if (isPreview) {
+                    window.open(url, '_blank');
+                } else {
+                    const getVal = (id) => formData[id] || 'RAS';
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = `OI_${getVal('date_op').replace(/[\/\\?%*:|"<>]/g, '-')}_${getVal('nom_adversaire').replace(/ /g, '_')}.pdf`;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                }
+
+            } catch (error) {
+                console.error("Erreur critique lors de la génération du PDF:", error);
+                alert("Une erreur critique est survenue. Consultez la console (F12).");
+            } finally {
+                btn.textContent = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        previewBtn.addEventListener('click', () => handlePdfAction(true));
+        generatePdfBtn.addEventListener('click', () => handlePdfAction(false));
+    </script>
+</body>
+</html>
