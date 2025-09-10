@@ -851,6 +851,37 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 context.y = currentY - 20;
             };
 
+            const processImage = async (file, maxWidth = 1280, quality = 0.85) => {
+                return new Promise((resolve, reject) => {
+                     const reader = new FileReader();
+                     reader.readAsDataURL(file);
+                     reader.onload = (event) => {
+                         const img = new Image();
+                         img.src = event.target.result;
+                         img.onload = () => {
+                             const canvas = document.createElement('canvas');
+                             const ctx = canvas.getContext('2d');
+                             let { width, height } = img;
+                             if (width > maxWidth) {
+                                 height = (maxWidth / width) * height;
+                                 width = maxWidth;
+                             }
+                             canvas.width = width;
+                             canvas.height = height;
+                             ctx.drawImage(img, 0, 0, width, height);
+                             canvas.toBlob(blob => {
+                                 const blobReader = new FileReader();
+                                 blobReader.onloadend = () => resolve(blobReader.result);
+                                 blobReader.onerror = reject;
+                                 blobReader.readAsArrayBuffer(blob);
+                             }, 'image/jpeg', quality);
+                         };
+                         img.onerror = reject;
+                     }
+                     reader.onerror = reject;
+                });
+            };
+            
             const drawImagesFromContainer = async (containerId, title) => {
                 const inputs = Array.from(document.querySelectorAll(`#${containerId} .photo-input`)).filter(i => i.files.length > 0);
                 for (const input of inputs) {
@@ -891,29 +922,9 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             
             addNewPage();
             drawTitle("1.3 ADVERSAIRE");
-            
-            const initialAdversaireY = context.y;
-            let photoBottomY = initialAdversaireY;
             const photoInput = document.querySelector('#adversary_photo_container .photo-input');
-
-            if (photoInput && photoInput.files.length > 0) {
-                const photoBoxWidth = 200;
-                const photoBoxX = context.pageWidth - context.margin - photoBoxWidth;
-                const file = photoInput.files[0];
-                const imageBytes = await processImage(file);
-                const image = await pdfDoc.embedJpg(imageBytes);
-                const scaled = image.scaleToFit(photoBoxWidth - 10, context.pageHeight);
-                const photoBoxHeight = scaled.height + 10;
-                const frameY = initialAdversaireY - photoBoxHeight;
-                if (frameY >= context.margin) {
-                    context.currentPage.drawRectangle({ x: photoBoxX, y: frameY, width: photoBoxWidth, height: photoBoxHeight, borderColor: context.colors.accent, borderWidth: 1 });
-                    context.currentPage.drawImage(image, { x: photoBoxX + 5, y: frameY + 5, width: scaled.width, height: scaled.height });
-                    photoBottomY = frameY;
-                }
-            }
             const adversaireHeaders = ["Information", "Détail"];
             const meText = (formData.me_list || []).map((me, i) => `ME${i+1}: ${me}`).join(' | ');
-
             const adversaireRows = [
                 ['Nom/Prénom', getVal('nom_adversaire')], ['Domicile', getVal('domicile_adversaire')],
                 ['Naissance', `${getVal('date_naissance')} à ${getVal('lieu_naissance')}`],
@@ -925,10 +936,44 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 ['Armes', getVal('armes_connues')],
                 ['Moyens Employés', meText],
             ];
-            const tableWidth = context.pageWidth - context.margin * 2 - (photoInput.files.length > 0 ? 210 : 0);
-            context.y = initialAdversaireY;
-            drawTable(adversaireHeaders, adversaireRows.filter(r => r[1] && r[1].trim() !== 'à'), [150, tableWidth - 150], context.margin);
-            context.y = Math.min(context.y, photoBottomY);
+
+            if (photoInput && photoInput.files.length > 0) {
+                const initialAdversaireY = context.y;
+                const photoBoxWidth = 200;
+                const photoMargin = 10;
+                const tableWidth = context.pageWidth - context.margin * 2 - photoBoxWidth - photoMargin;
+                
+                context.y = initialAdversaireY;
+                drawTable(adversaireHeaders, adversaireRows.filter(r => r[1] && r[1].trim() !== 'à'), [150, tableWidth - 150], context.margin);
+                const tableBottomY = context.y;
+
+                let photoBottomY = 0;
+                const photoBoxX = context.margin + tableWidth + photoMargin;
+                const file = photoInput.files[0];
+                
+                try {
+                    const imageBytes = await processImage(file);
+                    const image = await pdfDoc.embedJpg(imageBytes);
+                    const scaled = image.scaleToFit(photoBoxWidth - 10, initialAdversaireY - context.margin);
+                    const photoBoxHeight = scaled.height + 10;
+                    const frameY = initialAdversaireY - photoBoxHeight;
+
+                    if(frameY >= context.margin) {
+                        context.currentPage.drawRectangle({ x: photoBoxX, y: frameY, width: photoBoxWidth, height: photoBoxHeight, borderColor: context.colors.accent, borderWidth: 1 });
+                        context.currentPage.drawImage(image, { x: photoBoxX + 5, y: frameY + 5, width: scaled.width, height: scaled.height });
+                        photoBottomY = frameY;
+                    } else {
+                        photoBottomY = tableBottomY;
+                    }
+                } catch(e) {
+                    console.error("Échec du traitement de la photo de l'adversaire:", e);
+                    photoBottomY = tableBottomY;
+                }
+                context.y = Math.min(tableBottomY, photoBottomY);
+            } else {
+                const tableWidth = context.pageWidth - context.margin * 2;
+                drawTable(adversaireHeaders, adversaireRows.filter(r => r[1] && r[1].trim() !== 'à'), [150, tableWidth - 150], context.margin);
+            }
 
             addNewPage();
             drawTitle("1.4 ENVIRONNEMENT");
@@ -953,8 +998,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             let currentX = context.margin;
             
             const exec_parts = [
-                { text: "En vue ", isHighlight: false },
-                { text: "d'appréhender le mis en cause et empêcher la déperdition des preuves,\n", isHighlight: false },
+                { text: "En vue d'appréhender le mis en cause et empêcher la déperdition des preuves,\n", isHighlight: false },
                 { text: "Je veux", isHighlight: true },
                 { text: ", le ", isHighlight: false },
                 { text: `${getVal('date_execution') || '(date)'}`, isHighlight: true },
