@@ -853,32 +853,33 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
 
             const processImage = async (file, maxWidth = 1280, quality = 0.85) => {
                 return new Promise((resolve, reject) => {
-                     const reader = new FileReader();
-                     reader.readAsDataURL(file);
-                     reader.onload = (event) => {
-                         const img = new Image();
-                         img.src = event.target.result;
-                         img.onload = () => {
-                             const canvas = document.createElement('canvas');
-                             const ctx = canvas.getContext('2d');
-                             let { width, height } = img;
-                             if (width > maxWidth) {
-                                 height = (maxWidth / width) * height;
-                                 width = maxWidth;
-                             }
-                             canvas.width = width;
-                             canvas.height = height;
-                             ctx.drawImage(img, 0, 0, width, height);
-                             canvas.toBlob(blob => {
-                                 const blobReader = new FileReader();
-                                 blobReader.onloadend = () => resolve(blobReader.result);
-                                 blobReader.onerror = reject;
-                                 blobReader.readAsArrayBuffer(blob);
-                             }, 'image/jpeg', quality);
-                         };
-                         img.onerror = reject;
-                     }
-                     reader.onerror = reject;
+                    const img = new Image();
+                    const objectUrl = URL.createObjectURL(file);
+                    img.src = objectUrl;
+                    img.onload = () => {
+                        URL.revokeObjectURL(objectUrl);
+                        const canvas = document.createElement('canvas');
+                        const ctx = canvas.getContext('2d');
+                        let { width, height } = img;
+
+                        if (width > maxWidth) {
+                            height = (maxWidth / width) * height;
+                            width = maxWidth;
+                        }
+
+                        canvas.width = width;
+                        canvas.height = height;
+                        ctx.drawImage(img, 0, 0, width, height);
+
+                        canvas.toBlob(blob => {
+                            if (!blob) return reject(new Error('Canvas to Blob conversion failed'));
+                            resolve(blob.arrayBuffer());
+                        }, 'image/jpeg', quality);
+                    };
+                    img.onerror = (err) => {
+                        URL.revokeObjectURL(objectUrl);
+                        reject(err);
+                    };
                 });
             };
             
@@ -887,17 +888,23 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 for (const input of inputs) {
                     addNewPage();
                     const file = input.files[0];
-                    const imageBytes = await processImage(file);
-                    const image = await pdfDoc.embedJpg(imageBytes);
-                    const { width, height } = context.currentPage.getSize();
-                    const paddedW = width - context.margin * 2;
-                    const paddedH = height - context.margin * 2 - 30;
-                    const scaled = image.scaleToFit(paddedW, paddedH);
-                    const x = (width - scaled.width) / 2;
-                    const y = (height - scaled.height) / 2 + 15;
-                    context.currentPage.drawImage(image, { x, y, width: scaled.width, height: scaled.height });
-                    const textWidth = helveticaBoldFont.widthOfTextAtSize(title, 14);
-                    context.currentPage.drawText(title, { x: width / 2 - textWidth / 2, y: y - 20, font: helveticaBoldFont, size: 14, color: context.colors.text });
+                    try {
+                        const imageBytes = await processImage(file);
+                        const image = await pdfDoc.embedJpg(imageBytes);
+                        const { width, height } = context.currentPage.getSize();
+                        const paddedW = width - context.margin * 2;
+                        const paddedH = height - context.margin * 2 - 30;
+                        const scaled = image.scaleToFit(paddedW, paddedH);
+                        const x = (width - scaled.width) / 2;
+                        const y = (height - scaled.height) / 2 + 15;
+                        context.currentPage.drawImage(image, { x, y, width: scaled.width, height: scaled.height });
+                        const textWidth = helveticaBoldFont.widthOfTextAtSize(title, 14);
+                        context.currentPage.drawText(title, { x: width / 2 - textWidth / 2, y: y - 20, font: helveticaBoldFont, size: 14, color: context.colors.text });
+                    } catch (e) {
+                        console.error("Impossible de traiter ou d'intégrer l'image:", e);
+                        drawTitle("Erreur d'image");
+                        drawWrappedText(`Impossible de charger l'image pour : ${title}`);
+                    }
                 }
             };
             
@@ -1047,31 +1054,4 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             for (const row of (formData.patracdvr_rows || [])) {
                 if(row.vehicle) {
                     drawSubTitle(`Véhicule: ${row.vehicle}`);
-                    const patracRows = row.members.filter(m => m.trigramme).map(m => [m.trigramme, m.fonction, m.armement, m.equipement, m.equipement2, m.tenue, m.gpb]);
-                    if (patracRows.length > 0) {
-                        drawTable(patracHeaders, patracRows, [90, 100, 90, 100, 100, 90, 90], context.margin);
-                    }
-                }
-            }
-            
-            addNewPage();
-            drawTitle("Conduites à tenir");
-            drawSubTitle("Générales");
-            drawWrappedText(getVal('cat_generales'), {x: context.margin, font: helveticaBoldFont});
-
-            const noGoText = getVal('no_go');
-            if (noGoText) {
-                drawSubTitle("NO GO");
-                drawWrappedText(noGoText, { x: context.margin, font: helveticaBoldFont, size: 14.4, color: rgb(1, 0.2, 0.2) });
-            }
-
-            drawSubTitle("Liaison");
-            drawWrappedText(getVal('cat_liaison'), {x: context.margin, font: helveticaBoldFont});
-
-            addNewPage();
-            if (backgroundImage) {
-                context.currentPage.drawImage(backgroundImage, { x: 0, y: 0, width: context.pageWidth, height: context.pageHeight });
-            }
-            const finalText = "Avez vous des questions?";
-            const finalTextWidth = helveticaBoldFont.widthOfTextAtSize(finalText, 48);
-            context.currentPage.drawText(finalText, { x: context.pageWidth /
+                    const patracRows = row.members.filter(m => m.trigramme).map(m => 
