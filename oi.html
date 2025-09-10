@@ -105,6 +105,8 @@
             #previewBtn { order: 3; } #generatePdfBtn { order: 4; }
         }
     </style>
+    <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
+    <script>eruda.init();</script>
 </head>
 <body class="dark-mode">
 
@@ -725,11 +727,10 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
         
         // --- PDF GENERATION ---
         
-        // Fonction utilitaire pour découper le texte (wrap)
         function wrapText(text, font, fontSize, maxWidth) {
             const words = text.split(' ');
             const lines = [];
-            if (words.length === 0) return [];
+            if (words.length === 0) return [""];
             let currentLine = words[0];
 
             for (let i = 1; i < words.length; i++) {
@@ -831,15 +832,16 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
 
                 checkY(size + lineHeight + 10);
                 let currentX = x;
-                const maxWidth = context.pageWidth - x - context.margin;
+                const maxWidth = context.pageWidth - context.margin;
 
                 for (const part of parts) {
                     const font = part.bold ? context.helveticaBoldFont : context.helveticaFont;
                     const color = part.color || context.colors.text;
-                    const tokens = part.text.split(/(\s+|\n)/).filter(t => t);
+                    const textToProcess = String(part.text || '');
+                    const tokens = textToProcess.split(/(\s+|\n)/).filter(t => t);
 
                     for (const token of tokens) {
-                        if (token.match(/^\n+$/)) { // If the token is one or more newlines
+                        if (token.match(/^\n+$/)) { 
                             context.y -= (size + lineHeight) * token.length;
                             currentX = x;
                             checkY(size + lineHeight);
@@ -848,7 +850,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
 
                         const tokenWidth = font.widthOfTextAtSize(token, size);
 
-                        if (currentX > x && !token.match(/^\s+$/) && currentX + tokenWidth > (x + maxWidth)) {
+                        if (currentX > x && !token.match(/^\s+$/) && currentX + tokenWidth > maxWidth) {
                             context.y -= (size + lineHeight);
                             currentX = x;
                             checkY(size + lineHeight);
@@ -860,50 +862,62 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 }
                 context.y -= (size + lineHeight + 10);
             };
-
+            
             const drawTable = (headers, rows, columnWidths, startX) => {
                 let currentY = context.y;
-                const rowPadding = 5; const headerFontSize = 10; const contentFontSize = 10;
-                
+                const rowPadding = 5;
+                const headerFontSize = 10;
+                const contentFontSize = 10;
+
                 const drawRow = (rowData, isHeader) => {
                     const font = isHeader ? context.helveticaBoldFont : context.helveticaFont;
                     const size = isHeader ? headerFontSize : contentFontSize;
+                    
                     const cellContents = rowData.map((text, i) => {
                         const cellText = String(text || '');
                         return wrapText(cellText, font, size, columnWidths[i] - 2 * rowPadding);
                     });
+
                     const maxLines = Math.max(...cellContents.map(lines => lines.length || 1));
                     const rowHeight = maxLines * (size + 2) + 2 * rowPadding;
+
                     if (currentY - rowHeight < context.margin) {
-                        addNewPage(); currentY = context.y;
-                        // Redraw header on new page
-                        const headerFont = context.helveticaBoldFont;
-                        const headerSize = headerFontSize;
-                        const headerCellContents = headers.map((text, i) => wrapText(text, headerFont, headerSize, columnWidths[i] - 2 * rowPadding));
-                        const headerMaxLines = Math.max(...headerCellContents.map(lines => lines.length || 1));
-                        const headerRowHeight = headerMaxLines * (headerSize + 2) + 2 * rowPadding;
-                        currentY -= headerRowHeight;
-                         let headerCurrentX = startX;
-                        headers.forEach((_, i) => {
-                            context.currentPage.drawRectangle({ x: headerCurrentX, y: currentY, width: columnWidths[i], height: headerRowHeight, borderColor: context.colors.accent, borderWidth: 0.5 });
-                            const lines = headerCellContents[i];
-                            lines.forEach((line, lineIndex) => {
-                                context.currentPage.drawText(line, { x: headerCurrentX + rowPadding, y: currentY + headerRowHeight - rowPadding - (lineIndex + 1) * (headerSize + 2) + 2, font: headerFont, size: headerSize, color: context.colors.text });
-                            });
-                            headerCurrentX += columnWidths[i];
-                        });
+                        addNewPage();
+                        currentY = context.y;
+                        if (!isHeader) {
+                            drawRow(headers, true); 
+                            currentY = context.y;
+                        }
                     }
+
                     currentY -= rowHeight;
                     let currentX = startX;
                     rowData.forEach((_, i) => {
-                        context.currentPage.drawRectangle({ x: currentX, y: currentY, width: columnWidths[i], height: rowHeight, borderColor: context.colors.accent, borderWidth: 0.5 });
+                        context.currentPage.drawRectangle({
+                            x: currentX,
+                            y: currentY,
+                            width: columnWidths[i],
+                            height: rowHeight,
+                            borderColor: context.colors.accent,
+                            borderWidth: 0.5
+                        });
                         const lines = cellContents[i];
                         lines.forEach((line, lineIndex) => {
-                            context.currentPage.drawText(line, { x: currentX + rowPadding, y: currentY + rowHeight - rowPadding - (lineIndex + 1) * (size + 2) + 2, font, size, color: context.colors.text });
+                            context.currentPage.drawText(line, {
+                                x: currentX + rowPadding,
+                                y: currentY + rowHeight - rowPadding - (lineIndex + 1) * (size + 2) + 2,
+                                font,
+                                size,
+                                color: context.colors.text
+                            });
                         });
                         currentX += columnWidths[i];
                     });
+                     if(isHeader) {
+                        context.y = currentY;
+                     }
                 };
+
                 drawRow(headers, true);
                 rows.forEach(row => drawRow(row, false));
                 context.y = currentY - 20;
