@@ -992,46 +992,8 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
 
             addNewPage();
             drawTitle("3. EXÉCUTION");
-            const baseFontSize = 14;
-            const highlightFontSize = 16;
-            const redColor = rgb(1, 0, 0);
-            let currentX = context.margin;
-            
-            const exec_parts = [
-                { text: "En vue d'appréhender le mis en cause et empêcher la déperdition des preuves,\n", isHighlight: false },
-                { text: "Je veux", isHighlight: true },
-                { text: ", le ", isHighlight: false },
-                { text: `${getVal('date_execution') || '(date)'}`, isHighlight: true },
-                { text: " à partir de ", isHighlight: false },
-                { text: `${getVal('heure_execution') || '(heure)'}`, isHighlight: true },
-                { text: ", pour une action ", isHighlight: false },
-                { text: `${getVal('type_action') || '(type d\'action)'}`, isHighlight: true },
-                { text: " investir le domicile\nprésumé de ", isHighlight: false },
-                { text: `${getVal('nom_adversaire') || '(nom de l\'adversaire)'}`, isHighlight: true },
-                { text: " après avoir bouclé celui-ci.", isHighlight: false },
-            ];
-            checkY(70);
-            exec_parts.forEach(part => {
-                const font = part.isHighlight ? helveticaBoldFont : helveticaFont;
-                const size = part.isHighlight ? highlightFontSize : baseFontSize;
-                const color = part.isHighlight ? redColor : context.colors.text;
-                const lines = part.text.split('\n');
-                lines.forEach((line, index) => {
-                    const textWidth = font.widthOfTextAtSize(line, size);
-                    if (currentX > context.margin && currentX + textWidth > context.pageWidth - context.margin) {
-                        context.y -= (baseFontSize + 4);
-                        currentX = context.margin;
-                    }
-                    context.currentPage.drawText(line, { x: currentX, y: context.y, font, size, color });
-                    currentX += textWidth;
-                    if (index < lines.length - 1) {
-                        context.y -= (baseFontSize + 4);
-                        currentX = context.margin;
-                    }
-                });
-            });
-            context.y -= (baseFontSize + 4) * 2;
-
+            const execText = `En vue d'appréhender le mis en cause et empêcher la déperdition des preuves,\nJe veux, le ${getVal('date_execution') || '(date)'} à partir de ${getVal('heure_execution') || '(heure)'}, pour une action de type ${getVal('type_action') || '(type d\'action)'}, investir le domicile\nprésumé de ${getVal('nom_adversaire') || '(nom de l\'adversaire)'} après avoir bouclé celui-ci.`;
+            drawWrappedText(execText, { size: 16, x: context.margin, lineHeight: 8 });
 
             drawSubTitle("Chronologie des temps");
             const chronoHeaders = ["Type", "Heure", "Description"];
@@ -1112,54 +1074,4 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             }
             const finalText = "Avez vous des questions?";
             const finalTextWidth = helveticaBoldFont.widthOfTextAtSize(finalText, 48);
-            context.currentPage.drawText(finalText, { x: context.pageWidth / 2 - finalTextWidth / 2, y: context.pageHeight / 2, font: helveticaBoldFont, size: 48, color: context.colors.accent });
-
-            const pdfBytes = await pdfDoc.save();
-            return { pdfBytes, formData };
-        }
-
-        async function handlePdfAction(isPreview) {
-            if (typeof PDFLib === 'undefined') {
-                alert("Erreur: La bibliothèque PDF n'est pas encore chargée.");
-                return;
-            }
-            
-            const btn = isPreview ? previewBtn : generatePdfBtn;
-            const originalText = btn.textContent;
-            btn.textContent = 'Génération...';
-            btn.disabled = true;
-
-            try {
-                const result = await buildPdf();
-                if (!result) return;
-                
-                const { pdfBytes, formData } = result;
-                const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-                const url = URL.createObjectURL(blob);
-
-                if (isPreview) {
-                    window.open(url, '_blank');
-                } else {
-                    const getVal = (id) => formData[id] || 'RAS';
-                    const link = document.createElement('a');
-                    link.href = url;
-                    link.download = `OI_${getVal('date_op').replace(/[\/\\?%*:|"<>]/g, '-')}_${getVal('nom_adversaire').replace(/ /g, '_')}.pdf`;
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                }
-
-            } catch (error) {
-                console.error("Erreur critique lors de la génération du PDF:", error);
-                alert("Une erreur critique est survenue. Consultez la console (F12).");
-            } finally {
-                btn.textContent = originalText;
-                btn.disabled = false;
-            }
-        }
-
-        previewBtn.addEventListener('click', () => handlePdfAction(true));
-        generatePdfBtn.addEventListener('click', () => handlePdfAction(false));
-    </script>
-</body>
-</html>
+            context.currentPage.drawText(finalText, { x: context.pageWidth /
