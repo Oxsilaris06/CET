@@ -11,7 +11,7 @@
         :root {
             --bg-body: #121212; --bg-container: #1e1e1e; --bg-interactive: #2a2a2a;
             --text-primary: #e0e0e0; --text-secondary: #95a5a6; --border-color: #444444;
-            --accent-blue: #5b9bd5; --accent-hover: #4a7aa5; --danger-red: #c03b2b;
+            --accent-blue: #5b9bd5; --accent-hover: #4a7aa5; --danger-red: #c0392b;
         }
         body.light-mode {
             --bg-body: #f0f2f5; --bg-container: #ffffff; --bg-interactive: #f8f9fa;
@@ -853,6 +853,9 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
 
             const processImage = async (file, maxWidth = 1280, quality = 0.85) => {
                 return new Promise((resolve, reject) => {
+                    if (!file || !file.type.startsWith('image/')) {
+                        return reject(new Error('Le fichier fourni n\'est pas une image valide.'));
+                    }
                     const img = new Image();
                     const objectUrl = URL.createObjectURL(file);
                     img.src = objectUrl;
@@ -872,13 +875,13 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                         ctx.drawImage(img, 0, 0, width, height);
 
                         canvas.toBlob(blob => {
-                            if (!blob) return reject(new Error('Canvas to Blob conversion failed'));
+                            if (!blob) return reject(new Error('La conversion de l\'image a échoué (canvas.toBlob).'));
                             resolve(blob.arrayBuffer());
                         }, 'image/jpeg', quality);
                     };
                     img.onerror = (err) => {
                         URL.revokeObjectURL(objectUrl);
-                        reject(err);
+                        reject(new Error(`Impossible de charger l'image. Le format est peut-être non pris en charge. Détails: ${err}`));
                     };
                 });
             };
@@ -901,9 +904,9 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                         const textWidth = helveticaBoldFont.widthOfTextAtSize(title, 14);
                         context.currentPage.drawText(title, { x: width / 2 - textWidth / 2, y: y - 20, font: helveticaBoldFont, size: 14, color: context.colors.text });
                     } catch (e) {
-                        console.error("Impossible de traiter ou d'intégrer l'image:", e);
+                        console.error(`Impossible de traiter ou d'intégrer l'image pour : ${title}`, e);
                         drawTitle("Erreur d'image");
-                        drawWrappedText(`Impossible de charger l'image pour : ${title}`);
+                        drawWrappedText(`Impossible de charger l'image "${file.name}".\n\nErreur: ${e.message}`);
                     }
                 }
             };
@@ -954,7 +957,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 drawTable(adversaireHeaders, adversaireRows.filter(r => r[1] && r[1].trim() !== 'à'), [150, tableWidth - 150], context.margin);
                 const tableBottomY = context.y;
 
-                let photoBottomY = 0;
+                let photoBottomY = tableBottomY; // Default to table's bottom Y
                 const photoBoxX = context.margin + tableWidth + photoMargin;
                 const file = photoInput.files[0];
                 
@@ -969,12 +972,9 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                         context.currentPage.drawRectangle({ x: photoBoxX, y: frameY, width: photoBoxWidth, height: photoBoxHeight, borderColor: context.colors.accent, borderWidth: 1 });
                         context.currentPage.drawImage(image, { x: photoBoxX + 5, y: frameY + 5, width: scaled.width, height: scaled.height });
                         photoBottomY = frameY;
-                    } else {
-                        photoBottomY = tableBottomY;
                     }
                 } catch(e) {
                     console.error("Échec du traitement de la photo de l'adversaire:", e);
-                    photoBottomY = tableBottomY;
                 }
                 context.y = Math.min(tableBottomY, photoBottomY);
             } else {
@@ -999,46 +999,8 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
 
             addNewPage();
             drawTitle("3. EXÉCUTION");
-            const baseFontSize = 14;
-            const highlightFontSize = 16;
-            const redColor = rgb(1, 0, 0);
-            let currentX = context.margin;
-            
-            const exec_parts = [
-                { text: "En vue d'appréhender le mis en cause et empêcher la déperdition des preuves,\n", isHighlight: false },
-                { text: "Je veux", isHighlight: true },
-                { text: ", le ", isHighlight: false },
-                { text: `${getVal('date_execution') || '(date)'}`, isHighlight: true },
-                { text: " à partir de ", isHighlight: false },
-                { text: `${getVal('heure_execution') || '(heure)'}`, isHighlight: true },
-                { text: ", pour une action ", isHighlight: false },
-                { text: `${getVal('type_action') || '(type d\'action)'}`, isHighlight: true },
-                { text: " investir le domicile\nprésumé de ", isHighlight: false },
-                { text: `${getVal('nom_adversaire') || '(nom de l\'adversaire)'}`, isHighlight: true },
-                { text: " après avoir bouclé celui-ci.", isHighlight: false },
-            ];
-            checkY(70);
-            exec_parts.forEach(part => {
-                const font = part.isHighlight ? helveticaBoldFont : helveticaFont;
-                const size = part.isHighlight ? highlightFontSize : baseFontSize;
-                const color = part.isHighlight ? redColor : context.colors.text;
-                const lines = part.text.split('\n');
-                lines.forEach((line, index) => {
-                    const textWidth = font.widthOfTextAtSize(line, size);
-                    if (currentX > context.margin && currentX + textWidth > context.pageWidth - context.margin) {
-                        context.y -= (baseFontSize + 4);
-                        currentX = context.margin;
-                    }
-                    context.currentPage.drawText(line, { x: currentX, y: context.y, font, size, color });
-                    currentX += textWidth;
-                    if (index < lines.length - 1) {
-                        context.y -= (baseFontSize + 4);
-                        currentX = context.margin;
-                    }
-                });
-            });
-            context.y -= (baseFontSize + 4) * 2;
-
+            const execText = `En vue d'appréhender le mis en cause et empêcher la déperdition des preuves,\nJe veux, le ${getVal('date_execution') || '(date)'} à partir de ${getVal('heure_execution') || '(heure)'}, pour une action ${getVal('type_action') || '(type d\'action)'} investir le domicile\nprésumé de ${getVal('nom_adversaire') || '(nom de l\'adversaire)'} après avoir bouclé celui-ci.`;
+            drawWrappedText(execText, { size: 16, x: context.margin, lineHeight: 8 });
 
             drawSubTitle("Chronologie des temps");
             const chronoHeaders = ["Type", "Heure", "Description"];
