@@ -42,12 +42,13 @@
         .wizard-step { display: none; animation: fadeIn 0.5s; }
         .wizard-step.active { display: block; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .wizard-nav { display: flex; flex-wrap: wrap; justify-content: space-between; margin-top: 30px; border-top: 1px solid var(--border-color); padding-top: 20px; }
-        .wizard-nav-btn { width: 100%; margin-top: 10px; padding: 12px 20px; border: none; border-radius: 5px; cursor: pointer; font-family: 'Oswald', sans-serif; font-size: 1.1em; }
-        #prevBtn { background-color: var(--bg-interactive); color: var(--text-primary); border: 1px solid var(--border-color); order: 1; }
-        #nextBtn { background-color: var(--accent-blue); color: white; order: 2; }
-        #previewBtn { background-color: #6c757d; color: white; order: 3; }
-        #generatePdfBtn { background-color: #27ae60; color: white; order: 4; }
+        .wizard-nav { display: flex; flex-wrap: wrap; justify-content: space-between; margin-top: 30px; border-top: 1px solid var(--border-color); padding-top: 20px; gap: 10px; }
+        .wizard-nav-btn { flex-grow: 1; padding: 12px 20px; border: none; border-radius: 5px; cursor: pointer; font-family: 'Oswald', sans-serif; font-size: 1.1em; }
+        #prevBtn { background-color: var(--bg-interactive); color: var(--text-primary); border: 1px solid var(--border-color); }
+        #nextBtn { background-color: var(--accent-blue); color: white; }
+        #previewBtn { background-color: #6c757d; color: white; }
+        #generatePdfBtn { background-color: #27ae60; color: white; }
+        #retexReportBtn { background-color: #008080; color: white; }
         label { display: block; margin-bottom: 5px; font-weight: bold; color: var(--text-secondary); }
         input, textarea, select { width: 100%; padding: 12px; margin-bottom: 15px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 1rem; background-color: var(--bg-interactive); color: var(--text-primary); font-family: 'Oswald', sans-serif; }
         textarea { min-height: 120px; }
@@ -100,9 +101,8 @@
         #modal_cancelBtn { flex-grow: 1; }
         @media (min-width: 600px) {
             #editMemberModal { width: 90%; max-width: 500px; height: auto; max-height: 90vh; margin: auto; border: 1px solid var(--border-color); border-radius: 8px; }
+            .wizard-nav { flex-wrap: nowrap; }
             .wizard-nav-btn { width: auto; margin-top: 0; }
-            #prevBtn { order: 1; } #nextBtn { order: 2; }
-            #previewBtn { order: 3; } #generatePdfBtn { order: 4; }
         }
     </style>
 </head>
@@ -326,11 +326,16 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             <button class="wizard-nav-btn" id="nextBtn" type="button">Suivant</button>
             <button class="wizard-nav-btn" id="previewBtn" type="button" style="display:none;">Aperçu 🔎</button>
             <button class="wizard-nav-btn" id="generatePdfBtn" type="button" style="display:none;">Générer le PDF 📄</button>
+            <button class="wizard-nav-btn" id="retexReportBtn" type="button" style="display:none;">Consulter Rapport RETEX 🧠</button>
         </div>
     </div>
 
     <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
     <script>
+        // --- NOUVELLE CONFIGURATION ---
+        const RETEX_BASE_URL = "https://oxsilaris06.github.io/CET/retex.html";
+        const APPS_SCRIPT_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyF0CJ_B9U4Izn6ieZG4lfIq23oScE6cFvd1SoUXvVUBRqk_Ce1R8TJpRRnuamcdJH-/exec";
+
         // --- GLOBAL CONFIG ---
         const memberConfig = {
             fonctions: ['Chef inter','Chef dispo','AO','Inter','DE'],
@@ -351,6 +356,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
         const nextBtn = document.getElementById('nextBtn');
         const previewBtn = document.getElementById('previewBtn');
         const generatePdfBtn = document.getElementById('generatePdfBtn');
+        const retexReportBtn = document.getElementById('retexReportBtn'); 
 
         function showStep(n) {
             steps.forEach((step, index) => step.classList.toggle('active', index === n));
@@ -364,6 +370,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             nextBtn.style.display = isLastStep ? "none" : "inline-block";
             previewBtn.style.display = isLastStep ? "inline-block" : "none";
             generatePdfBtn.style.display = isLastStep ? "inline-block" : "none";
+            retexReportBtn.style.display = isLastStep ? "inline-block" : "none"; 
         }
         function goToStep(n) {
             if (n >= 0 && n < steps.length) {
@@ -723,8 +730,8 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             showStep(currentStep);
         });
         
-        // --- PDF GENERATION (STABLE VERSION) ---
-        async function buildPdf() {
+        // --- PDF GENERATION (FINAL STABLE VERSION) ---
+        async function buildPdf(retexUrl) { // MODIFIÉ
             const { PDFDocument, StandardFonts, rgb, PageSizes } = PDFLib;
             const pdfDoc = await PDFDocument.create();
             const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
@@ -758,7 +765,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 const bgImageBytes = await fetch(bgImageUrl).then(res => res.arrayBuffer());
                 backgroundImage = await pdfDoc.embedPng(bgImageBytes);
             } catch (e) {
-                console.warn("L'image de fond 'Fd.png' n'a pas pu être chargée. Le PDF sera généré sans elle.", e);
+                console.warn("L'image de fond 'Fd.png' n'a pas pu être chargée.", e);
             }
             
             const addNewPage = () => {
@@ -911,7 +918,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 }
             };
             
-            // --- Construction du PDF ---
+            // --- Construction du PDF (votre code original) ---
             addNewPage();
             if (backgroundImage) {
                 context.currentPage.drawImage(backgroundImage, { x: 0, y: 0, width: context.pageWidth, height: context.pageHeight });
@@ -957,7 +964,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 drawTable(adversaireHeaders, adversaireRows.filter(r => r[1] && r[1].trim() !== 'à'), [150, tableWidth - 150], context.margin);
                 const tableBottomY = context.y;
 
-                let photoBottomY = tableBottomY; // Default to table's bottom Y
+                let photoBottomY = tableBottomY;
                 const photoBoxX = context.margin + tableWidth + photoMargin;
                 const file = photoInput.files[0];
                 
@@ -1074,7 +1081,27 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
 
             drawSubTitle("Liaison");
             drawWrappedText(getVal('cat_liaison'), {x: context.margin, font: helveticaBoldFont});
+            
+            // --- MODIFIÉ: Insertion de la page Retex (version stable en texte brut) ---
+            if (retexUrl) {
+                addNewPage();
+                const operationTitle = getVal('nom_adversaire') || 'OPERATION';
+                drawTitle(`RETEX : ${operationTitle.toUpperCase()}`);
+                
+                drawWrappedText("Chaque membre ayant participé à l'opération est tenu de remplir le formulaire de Retour d'Expérience (Retex) en utilisant le lien ci-dessous.", { size: 14, x: context.margin });
+                
+                context.y -= 40;
 
+                // Affiche l'URL complète en texte clair. C'est la méthode la plus stable.
+                drawWrappedText(retexUrl, {
+                    x: context.margin,
+                    font: helveticaBoldFont,
+                    size: 14,
+                    color: context.colors.accent,
+                });
+            }
+
+            // --- Page finale (votre code original) ---
             addNewPage();
             if (backgroundImage) {
                 context.currentPage.drawImage(backgroundImage, { x: 0, y: 0, width: context.pageWidth, height: context.pageHeight });
@@ -1099,7 +1126,19 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             btn.disabled = true;
 
             try {
-                const result = await buildPdf();
+                // --- MODIFIÉ: Création de l'URL Retex avant de construire le PDF ---
+                const dateOp = document.getElementById('date_op').value;
+                const nomAdversaire = document.getElementById('nom_adversaire').value;
+                let retexUrl = null;
+
+                if (dateOp && nomAdversaire) {
+                    const safeAdversaireName = nomAdversaire.trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
+                    const oiId = `${dateOp}_${safeAdversaireName}`;
+                    retexUrl = `${RETEX_BASE_URL}?oiId=${encodeURIComponent(oiId)}`;
+                }
+                
+                const result = await buildPdf(retexUrl); // Passe l'URL à la fonction
+                
                 if (!result) {
                     btn.textContent = originalText;
                     btn.disabled = false;
@@ -1133,6 +1172,28 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
 
         previewBtn.addEventListener('click', () => handlePdfAction(true));
         generatePdfBtn.addEventListener('click', () => handlePdfAction(false));
+
+        retexReportBtn.addEventListener('click', () => {
+            if (!APPS_SCRIPT_WEB_APP_URL.includes('macros/s')) {
+                alert("L'URL du script d'analyse n'est pas configurée.");
+                return;
+            }
+            const dateOp = document.getElementById('date_op').value;
+            const nomAdversaire = document.getElementById('nom_adversaire').value;
+
+            if (!dateOp || !nomAdversaire) {
+                alert("Veuillez renseigner la date de l'opération et le nom de l'adversaire pour identifier le Retex.");
+                return;
+            }
+
+            const safeAdversaireName = nomAdversaire.trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
+            const oiId = `${dateOp}_${safeAdversaireName}`;
+            
+            const reportUrl = `${APPS_SCRIPT_WEB_APP_URL}?action=generateReport&oiId=${encodeURIComponent(oiId)}`;
+            
+            alert(`Demande du rapport pour l'opération : ${oiId}. Le téléchargement du PDF va se lancer dans un nouvel onglet.`);
+            window.open(reportUrl, '_blank');
+        });
     </script>
 </body>
 </html>
