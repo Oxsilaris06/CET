@@ -332,7 +332,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
 
     <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
     <script>
-        // --- NOUVELLE CONFIGURATION ---
+        // --- CONFIGURATION ---
         const RETEX_BASE_URL = "https://oxsilaris06.github.io/CET/retex.html";
         const APPS_SCRIPT_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyF0CJ_B9U4Izn6ieZG4lfIq23oScE6cFvd1SoUXvVUBRqk_Ce1R8TJpRRnuamcdJH-/exec";
 
@@ -730,14 +730,10 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             showStep(currentStep);
         });
         
-        // --- PDF GENERATION (FINAL STABLE VERSION) ---
+        // --- PDF GENERATION (SECTION ENTIÈREMENT RÉVISÉE ET FIABILISÉE) ---
 
         /**
-         * MODIFIÉ : Dessine un bouton cliquable centré sur une page PDF.
-         * @param {PDFPage} page La page sur laquelle dessiner.
-         * @param {string} text Le texte du bouton.
-         * @param {string} url L'URL de destination.
-         * @param {object} options Options de style.
+         * Dessine un bouton cliquable centré sur une page PDF.
          */
         function drawButtonLink(page, text, url, options) {
             const { font, size, textColor, buttonColor } = options;
@@ -805,12 +801,10 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 const bgImageUrl = 'Fd.png';
                 const bgImageBytes = await fetch(bgImageUrl).then(res => res.arrayBuffer());
                 backgroundImage = await pdfDoc.embedPng(bgImageBytes);
-            } catch (e) {
-                console.warn("L'image de fond 'Fd.png' n'a pas pu être chargée.", e);
-            }
+            } catch (e) { console.warn("L'image de fond 'Fd.png' n'a pas pu être chargée.", e); }
             
             const addNewPage = () => {
-                context.currentPage = context.pdfDoc.addPage([PageSizes.A4[1], PageSizes.A4[0]]); // Paysage
+                context.currentPage = context.pdfDoc.addPage([PageSizes.A4[1], PageSizes.A4[0]]);
                 const { width, height } = context.currentPage.getSize();
                 context.pageWidth = width; context.pageHeight = height;
                 context.y = height - context.margin;
@@ -857,9 +851,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 const maxWidth = context.pageWidth - x - context.margin;
                 const lines = wrapText(text, font, size, maxWidth);
                 const totalHeight = lines.length * (size + 4);
-                if (checkY(totalHeight + 10)) {
-                    context.y -= (size + 4); 
-                }
+                if (checkY(totalHeight + 10)) { context.y -= (size + 4); }
                 lines.forEach((line, index) => {
                     context.currentPage.drawText(line, { x, y: context.y - (index * (size + 4)), font, size, color });
                 });
@@ -867,134 +859,184 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             };
             
             const drawTable = (headers, rows, columnWidths, startX) => {
-                let currentY = context.y;
-                const rowPadding = 5;
-                const headerFontSize = 10;
-                const contentFontSize = 10;
-
+                let currentY = context.y; const rowPadding = 5; const headerFontSize = 10; const contentFontSize = 10;
                 const drawRow = (rowData, isHeader) => {
-                    const font = isHeader ? helveticaBoldFont : helveticaFont;
-                    const size = isHeader ? headerFontSize : contentFontSize;
+                    const font = isHeader ? helveticaBoldFont : helveticaFont; const size = isHeader ? headerFontSize : contentFontSize;
                     const cellContents = rowData.map((text, i) => wrapText(text, font, size, columnWidths[i] - 2 * rowPadding));
                     const maxLines = Math.max(...cellContents.map(lines => lines.length));
                     const rowHeight = maxLines * (size + 2) + 2 * rowPadding;
-                    if (currentY - rowHeight < context.margin) {
-                        addNewPage();
-                        currentY = context.y;
-                        drawRow(headers, true);
-                    }
-                    currentY -= rowHeight;
-                    let currentX = startX;
+                    if (currentY - rowHeight < context.margin) { addNewPage(); currentY = context.y; drawRow(headers, true); }
+                    currentY -= rowHeight; let currentX = startX;
                     rowData.forEach((_, i) => {
                         context.currentPage.drawRectangle({ x: currentX, y: currentY, width: columnWidths[i], height: rowHeight, borderColor: context.colors.accent, borderWidth: 0.5 });
                         const lines = cellContents[i];
-                        lines.forEach((line, lineIndex) => {
-                            context.currentPage.drawText(line, { x: currentX + rowPadding, y: currentY + rowHeight - rowPadding - (lineIndex + 1) * (size + 2) + 2, font, size, color: context.colors.text });
-                        });
+                        lines.forEach((line, lineIndex) => { context.currentPage.drawText(line, { x: currentX + rowPadding, y: currentY + rowHeight - rowPadding - (lineIndex + 1) * (size + 2) + 2, font, size, color: context.colors.text }); });
                         currentX += columnWidths[i];
                     });
                 };
-                drawRow(headers, true);
-                rows.forEach(row => drawRow(row, false));
-                context.y = currentY - 20;
+                drawRow(headers, true); rows.forEach(row => drawRow(row, false)); context.y = currentY - 20;
             };
 
-            const processImage = async (file, maxWidth = 1280, quality = 0.85) => {
-                return new Promise((resolve, reject) => {
-                    if (!file || !file.type.startsWith('image/')) {
-                        return reject(new Error('Le fichier fourni n\'est pas une image valide.'));
-                    }
-                    const img = new Image();
-                    const objectUrl = URL.createObjectURL(file);
-                    img.src = objectUrl;
-                    img.onload = () => {
-                        URL.revokeObjectURL(objectUrl);
-                        const canvas = document.createElement('canvas');
-                        const ctx = canvas.getContext('2d');
-                        let { width, height } = img;
-
-                        if (width > maxWidth) {
-                            height = (maxWidth / width) * height;
-                            width = maxWidth;
-                        }
-
-                        canvas.width = width;
-                        canvas.height = height;
-                        ctx.drawImage(img, 0, 0, width, height);
-
-                        canvas.toBlob(blob => {
-                            if (!blob) return reject(new Error('La conversion de l\'image a échoué (canvas.toBlob).'));
-                            resolve(blob.arrayBuffer());
-                        }, 'image/jpeg', quality);
-                    };
-                    img.onerror = (err) => {
-                        URL.revokeObjectURL(objectUrl);
-                        reject(new Error(`Impossible de charger l'image. Le format est peut-être non pris en charge. Détails: ${err}`));
-                    };
-                });
-            };
+            const processImage = async (file, maxWidth = 1280, quality = 0.85) => { return new Promise((resolve, reject) => { if (!file || !file.type.startsWith('image/')) { return reject(new Error('Le fichier fourni n\'est pas une image valide.')); } const img = new Image(); const objectUrl = URL.createObjectURL(file); img.src = objectUrl; img.onload = () => { URL.revokeObjectURL(objectUrl); const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d'); let { width, height } = img; if (width > maxWidth) { height = (maxWidth / width) * height; width = maxWidth; } canvas.width = width; canvas.height = height; ctx.drawImage(img, 0, 0, width, height); canvas.toBlob(blob => { if (!blob) return reject(new Error('La conversion de l\'image a échoué (canvas.toBlob).')); resolve(blob.arrayBuffer()); }, 'image/jpeg', quality); }; img.onerror = () => { URL.revokeObjectURL(objectUrl); reject(new Error(`Impossible de charger l'image.`)); }; }); };
             
             const drawImagesFromContainer = async (containerId, title) => {
                 const inputs = Array.from(document.querySelectorAll(`#${containerId} .photo-input`)).filter(i => i.files.length > 0);
                 for (const input of inputs) {
-                    addNewPage();
-                    const file = input.files[0];
+                    addNewPage(); const file = input.files[0];
                     try {
-                        const imageBytes = await processImage(file);
-                        const image = await pdfDoc.embedJpg(imageBytes);
-                        const { width, height } = context.currentPage.getSize();
-                        const paddedW = width - context.margin * 2;
-                        const paddedH = height - context.margin * 2 - 30;
-                        const scaled = image.scaleToFit(paddedW, paddedH);
-                        const x = (width - scaled.width) / 2;
-                        const y = (height - scaled.height) / 2 + 15;
+                        const imageBytes = await processImage(file); const image = await pdfDoc.embedJpg(imageBytes);
+                        const { width, height } = context.currentPage.getSize(); const paddedW = width - context.margin * 2; const paddedH = height - context.margin * 2 - 30;
+                        const scaled = image.scaleToFit(paddedW, paddedH); const x = (width - scaled.width) / 2; const y = (height - scaled.height) / 2 + 15;
                         context.currentPage.drawImage(image, { x, y, width: scaled.width, height: scaled.height });
                         const textWidth = helveticaBoldFont.widthOfTextAtSize(title, 14);
                         context.currentPage.drawText(title, { x: width / 2 - textWidth / 2, y: y - 20, font: helveticaBoldFont, size: 14, color: context.colors.text });
-                    } catch (e) {
-                        console.error(`Impossible de traiter ou d'intégrer l'image pour : ${title}`, e);
-                        drawTitle("Erreur d'image");
-                        drawWrappedText(`Impossible de charger l'image "${file.name}".\n\nErreur: ${e.message}`);
-                    }
+                    } catch (e) { console.error(`Erreur d'image pour ${title}`, e); drawTitle("Erreur d'image"); drawWrappedText(`Impossible de charger l'image "${file.name}".\n\nErreur: ${e.message}`); }
                 }
             };
             
-            // --- Construction du PDF ---
-            // ... (Toutes les pages précédentes sont construites ici) ...
+            // --- SÉQUENCE DE CONSTRUCTION DU PDF (ENTIÈREMENT RECONSTRUITE) ---
             
-            // --- MODIFIÉ : Insertion de la page dédiée au bouton RETEX avec gestion d'erreur ---
+            // Page de Titre
+            addNewPage();
+            if (backgroundImage) { context.currentPage.drawImage(backgroundImage, { x: 0, y: 0, width: context.pageWidth, height: context.pageHeight }); }
+            const mainTitle = "OPÉRATION DE POLICE JUDICIAIRE"; const dateTitle = `DU ${getVal('date_op') || '(DATE)'}`;
+            const titleWidth = helveticaBoldFont.widthOfTextAtSize(mainTitle, 24); const dateTitleWidth = helveticaBoldFont.widthOfTextAtSize(dateTitle, 18);
+            context.currentPage.drawText(mainTitle, { x: context.pageWidth / 2 - titleWidth / 2, y: context.pageHeight / 2 + 10, font: helveticaBoldFont, size: 24, color: context.colors.accent });
+            context.currentPage.drawText(dateTitle, { x: context.pageWidth / 2 - dateTitleWidth / 2, y: context.pageHeight / 2 - 20, font: helveticaBoldFont, size: 18, color: context.colors.text });
+
+            // Page Situation
+            addNewPage(); drawTitle("1. SITUATION");
+            drawSubTitle("1.1 Situation Générale"); drawWrappedText(getVal('situation_generale'));
+            drawSubTitle("1.2 Situation Particulière"); drawWrappedText(getVal('situation_particuliere'));
+            
+            // Page Adversaire
+            addNewPage(); drawTitle("1.3 ADVERSAIRE");
+            const photoInput = document.querySelector('#adversary_photo_container .photo-input');
+            const adversaireHeaders = ["Information", "Détail"];
+            const meText = (formData.me_list || []).map((me, i) => `ME${i+1}: ${me}`).join(' | ');
+            const adversaireRows = [
+                ['Nom/Prénom', getVal('nom_adversaire')], ['Domicile', getVal('domicile_adversaire')],
+                ['Naissance', `${getVal('date_naissance')} à ${getVal('lieu_naissance')}`],
+                ['Description', `${getVal('stature_adversaire')} / ${getVal('ethnie_adversaire')}`],
+                ['Signes particuliers', getVal('signes_particuliers')], ['Profession', getVal('profession_adversaire')],
+                ['Antécédents', getVal('antecedents_adversaire')], ['État d\'esprit', (formData.etat_esprit_list || []).join(', ')],
+                ['Attitude', getVal('attitude_adversaire')], ['Volume (renfort)', (formData.volume_list || []).join(', ')],
+                ['Substances', getVal('substances_adversaire')], ['Véhicules', (formData.vehicules_list || []).join(', ')],
+                ['Armes', getVal('armes_connues')], ['Moyens Employés', meText],
+            ];
+            if (photoInput && photoInput.files.length > 0) {
+                const initialAdversaireY = context.y; const photoBoxWidth = 200; const photoMargin = 10;
+                const tableWidth = context.pageWidth - context.margin * 2 - photoBoxWidth - photoMargin;
+                context.y = initialAdversaireY;
+                drawTable(adversaireHeaders, adversaireRows.filter(r => r[1] && r[1].trim() !== 'à'), [150, tableWidth - 150], context.margin);
+                const tableBottomY = context.y; let photoBottomY = tableBottomY;
+                const photoBoxX = context.margin + tableWidth + photoMargin; const file = photoInput.files[0];
+                try {
+                    const imageBytes = await processImage(file); const image = await pdfDoc.embedJpg(imageBytes);
+                    const scaled = image.scaleToFit(photoBoxWidth - 10, initialAdversaireY - context.margin);
+                    const photoBoxHeight = scaled.height + 10; const frameY = initialAdversaireY - photoBoxHeight;
+                    if(frameY >= context.margin) {
+                        context.currentPage.drawRectangle({ x: photoBoxX, y: frameY, width: photoBoxWidth, height: photoBoxHeight, borderColor: context.colors.accent, borderWidth: 1 });
+                        context.currentPage.drawImage(image, { x: photoBoxX + 5, y: frameY + 5, width: scaled.width, height: scaled.height });
+                        photoBottomY = frameY;
+                    }
+                } catch(e) { console.error("Échec photo adversaire:", e); }
+                context.y = Math.min(tableBottomY, photoBottomY);
+            } else {
+                const tableWidth = context.pageWidth - context.margin * 2;
+                drawTable(adversaireHeaders, adversaireRows.filter(r => r[1] && r[1].trim() !== 'à'), [150, tableWidth - 150], context.margin);
+            }
+
+            // Page Environnement
+            addNewPage(); drawTitle("1.4 ENVIRONNEMENT");
+            drawSubTitle("Ami(e)s (soutien)"); drawWrappedText(getVal('amies'));
+            drawSubTitle("Terrain / Météo"); drawWrappedText(getVal('terrain_info'));
+            drawSubTitle("Population"); drawWrappedText(getVal('population'));
+            drawSubTitle("Cadre juridique"); drawWrappedText(getVal('cadre_juridique'));
+
+            // Page Mission
+            addNewPage(); drawTitle("2. MISSION");
+            drawWrappedText(getVal('missions_psig'), { font: helveticaBoldFont, size: 30, x: context.margin });
+            
+            // Page Exécution
+            addNewPage(); drawTitle("3. EXÉCUTION");
+            const execText = `En vue d'appréhender le mis en cause et empêcher la déperdition des preuves,\nJe veux, le ${getVal('date_execution') || '(date)'} à partir de ${getVal('heure_execution') || '(heure)'}, pour une action ${getVal('type_action') || '(type d\'action)'} investir le domicile\nprésumé de ${getVal('nom_adversaire') || '(nom de l\'adversaire)'} après avoir bouclé celui-ci.`;
+            drawWrappedText(execText, { size: 16, x: context.margin });
+            drawSubTitle("Chronologie des temps");
+            const chronoHeaders = ["Type", "Heure", "Description"];
+            const chronoRows = (formData.time_events || []).map(e => [e.type || 'N/A', e.hour || 'N/A', e.description || 'N/A']);
+            drawTable(chronoHeaders, chronoRows, [80, 120, 550], context.margin);
+            drawSubTitle("Hypothèses"); drawWrappedText(`H1: ${getVal('hypothese_h1')}\nH2: ${getVal('hypothese_h2')}\nH3: ${getVal('hypothese_h3')}`);
+
+            // Page Articulation (INDIA)
+            addNewPage(); drawTitle("4. ARTICULATION");
+            drawWrappedText(`Place du Chef (Générale): ${getVal('place_chef')}`, { size: 14, x: context.margin });
+            drawSubTitle("Équipe INDIA (INTER)");
+            drawSubTitle("Mission:"); drawWrappedText(getVal('india_mission'));
+            drawSubTitle("Objectif:"); drawWrappedText(getVal('india_objectif'));
+            drawSubTitle("Itinéraire:"); drawWrappedText(getVal('india_itineraire'));
+            drawSubTitle("Points Particuliers:"); drawWrappedText(getVal('india_points_particuliers'));
+            drawSubTitle("Conduite à Tenir:"); drawWrappedText(getVal('india_cat'));
+            
+            // Page Articulation (AO)
+            addNewPage(); drawTitle("4. ARTICULATION (Suite)");
+            drawSubTitle("Équipe Appui/Observation (AO) - ZMSPCP");
+            drawSubTitle("Zone d'installation (Z):"); drawWrappedText(getVal('ao_zone_installation'));
+            drawSubTitle("Mission (M):"); drawWrappedText(getVal('ao_mission'));
+            drawSubTitle("Secteur de surveillance (S):"); drawWrappedText(getVal('ao_secteur_surveillance'));
+            drawSubTitle("Points Particuliers (P):"); drawWrappedText(getVal('ao_points_particuliers'));
+            drawSubTitle("Place du Chef (P):"); drawWrappedText(getVal('ao_place_chef'));
+            drawSubTitle("Conduite à Tenir (C):"); drawWrappedText(getVal('ao_cat'));
+            
+            // Page PATRACDVR
+            addNewPage(); drawTitle("5. PATRACDVR");
+            const patracHeaders = ["Trigramme", "Fonction", "Armement", "Équip. 1", "Équip. 2", "Tenue", "GPB"];
+            for (const row of (formData.patracdvr_rows || [])) {
+                if(row.vehicle) {
+                    drawSubTitle(`Véhicule: ${row.vehicle}`);
+                    const patracRows = row.members.filter(m => m.trigramme).map(m => [m.trigramme, m.fonction, m.armement, m.equipement, m.equipement2, m.tenue, m.gpb]);
+                    if (patracRows.length > 0) {
+                        drawTable(patracHeaders, patracRows, [90, 100, 90, 100, 100, 90, 90], context.margin);
+                    }
+                }
+            }
+            
+            // Pages Photos (dynamiques)
+            await drawImagesFromContainer('photo_container_transport_pr', 'Transport PSIG vers PR');
+            await drawImagesFromContainer('photo_container_transport_domicile', 'Transport PR vers Domicile');
+            await drawImagesFromContainer('photo_container_cellule_effraction', 'Cellule Effraction');
+            await drawImagesFromContainer('photo_container_itineraire_exterieur', 'Itinéraire Extérieur India');
+            await drawImagesFromContainer('photo_container_itineraire_interieur', 'Itinéraire Intérieur India');
+            await drawImagesFromContainer('photo_container_bapteme_terrain', 'Baptême terrain');
+            await drawImagesFromContainer('photo_container_emplacement_ao', 'Emplacement AO');
+
+            // Page CAT
+            addNewPage(); drawTitle("Conduites à tenir");
+            drawSubTitle("Générales"); drawWrappedText(getVal('cat_generales'), {x: context.margin, font: helveticaBoldFont});
+            const noGoText = getVal('no_go');
+            if (noGoText) { drawSubTitle("NO GO"); drawWrappedText(noGoText, { x: context.margin, font: helveticaBoldFont, size: 14.4, color: rgb(1, 0.2, 0.2) }); }
+            drawSubTitle("Liaison"); drawWrappedText(getVal('cat_liaison'), {x: context.margin, font: helveticaBoldFont});
+
+            // --- PAGE RETEX FIABILISÉE ---
             if (retexUrl) {
                 addNewPage();
                 try {
                     drawButtonLink(
-                        context.currentPage,
-                        "Cliquez Ici",
-                        retexUrl,
-                        {
-                            font: helveticaBoldFont,
-                            size: 48,
-                            textColor: rgb(1, 1, 1), // Blanc
-                            buttonColor: rgb(204/255, 0, 0) // Rouge
-                        }
+                        context.currentPage, "Cliquez Ici", retexUrl,
+                        { font: helveticaBoldFont, size: 48, textColor: rgb(1, 1, 1), buttonColor: rgb(204/255, 0, 0) }
                     );
                 } catch (e) {
-                    console.error("ERREUR CRITIQUE lors de la création du bouton lien. Affichage en texte brut comme solution de secours.", e);
+                    console.error("ERREUR lors de la création du bouton lien. Affichage en texte brut comme solution de secours.", e);
                     drawTitle("Formulaire de Retour d'Expérience (RETEX)");
-                    drawWrappedText("Erreur: Le bouton cliquable n'a pas pu être généré. Veuillez utiliser le lien ci-dessous.", {x: context.margin});
-                    drawWrappedText(retexUrl, {
-                        x: context.margin,
-                        font: helveticaFont,
-                        size: 11,
-                        color: context.colors.accent,
-                    });
+                    drawWrappedText("Erreur: Le bouton cliquable n'a pas pu être généré. Veuillez utiliser le lien ci-dessous (à copier/coller).", {x: context.margin, size: 14});
+                    context.y -= 20;
+                    drawWrappedText(retexUrl, { x: context.margin, font: helveticaFont, size: 12, color: context.colors.accent });
                 }
             }
 
             // --- Page finale ---
             addNewPage();
-            if (backgroundImage) {
-                context.currentPage.drawImage(backgroundImage, { x: 0, y: 0, width: context.pageWidth, height: context.pageHeight });
-            }
+            if (backgroundImage) { context.currentPage.drawImage(backgroundImage, { x: 0, y: 0, width: context.pageWidth, height: context.pageHeight }); }
             const finalText = "Avez vous des questions?";
             const finalTextWidth = helveticaBoldFont.widthOfTextAtSize(finalText, 48);
             context.currentPage.drawText(finalText, { x: context.pageWidth / 2 - finalTextWidth / 2, y: context.pageHeight / 2, font: helveticaBoldFont, size: 48, color: context.colors.accent });
@@ -1002,41 +1044,26 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             const pdfBytes = await pdfDoc.save();
             return { pdfBytes, formData };
         }
-
+        
         async function handlePdfAction(isPreview) {
-            if (typeof PDFLib === 'undefined') {
-                alert("Erreur: La bibliothèque PDF n'est pas encore chargée.");
-                return;
-            }
-            
+            if (typeof PDFLib === 'undefined') { alert("Erreur: La bibliothèque PDF n'est pas encore chargée."); return; }
             const btn = isPreview ? previewBtn : generatePdfBtn;
             const originalText = btn.textContent;
-            btn.textContent = 'Génération...';
-            btn.disabled = true;
-
+            btn.textContent = 'Génération...'; btn.disabled = true;
             try {
                 const dateOp = document.getElementById('date_op').value;
                 const nomAdversaire = document.getElementById('nom_adversaire').value;
                 let retexUrl = null;
-
                 if (dateOp && nomAdversaire) {
                     const safeAdversaireName = nomAdversaire.trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
                     const oiId = `${dateOp}_${safeAdversaireName}`;
                     retexUrl = `${RETEX_BASE_URL}?oiId=${encodeURIComponent(oiId)}`;
                 }
-                
                 const result = await buildPdf(retexUrl);
-                
-                if (!result) {
-                    btn.textContent = originalText;
-                    btn.disabled = false;
-                    return;
-                }
-                
+                if (!result) { btn.textContent = originalText; btn.disabled = false; return; }
                 const { pdfBytes, formData } = result;
                 const blob = new Blob([pdfBytes], { type: 'application/pdf' });
                 const url = URL.createObjectURL(blob);
-
                 if (isPreview) {
                     window.open(url, '_blank');
                 } else {
@@ -1048,37 +1075,24 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     link.click();
                     document.body.removeChild(link);
                 }
-
             } catch (error) {
                 console.error("Erreur critique lors de la génération du PDF:", error);
                 alert("Une erreur critique est survenue. Consultez la console (F12).");
             } finally {
-                btn.textContent = originalText;
-                btn.disabled = false;
+                btn.textContent = originalText; btn.disabled = false;
             }
         }
 
         previewBtn.addEventListener('click', () => handlePdfAction(true));
         generatePdfBtn.addEventListener('click', () => handlePdfAction(false));
-
         retexReportBtn.addEventListener('click', () => {
-            if (!APPS_SCRIPT_WEB_APP_URL.includes('macros/s')) {
-                alert("L'URL du script d'analyse n'est pas configurée.");
-                return;
-            }
+            if (!APPS_SCRIPT_WEB_APP_URL.includes('macros/s')) { alert("L'URL du script d'analyse n'est pas configurée."); return; }
             const dateOp = document.getElementById('date_op').value;
             const nomAdversaire = document.getElementById('nom_adversaire').value;
-
-            if (!dateOp || !nomAdversaire) {
-                alert("Veuillez renseigner la date de l'opération et le nom de l'adversaire pour identifier le Retex.");
-                return;
-            }
-
+            if (!dateOp || !nomAdversaire) { alert("Veuillez renseigner la date de l'opération et le nom de l'adversaire pour identifier le Retex."); return; }
             const safeAdversaireName = nomAdversaire.trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
             const oiId = `${dateOp}_${safeAdversaireName}`;
-            
             const reportUrl = `${APPS_SCRIPT_WEB_APP_URL}?action=generateReport&oiId=${encodeURIComponent(oiId)}`;
-            
             alert(`Demande du rapport pour l'opération : ${oiId}. Le téléchargement du PDF va se lancer dans un nouvel onglet.`);
             window.open(reportUrl, '_blank');
         });
