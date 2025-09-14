@@ -732,14 +732,53 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
         
         // --- PDF GENERATION ---
         
-        // MODIFICATION : Fonction drawHyperlink simplifiée et fiabilisée
-        function drawHyperlink(page, text, url, x, y, options) {
-            const { font, size, color } = options;
-            page.drawText(text, { x, y, font, size, color });
+        /**
+         * NOUVELLE FONCTION : Dessine un bouton cliquable centré sur une page PDF.
+         * @param {PDFPage} page La page sur laquelle dessiner.
+         * @param {string} text Le texte du bouton.
+         * @param {string} url L'URL de destination.
+         * @param {object} options Options de style.
+         */
+        function drawButtonLink(page, text, url, options) {
+            const { font, size, textColor, buttonColor } = options;
+            const { width: pageWidth, height: pageHeight } = page.getSize();
+
+            // 1. Calculer les dimensions du texte et du bouton
             const textWidth = font.widthOfTextAtSize(text, size);
             const textHeight = font.heightAtSize(size);
+            const padding = { horizontal: 40, vertical: 20 };
+            const buttonWidth = textWidth + padding.horizontal * 2;
+            const buttonHeight = textHeight + padding.vertical * 2;
+
+            // 2. Calculer les coordonnées pour un centrage parfait
+            const rectX = (pageWidth - buttonWidth) / 2;
+            const rectY = (pageHeight - buttonHeight) / 2;
+            const textX = rectX + padding.horizontal;
+            // pdf-lib dessine le texte à partir de la ligne de base, un petit ajustement est nécessaire
+            const textY = rectY + padding.vertical; 
+            
+            // 3. Dessiner le rectangle (le corps du bouton)
+            page.drawRectangle({
+                x: rectX,
+                y: rectY,
+                width: buttonWidth,
+                height: buttonHeight,
+                color: buttonColor,
+                borderRadius: 10
+            });
+
+            // 4. Dessiner le texte sur le bouton
+            page.drawText(text, {
+                x: textX,
+                y: textY,
+                font: font,
+                size: size,
+                color: textColor
+            });
+
+            // 5. Créer la zone de lien invisible qui recouvre tout le bouton
             page.createURIAnnotation(
-                { x, y, width: textWidth, height: textHeight },
+                { x: rectX, y: rectY, width: buttonWidth, height: buttonHeight },
                 url
             );
         }
@@ -932,6 +971,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             };
             
             // --- Construction du PDF ---
+            // ... (Toutes les pages précédentes de votre PDF sont construites ici, ce code ne change pas) ...
             addNewPage();
             if (backgroundImage) {
                 context.currentPage.drawImage(backgroundImage, { x: 0, y: 0, width: context.pageWidth, height: context.pageHeight });
@@ -1095,35 +1135,20 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             drawSubTitle("Liaison");
             drawWrappedText(getVal('cat_liaison'), {x: context.margin, font: helveticaBoldFont});
             
-            // --- MODIFIÉ : Insertion de la page Retex avec un lien cliquable et une gestion d'erreur ---
+            // --- MODIFIÉ : Insertion de la page dédiée au bouton RETEX ---
             if (retexUrl) {
                 addNewPage();
-                const operationTitle = getVal('nom_adversaire') || 'OPERATION';
-                drawTitle(`RETEX : ${operationTitle.toUpperCase()}`);
-                
-                drawWrappedText("Chaque membre ayant participé à l'opération est tenu de remplir le formulaire de Retour d'Expérience (Retex) en utilisant le lien ci-dessous.", { size: 14, x: context.margin });
-                context.y -= 40;
-
-                try {
-                    const linkText = "Cliquer ici pour accéder au formulaire RETEX (nécessite une connexion internet)";
-                    drawHyperlink(
-                        context.currentPage,
-                        linkText,
-                        retexUrl,
-                        context.margin,
-                        context.y,
-                        { font: helveticaBoldFont, size: 14, color: context.colors.accent }
-                    );
-                } catch (e) {
-                    console.error("Erreur lors de la création de l'hyperlien. Affichage en texte brut.", e);
-                    // Fallback : si la création du lien échoue, on affiche l'URL en texte brut.
-                    drawWrappedText("Lien (à copier/coller) : " + retexUrl, {
-                        x: context.margin,
-                        font: helveticaFont,
-                        size: 11,
-                        color: context.colors.text,
-                    });
-                }
+                drawButtonLink(
+                    context.currentPage,
+                    "Cliquez Ici",
+                    retexUrl,
+                    {
+                        font: helveticaBoldFont,
+                        size: 48,
+                        textColor: rgb(1, 1, 1), // Blanc
+                        buttonColor: rgb(204/255, 0, 0) // Rouge
+                    }
+                );
             }
 
             // --- Page finale ---
