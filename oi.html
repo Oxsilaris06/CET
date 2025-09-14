@@ -730,8 +730,35 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             showStep(currentStep);
         });
         
-        // --- PDF GENERATION (FINAL STABLE VERSION) ---
-        async function buildPdf(retexUrl) { // MODIFIÉ
+        // --- PDF GENERATION ---
+
+        /**
+         * AJOUT : Dessine un texte cliquable (hyperlien) sur une page PDF.
+         * @param {PDFPage} page La page sur laquelle dessiner.
+         * @param {string} text Le texte à afficher.
+         * @param {string} url L'URL de destination du lien.
+         * @param {number} x La coordonnée X.
+         * @param {number} y La coordonnée Y.
+         * @param {object} options Options de police et de taille.
+         */
+        function drawHyperlink(page, text, url, x, y, options) {
+            const { font, size, color } = options;
+            
+            // 1. Dessine le texte à l'écran
+            page.drawText(text, { x, y, font, size, color });
+
+            // 2. Calcule la largeur du texte pour la zone cliquable
+            const textWidth = font.widthOfTextAtSize(text, size);
+            const textHeight = font.heightAtSize(size);
+
+            // 3. Ajoute une "annotation de lien" invisible par-dessus le texte
+            page.createURIAnnotation(
+                { x, y, width: textWidth, height: textHeight },
+                url
+            );
+        }
+
+        async function buildPdf(retexUrl) {
             const { PDFDocument, StandardFonts, rgb, PageSizes } = PDFLib;
             const pdfDoc = await PDFDocument.create();
             const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
@@ -918,7 +945,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 }
             };
             
-            // --- Construction du PDF (votre code original) ---
+            // --- Construction du PDF ---
             addNewPage();
             if (backgroundImage) {
                 context.currentPage.drawImage(backgroundImage, { x: 0, y: 0, width: context.pageWidth, height: context.pageHeight });
@@ -1082,7 +1109,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             drawSubTitle("Liaison");
             drawWrappedText(getVal('cat_liaison'), {x: context.margin, font: helveticaBoldFont});
             
-            // --- MODIFIÉ: Insertion de la page Retex (version stable en texte brut) ---
+            // --- MODIFIÉ : Insertion de la page Retex avec un lien cliquable ---
             if (retexUrl) {
                 addNewPage();
                 const operationTitle = getVal('nom_adversaire') || 'OPERATION';
@@ -1092,16 +1119,20 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 
                 context.y -= 40;
 
-                // Affiche l'URL complète en texte clair. C'est la méthode la plus stable.
-                drawWrappedText(retexUrl, {
-                    x: context.margin,
-                    font: helveticaBoldFont,
-                    size: 14,
-                    color: context.colors.accent,
-                });
+                const linkText = "Cliquer ici pour accéder au formulaire RETEX";
+                
+                // Utilise la nouvelle fonction pour dessiner un lien cliquable
+                drawHyperlink(
+                    context.currentPage,
+                    linkText,
+                    retexUrl,
+                    context.margin, // Coordonnée X
+                    context.y,      // Coordonnée Y
+                    { font: helveticaBoldFont, size: 14, color: context.colors.accent }
+                );
             }
 
-            // --- Page finale (votre code original) ---
+            // --- Page finale ---
             addNewPage();
             if (backgroundImage) {
                 context.currentPage.drawImage(backgroundImage, { x: 0, y: 0, width: context.pageWidth, height: context.pageHeight });
@@ -1126,7 +1157,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             btn.disabled = true;
 
             try {
-                // --- MODIFIÉ: Création de l'URL Retex avant de construire le PDF ---
                 const dateOp = document.getElementById('date_op').value;
                 const nomAdversaire = document.getElementById('nom_adversaire').value;
                 let retexUrl = null;
@@ -1137,7 +1167,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     retexUrl = `${RETEX_BASE_URL}?oiId=${encodeURIComponent(oiId)}`;
                 }
                 
-                const result = await buildPdf(retexUrl); // Passe l'URL à la fonction
+                const result = await buildPdf(retexUrl);
                 
                 if (!result) {
                     btn.textContent = originalText;
