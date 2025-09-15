@@ -104,6 +104,47 @@
             .wizard-nav { flex-wrap: nowrap; }
             .wizard-nav-btn { width: auto; margin-top: 0; }
         }
+
+        /* --- STYLES DU TUTORIEL --- */
+        .tutorial-popup {
+            position: absolute;
+            background: var(--bg-container);
+            color: var(--text-primary);
+            border: 1px solid var(--accent-blue);
+            border-radius: 8px;
+            padding: 15px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.35);
+            z-index: 1001;
+            width: 300px;
+            display: none;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .tutorial-popup p { margin-bottom: 0; }
+        .tutorial-popup button {
+            background-color: var(--accent-blue);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 8px 12px;
+            cursor: pointer;
+            font-family: 'Oswald', sans-serif;
+            text-transform: uppercase;
+        }
+        .tutorial-popup .close-btn {
+            position: absolute;
+            top: 5px;
+            right: 10px;
+            font-size: 20px;
+            cursor: pointer;
+            color: var(--text-secondary);
+        }
+        .highlight-element {
+            box-shadow: 0 0 0 5px var(--accent-blue) !important;
+            transition: box-shadow 0.3s ease-in-out;
+            position: relative;
+            z-index: 1002;
+        }
     </style>
 </head>
 <body class="dark-mode">
@@ -113,6 +154,15 @@
         <a href="index.html" class="dock-menu-item" title="Accueil"><span class="material-icons">home</span></a>
         <div class="dock-menu-item" id="darkModeToggle" title="Changer le thème"><span class="material-symbols-outlined" id="darkModeIcon">nightlight</span></div>
         <div class="dock-menu-item" id="resetBtn" title="Réinitialiser le formulaire"><span class="material-icons">refresh</span></div>
+        <div class="dock-menu-item" id="tutorialBtn" title="Lancer le tutoriel">
+            <span class="material-icons">school</span>
+        </div>
+    </div>
+
+    <div id="tutorial-popup" class="tutorial-popup">
+        <span class="close-btn">&times;</span>
+        <p id="popup-text"></p>
+        <button id="next-popup-btn">Suivant</button>
     </div>
 
     <dialog id="editMemberModal">
@@ -652,6 +702,160 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             }, { offset: Number.NEGATIVE_INFINITY }).element;
         }
 
+        // --- TUTORIAL SYSTEM ---
+        let currentTutorialStep = 0;
+        const tutorialPopup = document.getElementById('tutorial-popup');
+        const popupText = document.getElementById('popup-text');
+        const nextPopupBtn = document.getElementById('next-popup-btn');
+        const closePopupBtn = tutorialPopup.querySelector('.close-btn');
+        let currentHighlightedElement = null;
+
+        const tutorialSteps = [
+            {
+                text: "Bienvenue dans le générateur d'Ordre Initial (OI). Ce tutoriel va vous guider à travers les étapes de création de votre document opérationnel.",
+                selector: '.container'
+            },
+            {
+                text: "L'application est structurée comme un assistant en 10 étapes, représentées par cette barre de progression.",
+                selector: '.wizard-progress'
+            },
+            {
+                text: "Pour commencer, entrez la date de l'opération et décrivez le contexte dans les sections Situation Générale et Particulière.",
+                selector: '#date_op',
+                step: 0
+            },
+            {
+                text: "À l'étape 'Adversaire', vous pouvez télécharger une photo et remplir les informations comme le nom et le domicile. Les boutons '➕' vous permettent d'ajouter des champs dynamiques.",
+                selector: '#adversary_photo_container',
+                step: 1
+            },
+            {
+                text: "L'étape 'Environnement' vous permet de saisir les informations sur le terrain, la météo, la population et le cadre juridique de l'opération.",
+                selector: '#terrain_info',
+                step: 2
+            },
+            {
+                text: "L'étape 'Mission du PSIG' contient des missions pré-remplies, que vous pouvez modifier si nécessaire.",
+                selector: '#missions_psig',
+                step: 3
+            },
+            {
+                text: "Dans l'étape 'Exécution', vous définissez la date et l'heure de l'action. Vous pouvez aussi ajouter, modifier ou réorganiser les événements de la chronologie par glisser-déposer.",
+                selector: '#time_events_container',
+                step: 4
+            },
+            {
+                text: "L'étape 'Articulation' est divisée en sections rétractables pour les équipes INDIA et Appui/Observation. Vous pouvez télécharger des photos d'itinéraire ou d'emplacement.",
+                selector: '.collapsible-container:first-of-type',
+                step: 5
+            },
+            {
+                text: "Dans 'PATRACDVR', vous gérez le personnel et les véhicules de l'opération. Cliquez sur 'Ajouter un véhicule' puis sur les membres pour les éditer.",
+                selector: '#patracdvr_container',
+                step: 6
+            },
+            {
+                text: "L'étape 'Photos' est dédiée aux photos complémentaires qui seront insérées dans le document final.",
+                selector: '.wizard-step:nth-of-type(8)',
+                step: 7
+            },
+            {
+                text: "À l'étape 'Conduites à Tenir (CAT)', vous spécifiez les règles générales, les conditions de désengagement (NO GO) et les procédures de liaison.",
+                selector: '#cat_generales',
+                step: 8
+            },
+            {
+                text: "Enfin, l'étape de 'Finalisation' vous permet de générer le PDF de votre Ordre Initial, de l'apercevoir ou de consulter le rapport Retex s'il est disponible.",
+                selector: '#generatePdfBtn',
+                step: 9
+            },
+            {
+                text: "Le menu en bas de l'écran vous permet d'accéder rapidement aux fonctions comme le changement de thème ou la réinitialisation du formulaire. Le tutoriel est terminé.",
+                selector: '#dockMenu'
+            }
+        ];
+
+        function startTutorial() {
+            if (tutorialPopup.style.display === 'flex') {
+                hideTutorial();
+                return;
+            }
+            goToStep(0);
+            currentTutorialStep = 0;
+            showTutorialStep(currentTutorialStep);
+        }
+
+        function showTutorialStep(stepIndex) {
+            if (stepIndex >= tutorialSteps.length) {
+                hideTutorial();
+                return;
+            }
+
+            const step = tutorialSteps[stepIndex];
+            if (step.step !== undefined && step.step !== currentStep) {
+                goToStep(step.step);
+                setTimeout(() => showTutorialStep(stepIndex), 600);
+                return;
+            }
+
+            if (currentHighlightedElement) {
+                currentHighlightedElement.classList.remove('highlight-element');
+            }
+
+            const targetElement = document.querySelector(step.selector);
+            if (!targetElement) {
+                console.warn(`Tutorial element not found for selector: ${step.selector}`);
+                currentTutorialStep++;
+                showTutorialStep(currentTutorialStep);
+                return;
+            }
+            
+            targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            targetElement.classList.add('highlight-element');
+            currentHighlightedElement = targetElement;
+            
+            popupText.textContent = step.text;
+            nextPopupBtn.textContent = stepIndex === tutorialSteps.length - 1 ? 'Terminer' : 'Suivant';
+
+            const rect = targetElement.getBoundingClientRect();
+            const popupWidth = tutorialPopup.offsetWidth;
+            const popupHeight = tutorialPopup.offsetHeight;
+            let popupX, popupY;
+
+            // Positionnement par rapport à l'élément
+            popupX = rect.left + window.scrollX + (rect.width / 2) - (popupWidth / 2);
+            popupY = rect.top + window.scrollY - popupHeight - 20;
+
+            // Si le pop-up est au-dessus de l'écran, le placer en dessous
+            if (popupY < window.scrollY + 10) {
+                popupY = rect.bottom + window.scrollY + 20;
+            }
+
+            // Correction des bords de l'écran
+            if (popupX < 10) popupX = 10;
+            if (popupX + popupWidth > window.innerWidth - 10) {
+                popupX = window.innerWidth - popupWidth - 10;
+            }
+
+            tutorialPopup.style.top = `${popupY}px`;
+            tutorialPopup.style.left = `${popupX}px`;
+            tutorialPopup.style.display = 'flex';
+        }
+
+        function hideTutorial() {
+            if (currentHighlightedElement) {
+                currentHighlightedElement.classList.remove('highlight-element');
+            }
+            tutorialPopup.style.display = 'none';
+        }
+
+        nextPopupBtn.addEventListener('click', () => {
+            currentTutorialStep++;
+            showTutorialStep(currentTutorialStep);
+        });
+
+        closePopupBtn.addEventListener('click', hideTutorial);
+        
         // --- EVENT LISTENERS & INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', () => {
             document.querySelector('.container').addEventListener('click', (event) => {
@@ -716,6 +920,8 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 }
             });
 
+            document.getElementById('tutorialBtn').addEventListener('click', startTutorial);
+
             if (localStorage.getItem('theme') === 'light') {
                 document.body.classList.replace('dark-mode', 'light-mode');
                 document.getElementById('darkModeIcon').textContent = 'clear_day';
@@ -731,7 +937,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
         });
         
         // --- PDF GENERATION (FINAL STABLE VERSION) ---
-        async function buildPdf(retexUrl) { // MODIFIÉ
+        async function buildPdf(retexUrl) {
             const { PDFDocument, StandardFonts, rgb, PageSizes } = PDFLib;
             const pdfDoc = await PDFDocument.create();
             const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
@@ -769,7 +975,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             }
             
             const addNewPage = () => {
-                context.currentPage = context.pdfDoc.addPage([PageSizes.A4[1], PageSizes.A4[0]]); // Paysage
+                context.currentPage = context.pdfDoc.addPage([PageSizes.A4[1], PageSizes.A4[0]]);
                 const { width, height } = context.currentPage.getSize();
                 context.pageWidth = width; context.pageHeight = height;
                 context.y = height - context.margin;
@@ -1137,7 +1343,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     retexUrl = `${RETEX_BASE_URL}?oiId=${encodeURIComponent(oiId)}`;
                 }
                 
-                const result = await buildPdf(retexUrl); // Passe l'URL à la fonction
+                const result = await buildPdf(retexUrl);
                 
                 if (!result) {
                     btn.textContent = originalText;
