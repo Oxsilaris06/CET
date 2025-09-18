@@ -76,8 +76,8 @@
         .file-name-display { color: var(--text-secondary); font-style: italic; margin-left: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 250px; }
         .image-preview { max-width: 150px; max-height: 100px; margin-top: 10px; border-radius: 4px; border: 1px solid var(--border-color); }
         .draggable { cursor: move; user-select: none; }
-        .draggable.dragging { opacity: 0.5; }
-        .patracdvr-members-container { display: flex; flex-wrap: wrap; gap: 10px; padding: 10px 0; min-height: 50px; }
+        .draggable.dragging { opacity: 0.5; border: 2px dashed var(--accent-blue); }
+        .patracdvr-members-container { display: flex; flex-wrap: wrap; gap: 10px; padding: 10px 0; min-height: 50px; border-radius: 5px; }
         .patracdvr-member-btn {
             background-color: var(--bg-body); border: 1px solid var(--border-color);
             color: var(--text-primary); padding: 8px 12px; border-radius: 5px;
@@ -242,6 +242,7 @@
                     <h3 style="margin-top: 20px;">Photos supplémentaires de l'adversaire</h3>
                     <div id="adversary_extra_photos_container"></div>
                     <button type="button" class="add-btn" onclick="addPhotoInput('adversary_extra_photos_container')">Ajouter Photo Adversaire ➕</button>
+                    
                     <label for="substances_adversaire">Substances :</label><input type="text" id="substances_adversaire">
                     <label>Véhicules :</label><div id="vehicules_container"></div><button type="button" class="add-btn" onclick="addDynamicField('vehicules_container')">➕</button>
                     <label for="armes_connues">Armes connues :</label><input type="text" id="armes_connues">
@@ -562,7 +563,8 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 addPatracdvrMember(membersContainer);
             });
             
-            enableDragAndDrop(membersContainer);
+            // --- MODIFICATION: SUPPRESSION de l'ancien appel D&D
+            // enableDragAndDrop(membersContainer); 
             members.forEach(m => addPatracdvrMember(membersContainer, m));
         }
 
@@ -662,41 +664,9 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
         }
 
         // --- DRAG & DROP ---
-        function enableDragAndDrop(container) {
-            if (!container) return;
-            let draggedItem = null;
-            container.addEventListener('dragstart', e => {
-                if (e.target.classList.contains('draggable')) {
-                    draggedItem = e.target;
-                    e.dataTransfer.effectAllowed = 'move';
-                    e.dataTransfer.setData('text/plain', e.target.id);
-                    setTimeout(() => e.target.classList.add('dragging'), 0);
-                }
-            });
-            container.addEventListener('dragend', e => {
-                if(draggedItem) {
-                    draggedItem.classList.remove('dragging');
-                    draggedItem = null;
-                }
-            });
-            container.addEventListener('dragover', e => {
-                e.preventDefault();
-                const afterElement = getDragAfterElement(container, e.clientY);
-                if (draggedItem) {
-                    if (afterElement == null) {
-                        container.appendChild(draggedItem);
-                    } else {
-                        container.insertBefore(draggedItem, afterElement);
-                    }
-                }
-            });
-            container.addEventListener('drop', e => {
-                e.preventDefault();
-                if(draggedItem) {
-                    saveFormData();
-                }
-            });
-        }
+        // MODIFICATION START: Logique de glisser-déposer améliorée
+        let draggedItem = null;
+
         function getDragAfterElement(container, y) {
             const draggableElements = [...container.querySelectorAll('.draggable:not(.dragging)')];
             return draggableElements.reduce((closest, child) => {
@@ -709,6 +679,39 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 }
             }, { offset: Number.NEGATIVE_INFINITY }).element;
         }
+
+        function initializePatracdvrDragAndDrop() {
+            const patracdvrContainer = document.getElementById('patracdvr_container');
+
+            patracdvrContainer.addEventListener('dragstart', e => {
+                if (e.target.classList.contains('patracdvr-member-btn')) {
+                    draggedItem = e.target;
+                    setTimeout(() => e.target.classList.add('dragging'), 0);
+                }
+            });
+
+            patracdvrContainer.addEventListener('dragend', e => {
+                if (draggedItem) {
+                    draggedItem.classList.remove('dragging');
+                    draggedItem = null;
+                    saveFormData();
+                }
+            });
+
+            patracdvrContainer.addEventListener('dragover', e => {
+                e.preventDefault();
+                const targetContainer = e.target.closest('.patracdvr-members-container');
+                if (targetContainer && draggedItem) {
+                    const afterElement = getDragAfterElement(targetContainer, e.clientY);
+                    if (afterElement == null) {
+                        targetContainer.appendChild(draggedItem);
+                    } else {
+                        targetContainer.insertBefore(draggedItem, afterElement);
+                    }
+                }
+            });
+        }
+        // MODIFICATION END
 
         // --- TUTORIAL SYSTEM ---
         let currentTutorialStep = 0;
@@ -759,7 +762,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 step: 5
             },
             {
-                text: "Dans 'PATRACDVR', vous gérez le personnel et les véhicules de l'opération. Cliquez sur 'Ajouter un véhicule' puis sur les membres pour les éditer.",
+                text: "Dans 'PATRACDVR', vous gérez le personnel et les véhicules de l'opération. Vous pouvez glisser-déposer un membre d'un véhicule à un autre pour le réassigner.",
                 selector: '#patracdvr_container',
                 step: 6
             },
@@ -819,7 +822,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 tutorialPopup.style.left = '50%';
                 tutorialPopup.style.transform = 'translate(-50%, -50%)';
                 tutorialPopup.style.display = 'flex';
-                currentHighlightedElement = null; // Pas d'élément à mettre en surbrillance pour le premier pop-up
+                currentHighlightedElement = null; 
                 return;
             }
 
@@ -840,16 +843,13 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             const popupHeight = tutorialPopup.offsetHeight;
             let popupX, popupY;
 
-            // Positionnement par rapport à l'élément
             popupX = rect.left + window.scrollX + (rect.width / 2) - (popupWidth / 2);
             popupY = rect.top + window.scrollY - popupHeight - 20;
 
-            // Si le pop-up est au-dessus de l'écran, le placer en dessous
             if (popupY < window.scrollY + 10) {
                 popupY = rect.bottom + window.scrollY + 20;
             }
 
-            // Correction des bords de l'écran
             if (popupX < 10) popupX = 10;
             if (popupX + popupWidth > window.innerWidth - 10) {
                 popupX = window.innerWidth - popupWidth - 10;
@@ -950,7 +950,11 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             }
 
             addPhotoInput('adversary_photo_container', true);
-            enableDragAndDrop(document.querySelector('#time_events_container'));
+            
+            // MODIFICATION: Initialisation de la nouvelle logique D&D
+            initializePatracdvrDragAndDrop();
+            enableDragAndDrop(document.querySelector('#time_events_container')); // Laisser l'ancien pour la chronologie
+
             loadFormData();
             showStep(currentStep);
         });
@@ -1214,7 +1218,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 drawTable(adversaireHeaders, adversaireRows.filter(r => r[1] && r[1].trim() !== 'à'), [150, tableWidth - 150], context.margin);
             }
             
-            // MODIFICATION: Ajout des pages pour les photos supplémentaires
             await drawImagesFromContainer('adversary_extra_photos_container', 'Photo Supplémentaire - Adversaire');
             await drawImagesFromContainer('renforts_photo_container', 'Photo - Renfort Potentiel');
 
