@@ -76,8 +76,8 @@
         .file-name-display { color: var(--text-secondary); font-style: italic; margin-left: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 250px; }
         .image-preview { max-width: 150px; max-height: 100px; margin-top: 10px; border-radius: 4px; border: 1px solid var(--border-color); }
         .draggable { cursor: move; user-select: none; }
-        .draggable.dragging { opacity: 0.5; border: 2px dashed var(--accent-blue); }
-        .patracdvr-members-container { display: flex; flex-wrap: wrap; gap: 10px; padding: 10px 0; min-height: 50px; border-radius: 5px; }
+        .draggable.dragging { opacity: 0.5; }
+        .patracdvr-members-container { display: flex; flex-wrap: wrap; gap: 10px; padding: 10px 0; min-height: 50px; }
         .patracdvr-member-btn {
             background-color: var(--bg-body); border: 1px solid var(--border-color);
             color: var(--text-primary); padding: 8px 12px; border-radius: 5px;
@@ -86,42 +86,26 @@
         .patracdvr-member-btn:hover { border-color: var(--accent-blue); }
         .patracdvr-member-btn .trigramme { font-weight: bold; }
         .patracdvr-member-btn .fonction { font-size: 0.8em; color: var(--text-secondary); display: block; }
-        
-        /* --- MODAL STYLES --- */
         #editMemberModal {
             color: var(--text-primary); background: var(--bg-container);
             width: 100vw; max-width: 100vw; height: 100vh; max-height: 100vh;
-            margin: 0; border: none; border-radius: 0; 
-            /* CORRECTION: Padding retiré pour éviter le débordement */
-            padding: 0; 
+            margin: 0; border: none; border-radius: 0; padding: 15px;
         }
         #editMemberModal::backdrop { background: rgba(0, 0, 0, 0.85); }
-        #editMemberModal #editMemberForm { 
-            display: flex; flex-direction: column; height: 100%; 
-            /* CORRECTION: Padding ajouté ici pour contenir le layout */
-            padding: 15px;
-        }
+        #editMemberModal #editMemberForm { display: flex; flex-direction: column; height: 100%; }
         #editMemberModal .modal-content { flex: 1 1 auto; overflow-y: auto; padding: 0 5px; }
         #editMemberModal .modal-actions { flex-shrink: 0; display: flex; justify-content: space-between; gap: 10px; margin-top: 20px; }
         
-        /* CORRECTION: Règle unifiée pour des boutons de taille égale */
+        /* CORRECTION 1 START: Règle unifiée pour la taille des boutons */
         #editMemberModal .modal-actions button {
             flex: 1;
         }
+        #modal_cancelBtn { background-color: var(--bg-interactive); border: 1px solid var(--border-color); color: var(--text-primary); }
         #modal_deleteBtn { background-color: var(--danger-red); color: white; }
+        /* CORRECTION 1 END: Suppression des anciennes règles flex-grow conflictuelles */
         
-        /* Styles pour les écrans plus larges */
         @media (min-width: 600px) {
-            #editMemberModal { 
-                width: 90%; max-width: 500px; height: auto; max-height: 90vh; 
-                margin: auto; border: 1px solid var(--border-color); border-radius: 8px; 
-                /* CORRECTION: Le padding est restauré pour la vue desktop */
-                padding: 15px;
-            }
-            /* CORRECTION: On annule le padding du formulaire pour la vue desktop pour éviter un double padding */
-            #editMemberModal #editMemberForm {
-                padding: 0;
-            }
+            #editMemberModal { width: 90%; max-width: 500px; height: auto; max-height: 90vh; margin: auto; border: 1px solid var(--border-color); border-radius: 8px; }
             .wizard-nav { flex-wrap: nowrap; }
             .wizard-nav-btn { width: auto; margin-top: 0; }
         }
@@ -231,7 +215,7 @@
 
         <form id="oi-form">
             <div class="wizard-content">
-                 <div class="wizard-step">
+                <div class="wizard-step">
                     <h2>1. Situation</h2>
                     <label for="date_op">Date de l'opération :</label><input type="date" id="date_op">
                     <label for="situation_generale">1.1 Générale :</label><textarea id="situation_generale"></textarea>
@@ -263,7 +247,6 @@
                     <h3 style="margin-top: 20px;">Photos supplémentaires de l'adversaire</h3>
                     <div id="adversary_extra_photos_container"></div>
                     <button type="button" class="add-btn" onclick="addPhotoInput('adversary_extra_photos_container')">Ajouter Photo Adversaire ➕</button>
-                    
                     <label for="substances_adversaire">Substances :</label><input type="text" id="substances_adversaire">
                     <label>Véhicules :</label><div id="vehicules_container"></div><button type="button" class="add-btn" onclick="addDynamicField('vehicules_container')">➕</button>
                     <label for="armes_connues">Armes connues :</label><input type="text" id="armes_connues">
@@ -584,6 +567,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 addPatracdvrMember(membersContainer);
             });
             
+            enableDragAndDrop(membersContainer);
             members.forEach(m => addPatracdvrMember(membersContainer, m));
         }
 
@@ -731,41 +715,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             }, { offset: Number.NEGATIVE_INFINITY }).element;
         }
 
-        // --- NOUVELLE LOGIQUE D&D POUR PATRACDVR ---
-        let globalDraggedItem = null;
-        function initializePatracdvrDragAndDrop() {
-            const patracdvrContainer = document.getElementById('patracdvr_container');
-
-            patracdvrContainer.addEventListener('dragstart', e => {
-                if (e.target.classList.contains('patracdvr-member-btn')) {
-                    globalDraggedItem = e.target;
-                    setTimeout(() => e.target.classList.add('dragging'), 0);
-                }
-            });
-
-            patracdvrContainer.addEventListener('dragend', e => {
-                if (globalDraggedItem && e.target.classList.contains('patracdvr-member-btn')) {
-                    globalDraggedItem.classList.remove('dragging');
-                    globalDraggedItem = null;
-                    saveFormData();
-                }
-            });
-
-            patracdvrContainer.addEventListener('dragover', e => {
-                e.preventDefault();
-                const targetContainer = e.target.closest('.patracdvr-members-container');
-                if (targetContainer && globalDraggedItem) {
-                    const afterElement = getDragAfterElement(targetContainer, e.clientY);
-                    if (afterElement == null) {
-                        targetContainer.appendChild(globalDraggedItem);
-                    } else {
-                        targetContainer.insertBefore(globalDraggedItem, afterElement);
-                    }
-                }
-            });
-        }
-
-
         // --- TUTORIAL SYSTEM ---
         let currentTutorialStep = 0;
         const tutorialPopup = document.getElementById('tutorial-popup');
@@ -775,7 +724,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
         let currentHighlightedElement = null;
 
         const tutorialSteps = [
-             {
+            {
                 text: "Bienvenue dans le générateur d'Ordre Initial (OI). Ce tutoriel va vous guider à travers les étapes de création de votre document opérationnel.",
                 selector: '.container',
                 center: true
@@ -815,7 +764,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 step: 5
             },
             {
-                text: "Dans 'PATRACDVR', vous gérez le personnel et les véhicules de l'opération. Vous pouvez glisser-déposer un membre d'un véhicule à un autre pour le réassigner.",
+                text: "Dans 'PATRACDVR', vous gérez le personnel et les véhicules de l'opération. Cliquez sur 'Ajouter un véhicule' puis sur les membres pour les éditer.",
                 selector: '#patracdvr_container',
                 step: 6
             },
@@ -875,7 +824,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 tutorialPopup.style.left = '50%';
                 tutorialPopup.style.transform = 'translate(-50%, -50%)';
                 tutorialPopup.style.display = 'flex';
-                currentHighlightedElement = null; 
+                currentHighlightedElement = null; // Pas d'élément à mettre en surbrillance pour le premier pop-up
                 return;
             }
 
@@ -896,13 +845,16 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             const popupHeight = tutorialPopup.offsetHeight;
             let popupX, popupY;
 
+            // Positionnement par rapport à l'élément
             popupX = rect.left + window.scrollX + (rect.width / 2) - (popupWidth / 2);
             popupY = rect.top + window.scrollY - popupHeight - 20;
 
+            // Si le pop-up est au-dessus de l'écran, le placer en dessous
             if (popupY < window.scrollY + 10) {
                 popupY = rect.bottom + window.scrollY + 20;
             }
 
+            // Correction des bords de l'écran
             if (popupX < 10) popupX = 10;
             if (popupX + popupWidth > window.innerWidth - 10) {
                 popupX = window.innerWidth - popupWidth - 10;
@@ -1003,10 +955,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             }
 
             addPhotoInput('adversary_photo_container', true);
-            
-            initializePatracdvrDragAndDrop();
-            enableDragAndDrop(document.querySelector('#time_events_container')); 
-
+            enableDragAndDrop(document.querySelector('#time_events_container'));
             loadFormData();
             showStep(currentStep);
         });
@@ -1050,7 +999,8 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             }
             
             const addNewPage = () => {
-                context.currentPage = context.pdfDoc.addPage([PageSizes.A4[1], Pages.A4[0]]);
+                // CORRECTION 2: Remplacement de "Pages" par "PageSizes"
+                context.currentPage = context.pdfDoc.addPage([PageSizes.A4[1], PageSizes.A4[0]]);
                 const { width, height } = context.currentPage.getSize();
                 context.pageWidth = width; context.pageHeight = height;
                 context.y = height - context.margin;
