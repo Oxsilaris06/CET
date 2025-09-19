@@ -527,7 +527,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             if (isSingle) container.innerHTML = '';
             const itemWrapper = document.createElement('div');
             itemWrapper.className = 'photo-input-wrapper';
-            const uniqueId = `photo_${Date.now()}_${Math.random()}`;
+            const uniqueId = isSingle ? `photo_${containerId}` : `photo_${Date.now()}_${Math.random()}`;
             const previewId = `preview_${uniqueId}`;
             itemWrapper.innerHTML = `
                 <div class="dynamic-list-item">
@@ -535,7 +535,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     <label for="${uniqueId}" class="file-upload-label">Choisir une photo</label>
                     <span id="span_${uniqueId}" class="file-name-display">Aucun fichier</span>
                     <button type="button" class="add-btn annotate-btn" style="display:none; margin-left:5px; background-color: var(--accent-blue);" onclick="openAnnotationModal('${previewId}')">Annoter</button>
-                    ${!isSingle ? '<button type="button" class="remove-btn" onclick="this.closest(\'.photo-input-wrapper\').remove()">❌</button>' : ''}
+                    ${!isSingle ? '<button type="button" class="remove-btn" onclick="this.closest(\'.photo-input-wrapper\').remove(); saveFormData();">❌</button>' : ''}
                 </div>
                 <img id="${previewId}" class="image-preview" style="display:none;" alt="Aperçu"/>`;
             container.appendChild(itemWrapper);
@@ -550,9 +550,10 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 const reader = new FileReader();
                 reader.onload = e => {
                     previewImg.src = e.target.result;
-                    previewImg.dataset.originalSrc = e.target.result; // Stocke la source originale
+                    previewImg.dataset.originalSrc = e.target.result; 
                     previewImg.style.display = 'block';
                     if (annotateBtn) annotateBtn.style.display = 'inline-block';
+                    saveFormData();
                 }
                 reader.readAsDataURL(input.files[0]);
             } else {
@@ -560,6 +561,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 previewImg.src = '';
                 previewImg.style.display = 'none';
                 if (annotateBtn) annotateBtn.style.display = 'none';
+                saveFormData();
             }
         }
         function addDynamicField(containerId, value = '') {
@@ -714,6 +716,15 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                         data[img.id + '_original_src'] = img.dataset.originalSrc;
                     }
                 });
+                data.photo_container_list = {};
+                document.querySelectorAll('div[id^="photo_container_"]').forEach(container => {
+                    const images = [];
+                    container.querySelectorAll('.image-preview').forEach(img => {
+                         if (img.src.startsWith('data:image')) images.push(img.src);
+                    });
+                    if (images.length > 0) data.photo_container_list[container.id] = images;
+                });
+
 
                 data.me_list = Array.from(document.querySelectorAll('#me_container .me-input')).map(i => i.value).filter(Boolean);
                 data.etat_esprit_list = Array.from(document.querySelectorAll(`#etat_esprit_container .dynamic-input`)).map(i => i.value).filter(Boolean);
@@ -756,6 +767,25 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                         }
                         return;
                     }
+                     if (key === 'photo_container_list') {
+                        Object.keys(data[key]).forEach(containerId => {
+                            const container = document.getElementById(containerId);
+                            if (container) {
+                                (data[key][containerId] || []).forEach((imgSrc, index) => {
+                                    if (index > 0 || container.querySelector('.image-preview')) { addPhotoInput(containerId); }
+                                    const lastWrapper = container.querySelector('.photo-input-wrapper:last-child');
+                                    if (lastWrapper) {
+                                        const previewImg = lastWrapper.querySelector('.image-preview');
+                                        previewImg.src = imgSrc;
+                                        previewImg.style.display = 'block';
+                                        lastWrapper.querySelector('.annotate-btn').style.display = 'inline-block';
+                                    }
+                                });
+                            }
+                        });
+                        return;
+                    }
+
                     if (['patracdvr_rows', 'patracdvr_unassigned'].includes(key)) return; 
 
                     const el = document.getElementById(key);
@@ -835,7 +865,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             };
             const dragOverHandler = e => {
                 e.preventDefault();
-                const targetContainer = e.target.closest('.patracdvr-members-container, #unassigned_members_container');
+                const targetContainer = e.target.closest('.patracdvr-members-container, #unassigned_members_container, #time_events_container');
                 if (targetContainer && draggedItem) {
                     const afterElement = getDragAfterElement(targetContainer, e.clientY);
                     if (afterElement == null) {
@@ -848,7 +878,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
 
             document.addEventListener('dragstart', dragStartHandler);
             document.addEventListener('dragend', dragEndHandler);
-            container.addEventListener('dragover', dragOverHandler);
+            document.addEventListener('dragover', dragOverHandler);
         }
 
         function getDragAfterElement(container, y) {
@@ -1255,8 +1285,10 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             if (localStorage.getItem('dockCollapsed') === 'true') { dockMenu.classList.add('collapsed'); }
 
             addPhotoInput('adversary_photo_container', true);
-            enableDragAndDrop(document.querySelector('.container'));
-            enableDragAndDrop(document.querySelector('#time_events_container'));
+            // Initialisation du Drag & Drop pour les conteneurs existants au chargement
+            enableDragAndDrop(document.getElementById('patracdvr_container'));
+            enableDragAndDrop(document.getElementById('unassigned_members_container'));
+            enableDragAndDrop(document.getElementById('time_events_container'));
             loadFormData();
             showStep(currentStep);
         });
@@ -1298,7 +1330,8 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             } catch (e) {
                 console.warn("L'image de fond 'Fd.png' n'a pas pu être chargée.", e);
             }
-            
+
+            // --- NOUVELLES FONCTIONS DE MISE EN FORME ---
             const addNewPage = () => {
                 context.currentPage = context.pdfDoc.addPage([PageSizes.A4[1], PageSizes.A4[0]]);
                 const { width, height } = context.currentPage.getSize();
@@ -1308,24 +1341,23 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             };
 
             const checkY = (spaceNeeded) => { if (context.y - spaceNeeded < context.margin) { addNewPage(); return true; } return false; };
-            const drawTitle = (text, size = 18) => { checkY(size + 12); context.currentPage.drawText(text, { x: context.margin, y: context.y, font: helveticaBoldFont, size, color: context.colors.accent }); context.y -= (size + 12); };
-            const drawSubTitle = (text, size = 14) => { if (checkY(size + 11)) { context.y -= 5; } context.currentPage.drawText(text, { x: context.margin, y: context.y, font: helveticaBoldFont, size, color: context.colors.accent }); context.y -= (size + 11); };
-            const drawLabelAndText = (label, text) => {
-                const font = helveticaFont;
-                const size = 11;
-                const labelWidth = helveticaBoldFont.widthOfTextAtSize(label, size);
-                const maxWidth = context.pageWidth - context.margin * 2 - labelWidth - 5;
-                const lines = wrapText(text, font, size, maxWidth);
-                const totalHeight = lines.length * (size + 4);
-                if (checkY(totalHeight)) { context.y -= 5; }
-                context.currentPage.drawText(label, { x: context.margin, y: context.y, font: helveticaBoldFont, size: size, color: context.colors.text});
-                lines.forEach((line, index) => {
-                    context.currentPage.drawText(line, { x: context.margin + labelWidth + 5, y: context.y - (index * (size + 4)), font, size, color: context.colors.text });
-                });
-                context.y -= (totalHeight + 5);
+
+            const drawTitle = (text) => {
+                checkY(40);
+                context.y -= 10; // Espace avant le titre
+                context.currentPage.drawText(text, { x: context.margin, y: context.y, font: helveticaBoldFont, size: 18, color: context.colors.accent });
+                context.y -= 25; // Espace après le titre
             };
+            
+            const drawSubTitle = (text) => {
+                checkY(25);
+                context.y -= 5; // Espace avant le sous-titre
+                context.currentPage.drawText(text, { x: context.margin, y: context.y, font: helveticaBoldFont, size: 14, color: context.colors.accent });
+                context.y -= 20; // Espace après
+            };
+            
             const wrapText = (text, font, size, maxWidth) => {
-                const words = String(text || '').replace(/\n/g, ' \n ').split(' ');
+                const words = String(text || 'N/A').replace(/\n/g, ' \n ').split(' ');
                 let lines = []; let currentLine = '';
                 for (const word of words) {
                     if (word === '\n') { lines.push(currentLine); currentLine = ''; continue; }
@@ -1336,17 +1368,47 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 }
                 lines.push(currentLine); return lines;
             };
+
             const drawWrappedText = (text, options = {}) => {
-                const { font = helveticaFont, size = 12, color = context.colors.text, x = context.margin + 15, spacing = 10 } = options;
+                const { x = context.margin + 15, size = 11, font = helveticaFont, spacingAfter = 15 } = options;
                 const maxWidth = context.pageWidth - x - context.margin;
                 const lines = wrapText(text, font, size, maxWidth);
                 const totalHeight = lines.length * (size + 4);
-                if (checkY(totalHeight + spacing)) { context.y -= (size + 4); }
+                if (checkY(totalHeight + spacingAfter)) { context.y -= (size + 4); }
                 lines.forEach((line, index) => {
-                    context.currentPage.drawText(line, { x, y: context.y - (index * (size + 4)), font, size, color });
+                    context.currentPage.drawText(line, { x, y: context.y - (index * (size + 4)), font, size, color: context.colors.text });
                 });
-                context.y -= (totalHeight + spacing);
+                context.y -= (totalHeight + spacingAfter);
             };
+
+            const drawLabelAndText = (label, text) => {
+                if (!text || text.trim() === '') return;
+                const labelWidth = 150;
+                const valueX = context.margin + labelWidth;
+                const maxWidth = context.pageWidth - valueX - context.margin;
+                const size = 11;
+                const lines = wrapText(text, helveticaFont, size, maxWidth);
+                const totalHeight = lines.length * (size + 4);
+                
+                checkY(totalHeight + 8);
+                
+                context.currentPage.drawText(label, { x: context.margin, y: context.y, font: helveticaBoldFont, size: size, color: context.colors.text});
+                lines.forEach((line, index) => {
+                    context.currentPage.drawText(line, { x: valueX, y: context.y - (index * (size + 4)), font: helveticaFont, size: size, color: context.colors.text });
+                });
+                context.y -= totalHeight + 8;
+            };
+            
+            const drawBulletPointList = (label, items) => {
+                if (!items || items.length === 0) return;
+                checkY(20);
+                drawSubTitle(label);
+                items.forEach(item => {
+                    drawWrappedText(`•  ${item}`, {x: context.margin + 10, spacingAfter: 5});
+                });
+                context.y -= 10;
+            };
+
             const drawTable = (headers, rows, columnWidths, startX) => {
                 let currentY = context.y; const rowPadding = 5; const headerFontSize = 10; const contentFontSize = 9;
                 const drawRow = (rowData, isHeader) => {
@@ -1370,7 +1432,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 return new Promise((resolve, reject) => {
                     if (!source) return reject(new Error('Source d\'image nulle ou indéfinie.'));
                     const img = new Image();
-                    img.crossOrigin = "anonymous"; // Essentiel pour les images distantes
+                    img.crossOrigin = "anonymous";
                     let objectUrl = null;
 
                     if (source instanceof File) {
@@ -1397,29 +1459,35 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             };
             
             const drawImagesFromContainer = async (containerId, title) => {
-                const imageSrc = formData[`preview_photo_${containerId}_src`];
-                if (!imageSrc) return;
+                const imageSrc = formData[`preview_photo_${containerId}_src`]; // Pour les photos uniques
+                const imageList = formData.photo_container_list ? formData.photo_container_list[containerId] : []; // Pour les listes de photos
 
-                addNewPage();
-                try {
-                    const imageBytes = await processImage(imageSrc);
-                    const image = await pdfDoc.embedJpg(imageBytes);
-                    const { width, height } = context.currentPage.getSize();
-                    const paddedW = width - context.margin * 2;
-                    const paddedH = height - context.margin * 2 - 40; // Espace pour le titre
-                    const scaled = image.scaleToFit(paddedW, paddedH);
-                    const x = (width - scaled.width) / 2;
-                    const y = (height - scaled.height) / 2 + 20; // Centré verticalement avec titre en bas
+                const sources = [];
+                if (imageSrc) sources.push({src: imageSrc, title: title});
+                if (imageList) {
+                    imageList.forEach((src, i) => sources.push({ src: src, title: `${title} (${i+1})`}));
+                }
+                if (sources.length === 0) return;
 
-                    context.currentPage.drawImage(image, { x, y, width: scaled.width, height: scaled.height });
+                for (const item of sources) {
+                    addNewPage();
+                    try {
+                        const imageBytes = await processImage(item.src);
+                        const image = await pdfDoc.embedJpg(imageBytes);
+                        const { width, height } = context.currentPage.getSize();
+                        const paddedW = width - context.margin * 2; const paddedH = height - context.margin * 2 - 40;
+                        const scaled = image.scaleToFit(paddedW, paddedH);
+                        const x = (width - scaled.width) / 2; const y = (height - scaled.height) / 2 + 20;
 
-                    const textWidth = helveticaBoldFont.widthOfTextAtSize(title, 14);
-                    context.currentPage.drawText(title, { x: width / 2 - textWidth / 2, y: y - 20, font: helveticaBoldFont, size: 14, color: context.colors.text });
-                } catch (e) {
-                    console.error(`Impossible de traiter ou d'intégrer l'image pour : ${title}`, e);
-                    checkY(50);
-                    drawSubTitle(`Erreur d'image: ${title}`);
-                    drawWrappedText(`Impossible de charger l'image.\nErreur: ${e.message}`);
+                        context.currentPage.drawImage(image, { x, y, width: scaled.width, height: scaled.height });
+
+                        const textWidth = helveticaBoldFont.widthOfTextAtSize(item.title, 14);
+                        context.currentPage.drawText(item.title, { x: width / 2 - textWidth / 2, y: y - 20, font: helveticaBoldFont, size: 14, color: context.colors.text });
+                    } catch (e) {
+                        console.error(`Impossible de traiter ou d'intégrer l'image pour : ${item.title}`, e);
+                        drawSubTitle(`Erreur d'image: ${item.title}`);
+                        drawWrappedText(`Impossible de charger l'image.\nErreur: ${e.message}`);
+                    }
                 }
             };
             
@@ -1463,17 +1531,24 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 drawLabelAndText('Attitude Connue:', getVal('attitude_adversaire'));
                 drawLabelAndText('Substances:', getVal('substances_adversaire'));
                 drawLabelAndText('Armes connues:', getVal('armes_connues'));
-                if (formData.me_list && formData.me_list.length > 0) drawLabelAndText('Moyens Employés:', formData.me_list.join(', '));
-                if (formData.etat_esprit_list && formData.etat_esprit_list.length > 0) drawLabelAndText('État d\'esprit:', formData.etat_esprit_list.join(', '));
-                if (formData.volume_list && formData.volume_list.length > 0) drawLabelAndText('Volume (Renfort):', formData.volume_list.join(', '));
-                if (formData.vehicules_list && formData.vehicules_list.length > 0) drawLabelAndText('Véhicules:', formData.vehicules_list.join(', '));
+                
+                context.y -= 10;
+                drawBulletPointList('Moyens Employés:', formData.me_list);
+                drawBulletPointList('État d\'esprit:', formData.etat_esprit_list);
+                drawBulletPointList('Volume (Renfort):', formData.volume_list);
+                drawBulletPointList('Véhicules:', formData.vehicules_list);
                 
                 // --- 1.4 ENVIRONNEMENT ---
-                drawSubTitle('1.4 Environnement');
-                drawLabelAndText('Amis (soutien):', getVal('amies'));
-                drawLabelAndText('Terrain / Météo:', getVal('terrain_info'));
-                drawLabelAndText('Population:', getVal('population'));
-                drawLabelAndText('Cadre Juridique:', getVal('cadre_juridique'));
+                addNewPage();
+                drawTitle('1.4 Environnement');
+                drawSubTitle('Amis (soutien)');
+                drawWrappedText(getVal('amies'));
+                drawSubTitle('Terrain / Météo');
+                drawWrappedText(getVal('terrain_info'));
+                drawSubTitle('Population');
+                drawWrappedText(getVal('population'));
+                drawSubTitle('Cadre Juridique');
+                drawWrappedText(getVal('cadre_juridique'));
 
                 // --- 2. MISSION & 3. EXÉCUTION ---
                 addNewPage();
@@ -1483,6 +1558,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 drawTitle('3. EXÉCUTION');
                 drawLabelAndText('Date / Heure:', `${getVal('date_execution')} à ${getVal('heure_execution')}`);
                 drawLabelAndText('Type d\'action:', getVal('type_action'));
+                
                 drawSubTitle('Chronologie');
                 if (formData.time_events && formData.time_events.length > 0) {
                     const timeHeaders = ['Type', 'Heure', 'Description'];
@@ -1499,19 +1575,24 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 drawLabelAndText('Place du Chef (Générale):', getVal('place_chef'));
                 
                 drawSubTitle('Équipe INDIA (INTER)');
-                drawLabelAndText('Mission:', getVal('india_mission'));
-                drawLabelAndText('Objectif:', getVal('india_objectif'));
-                drawLabelAndText('Itinéraire:', getVal('india_itineraire'));
-                drawLabelAndText('Points Particuliers:', getVal('india_points_particuliers'));
-                drawLabelAndText('Conduite à Tenir:', getVal('india_cat'));
+                drawWrappedText(`Mission: ${getVal('india_mission')}`);
+                drawWrappedText(`Objectif: ${getVal('india_objectif')}`);
+                drawSubTitle('Itinéraire (INDIA)');
+                drawWrappedText(getVal('india_itineraire'));
+                drawSubTitle('Points Particuliers (INDIA)');
+                drawWrappedText(getVal('india_points_particuliers'));
+                drawSubTitle('Conduite à Tenir (INDIA)');
+                drawWrappedText(getVal('india_cat'));
                 
                 checkY(20);
                 drawSubTitle('Équipe Appui/Observation (AO)');
-                drawLabelAndText('Zone d\'installation:', getVal('ao_zone_installation'));
-                drawLabelAndText('Mission:', getVal('ao_mission'));
-                drawLabelAndText('Secteur de surveillance:', getVal('ao_secteur_surveillance'));
-                drawLabelAndText('Points Particuliers:', getVal('ao_points_particuliers'));
-                drawLabelAndText('Conduite à Tenir:', getVal('ao_cat'));
+                drawWrappedText(`Zone d'installation: ${getVal('ao_zone_installation')}`);
+                drawWrappedText(`Mission: ${getVal('ao_mission')}`);
+                drawWrappedText(`Secteur de surveillance: ${getVal('ao_secteur_surveillance')}`);
+                drawSubTitle('Points Particuliers (AO)');
+                drawWrappedText(getVal('ao_points_particuliers'));
+                drawSubTitle('Conduite à Tenir (AO)');
+                drawWrappedText(getVal('ao_cat'));
                 drawLabelAndText('Place du Chef (AO):', getVal('ao_place_chef'));
 
                 // --- 5. PATRACDVR ---
@@ -1554,13 +1635,12 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
 
             await pdfCreationLogic();
             
-            // Ajout des numéros de page
             const pages = pdfDoc.getPages();
             for (let i = 0; i < pages.length; i++) {
                 const page = pages[i];
                 const { width } = page.getSize();
                 page.drawText(`${i + 1} / ${pages.length}`, {
-                    x: width / 2 - 20, y: 20,
+                    x: width / 2 - 15, y: 20,
                     font: helveticaFont, size: 10, color: context.colors.text,
                 });
             }
