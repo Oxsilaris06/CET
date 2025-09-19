@@ -125,7 +125,6 @@
         .toolbar-main-tools::-webkit-scrollbar, .toolbar-contextual-tools::-webkit-scrollbar { height: 4px; }
         .toolbar-main-tools::-webkit-scrollbar-thumb, .toolbar-contextual-tools::-webkit-scrollbar-thumb { background: var(--border-color); }
         .tool-btn { padding: 10px; font-family: 'Oswald', sans-serif; border: 1px solid var(--border-color); background: var(--bg-interactive); color: var(--text-primary); cursor: pointer; border-radius: 4px; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 4px; flex-shrink: 0; min-width: 70px; }
-        .tool-btn .material-icons { font-size: 28px; }
         .tool-btn.active { background: var(--accent-blue); color: white; border-color: var(--accent-blue); }
         .tool-controls, #contextual_tools { display: none; }
         .tool-controls.active, #contextual_tools.active { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px; border: 1px dashed var(--border-color); border-radius: 4px; }
@@ -310,13 +309,12 @@
                      <label>Ami(e)s (Unités en soutien) :</label><input type="text" id="amies">
                      <label>Terrain / Météo :</label><input type="text" id="terrain_info">
                      <label>Population :</label><input type="text" id="population">
-                     <label>Cadre juridique :</label><input type="text" id="cadre_juridique">
+                     <label for="cadre_juridique">Cadre juridique :</label><textarea id="cadre_juridique" rows="3"></textarea>
                 </div>
 
                 <div class="wizard-step">
                     <h2>2. Mission du PSIG</h2>
                     <textarea id="missions_psig" rows="8">
-
 INTERPELLER L'OBJECTIF.
 
 ASSISTER LORS DE LA PERQUISITION.
@@ -326,19 +324,19 @@ CONDUITE AU LIEU DE GAV.</textarea>
 
                 <div class="wizard-step">
                      <h2>3. Exécution</h2>
-                     <label>Date d'exécution :</label><input type="date" id="date_execution">
-                     <label>Heure d'exécution (H) :</label><input type="time" id="heure_execution" value="06:00">
-                     <label>Type d'action :</label><input type="text" id="type_action">
+                     <label for="date_execution">Date d'exécution :</label><input type="date" id="date_execution">
+                     <label for="heure_execution">Heure d'exécution (H) :</label><input type="time" id="heure_execution" value="06:00">
+                     <label for="type_action">Type d'action :</label><input type="text" id="type_action">
                      <h3>Chronologie</h3><div id="time_events_container"></div><button type="button" class="add-btn" onclick="addTimeEvent()">➕</button>
                      <h3>Hypothèses</h3>
-                     <label>H1 :</label><input type="text" id="hypothese_h1" value="Target présente LE1">
-                     <label>H2 :</label><input type="text" id="hypothese_h2" value="Target présente LE2">
-                     <label>H3 :</label><input type="text" id="hypothese_h3" value="Target absente LE 1 et 2">
+                     <label for="hypothese_h1">H1 :</label><input type="text" id="hypothese_h1" value="Target présente LE1">
+                     <label for="hypothese_h2">H2 :</label><input type="text" id="hypothese_h2" value="Target présente LE2">
+                     <label for="hypothese_h3">H3 :</label><input type="text" id="hypothese_h3" value="Target absente LE 1 et 2">
                 </div>
 
                 <div class="wizard-step">
                      <h2>4. Articulation (MOIPC/ZMSPCP)</h2>
-                     <label>Place du Chef (Générale) :</label><input type="text" id="place_chef">
+                     <label for="place_chef">Place du Chef (Générale) :</label><input type="text" id="place_chef">
                      <div class="collapsible-container">
                         <div class="collapsible-header"><h3>Équipe INDIA (INTER)</h3><span class="material-icons">expand_more</span></div>
                         <div class="collapsible-content">
@@ -391,6 +389,11 @@ CONDUITE AU LIEU DE GAV.</textarea>
                     <h2>5. PATRACDVR</h2>
                     <div id="patracdvr_container"></div>
                     <button type="button" class="add-btn" style="width:100%;" onclick="addPatracdvrRow()">Ajouter un véhicule ➕</button>
+                    <input type="file" id="json-file-input" accept="application/json" style="display:none;">
+                    <label for="json-file-input" class="file-upload-label" style="width:100%; margin-top: 10px;">Importer un fichier de configuration ➕</label>
+                    <div id="members_bank_container" class="patracdvr-members-container">
+                        <h4 style="border: 1px dashed var(--border-color); padding: 10px; margin-bottom: 10px;">N'oubliez pas d'éditer les membres pour la mission</h4>
+                    </div>
                 </div>
 
                 <div class="wizard-step">
@@ -461,7 +464,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             tenues: ['UBAS', '4S', 'Bleu', 'Treillis', 'Civil'],
             gpbs: ['GPBL', 'GPBPD']
         };
-        const availableVehicles = ['Sharan', 'Kodiaq', '5008', 'Scénic', 'BT'];
+        const availableVehicles = ['Sharan', 'Kodiaq', '5008'];
 
         // --- WIZARD & FORM MANAGEMENT ---
         let currentStep = 0;
@@ -625,7 +628,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 addPatracdvrMember(membersContainer);
             });
             
-            enableDragAndDrop(membersContainer);
             members.forEach(m => addPatracdvrMember(membersContainer, m));
         }
 
@@ -703,6 +705,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     vehicle: row.querySelector('.patracdvr-vehicle-select').value,
                     members: Array.from(row.querySelectorAll('.patracdvr-member-btn')).map(btn => ({ ...btn.dataset }))
                 }));
+                data.unassigned_members = Array.from(document.querySelectorAll('#members_bank_container .patracdvr-member-btn')).map(btn => ({ ...btn.dataset }));
                 data.time_events = Array.from(document.querySelectorAll('#time_events_container .time-item')).map(item => ({
                     type: item.querySelector('.time-type-select').value,
                     hour: item.querySelector('.time-hour-input').value,
@@ -712,9 +715,12 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             } catch (e) { console.error("Save error:", e); }
         }
 
-        function loadFormData() {
+        async function loadFormData() {
             const dataString = localStorage.getItem('oiFormData');
-            if (!dataString) return;
+            if (!dataString) {
+                await initializeDefaultPatracdvr();
+                return;
+            }
             try {
                 const data = JSON.parse(dataString);
                 Object.keys(data).forEach(key => {
@@ -740,46 +746,88 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 (data.volume_list || []).forEach(val => addDynamicFieldWithSelect('volume_adversaire_container', ['Seul', 'Famille', 'BO', 'Conjointe'], val));
                 (data.vehicules_list || []).forEach(val => addDynamicField('vehicules_container', val));
                 (data.patracdvr_rows || []).forEach(row => addPatracdvrRow(row.vehicle, row.members));
+                (data.unassigned_members || []).forEach(m => addPatracdvrMember(document.getElementById('members_bank_container'), m));
                 (data.time_events || []).forEach(ev => addTimeEvent(ev.type, ev.hour, ev.description));
-            } catch (e) { console.error("Load error:", e); }
+
+                 if (data.patracdvr_rows.length === 0 && data.unassigned_members.length === 0) {
+                    await initializeDefaultPatracdvr();
+                }
+            } catch (e) {
+                 console.error("Load error:", e);
+                 await initializeDefaultPatracdvr();
+            }
+        }
+
+        async function initializeDefaultPatracdvr() {
+            try {
+                const response = await fetch('members_config.json');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const config = await response.json();
+                const membersBank = document.getElementById('members_bank_container');
+                const patracdvrContainer = document.getElementById('patracdvr_container');
+
+                membersBank.innerHTML = '<h4 style="border: 1px dashed var(--border-color); padding: 10px; margin-bottom: 10px;">N\'oubliez pas d\'éditer les membres pour la mission</h4>';
+                patracdvrContainer.innerHTML = '';
+                
+                config.members.forEach(m => addPatracdvrMember(membersBank, m));
+                availableVehicles.forEach(v => addPatracdvrRow(v));
+
+                saveFormData();
+
+            } catch (e) {
+                console.error("Failed to load default configuration:", e);
+                // Fallback to empty state if JSON fails to load
+                const membersBank = document.getElementById('members_bank_container');
+                const patracdvrContainer = document.getElementById('patracdvr_container');
+                membersBank.innerHTML = '<h4 style="border: 1px dashed var(--border-color); padding: 10px; margin-bottom: 10px;">N\'oubliez pas d\'éditer les membres pour la mission</h4>';
+                patracdvrContainer.innerHTML = '';
+            }
         }
 
         // --- DRAG & DROP ---
-        function enableDragAndDrop(container) {
-            if (!container) return;
-            let draggedItem = null;
-            container.addEventListener('dragstart', e => {
-                if (e.target.classList.contains('draggable')) {
-                    draggedItem = e.target;
-                    e.dataTransfer.effectAllowed = 'move';
-                    e.dataTransfer.setData('text/plain', e.target.id);
-                    setTimeout(() => e.target.classList.add('dragging'), 0);
-                }
-            });
-            container.addEventListener('dragend', e => {
-                if(draggedItem) {
-                    draggedItem.classList.remove('dragging');
-                    draggedItem = null;
-                }
-            });
-            container.addEventListener('dragover', e => {
-                e.preventDefault();
-                const afterElement = getDragAfterElement(container, e.clientY);
+        document.body.addEventListener('dragstart', e => {
+            if (e.target.classList.contains('draggable')) {
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', e.target.id);
+                e.target.classList.add('dragging');
+            }
+        });
+
+        document.body.addEventListener('dragend', e => {
+            if (e.target.classList.contains('draggable')) {
+                e.target.classList.remove('dragging');
+                saveFormData();
+            }
+        });
+
+        document.body.addEventListener('dragover', e => {
+            const dropContainer = e.target.closest('.patracdvr-members-container');
+            if (dropContainer && e.target.classList.contains('draggable')) {
+                const draggedItem = document.querySelector('.dragging');
                 if (draggedItem) {
+                     e.preventDefault();
+                    const afterElement = getDragAfterElement(dropContainer, e.clientY);
                     if (afterElement == null) {
-                        container.appendChild(draggedItem);
+                        dropContainer.appendChild(draggedItem);
                     } else {
-                        container.insertBefore(draggedItem, afterElement);
+                        dropContainer.insertBefore(draggedItem, afterElement);
                     }
                 }
-            });
-            container.addEventListener('drop', e => {
-                e.preventDefault();
-                if(draggedItem) {
-                    saveFormData();
-                }
-            });
-        }
+            } else if (dropContainer) {
+                 e.preventDefault();
+            }
+        });
+
+        document.body.addEventListener('drop', e => {
+             const dropContainer = e.target.closest('.patracdvr-members-container');
+            if (dropContainer) {
+                 e.preventDefault();
+            }
+        });
+
+
         function getDragAfterElement(container, y) {
             const draggableElements = [...container.querySelectorAll('.draggable:not(.dragging)')];
             return draggableElements.reduce((closest, child) => {
@@ -792,57 +840,65 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 }
             }, { offset: Number.NEGATIVE_INFINITY }).element;
         }
-
-        // --- TUTORIAL SYSTEM --- (inchangé)
-        let currentTutorialStep = 0;
-        const tutorialPopup = document.getElementById('tutorial-popup');
-        const popupText = document.getElementById('popup-text');
-        const nextPopupBtn = document.getElementById('next-popup-btn');
-        const closePopupBtn = tutorialPopup.querySelector('.close-btn');
-        let currentHighlightedElement = null;
-        const tutorialSteps = [
-            { text: "Bienvenue dans le générateur d'Ordre Initial (OI). Ce tutoriel va vous guider à travers les étapes de création de votre document opérationnel.", selector: '.container', center: true },
-            { text: "L'application est structurée comme un assistant en 10 étapes, représentées par cette barre de progression.", selector: '.wizard-progress' },
-            { text: "Pour commencer, entrez la date de l'opération et décrivez le contexte dans les sections Situation Générale et Particulière.", selector: '#date_op', step: 0 },
-            { text: "À l'étape 'Adversaire', vous pouvez télécharger une photo et remplir les informations. Une fois la photo chargée, le bouton 'Annoter' apparaît pour ajouter des indications visuelles.", selector: '#adversary_photo_container', step: 1},
-            { text: "L'étape 'Environnement' vous permet de saisir les informations sur le terrain, la météo, la population et le cadre juridique de l'opération.", selector: '#terrain_info', step: 2 },
-            { text: "L'étape 'Mission du PSIG' contient des missions pré-remplies, que vous pouvez modifier si nécessaire.", selector: '#missions_psig', step: 3 },
-            { text: "Dans l'étape 'Exécution', vous définissez la date et l'heure de l'action. Vous pouvez aussi ajouter, modifier ou réorganiser les événements de la chronologie par glisser-déposer.", selector: '#time_events_container', step: 4 },
-            { text: "L'étape 'Articulation' est divisée en sections rétractables pour les équipes INDIA et Appui/Observation. Vous pouvez télécharger des photos d'itinéraire ou d'emplacement.", selector: '.collapsible-container:first-of-type', step: 5 },
-            { text: "Dans 'PATRACDVR', vous gérez le personnel et les véhicules de l'opération. Cliquez sur 'Ajouter un véhicule' puis sur les membres pour les éditer.", selector: '#patracdvr_container', step: 6 },
-            { text: "L'étape 'Photos' est dédiée aux photos complémentaires qui seront insérées dans le document final.", selector: '.wizard-step:nth-of-type(8)', step: 7 },
-            { text: "À l'étape 'Conduites à Tenir (CAT)', vous spécifiez les règles générales, les conditions de désengagement (NO GO) et les procédures de liaison.", selector: '#cat_generales', step: 8 },
-            { text: "Enfin, l'étape de 'Finalisation' vous permet de générer le PDF de votre Ordre Initial, de l'apercevoir ou de consulter le rapport Retex s'il est disponible.", selector: '#generatePdfBtn', step: 9 },
-            { text: "Le menu en bas de l'écran vous permet d'accéder rapidement aux fonctions comme le changement de thème ou la réinitialisation du formulaire. Le tutoriel est terminé.", selector: '#dockMenu' }
-        ];
-
-        function startTutorial() { if (tutorialPopup.style.display === 'flex') { hideTutorial(); return; } goToStep(0); currentTutorialStep = 0; showTutorialStep(currentTutorialStep); }
-        function showTutorialStep(stepIndex) {
-            if (stepIndex >= tutorialSteps.length) { hideTutorial(); return; }
-            const step = tutorialSteps[stepIndex];
-            if (step.step !== undefined && step.step !== currentStep) { goToStep(step.step); setTimeout(() => showTutorialStep(stepIndex), 600); return; }
-            if (currentHighlightedElement) { currentHighlightedElement.classList.remove('highlight-element'); }
-            popupText.textContent = step.text;
-            nextPopupBtn.textContent = stepIndex === tutorialSteps.length - 1 ? 'Terminer' : 'Suivant';
-            if (step.center) { tutorialPopup.style.top = '50%'; tutorialPopup.style.left = '50%'; tutorialPopup.style.transform = 'translate(-50%, -50%)'; tutorialPopup.style.display = 'flex'; currentHighlightedElement = null; return; }
-            const targetElement = document.querySelector(step.selector);
-            if (!targetElement) { console.warn(`Tutorial element not found: ${step.selector}`); currentTutorialStep++; showTutorialStep(currentTutorialStep); return; }
-            targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            targetElement.classList.add('highlight-element');
-            currentHighlightedElement = targetElement;
-            const rect = targetElement.getBoundingClientRect(); const popupWidth = tutorialPopup.offsetWidth; const popupHeight = tutorialPopup.offsetHeight;
-            let popupX = rect.left + window.scrollX + (rect.width / 2) - (popupWidth / 2);
-            let popupY = rect.top + window.scrollY - popupHeight - 20;
-            if (popupY < window.scrollY + 10) { popupY = rect.bottom + window.scrollY + 20; }
-            if (popupX < 10) popupX = 10;
-            if (popupX + popupWidth > window.innerWidth - 10) { popupX = window.innerWidth - popupWidth - 10; }
-            tutorialPopup.style.top = `${popupY}px`; tutorialPopup.style.left = `${popupX}px`; tutorialPopup.style.transform = 'none'; tutorialPopup.style.display = 'flex';
-        }
-        function hideTutorial() { if (currentHighlightedElement) { currentHighlightedElement.classList.remove('highlight-element'); } tutorialPopup.style.display = 'none'; }
-        nextPopupBtn.addEventListener('click', () => { currentTutorialStep++; showTutorialStep(currentTutorialStep); });
-        closePopupBtn.addEventListener('click', hideTutorial);
         
-        // --- SYSTÈME D'ANNOTATION MOBILE-FIRST ---
+        function allowDrop(e) {
+            e.preventDefault();
+            const dropContainer = e.target.closest('.patracdvr-members-container');
+            if (dropContainer) {
+                e.dataTransfer.dropEffect = 'move';
+            } else {
+                e.dataTransfer.dropEffect = 'none';
+            }
+        }
+
+        function drop(e) {
+            e.preventDefault();
+            const data = e.dataTransfer.getData("text/plain");
+            const draggedElement = document.getElementById(data);
+            const dropContainer = e.target.closest('.patracdvr-members-container');
+            if (draggedElement && dropContainer) {
+                const afterElement = getDragAfterElement(dropContainer, e.clientY);
+                if (afterElement == null) {
+                    dropContainer.appendChild(draggedElement);
+                } else {
+                    dropContainer.insertBefore(draggedElement, afterElement);
+                }
+            }
+            saveFormData();
+        }
+
+        // Fonction pour charger une configuration de membres à partir d'un fichier JSON
+        async function loadMembersFromJson(file) {
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                try {
+                    const config = JSON.parse(e.target.result);
+                    if (config.members && Array.isArray(config.members)) {
+                        await applyMemberConfiguration(config.members);
+                    } else {
+                        alert("Le fichier JSON est mal formaté ou ne contient pas de liste de membres.");
+                    }
+                } catch (error) {
+                    console.error("Erreur de lecture ou d'analyse du fichier JSON:", error);
+                    alert("Erreur lors de la lecture du fichier de configuration.");
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        async function applyMemberConfiguration(members) {
+            const membersBank = document.getElementById('members_bank_container');
+            
+            const oldMembers = membersBank.querySelectorAll('.patracdvr-member-btn');
+            oldMembers.forEach(m => m.remove());
+
+            members.forEach(m => addPatracdvrMember(membersBank, m));
+            
+            saveFormData();
+            alert("Configuration des membres chargée avec succès !");
+        }
+
+        // SYSTÈME D'ANNOTATION MOBILE-FIRST
         const annotationModal = document.getElementById('annotationModal');
         const canvas = document.getElementById('annotationCanvas');
         const ctx = canvas.getContext('2d');
@@ -1224,6 +1280,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 modal.close();
             });
             document.getElementById('modal_cancelBtn').addEventListener('click', () => modal.close());
+            
             document.getElementById('modal_deleteBtn').addEventListener('click', () => {
                 const buttonId = form.dataset.editingButtonId;
                 const button = document.getElementById(buttonId);
@@ -1268,12 +1325,11 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             }
 
             addPhotoInput('adversary_photo_container', true);
-            enableDragAndDrop(document.querySelector('#time_events_container'));
+            
             loadFormData();
             showStep(currentStep);
         });
         
-        // --- PDF GENERATION (FINAL STABLE VERSION) --- (inchangé)
         async function buildPdf(retexUrl) {
             const { PDFDocument, StandardFonts, rgb, PageSizes } = PDFLib;
             const pdfDoc = await PDFDocument.create();
@@ -1417,7 +1473,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 }
             };
             
-            // --- Construction du PDF (logique inchangée) ---
             const pdfCreationLogic = async () => { /* ... la longue logique de création de PDF reste ici ... */ };
             await pdfCreationLogic();
 
