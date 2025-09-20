@@ -83,7 +83,7 @@
         .dock-menu.collapsed .dock-menu-item:not(#dockToggleBtn) { opacity: 0; width: 0; margin-left: -10px; visibility: hidden; }
         #dockToggleBtn .material-icons { transition: transform 0.3s ease; }
         .dock-menu.collapsed #dockToggleBtn .material-icons { transform: rotate(180deg); }
-        .photo-input { display: none; }
+        .photo-input, #sessionFileInput { display: none; }
         .file-upload-label { background-color: var(--accent-blue); color: white !important; padding: 10px 14px; border-radius: 4px; cursor: pointer; transition: background-color 0.2s; font-family: 'Oswald', sans-serif; font-weight: normal; display: inline-block; text-align: center; flex-shrink: 0; }
         .file-upload-label:hover { background-color: var(--accent-hover); }
         .file-name-display { color: var(--text-secondary); font-style: italic; margin-left: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 150px; }
@@ -158,10 +158,13 @@
     <div class="dock-menu" id="dockMenu">
         <div class="dock-menu-item" id="dockToggleBtn" title="Réduire"><span class="material-icons">expand_more</span></div>
         <a href="index.html" class="dock-menu-item" title="Accueil"><span class="material-icons">home</span></a>
+        <div class="dock-menu-item" id="importSessionBtn" title="Importer une session"><span class="material-icons">file_upload</span></div>
+        <div class="dock-menu-item" id="exportSessionBtn" title="Exporter la session"><span class="material-icons">file_download</span></div>
         <div class="dock-menu-item" id="darkModeToggle" title="Changer le thème"><span class="material-symbols-outlined" id="darkModeIcon">nightlight</span></div>
         <div class="dock-menu-item" id="resetBtn" title="Réinitialiser le formulaire"><span class="material-icons">refresh</span></div>
         <div class="dock-menu-item" id="tutorialBtn" title="Lancer le tutoriel"><span class="material-icons">school</span></div>
     </div>
+    <input type="file" id="sessionFileInput" accept=".json" />
 
     <div id="tutorial-popup" class="tutorial-popup">
         <span class="close-btn">&times;</span>
@@ -711,7 +714,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                            img.src = data[key];
                            img.dataset.originalSrc = data[imgId + '_original_src'];
                            img.style.display = 'block';
-                           const annotateBtn = img.parentElement.querySelector('.annotate-btn');
+                           const annotateBtn = img.closest('.photo-input-wrapper').querySelector('.annotate-btn');
                            if(annotateBtn) annotateBtn.style.display = 'inline-block';
                         }
                         return;
@@ -772,7 +775,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             }, { offset: Number.NEGATIVE_INFINITY }).element;
         }
 
-        // --- TUTORIAL SYSTEM (MIS À JOUR) ---
+        // --- TUTORIAL SYSTEM ---
         const tutorialSteps = [
             { text: "Bienvenue dans le générateur d'Ordre Initial. Ce guide vous assistera dans la création de votre document opérationnel.", selector: '.container', center: true },
             { text: "Cette barre de progression indique les différentes sections de l'O.I. Vous pouvez cliquer sur une étape pour y naviguer directement.", selector: '.wizard-progress' },
@@ -786,7 +789,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             { text: "Cette section permet d'ajouter des photos complémentaires (transport, effraction...) qui seront incluses dans le document final.", selector: '.wizard-step:nth-of-type(8)', step: 7 },
             { text: "Spécifiez les conduites à tenir générales, les conditions de désengagement (NO GO), et les procédures de liaison.", selector: '#cat_generales', step: 8 },
             { text: "Une fois le formulaire complété, vous pouvez prévisualiser le document, générer le PDF final, ou consulter le rapport RETEX associé.", selector: '#generatePdfBtn', step: 9 },
-            { text: "Ce menu flottant offre un accès rapide aux fonctions globales : changer le thème, réinitialiser entièrement le formulaire, ou relancer ce tutoriel.", selector: '#dockMenu' }
+            { text: "Ce menu flottant offre un accès rapide aux fonctions globales : sauvegarder (exporter) ou charger (importer) une session, changer le thème, réinitialiser le formulaire, ou relancer ce tutoriel.", selector: '#dockMenu' }
         ];
         
         let currentTutorialStep = 0;
@@ -821,7 +824,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
         nextPopupBtn.addEventListener('click', () => { currentTutorialStep++; showTutorialStep(currentTutorialStep); });
         closePopupBtn.addEventListener('click', hideTutorial);
         
-        // --- LOGIQUE D'ANNOTATION RÉINTÉGRÉE ---
+        // --- LOGIQUE D'ANNOTATION ---
         const annotationModal = document.getElementById('annotationModal');
         const canvas = document.getElementById('annotationCanvas');
         const ctx = canvas.getContext('2d');
@@ -1055,6 +1058,43 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             document.getElementById('delete_btn').addEventListener('click', () => { if(selectedAnnotation){ annotations = annotations.filter(ann => ann !== selectedAnnotation); selectedAnnotation = null; setContextualTools(null); redrawCanvas(); } });
             document.getElementById('edit_text_btn').addEventListener('click', () => { if(selectedAnnotation && selectedAnnotation.type === 'location'){ const newText = prompt('Modifier texte:', selectedAnnotation.text); if(newText !== null){ selectedAnnotation.text = newText; redrawCanvas(); } } });
             
+            // Import/Export Listeners
+            const importSessionBtn = document.getElementById('importSessionBtn');
+            const exportSessionBtn = document.getElementById('exportSessionBtn');
+            const sessionFileInput = document.getElementById('sessionFileInput');
+            importSessionBtn.addEventListener('click', () => sessionFileInput.click());
+            exportSessionBtn.addEventListener('click', () => {
+                saveFormData();
+                const dataString = localStorage.getItem('oiFormData');
+                if (!dataString) { alert("Aucune donnée à exporter."); return; }
+                const blob = new Blob([dataString], {type: 'application/json'});
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                const date = new Date().toISOString().slice(0, 10);
+                link.download = `OI_Session_${date}.json`;
+                link.href = url;
+                link.click();
+                URL.revokeObjectURL(url);
+            });
+            sessionFileInput.addEventListener('change', (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const jsonContent = e.target.result;
+                        JSON.parse(jsonContent); // Test for valid JSON
+                        localStorage.setItem('oiFormData', jsonContent);
+                        alert("Session importée avec succès. Rechargement de la page.");
+                        location.reload();
+                    } catch (err) {
+                        alert("Fichier invalide ou corrompu.");
+                    }
+                };
+                reader.readAsText(file);
+                event.target.value = null;
+            });
+
             // D&D Listeners
             let draggedItem = null;
             document.addEventListener('dragstart', e => { if (e.target.classList.contains('draggable')) { draggedItem = e.target; setTimeout(() => e.target.classList.add('dragging'), 0); } });
@@ -1173,19 +1213,17 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 });
             };
             const drawImagesFromContainer = async (containerId, title) => {
-                const inputs = Array.from(document.querySelectorAll(`#${containerId} .photo-input`));
-                for (let i = 0; i < inputs.length; i++) {
-                    const input = inputs[i];
-                    const previewImg = input.closest('.photo-input-wrapper').querySelector('.image-preview');
-                    let imageSource = null; let fileName = "image";
-                    
-                    if (previewImg && previewImg.src.startsWith('data:image') && previewImg.src !== previewImg.dataset.originalSrc) {
-                        imageSource = previewImg.src;
-                    } else if (input.files.length > 0) {
-                        imageSource = input.files[0]; fileName = imageSource.name;
+                const imageSrcs = [];
+                const wrappers = document.querySelectorAll(`#${containerId} .photo-input-wrapper`);
+                wrappers.forEach(wrapper => {
+                    const previewImg = wrapper.querySelector('.image-preview');
+                    if (previewImg && previewImg.src && previewImg.src.startsWith('data:image')) {
+                        imageSrcs.push(previewImg.src);
                     }
-                    if (!imageSource) continue;
-                    
+                });
+
+                for (let i = 0; i < imageSrcs.length; i++) {
+                    const imageSource = imageSrcs[i];
                     addNewPage();
                     try {
                         const imageBytes = await processImage(imageSource);
@@ -1195,17 +1233,16 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                         const scaled = image.scaleToFit(paddedW, paddedH);
                         const x = (width - scaled.width) / 2; const y = (height - scaled.height) / 2 + 15;
                         context.currentPage.drawImage(image, { x, y, width: scaled.width, height: scaled.height });
-                        const finalTitle = inputs.length > 1 ? `${title} (${i+1})` : title;
+                        const finalTitle = wrappers.length > 1 ? `${title} (${i+1})` : title;
                         const textWidth = helveticaBoldFont.widthOfTextAtSize(finalTitle, 14);
                         context.currentPage.drawText(finalTitle, { x: width / 2 - textWidth / 2, y: y - 20, font: helveticaBoldFont, size: 14, color: context.colors.text });
                     } catch (e) {
                         console.error(`Erreur d'intégration de l'image pour : ${title}`, e);
-                        drawTitle("Erreur d'image"); drawWrappedText(`Impossible de charger l'image "${fileName}".\n\nErreur: ${e.message}`);
+                        drawTitle("Erreur d'image"); drawWrappedText(`Impossible de charger une image.\n\nErreur: ${e.message}`);
                     }
                 }
             };
             
-            // --- LOGIQUE DE GÉNÉRATION PDF 100% IDENTIQUE AU MODÈLE ---
             const pdfCreationLogic = async () => {
                 addNewPage();
                 if (backgroundImage) { context.currentPage.drawImage(backgroundImage, { x: 0, y: 0, width: context.pageWidth, height: context.pageHeight }); }
@@ -1223,7 +1260,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 
                 addNewPage();
                 drawTitle("1.3 ADVERSAIRE");
-                const photoInput = document.querySelector('#adversary_photo_container .photo-input');
                 const adversaireHeaders = ["Information", "Détail"];
                 const meText = (formData.me_list || []).map((me, i) => `ME${i+1}: ${me}`).join(' | ');
                 const adversaireRows = [
@@ -1237,11 +1273,9 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     ['Armes', getVal('armes_connues')], ['Moyens Employés', meText],
                 ];
 
-                const previewImg = document.querySelector('#adversary_photo_container .image-preview');
-                let imageSource = null;
-                if (previewImg && previewImg.src.startsWith('data:image') && previewImg.src !== previewImg.dataset.originalSrc) { imageSource = previewImg.src; } 
-                else if (photoInput && photoInput.files.length > 0) { imageSource = photoInput.files[0]; }
-                
+                const imageKey = Object.keys(formData).find(k => k.startsWith('preview_photo_') && k.includes('adversary_photo_container') && k.endsWith('_src'));
+                const imageSource = imageKey ? formData[imageKey] : null;
+
                 if (imageSource) {
                     const initialAdversaireY = context.y; const photoBoxWidth = 200; const photoMargin = 10;
                     const tableWidth = context.pageWidth - context.margin * 2 - photoBoxWidth - photoMargin;
@@ -1354,8 +1388,8 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 const finalTextWidth = helveticaBoldFont.widthOfTextAtSize(finalText, 48);
                 context.currentPage.drawText(finalText, { x: context.pageWidth / 2 - finalTextWidth / 2, y: context.pageHeight / 2, font: helveticaBoldFont, size: 48, color: context.colors.accent });
             };
+
             await pdfCreationLogic();
-            
             const pdfBytes = await pdfDoc.save();
             return { pdfBytes, formData };
         }
