@@ -76,6 +76,10 @@
         .collapsible-container.open .collapsible-header .material-icons { transform: rotate(180deg); }
         .collapsible-content { padding: 0 15px; max-height: 0; overflow: hidden; transition: max-height 0.3s ease-out, padding 0.3s ease-out; }
         .collapsible-container.open .collapsible-content { max-height: 4000px; padding-top: 10px; padding-bottom: 15px; }
+        /* Style for articulation display */
+        .articulation-composition-display p { margin-bottom: 5px; }
+        .articulation-composition-display strong { color: var(--accent-blue); }
+
         .dock-menu { position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; padding: 10px; z-index: 1000; background-color: rgba(30, 30, 30, 0.7); border: 1px solid var(--border-color); border-radius: 35px; backdrop-filter: blur(10px); transition: all 0.3s ease-in-out; }
         .dock-menu-item { display: flex; align-items: center; justify-content: center; background-color: var(--bg-container); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 50%; width: 50px; height: 50px; font-size: 28px; cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.2); transition: all 0.2s; text-decoration: none; flex-shrink: 0; }
         .dock-menu-item:hover { transform: scale(1.1); }
@@ -437,6 +441,12 @@ CONDUITE AU LIEU DE GAV.</textarea>
                         <div class="collapsible-header"><h3>Équipe INDIA (INTER)</h3><span class="material-icons">expand_more</span></div>
                         <div class="collapsible-content">
                              <label for="india_mission">Mission :</label><textarea id="india_mission" rows="3">RECONNAÎTRE LE DOMICILE EN VUE D'APPRÉHENDER L'OBJECTIF</textarea>
+                             
+                             <h3>Composition</h3>
+                             <div id="india_composition_display" class="articulation-composition-display">
+                                 <p><i>La composition sera affichée ici après configuration dans l'onglet PATRACDVR.</i></p>
+                             </div>
+
                              <label for="india_objectif">Objectif :</label><input type="text" id="india_objectif">
                              <label for="india_itineraire">Itinéraire :</label><textarea id="india_itineraire" rows="3"></textarea>
                              
@@ -459,6 +469,12 @@ CONDUITE AU LIEU DE GAV.</textarea>
                      <div class="collapsible-container">
                         <div class="collapsible-header"><h3>Équipe Appui/Observation (AO) - ZMSPCP</h3><span class="material-icons">expand_more</span></div>
                         <div class="collapsible-content">
+                            
+                             <h3>Composition</h3>
+                             <div id="ao_composition_display" class="articulation-composition-display">
+                                <p><i>La composition sera affichée ici après configuration dans l'onglet PATRACDVR.</i></p>
+                             </div>
+
                              <label for="ao_zone_installation">Zone d'installation (Z) :</label><textarea id="ao_zone_installation" rows="3"></textarea>
                              <h3>Photos - Zone d'installation</h3>
                              <h4>Baptême terrain</h4>
@@ -805,6 +821,53 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             const select = document.getElementById(selectId);
             select.innerHTML = options.map(o => `<option value="${o}" ${o === selectedValue ? 'selected':''}>${o}</option>`).join('');
         }
+        
+        // --- NOUVELLE FONCTION: Mise à jour de l'affichage de l'articulation ---
+        function updateArticulationDisplay() {
+            const indiaContainer = document.getElementById('india_composition_display');
+            const aoContainer = document.getElementById('ao_composition_display');
+            
+            const indiaMembersByCell = {};
+            const aoMembersByCell = {};
+
+            // Récupérer tous les membres configurés dans le PATRACDVR
+            document.querySelectorAll('.patracdvr-member-btn').forEach(btn => {
+                const trigramme = btn.dataset.trigramme;
+                const cellule = btn.dataset.cellule;
+                if (!trigramme || !cellule) return;
+
+                if (cellule.toLowerCase().startsWith('india')) {
+                    if (!indiaMembersByCell[cellule]) {
+                        indiaMembersByCell[cellule] = [];
+                    }
+                    indiaMembersByCell[cellule].push(trigramme);
+                } else if (cellule.toLowerCase().startsWith('ao')) {
+                    if (!aoMembersByCell[cellule]) {
+                        aoMembersByCell[cellule] = [];
+                    }
+                    aoMembersByCell[cellule].push(trigramme);
+                }
+            });
+
+            const naturalSort = (a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+            
+            // Générer le HTML pour l'équipe India
+            let indiaHtml = '';
+            const sortedIndiaKeys = Object.keys(indiaMembersByCell).sort(naturalSort);
+            sortedIndiaKeys.forEach(cell => {
+                indiaHtml += `<p><strong>${cell}:</strong> ${indiaMembersByCell[cell].join(', ')}</p>`;
+            });
+            indiaContainer.innerHTML = indiaHtml || `<p><i>Aucun membre assigné aux cellules India.</i></p>`;
+
+            // Générer le HTML pour l'équipe AO
+            let aoHtml = '';
+            const sortedAoKeys = Object.keys(aoMembersByCell).sort(naturalSort);
+            sortedAoKeys.forEach(cell => {
+                aoHtml += `<p><strong>${cell}:</strong> ${aoMembersByCell[cell].join(', ')}</p>`;
+            });
+            aoContainer.innerHTML = aoHtml || `<p><i>Aucun membre assigné aux cellules AO.</i></p>`;
+        }
+
 
         // --- PANNEAU D'ÉDITION RAPIDE & MODALE LOGIC ---
         const quickEditMapping = {
@@ -957,6 +1020,9 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     description: item.querySelector('.time-description-input').value
                 }));
                 localStorage.setItem('oiFormData', JSON.stringify(data));
+                
+                // Appel de la fonction de mise à jour de l'articulation
+                updateArticulationDisplay();
             } catch (e) { console.error("Save error:", e); }
         }
         function loadFormData() {
@@ -991,6 +1057,9 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 (data.vehicules_list || []).forEach(val => addDynamicField('vehicules_container', val));
                 (data.time_events || []).forEach(ev => addTimeEvent(ev.type, ev.hour, ev.description));
                 initializePatracdvr(data);
+
+                // Appel après chargement
+                updateArticulationDisplay();
             } catch (e) { console.error("Load error:", e); }
         }
         function initializePatracdvr(dataFromStorage) {
@@ -1044,8 +1113,8 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             { text: "Renseignez les informations sur les unités amies, le terrain, la météo, la population et le cadre juridique de l'intervention.", selector: '#terrain_info', step: 2 },
             { text: "La mission principale de l'unité est pré-remplie dans cette section. Vous pouvez la modifier si nécessaire.", selector: '#missions_psig', step: 3 },
             { text: "Définissez la chronologie de l'action. Vous pouvez ajouter des événements et les réorganiser par glisser-déposer.", selector: '#time_events_container', step: 4 },
-            { text: "Décrivez l'articulation des équipes. Utilisez les sections pour détailler les missions de chaque groupe et ajoutez des photos pour les itinéraires ou emplacements.", selector: '.collapsible-container:first-of-type', step: 5 },
-            { text: "Gérez la composition des équipes en cliquant sur un membre pour ouvrir le panneau d'édition rapide.", selector: '#unassigned_members_container', step: 6 },
+            { text: "Décrivez l'articulation des équipes. La composition est désormais automatiquement importée depuis l'onglet PATRACDVR.", selector: '.collapsible-container:first-of-type', step: 5 },
+            { text: "Gérez la composition des équipes en cliquant sur un membre pour ouvrir le panneau d'édition rapide. Les changements seront visibles dans l'onglet Articulation.", selector: '#unassigned_members_container', step: 6 },
             { text: "Cette section permet d'ajouter des photos complémentaires (transport, effraction...) qui seront incluses dans le document final.", selector: '.wizard-step:nth-of-type(8)', step: 7 },
             { text: "Spécifiez les conduites à tenir générales, les conditions de désengagement (NO GO), et les procédures de liaison.", selector: '#cat_generales', step: 8 },
             { text: "Une fois le formulaire complété, vous pouvez prévisualiser le document, générer le PDF final, ou consulter le rapport RETEX associé.", selector: '#generatePdfBtn', step: 9 },
@@ -1570,6 +1639,31 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 }
             };
             
+            // --- MODIFICATION PDF ---
+            // Helper function to generate composition string for PDF
+            const getCompositionString = (teamPrefix) => {
+                const membersByCell = {};
+                const allMembers = (formData.patracdvr_rows || []).flatMap(row => row.members);
+                
+                allMembers.forEach(member => {
+                    if (member.cellule && member.cellule.toLowerCase().startsWith(teamPrefix)) {
+                        if (!membersByCell[member.cellule]) {
+                            membersByCell[member.cellule] = [];
+                        }
+                        membersByCell[member.cellule].push(member.trigramme);
+                    }
+                });
+
+                const naturalSort = (a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+                const sortedKeys = Object.keys(membersByCell).sort(naturalSort);
+
+                return sortedKeys.map(cell => {
+                    const cellShortName = cell.toLowerCase().replace('india ', 'I').replace('ao', 'AO');
+                    return `${cellShortName.toUpperCase()} : ${membersByCell[cell].join(' - ')}`;
+                }).join('   '); // Espace entre les groupes
+            };
+
+
             const pdfCreationLogic = async () => {
                 addNewPage();
                 if (backgroundImage) { context.currentPage.drawImage(backgroundImage, { x: 0, y: 0, width: context.pageWidth, height: context.pageHeight }); }
@@ -1660,7 +1754,10 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 addNewPage();
                 drawTitle("4. ARTICULATION");
                 drawWrappedText(`Place du Chef (Générale): ${getVal('place_chef')}`, { size: 14, x: context.margin });
-                drawSubTitle("Équipe INDIA (INTER)"); drawSubTitle("Mission:"); drawWrappedText(getVal('india_mission'));
+                drawSubTitle("Équipe INDIA (INTER)"); 
+                // --- MODIFICATION PDF ---
+                drawSubTitle("Composition:"); drawWrappedText(getCompositionString('india'));
+                drawSubTitle("Mission:"); drawWrappedText(getVal('india_mission'));
                 drawSubTitle("Objectif:"); drawWrappedText(getVal('india_objectif')); drawSubTitle("Itinéraire:");
                 drawWrappedText(getVal('india_itineraire')); drawSubTitle("Points Particuliers:"); drawWrappedText(getVal('india_points_particuliers'));
                 drawSubTitle("Conduite à Tenir:"); drawWrappedText(getVal('india_cat'));
@@ -1671,7 +1768,10 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 
                 addNewPage();
                 drawTitle("4. ARTICULATION (Suite)");
-                drawSubTitle("Équipe Appui/Observation (AO) - ZMSPCP"); drawSubTitle("Zone d'installation (Z):");
+                drawSubTitle("Équipe Appui/Observation (AO) - ZMSPCP"); 
+                // --- MODIFICATION PDF ---
+                drawSubTitle("Composition:"); drawWrappedText(getCompositionString('ao'));
+                drawSubTitle("Zone d'installation (Z):");
                 drawWrappedText(getVal('ao_zone_installation')); drawSubTitle("Mission (M):"); drawWrappedText(getVal('ao_mission'));
                 drawSubTitle("Secteur de surveillance (S):"); drawWrappedText(getVal('ao_secteur_surveillance'));
                 drawSubTitle("Points Particuliers (P):"); drawWrappedText(getVal('ao_points_particuliers'));
