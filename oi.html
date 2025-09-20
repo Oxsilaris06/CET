@@ -432,7 +432,7 @@ CONDUITE AU LIEU DE GAV.</textarea>
 
                     <div id="quickEditPanel">
                         <h4>Membre : <span id="selectedMemberTrigramme">Aucun</span>
-                            <button id="fullEditBtn" class="add-btn" style="font-size: 0.8em; padding: 5px 8px; margin-left: 15px;">Édition Complète</button>
+                            <button type="button" id="fullEditBtn" class="add-btn" style="font-size: 0.8em; padding: 5px 8px; margin-left: 15px;">Édition Complète</button>
                         </h4>
                         <div class="quick-edit-tabs"></div>
                         <div class="quick-edit-content"></div>
@@ -739,16 +739,15 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 'GPB': { key: 'gpbs', attribute: 'gpb' }
             };
 
+            // Construction de l'interface du panneau (inchangée)
             let isFirstTab = true;
             for (const [title, config] of Object.entries(mapping)) {
-                // Créer l'onglet
                 const tabBtn = document.createElement('button');
                 tabBtn.className = 'quick-edit-tab-btn';
                 tabBtn.textContent = title;
                 tabBtn.dataset.target = `#panel-content-${config.attribute}`;
                 tabsContainer.appendChild(tabBtn);
 
-                // Créer le panneau de contenu pour l'onglet
                 const tabPanel = document.createElement('div');
                 tabPanel.className = 'quick-edit-tab-panel';
                 tabPanel.id = `panel-content-${config.attribute}`;
@@ -780,6 +779,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 }
             }
             
+            // Gestion des onglets pour le mode mobile (inchangée)
             tabsContainer.addEventListener('click', (e) => {
                 if(e.target.matches('.quick-edit-tab-btn')) {
                     const targetPanelId = e.target.dataset.target;
@@ -790,9 +790,36 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 }
             });
 
-            panel.addEventListener('click', handleQuickEdit);
-            document.getElementById('fullEditBtn').addEventListener('click', () => {
-                if(activeMemberId) openMemberModal(activeMemberId);
+            // NOUVEAU GESTIONNAIRE DE CLICS UNIFIÉ
+            panel.addEventListener('click', (event) => {
+                // Étape 1: Stopper immédiatement la propagation pour TOUS les clics dans le panneau.
+                event.stopPropagation();
+
+                const target = event.target;
+                const quickEditButton = target.closest('.quick-edit-btn');
+                const fullEditButton = target.closest('#fullEditBtn');
+
+                // Étape 2: Gérer le clic sur un bouton d'option
+                if (quickEditButton && activeMemberId) {
+                    const activeMember = document.getElementById(activeMemberId);
+                    if (!activeMember) return;
+
+                    const attribute = quickEditButton.dataset.attribute;
+                    const value = quickEditButton.dataset.value;
+
+                    activeMember.dataset[attribute] = value;
+                    updateMemberButtonVisuals(activeMember);
+                    
+                    const group = quickEditButton.parentElement;
+                    group.querySelectorAll('.quick-edit-btn').forEach(btn => btn.classList.remove('selected'));
+                    quickEditButton.classList.add('selected');
+
+                    saveFormData();
+                } 
+                // Étape 3: Gérer le clic sur le bouton "Édition Complète"
+                else if (fullEditButton && activeMemberId) {
+                    openMemberModal(activeMemberId);
+                }
             });
         }
         
@@ -829,26 +856,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             });
         }
         
-        function handleQuickEdit(event) {
-            const target = event.target;
-            if (!target.classList.contains('quick-edit-btn') || !activeMemberId) return;
-            
-            const activeMember = document.getElementById(activeMemberId);
-            if (!activeMember) return;
-
-            const attribute = target.dataset.attribute;
-            const value = target.dataset.value;
-
-            activeMember.dataset[attribute] = value;
-            updateMemberButtonVisuals(activeMember);
-            
-            const group = target.parentElement;
-            group.querySelectorAll('.quick-edit-btn').forEach(btn => btn.classList.remove('selected'));
-            target.classList.add('selected');
-
-            saveFormData();
-        }
-
         // --- DATA PERSISTENCE (SAVE/LOAD) ---
         function saveFormData() {
             try {
@@ -1508,7 +1515,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 await drawImagesFromContainer('photo_container_bapteme_terrain', 'Baptême terrain');
 
                 addNewPage();
-                drawTitle("3. EXÉCUTION");
+                drawTitle("3. EXÉUTION");
                 const execText = `En vue d'appréhender le mis en cause et empêcher la déperdition des preuves,\nJe veux, le ${getVal('date_execution') || '(date)'} à partir de ${getVal('heure_execution') || '(heure)'}, pour une action ${getVal('type_action') || '(type d\'action)'} investir le domicile\nprésumé de ${getVal('nom_adversaire') || '(nom de l\'adversaire)'} après avoir bouclé celui-ci.`;
                 drawWrappedText(execText, { size: 16, x: context.margin, lineHeight: 8 });
                 drawSubTitle("Chronologie des temps");
