@@ -94,8 +94,9 @@
             display: flex; flex-wrap: wrap; gap: 10px; padding: 10px; min-height: 60px; 
             border: 1px dashed var(--border-color); border-radius: 5px; 
         }
-        .patracdvr-member-btn { background-color: var(--bg-body); border: 1px solid var(--border-color); color: var(--text-primary); padding: 8px 12px; border-radius: 5px; text-align: center; font-family: 'Oswald', sans-serif; cursor: pointer; }
-        .patracdvr-member-btn:hover { border-color: var(--accent-blue); }
+        .patracdvr-member-btn { background-color: var(--bg-body); border: 2px solid var(--border-color); color: var(--text-primary); padding: 8px 12px; border-radius: 5px; text-align: center; font-family: 'Oswald', sans-serif; cursor: pointer; transition: border-color 0.2s; }
+        .patracdvr-member-btn:hover { border-color: var(--accent-hover); }
+        .patracdvr-member-btn.member-active { border-color: var(--accent-blue); box-shadow: 0 0 8px var(--accent-blue); }
         .patracdvr-member-btn .trigramme { font-weight: bold; }
         .patracdvr-member-btn .fonction { font-size: 0.8em; color: var(--text-secondary); display: block; }
         #editMemberModal { color: var(--text-primary); background: var(--bg-container); width: 100vw; max-width: 100vw; height: 100vh; max-height: 100vh; margin: 0; border: none; border-radius: 0; padding: 15px; }
@@ -106,6 +107,22 @@
         #editMemberModal .modal-actions button { flex: 1; }
         #modal_cancelBtn { background-color: var(--bg-interactive); border: 1px solid var(--border-color); color: var(--text-primary); }
         #modal_deleteBtn { background-color: var(--danger-red); color: white; }
+
+        /* --- STYLES PANNEAU D'ÉDITION RAPIDE --- */
+        #quickEditPanel { display: none; padding: 15px; border: 1px solid var(--border-color); border-radius: 5px; margin-top: 20px; background-color: var(--bg-body); }
+        #quickEditPanel h4 { margin-top: 0; }
+        #quickEditPanel h4 #selectedMemberTrigramme { color: var(--accent-blue); }
+        .quick-edit-tabs { display: flex; overflow-x: auto; margin-bottom: 15px; border-bottom: 1px solid var(--border-color); }
+        .quick-edit-tabs::-webkit-scrollbar { height: 2px; }
+        .quick-edit-tabs::-webkit-scrollbar-thumb { background: var(--border-color); }
+        .quick-edit-tab-btn { background: none; border: none; border-bottom: 3px solid transparent; color: var(--text-secondary); padding: 8px 12px; cursor: pointer; font-family: 'Oswald', sans-serif; font-size: 0.9em; text-transform: uppercase; flex-shrink: 0; }
+        .quick-edit-tab-btn.active { color: var(--accent-blue); border-bottom-color: var(--accent-blue); }
+        .quick-edit-content .quick-edit-tab-panel { display: none; }
+        .quick-edit-content .quick-edit-tab-panel.active { display: block; }
+        .quick-edit-options { display: flex; flex-wrap: wrap; gap: 8px; }
+        .quick-edit-btn { background-color: var(--bg-interactive); border: 1px solid var(--border-color); color: var(--text-secondary); padding: 6px 10px; border-radius: 4px; cursor: pointer; font-family: 'Oswald', sans-serif; font-size: 0.9em; transition: all 0.2s; }
+        .quick-edit-btn:hover { border-color: var(--accent-hover); color: var(--text-primary); }
+        .quick-edit-btn.selected { background-color: var(--accent-blue); color: white; border-color: var(--accent-blue); }
         
         /* --- STYLES ANNOTATION --- */
         #annotationModal { width: 100vw; max-width: 100vw; height: 100vh; max-height: 100vh; background: var(--bg-container); color: var(--text-primary); border: none; border-radius: 0; padding: 0; overflow: hidden; }
@@ -143,6 +160,12 @@
             .annotation-actions { flex-direction: column; margin-top: auto; padding-top: 20px; }
             .annotation-actions button { justify-content: flex-start; }
             .annotation-canvas-container { order: 2; padding: 10px; }
+            
+            /* Styles desktop pour le panneau d'édition */
+            .quick-edit-tabs { display: none; } /* On cache les onglets */
+            .quick-edit-content { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+            .quick-edit-content .quick-edit-tab-panel { display: block !important; } /* On affiche tous les panneaux */
+            .quick-edit-content h5 { font-size: 0.9em; color: var(--text-secondary); margin-bottom: 8px; text-transform: uppercase; }
         }
 
         /* --- STYLES DU TUTORIEL --- */
@@ -406,6 +429,15 @@ CONDUITE AU LIEU DE GAV.</textarea>
                             <button type="button" id="resetPatracdvrBtn" class="remove-btn" style="margin-left: auto;">Réinitialiser PATRACDVR</button>
                         </div>
                     </div>
+
+                    <div id="quickEditPanel">
+                        <h4>Membre : <span id="selectedMemberTrigramme">Aucun</span>
+                            <button id="fullEditBtn" class="add-btn" style="font-size: 0.8em; padding: 5px 8px; margin-left: 15px;">Édition Complète</button>
+                        </h4>
+                        <div class="quick-edit-tabs"></div>
+                        <div class="quick-edit-content"></div>
+                    </div>
+
                     <h4>Personnel à attribuer</h4>
                     <div id="unassigned_members_container"></div>
                     <h4 style="margin-top: 20px;">Véhicules</h4>
@@ -482,6 +514,9 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             gpbs: ['GPBL', 'GPBPD']
         };
         const availableVehicles = ['Sharan', 'Kodiaq', '5008', 'Scénic', 'BT'];
+        
+        // --- GLOBAL STATE ---
+        let activeMemberId = null;
 
         // --- WIZARD & FORM MANAGEMENT ---
         let currentStep = 0;
@@ -624,7 +659,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             container.appendChild(item);
         }
 
-        // --- PATRACDVR & MEMBER MODAL MANAGEMENT ---
+        // --- PATRACDVR & MEMBER MANAGEMENT ---
         function addPatracdvrRow(vehicle = availableVehicles[0], members = []) {
             const container = document.getElementById('patracdvr_container');
             const row = document.createElement('div');
@@ -660,7 +695,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             Object.keys(memberData).forEach(key => btn.dataset[key] = memberData[key]);
             updateMemberButtonVisuals(btn);
             containerElement.appendChild(btn);
-            btn.addEventListener('click', () => openMemberModal(btn.id));
         }
         function updateMemberButtonVisuals(btn) {
             const trigramme = btn.dataset.trigramme || 'N/A';
@@ -688,7 +722,133 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             const select = document.getElementById(selectId);
             select.innerHTML = options.map(o => `<option value="${o}" ${o === selectedValue ? 'selected':''}>${o}</option>`).join('');
         }
+
+        // --- PANNEAU D'ÉDITION RAPIDE LOGIC ---
+        function setupQuickEditPanel() {
+            const panel = document.getElementById('quickEditPanel');
+            const tabsContainer = panel.querySelector('.quick-edit-tabs');
+            const contentContainer = panel.querySelector('.quick-edit-content');
+            
+            const mapping = {
+                'Fonction': { key: 'fonctions', attribute: 'fonction' },
+                'Cellule': { key: 'cellules', attribute: 'cellule' },
+                'Armement': { key: 'armements', attribute: 'armement' },
+                'Équip. 1': { key: 'equipements', attribute: 'equipement' },
+                'Équip. 2': { key: 'equipements2', attribute: 'equipement2' },
+                'Tenue': { key: 'tenues', attribute: 'tenue' },
+                'GPB': { key: 'gpbs', attribute: 'gpb' }
+            };
+
+            let isFirstTab = true;
+            for (const [title, config] of Object.entries(mapping)) {
+                // Créer l'onglet
+                const tabBtn = document.createElement('button');
+                tabBtn.className = 'quick-edit-tab-btn';
+                tabBtn.textContent = title;
+                tabBtn.dataset.target = `#panel-content-${config.attribute}`;
+                tabsContainer.appendChild(tabBtn);
+
+                // Créer le panneau de contenu pour l'onglet
+                const tabPanel = document.createElement('div');
+                tabPanel.className = 'quick-edit-tab-panel';
+                tabPanel.id = `panel-content-${config.attribute}`;
+                
+                const panelTitle = document.createElement('h5');
+                panelTitle.textContent = title;
+                tabPanel.appendChild(panelTitle);
+                
+                const optionsContainer = document.createElement('div');
+                optionsContainer.className = 'quick-edit-options';
+                
+                memberConfig[config.key].forEach(option => {
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = 'quick-edit-btn';
+                    btn.textContent = option;
+                    btn.dataset.attribute = config.attribute;
+                    btn.dataset.value = option;
+                    optionsContainer.appendChild(btn);
+                });
+                
+                tabPanel.appendChild(optionsContainer);
+                contentContainer.appendChild(tabPanel);
+
+                if(isFirstTab) {
+                    tabBtn.classList.add('active');
+                    tabPanel.classList.add('active');
+                    isFirstTab = false;
+                }
+            }
+            
+            tabsContainer.addEventListener('click', (e) => {
+                if(e.target.matches('.quick-edit-tab-btn')) {
+                    const targetPanelId = e.target.dataset.target;
+                    tabsContainer.querySelectorAll('.quick-edit-tab-btn').forEach(btn => btn.classList.remove('active'));
+                    contentContainer.querySelectorAll('.quick-edit-tab-panel').forEach(p => p.classList.remove('active'));
+                    e.target.classList.add('active');
+                    contentContainer.querySelector(targetPanelId).classList.add('active');
+                }
+            });
+
+            panel.addEventListener('click', handleQuickEdit);
+            document.getElementById('fullEditBtn').addEventListener('click', () => {
+                if(activeMemberId) openMemberModal(activeMemberId);
+            });
+        }
         
+        function handleMemberSelection(event) {
+            const clickedButton = event.target.closest('.patracdvr-member-btn');
+            if (!clickedButton) return;
+            
+            const panel = document.getElementById('quickEditPanel');
+            
+            if (activeMemberId === clickedButton.id) {
+                clickedButton.classList.remove('member-active');
+                activeMemberId = null;
+                panel.style.display = 'none';
+            } else {
+                if (activeMemberId) {
+                    const oldActive = document.getElementById(activeMemberId);
+                    if (oldActive) oldActive.classList.remove('member-active');
+                }
+                activeMemberId = clickedButton.id;
+                clickedButton.classList.add('member-active');
+                populateQuickEditPanel(activeMemberId);
+                panel.style.display = 'block';
+            }
+        }
+        
+        function populateQuickEditPanel(memberId) {
+            const member = document.getElementById(memberId);
+            if (!member) return;
+            document.getElementById('selectedMemberTrigramme').textContent = member.dataset.trigramme || 'N/A';
+            document.querySelectorAll('.quick-edit-btn').forEach(btn => {
+                const attribute = btn.dataset.attribute;
+                const value = btn.dataset.value;
+                btn.classList.toggle('selected', member.dataset[attribute] === value);
+            });
+        }
+        
+        function handleQuickEdit(event) {
+            const target = event.target;
+            if (!target.classList.contains('quick-edit-btn') || !activeMemberId) return;
+            
+            const activeMember = document.getElementById(activeMemberId);
+            if (!activeMember) return;
+
+            const attribute = target.dataset.attribute;
+            const value = target.dataset.value;
+
+            activeMember.dataset[attribute] = value;
+            updateMemberButtonVisuals(activeMember);
+            
+            const group = target.parentElement;
+            group.querySelectorAll('.quick-edit-btn').forEach(btn => btn.classList.remove('selected'));
+            target.classList.add('selected');
+
+            saveFormData();
+        }
+
         // --- DATA PERSISTENCE (SAVE/LOAD) ---
         function saveFormData() {
             try {
@@ -805,7 +965,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             { text: "La mission principale de l'unité est pré-remplie dans cette section. Vous pouvez la modifier si nécessaire.", selector: '#missions_psig', step: 3 },
             { text: "Définissez la chronologie de l'action. Vous pouvez ajouter des événements et les réorganiser par glisser-déposer.", selector: '#time_events_container', step: 4 },
             { text: "Décrivez l'articulation des équipes. Utilisez les sections pour détailler les missions de chaque groupe et ajoutez des photos pour les itinéraires ou emplacements.", selector: '.collapsible-container:first-of-type', step: 5 },
-            { text: "Gérez la composition des équipes. Chargez un fichier JSON pour pré-remplir la liste du personnel, puis assignez chaque membre à un véhicule par glisser-déposer.", selector: '#unassigned_members_container', step: 6 },
+            { text: "Gérez la composition des équipes en cliquant sur un membre pour ouvrir le panneau d'édition rapide.", selector: '#unassigned_members_container', step: 6 },
             { text: "Cette section permet d'ajouter des photos complémentaires (transport, effraction...) qui seront incluses dans le document final.", selector: '.wizard-step:nth-of-type(8)', step: 7 },
             { text: "Spécifiez les conduites à tenir générales, les conditions de désengagement (NO GO), et les procédures de liaison.", selector: '#cat_generales', step: 8 },
             { text: "Une fois le formulaire complété, vous pouvez prévisualiser le document, générer le PDF final, ou consulter le rapport RETEX associé.", selector: '#generatePdfBtn', step: 9 },
@@ -1025,7 +1185,9 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     button.dataset.equipement2 = document.getElementById('modal_equipement2').value;
                     button.dataset.tenue = document.getElementById('modal_tenue').value;
                     button.dataset.gpb = document.getElementById('modal_gpb').value;
-                    updateMemberButtonVisuals(button); saveFormData();
+                    updateMemberButtonVisuals(button);
+                    populateQuickEditPanel(buttonId);
+                    saveFormData();
                 }
                 modal.close();
             });
@@ -1060,6 +1222,9 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             });
             resetPatracdvrBtn.addEventListener('click', () => { if (confirm("Réinitialiser PATRACDVR ?")) { patracdvrContainer.innerHTML = ''; loadDefaultMembersConfig(); } });
             
+            // Member selection listener
+            document.querySelector('.wizard-step:has(#patracdvr_container)').addEventListener('click', handleMemberSelection);
+
             // Annotation Listeners
             canvas.addEventListener('mousedown', handleDrawStart); canvas.addEventListener('mousemove', handleDrawMove);
             canvas.addEventListener('mouseup', handleDrawEnd); canvas.addEventListener('mouseout', handleDrawEnd);
@@ -1131,7 +1296,10 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             });
             if (localStorage.getItem('theme') === 'light') { document.body.classList.replace('dark-mode', 'light-mode'); document.getElementById('darkModeIcon').textContent = 'clear_day'; }
             if (localStorage.getItem('dockCollapsed') === 'true') { dockMenu.classList.add('collapsed'); }
+            
+            // Initialisation
             addPhotoInput('adversary_photo_container', true);
+            setupQuickEditPanel();
             loadFormData();
             showStep(currentStep);
         });
