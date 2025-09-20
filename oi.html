@@ -377,7 +377,6 @@ CONDUITE AU LIEU DE GAV.</textarea>
                 
                 <div class="wizard-step">
                     <h2>5. PATRACDVR</h2>
-
                     <div style="margin-bottom: 20px; padding: 15px; border: 1px solid var(--border-color); border-radius: 5px;">
                         <h4>Gestion de la configuration</h4>
                         <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
@@ -387,7 +386,6 @@ CONDUITE AU LIEU DE GAV.</textarea>
                             <button type="button" id="resetPatracdvrBtn" class="remove-btn" style="margin-left: auto;">Réinitialiser PATRACDVR</button>
                         </div>
                     </div>
-                    
                     <h4>Personnel à attribuer</h4>
                     <div id="unassigned_members_container"></div>
                     <h4 style="margin-top: 20px;">Véhicules</h4>
@@ -774,26 +772,27 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             }, { offset: Number.NEGATIVE_INFINITY }).element;
         }
 
-        // --- TUTORIAL SYSTEM ---
+        // --- TUTORIAL SYSTEM (MIS À JOUR) ---
+        const tutorialSteps = [
+            { text: "Bienvenue dans le générateur d'Ordre Initial. Ce guide vous assistera dans la création de votre document opérationnel.", selector: '.container', center: true },
+            { text: "Cette barre de progression indique les différentes sections de l'O.I. Vous pouvez cliquer sur une étape pour y naviguer directement.", selector: '.wizard-progress' },
+            { text: "Commencez par définir le contexte général et particulier de l'opération, ainsi que sa date.", selector: '#date_op', step: 0 },
+            { text: "Détaillez ici toutes les informations relatives à l'adversaire. Chargez une photo, et le bouton 'Annoter' apparaîtra pour y ajouter des indications visuelles.", selector: '#adversary_photo_container', step: 1 },
+            { text: "Renseignez les informations sur les unités amies, le terrain, la météo, la population et le cadre juridique de l'intervention.", selector: '#terrain_info', step: 2 },
+            { text: "La mission principale de l'unité est pré-remplie dans cette section. Vous pouvez la modifier si nécessaire.", selector: '#missions_psig', step: 3 },
+            { text: "Définissez la chronologie de l'action. Vous pouvez ajouter des événements et les réorganiser par glisser-déposer.", selector: '#time_events_container', step: 4 },
+            { text: "Décrivez l'articulation des équipes. Utilisez les sections pour détailler les missions de chaque groupe et ajoutez des photos pour les itinéraires ou emplacements.", selector: '.collapsible-container:first-of-type', step: 5 },
+            { text: "Gérez la composition des équipes. Chargez un fichier JSON pour pré-remplir la liste du personnel, puis assignez chaque membre à un véhicule par glisser-déposer.", selector: '#unassigned_members_container', step: 6 },
+            { text: "Cette section permet d'ajouter des photos complémentaires (transport, effraction...) qui seront incluses dans le document final.", selector: '.wizard-step:nth-of-type(8)', step: 7 },
+            { text: "Spécifiez les conduites à tenir générales, les conditions de désengagement (NO GO), et les procédures de liaison.", selector: '#cat_generales', step: 8 },
+            { text: "Une fois le formulaire complété, vous pouvez prévisualiser le document, générer le PDF final, ou consulter le rapport RETEX associé.", selector: '#generatePdfBtn', step: 9 },
+            { text: "Ce menu flottant offre un accès rapide aux fonctions globales : changer le thème, réinitialiser entièrement le formulaire, ou relancer ce tutoriel.", selector: '#dockMenu' }
+        ];
+        
         let currentTutorialStep = 0;
         const tutorialPopup = document.getElementById('tutorial-popup'); const popupText = document.getElementById('popup-text');
         const nextPopupBtn = document.getElementById('next-popup-btn'); const closePopupBtn = tutorialPopup.querySelector('.close-btn');
         let currentHighlightedElement = null;
-        const tutorialSteps = [
-            { text: "Bienvenue...", selector: '.container', center: true },
-            { text: "Progression...", selector: '.wizard-progress' },
-            { text: "Situation...", selector: '#date_op', step: 0 },
-            { text: "Adversaire...", selector: '#adversary_photo_container', step: 1 },
-            { text: "Environnement...", selector: '#terrain_info', step: 2 },
-            { text: "Mission...", selector: '#missions_psig', step: 3 },
-            { text: "Exécution...", selector: '#time_events_container', step: 4 },
-            { text: "Articulation...", selector: '.collapsible-container:first-of-type', step: 5 },
-            { text: "PATRACDVR...", selector: '#unassigned_members_container', step: 6 },
-            { text: "Photos...", selector: '.wizard-step:nth-of-type(8)', step: 7 },
-            { text: "CAT...", selector: '#cat_generales', step: 8 },
-            { text: "Finalisation...", selector: '#generatePdfBtn', step: 9 },
-            { text: "Menu Dock...", selector: '#dockMenu' }
-        ];
         function startTutorial() { if (tutorialPopup.style.display === 'flex') { hideTutorial(); return; } goToStep(0); currentTutorialStep = 0; showTutorialStep(currentTutorialStep); }
         function showTutorialStep(stepIndex) {
             if (stepIndex >= tutorialSteps.length) { hideTutorial(); return; }
@@ -1147,8 +1146,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 };
                 drawRow(headers, true); rows.forEach(row => drawRow(row, false)); context.y = currentY - 20;
             };
-            
-            // --- processImage ADAPTÉ POUR GÉRER data:url ET File ---
             const processImage = async (source, maxWidth = 1280, quality = 0.85) => {
                 return new Promise((resolve, reject) => {
                     const img = new Image();
@@ -1158,7 +1155,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                         objectUrl = URL.createObjectURL(source);
                         img.src = objectUrl;
                     } else if (typeof source === 'string' && source.startsWith('data:image')) {
-                        img.src = source; // Gère directement la data URL
+                        img.src = source;
                     } else { return reject(new Error('Source d\'image invalide.')); }
                     
                     img.onload = () => {
@@ -1175,22 +1172,17 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     img.onerror = (err) => { if (objectUrl) URL.revokeObjectURL(objectUrl); reject(new Error(`Impossible de charger l'image: ${err}`)); };
                 });
             };
-            
-            // --- drawImagesFromContainer ADAPTÉ ---
             const drawImagesFromContainer = async (containerId, title) => {
                 const inputs = Array.from(document.querySelectorAll(`#${containerId} .photo-input`));
                 for (let i = 0; i < inputs.length; i++) {
                     const input = inputs[i];
                     const previewImg = input.closest('.photo-input-wrapper').querySelector('.image-preview');
-                    let imageSource = null;
-                    let fileName = "image";
+                    let imageSource = null; let fileName = "image";
                     
-                    // Priorité à l'image annotée (si elle existe et a été modifiée)
                     if (previewImg && previewImg.src.startsWith('data:image') && previewImg.src !== previewImg.dataset.originalSrc) {
                         imageSource = previewImg.src;
                     } else if (input.files.length > 0) {
-                        imageSource = input.files[0];
-                        fileName = imageSource.name;
+                        imageSource = input.files[0]; fileName = imageSource.name;
                     }
                     if (!imageSource) continue;
                     
@@ -1213,8 +1205,8 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 }
             };
             
+            // --- LOGIQUE DE GÉNÉRATION PDF 100% IDENTIQUE AU MODÈLE ---
             const pdfCreationLogic = async () => {
-                // --- LOGIQUE DE GÉNÉRATION PDF 100% IDENTIQUE AU MODÈLE ---
                 addNewPage();
                 if (backgroundImage) { context.currentPage.drawImage(backgroundImage, { x: 0, y: 0, width: context.pageWidth, height: context.pageHeight }); }
                 const mainTitle = "OPÉRATION DE POLICE JUDICIAIRE";
@@ -1362,8 +1354,8 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 const finalTextWidth = helveticaBoldFont.widthOfTextAtSize(finalText, 48);
                 context.currentPage.drawText(finalText, { x: context.pageWidth / 2 - finalTextWidth / 2, y: context.pageHeight / 2, font: helveticaBoldFont, size: 48, color: context.colors.accent });
             };
-
             await pdfCreationLogic();
+            
             const pdfBytes = await pdfDoc.save();
             return { pdfBytes, formData };
         }
