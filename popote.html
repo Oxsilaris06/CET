@@ -161,7 +161,7 @@
                 data() {
                     return {
                         siteTitle: siteConfig.global?.siteTitle || 'Popote',
-                        backendUrl: siteConfig.backendUrl || '', // **MODIFIED**
+                        backendUrl: siteConfig.backendUrl || '',
                         selectedMember: "",
                         password: "",
                         oldPassword: "",
@@ -178,7 +178,7 @@
                     };
                 },
                 created() {
-                    if (!this.backendUrl) { // **MODIFIED**
+                    if (!this.backendUrl) {
                         this.validationMessage = { text: "URL du backend non configurée dans all.json.", isCorrect: false };
                         return;
                     }
@@ -187,7 +187,7 @@
                 },
                 computed: {
                     connectedMemberDette() {
-                        return this.allDettes.find(d => d.membre.trim() === this.selectedMember.trim()) || null;
+                        return this.allDettes.find(d => d.membre && d.membre.trim() === this.selectedMember.trim()) || null;
                     },
                     totalConso() {
                         return (this.conso.canettes * 0.6) + (this.conso.bcaa * 1.5) + (this.conso.cookie * 1.8) + (this.conso.boules * 1.5) + (this.conso.autres * 0.4);
@@ -204,7 +204,7 @@
                 },
                 methods: {
                     async fetchApi(action, params = {}) {
-                        const url = new URL(this.backendUrl); // **MODIFIED**
+                        const url = new URL(this.backendUrl);
                         url.searchParams.append('action', action);
                         for (const key in params) {
                             url.searchParams.append(key, params[key]);
@@ -213,7 +213,13 @@
                         return response.json();
                     },
                     async fetchDettes() {
-                        this.allDettes = (await this.fetchApi('getDettes')).map(item => ({ membre: item.membre, dette: parseFloat(item.dette) || 0 }));
+                        const rawDettes = await this.fetchApi('getDettes');
+                        this.allDettes = rawDettes.map(item => {
+                            // Convertit en chaîne pour remplacer la virgule, puis en nombre.
+                            const debtString = String(item.Dette);
+                            const debtValue = parseFloat(debtString.replace(',', '.')) || 0;
+                            return { membre: item.Membre, dette: debtValue };
+                        });
                     },
                     async fetchMembers() {
                         this.allMembers = (await this.fetchApi('getMembers')).map(member => member.trim());
@@ -242,7 +248,7 @@
                         this.loadingSubmit = true;
                         const data = { membre: this.selectedMember, ...this.conso };
                         
-                        const response = await fetch(this.backendUrl, { // **MODIFIED**
+                        const response = await fetch(this.backendUrl, {
                             method: 'POST',
                             redirect: 'follow',
                             body: JSON.stringify(data),
