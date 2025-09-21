@@ -53,7 +53,6 @@
         .collapsible-content.active { display: block; }
         .high-debt-message { text-align: center; margin-bottom: 15px; font-weight: bold; padding: 10px; border-radius: 4px; }
         body.dark-mode .high-debt-message { background-color: var(--high-debt-bg-dark); color: var(--high-debt-text-dark); }
-        /* Add other necessary styles from original file */
     </style>
 </head>
 <body>
@@ -61,7 +60,8 @@
         <a href="index.html" class="dock-menu-item home-button"><span class="material-icons">home</span></a>
         <div class="dock-menu-item dark-mode-toggle" id="darkModeToggle"><span class="material-symbols-outlined" id="darkModeIcon"></span></div>
     </div>
-    <div class="container" id="app" style="display: none;"> <h1 v-text="siteTitle">Popote</h1>
+    <div class="container" id="app" style="display: none;">
+        <h1 v-text="siteTitle">Popote</h1>
         <a href="https://revolut.me/nicomhx" target="_blank" class="action-button revolut" :class="{'pulse-high': isHighDebt}" style="text-decoration: none; text-align: center; margin-bottom: 5px;"> Payer mes dettes 💸 </a>
         <div style="text-align: center; margin-bottom: 20px; color: var(--text-secondary); font-size: 1em;">
             <p>Lors du paiement merci d'ajouter votre trigramme et la date.</p>
@@ -121,7 +121,6 @@
         let siteConfig;
 
         document.addEventListener('DOMContentLoaded', async () => {
-            // --- Theme Switcher Logic (independent of config) ---
             const body = document.body;
             const toggleButton = document.getElementById('darkModeToggle');
             const toggleIcon = document.getElementById('darkModeIcon');
@@ -144,12 +143,11 @@
             });
             setInitialTheme();
 
-            // --- Config Loader ---
             try {
                 const response = await fetch('all.json');
                 if (!response.ok) throw new Error('Network response was not ok.');
                 siteConfig = await response.json();
-                initializeApp(); // Launch Vue App
+                initializeApp();
             } catch (error) {
                 document.body.innerHTML = `<div style="color: white; text-align: center; padding: 50px;"><h1>Erreur de Configuration</h1><p>Le fichier <code>all.json</code> est introuvable ou invalide. Veuillez configurer le site via la page <code>setup.html</code>.</p></div>`;
                 console.error("Failed to load all.json:", error);
@@ -163,7 +161,7 @@
                 data() {
                     return {
                         siteTitle: siteConfig.global?.siteTitle || 'Popote',
-                        APPS_SCRIPT_URL: siteConfig.backendUrls?.popote || '',
+                        backendUrl: siteConfig.backendUrl || '', // **MODIFIED**
                         selectedMember: "",
                         password: "",
                         oldPassword: "",
@@ -180,7 +178,7 @@
                     };
                 },
                 created() {
-                    if (!this.APPS_SCRIPT_URL) {
+                    if (!this.backendUrl) { // **MODIFIED**
                         this.validationMessage = { text: "URL du backend non configurée dans all.json.", isCorrect: false };
                         return;
                     }
@@ -206,7 +204,7 @@
                 },
                 methods: {
                     async fetchApi(action, params = {}) {
-                        const url = new URL(this.APPS_SCRIPT_URL);
+                        const url = new URL(this.backendUrl); // **MODIFIED**
                         url.searchParams.append('action', action);
                         for (const key in params) {
                             url.searchParams.append(key, params[key]);
@@ -230,7 +228,7 @@
                         if (result.result === 'success') {
                             this.isConnected = true;
                             this.validationMessage = { text: `Accès autorisé pour ${this.selectedMember}.`, isCorrect: true };
-                            await this.fetchDettes(); // Refresh debt info
+                            await this.fetchDettes();
                         } else {
                             this.validationMessage = { text: "Mot de passe incorrect.", isCorrect: false };
                         }
@@ -244,7 +242,7 @@
                         this.loadingSubmit = true;
                         const data = { membre: this.selectedMember, ...this.conso };
                         
-                        const response = await fetch(this.APPS_SCRIPT_URL, {
+                        const response = await fetch(this.backendUrl, { // **MODIFIED**
                             method: 'POST',
                             redirect: 'follow',
                             body: JSON.stringify(data),
@@ -290,7 +288,7 @@
                 }
             }).mount('#app');
 
-            document.getElementById('app').style.display = 'block'; // Show the app once Vue is mounted
+            document.getElementById('app').style.display = 'block';
         }
     </script>
 </body>
