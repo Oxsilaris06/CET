@@ -64,17 +64,20 @@
         document.addEventListener('DOMContentLoaded', async () => {
             try {
                 const response = await fetch('all.json');
-                if (!response.ok) throw new Error('Network response was not ok.');
+                if (!response.ok) {
+                    throw new Error('Fichier de configuration non trouvé ou invalide.');
+                }
                 siteConfig = await response.json();
                 initializeApp();
             } catch (error) {
-                document.body.innerHTML = `<div class="overlay"><h1>Erreur de Configuration</h1><p style="background: #c0392b; padding: 10px; border-radius: 5px;">Le fichier <code>all.json</code> est introuvable ou invalide. Veuillez configurer le site via la page <code>setup.html</code>.</p></div>`;
+                const overlay = document.querySelector('.overlay') || document.body;
+                overlay.innerHTML = `<h1>Erreur de Configuration</h1><p style="background: #c0392b; padding: 10px; border-radius: 5px;">Le fichier <code>all.json</code> est introuvable ou malformé. Veuillez utiliser <code>setup.html</code> pour le générer.</p>`;
                 console.error("Failed to load all.json:", error);
             }
         });
 
         function initializeApp() {
-            // --- CONFIGURATION DYNAMIQUE ---
+            // --- INJECTION DE LA CONFIGURATION DYNAMIQUE ---
             document.title = siteConfig.global?.pwaName || 'E-PSIG';
             document.querySelector('h1').textContent = siteConfig.global?.siteTitle || 'ESPACE PSIG';
             const videoSource = document.querySelector('#video-bg source');
@@ -84,7 +87,7 @@
             }
             const backendUrl = siteConfig.backendUrl || '';
             
-            // --- LOGIQUE DE LA PAGE (LOGIQUE ORIGINELLE RESTAURÉE) ---
+            // --- LOGIQUE ORIGINELLE DE LA PAGE ---
             const modal = document.getElementById('passwordModal');
             const passwordInput = document.getElementById('passwordInput');
             const confirmBtn = document.getElementById('confirmBtn');
@@ -97,13 +100,13 @@
                     targetPage = e.target.dataset.page;
                     document.getElementById('modalTitle').innerText = `Accès à "${targetPage}"`;
                     modal.style.display = 'flex';
+                    passwordInput.value = '';
                     passwordInput.focus();
                 });
             });
 
             cancelBtn.addEventListener('click', () => {
                 modal.style.display = 'none';
-                passwordInput.value = '';
             });
 
             confirmBtn.addEventListener('click', () => {
@@ -115,9 +118,9 @@
                     checkPassword(targetPage, passwordInput.value);
                 }
             });
-
+            
+            // La logique de mot de passe est conservée telle quelle, gérée côté client
             function checkPassword(page, password) {
-                // Logique de mot de passe client-side (comme dans votre original)
                 const pagePasswords = {
                     popote: 'popote',
                     oi: 'oi',
@@ -130,18 +133,20 @@
                 }
 
                 if (password === pagePasswords[page]) {
-                     // Correction pour le nom de fichier du configurateur
                      const pageName = (page === 'config' ? 'configurateur' : page);
                      window.location.href = pageName + '.html';
                 } else {
                     alert('Mot de passe incorrect.');
+                    passwordInput.value = '';
+                    passwordInput.focus();
                 }
             }
 
+            // La fonction d'annonce utilise maintenant l'URL de all.json
             async function fetchAnnonce() {
                 const annonceElement = document.getElementById('annonce-text');
                 if (!backendUrl) {
-                    annonceElement.textContent = "Annonce non configurée.";
+                    annonceElement.textContent = "Service d'annonce non configuré.";
                     return;
                 }
                 try {
