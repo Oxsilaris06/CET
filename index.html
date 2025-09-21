@@ -390,95 +390,135 @@
     </div>
 
     <script>
-        const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxZnl6yZZtNf-yhct5_F6ftkTJud16uUawHC1R_vYm-t0bmMaZUnuU7coYYeYweq0t0wQ/exec";
-        const DRIVE_URL = "https://drive.google.com/drive/folders/11kmI-02FFng-Jr_Zr0oPvFc3fQwEML4Z";
-        const OI_URL = "oi.html";
-        
-        // Logique pour l'annonce
-        const appsScriptUrlAnnonce = 'https://script.google.com/macros/s/AKfycbyBLq0bZM3tc5V2pN3vSvhNpdY-LE88SLQGIvcMnX5DmSOr9e9b-OTZzfptYJQ_Fx4DIQ/exec';
+        let siteConfig;
 
-        function fetchAnnonce() {
-            fetch(appsScriptUrlAnnonce)
-                .then(response => response.text())
-                .then(data => {
-                    document.getElementById('annonceContent').innerText = data;
-                })
-                .catch(error => {
-                    console.error('Erreur de récupération de l\'annonce:', error);
-                    document.getElementById('annonceContent').innerText = 'Annonce non disponible.';
-                });
-        }
-
-        document.addEventListener('DOMContentLoaded', fetchAnnonce);
-
-        // Logique pour la modale de connexion
-        const loginModal = document.getElementById('loginModal');
-        const memberSelect = document.getElementById('member-select');
-        const passwordInput = document.getElementById('password-input');
-        const loginMessage = document.getElementById('loginMessage');
-        let allMembers = [];
-        let loginTarget = ''; // 'drive' ou 'oi'
-
-        async function fetchMembers() {
+        document.addEventListener('DOMContentLoaded', async () => {
             try {
-                const response = await fetch(`${APPS_SCRIPT_URL}?action=getMembers`);
-                const data = await response.json();
-                allMembers = data.map(member => member.trim());
-                populateMemberSelect();
+                const response = await fetch('all.json');
+                if (!response.ok) throw new Error('Fichier de configuration non trouvé ou invalide.');
+                siteConfig = await response.json();
+                initializeApp();
             } catch (error) {
-                console.error("Erreur lors du chargement des membres:", error);
+                const container = document.querySelector('.container') || document.body;
+                container.innerHTML = `<h1>Erreur de Configuration</h1><p style="background: #c0392b; padding: 10px; border-radius: 5px;">Le fichier <code>all.json</code> est introuvable. Veuillez utiliser <code>setup.html</code> pour le générer.</p>`;
+                console.error("Failed to load all.json:", error);
             }
-        }
+        });
 
-        function populateMemberSelect() {
-            memberSelect.innerHTML = '<option value="">Sélectionner un membre</option>';
-            allMembers.forEach(member => {
-                const option = document.createElement('option');
-                option.value = member.trim();
-                option.textContent = member.trim();
-                memberSelect.appendChild(option);
-            });
-        }
-
-        function openLoginModal(target) {
-            loginTarget = target;
-            loginMessage.innerText = '';
-            passwordInput.value = '';
-            memberSelect.value = '';
-            loginModal.classList.add('active');
-            fetchMembers();
-        }
-
-        function closeLoginModal() {
-            loginModal.classList.remove('active');
-        }
-
-        async function validateLogin() {
-            const selectedMember = memberSelect.value;
-            const password = passwordInput.value;
-
-            if (!selectedMember || !password) {
-                loginMessage.innerText = 'Veuillez remplir tous les champs.';
-                return;
+        function initializeApp() {
+            // --- INJECTION DE LA CONFIGURATION ---
+            document.title = siteConfig.global?.pwaName || 'Espace PSIG';
+            document.querySelector('h1').textContent = siteConfig.global?.siteTitle || 'Espace PSIG';
+            const videoSource = document.querySelector('#background-video source');
+            if (videoSource) {
+                videoSource.src = siteConfig.global?.backgroundVideoPath || 'psigbackground.mp4';
+                document.querySelector('#background-video').load();
             }
+            const backendUrl = siteConfig.backendUrl || '';
 
-            try {
-                const url = `${APPS_SCRIPT_URL}?action=authenticate&member=${selectedMember}&password=${password}`;
-                const response = await fetch(url);
-                const result = await response.json();
+            // --- LOGIQUE ORIGINELLE DE LA PAGE ---
+            const DRIVE_URL = "https://drive.google.com/drive/folders/11kmI-02FFng-Jr_Zr0oPvFc3fQwEML4Z";
+            const OI_URL = "oi.html";
+            
+            const loginModal = document.getElementById('loginModal');
+            const memberSelect = document.getElementById('member-select');
+            const passwordInput = document.getElementById('password-input');
+            const loginMessage = document.getElementById('loginMessage');
+            let allMembers = [];
+            let loginTarget = '';
 
-                if (result.result === 'success') {
-                    if (loginTarget === 'drive') {
-                        window.location.href = DRIVE_URL;
-                    } else if (loginTarget === 'oi') {
-                        window.location.href = OI_URL;
-                    }
-                } else {
-                    loginMessage.innerText = 'Mot de passe incorrect ou erreur réseau.';
+            // La fonction fetchAnnonce est maintenant globale pour être appelée par l'icône refresh
+            window.fetchAnnonce = async function() {
+                const annonceElement = document.getElementById('annonceContent');
+                if (!backendUrl) {
+                    annonceElement.innerText = 'Service d\'annonce non configuré.';
+                    return;
                 }
-            } catch (error) {
-                console.error("Erreur d'authentification:", error);
-                loginMessage.innerText = "Erreur de connexion.";
+                annonceElement.innerText = 'Chargement...';
+                try {
+                    const url = new URL(backendUrl);
+                    url.searchParams.append('action', 'getAnnonce');
+                    const response = await fetch(url);
+                    const data = await response.text();
+                    annonceElement.innerText = data || 'Aucune annonce pour le moment.';
+                } catch (error) {
+                    console.error('Erreur de récupération de l\'annonce:', error);
+                    annonceElement.innerText = 'Annonce non disponible.';
+                }
+            }
+            
+            fetchAnnonce(); // Appel initial au chargement
+
+            async function fetchMembers() {
+                try {
+                    const url = new URL(backendUrl);
+                    url.searchParams.append('action', 'getMembers');
+                    const response = await fetch(url);
+                    const data = await response.json();
+                    allMembers = data.map(member => member.trim());
+                    populateMemberSelect();
+                } catch (error) {
+                    console.error("Erreur lors du chargement des membres:", error);
+                }
+            }
+
+            function populateMemberSelect() {
+                memberSelect.innerHTML = '<option value="">Sélectionner un membre</option>';
+                allMembers.forEach(member => {
+                    const option = document.createElement('option');
+                    option.value = member.trim();
+                    option.textContent = member.trim();
+                    memberSelect.appendChild(option);
+                });
+            }
+
+            window.openLoginModal = function(target) {
+                loginTarget = target;
+                loginMessage.innerText = '';
+                passwordInput.value = '';
+                memberSelect.value = '';
+                loginModal.classList.add('active');
+                if (!allMembers.length) { // On ne fetch les membres qu'une seule fois
+                    fetchMembers();
+                }
+            }
+
+            window.closeLoginModal = function() {
+                loginModal.classList.remove('active');
+            }
+
+            window.validateLogin = async function() {
+                const selectedMember = memberSelect.value;
+                const password = passwordInput.value;
+
+                if (!selectedMember || !password) {
+                    loginMessage.innerText = 'Veuillez remplir tous les champs.';
+                    return;
+                }
+                
+                loginMessage.innerText = 'Validation en cours...';
+
+                try {
+                    const url = new URL(backendUrl);
+                    url.searchParams.append('action', 'authenticate');
+                    url.searchParams.append('member', selectedMember);
+                    url.searchParams.append('password', password);
+                    const response = await fetch(url);
+                    const result = await response.json();
+
+                    if (result.result === 'success') {
+                        if (loginTarget === 'drive') {
+                            window.location.href = DRIVE_URL;
+                        } else if (loginTarget === 'oi') {
+                            window.location.href = OI_URL;
+                        }
+                    } else {
+                        loginMessage.innerText = 'Mot de passe incorrect ou erreur réseau.';
+                    }
+                } catch (error) {
+                    console.error("Erreur d'authentification:", error);
+                    loginMessage.innerText = "Erreur de connexion.";
+                }
             }
         }
     </script>
