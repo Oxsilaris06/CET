@@ -31,8 +31,92 @@
         table { width: 100%; border-collapse: collapse; font-size: 1.1em; text-align: left; border: 1px solid var(--border-color); }
         th, td { padding: 12px 15px; border-bottom: 1px solid var(--border-color); color: var(--text-primary); }
         th { background-color: var(--bg-interactive); font-weight: 500; text-transform: uppercase; }
-        .dock-menu { position: fixed; top: 50%; left: 0; transform: translateY(-50%); display: flex; flex-direction: column; gap: 15px; padding: 10px; z-index: 2000; }
-        .dock-menu-item { display: flex; align-items: center; justify-content: center; background-color: var(--bg-container); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 50%; width: 45px; height: 45px; font-size: 24px; cursor: pointer; text-decoration: none; }
+        
+        /* --- STYLES DU DOCK LATÉRAL --- */
+        .dock-menu {
+            position: fixed;
+            top: 50%;
+            left: 0;
+            transform: translateY(-50%);
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            padding: 10px;
+            z-index: 2000;
+        }
+        .dock-menu:not(.collapsed) {
+             width: 45px;
+             opacity: 0.5;
+             border-radius: 0 30px 30px 0;
+             transition: all 0.3s ease;
+        }
+        .dock-menu:not(.collapsed):hover {
+            opacity: 1;
+            background-color: rgba(30, 30, 30, 0.05);
+            border: 1px solid rgba(68, 68, 68, 0.1);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+        .dock-menu-item {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: var(--bg-container);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 50%;
+            width: 45px;
+            height: 45px;
+            font-size: 24px;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: all 0.3s ease;
+            text-decoration: none;
+        }
+        .dock-menu-item:hover {
+            transform: scale(1.1);
+            box-shadow: 0 6px 10px rgba(0,0,0,0.2);
+        }
+        .dock-menu.collapsed {
+            width: 28px;
+            height: auto;
+            align-items: center;
+            padding: 1px;
+            opacity: 1;
+            background-color: rgba(30, 30, 30, 0.05);
+            border: 1px solid rgba(68, 68, 68, 0.1);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-radius: 0 50% 50% 0;
+        }
+        .dock-menu.collapsed:hover { background-color: var(--bg-container); }
+        .dock-menu.collapsed .dock-menu-item { display: none; }
+        .dock-menu:not(.collapsed) .dock-toggle-btn { display: none; }
+        .dock-menu.collapsed .dock-toggle-btn {
+            display: flex;
+            background-color: var(--bg-container);
+            border: 1px solid var(--border-color);
+            border-radius: 50%;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .dock-toggle-btn {
+            background-color: transparent;
+            color: var(--text-primary);
+            border: none;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: transform 0.3s ease;
+        }
+        .dock-toggle-btn .material-icons { font-size: 32px; transition: transform 0.3s ease; }
+        .dock-menu.collapsed .dock-toggle-btn .material-icons { transform: rotate(0deg); }
+        .dock-menu:not(.collapsed) .dock-toggle-btn .material-icons { transform: rotate(180deg); }
+
+        /* --- FIN STYLES DU DOCK --- */
+
         fieldset { border: 1px solid var(--border-color); border-radius: 6px; padding: 20px; margin-bottom: 25px; }
         legend { padding: 0 10px; font-size: 1.5em; color: var(--text-primary); font-family: 'Saira Stencil One', sans-serif; cursor: pointer; }
         .conso-item { display: flex; justify-content: flex-start; align-items: center; margin-bottom: 10px; gap: 15px; }
@@ -57,9 +141,17 @@
 </head>
 <body>
     <div class="dock-menu" id="dockMenu">
-        <a href="index.html" class="dock-menu-item home-button"><span class="material-icons">home</span></a>
-        <div class="dock-menu-item dark-mode-toggle" id="darkModeToggle"><span class="material-symbols-outlined" id="darkModeIcon"></span></div>
+        <div class="dock-toggle-btn" id="dockToggleBtn">
+            <span class="material-icons">arrow_left</span>
+        </div>
+        <a href="index.html" class="dock-menu-item home-button">
+            <span class="material-icons">home</span>
+        </a>
+        <div class="dock-menu-item dark-mode-toggle" id="darkModeToggle">
+            <span class="material-symbols-outlined" id="darkModeIcon"></span>
+        </div>
     </div>
+
     <div class="container" id="app" style="display: none;">
         <h1 v-text="siteTitle">Popote</h1>
         <a href="https://revolut.me/nicomhx" target="_blank" class="action-button revolut" :class="{'pulse-high': isHighDebt}" style="text-decoration: none; text-align: center; margin-bottom: 5px;"> Payer mes dettes 💸 </a>
@@ -121,9 +213,13 @@
         let siteConfig;
 
         document.addEventListener('DOMContentLoaded', async () => {
+            // --- Theme & Dock Logic (independent of config) ---
             const body = document.body;
             const toggleButton = document.getElementById('darkModeToggle');
             const toggleIcon = document.getElementById('darkModeIcon');
+            const dockMenu = document.getElementById('dockMenu');
+            const dockToggleBtn = document.getElementById('dockToggleBtn');
+
             function setInitialTheme() {
                 const savedTheme = localStorage.getItem('darkMode');
                 if (savedTheme === 'true' || (savedTheme === null && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
@@ -143,6 +239,19 @@
             });
             setInitialTheme();
 
+            function toggleDock() {
+                dockMenu.classList.toggle('collapsed');
+                localStorage.setItem('dockCollapsed', dockMenu.classList.contains('collapsed'));
+            }
+            if (localStorage.getItem('dockCollapsed') === 'true') {
+                dockMenu.classList.add('collapsed');
+            }
+            dockToggleBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                toggleDock();
+            });
+
+            // --- Config Loader ---
             try {
                 const response = await fetch('all.json');
                 if (!response.ok) throw new Error('Network response was not ok.');
@@ -215,7 +324,6 @@
                     async fetchDettes() {
                         const rawDettes = await this.fetchApi('getDettes');
                         this.allDettes = rawDettes.map(item => {
-                            // Convertit en chaîne pour remplacer la virgule, puis en nombre.
                             const debtString = String(item.Dette);
                             const debtValue = parseFloat(debtString.replace(',', '.')) || 0;
                             return { membre: item.Membre, dette: debtValue };
