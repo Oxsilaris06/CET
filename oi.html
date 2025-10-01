@@ -84,7 +84,7 @@
         .articulation-composition-display strong { color: var(--accent-blue); }
 
         .dock-menu { position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; padding: 10px; z-index: 1000; background-color: rgba(30, 30, 30, 0.7); border: 1px solid var(--border-color); border-radius: 35px; backdrop-filter: blur(10px); transition: all 0.3s ease-in-out; }
-        .dock-menu-item { display: flex; align-items: center; justify-content: center; background-color: var(--bg-container); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 50%; width: 50px; height: 50px; font-size: 28px; cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.2); transition: all 0.2s; text-decoration: none; flex-shrink: 0; }
+        .dock-menu-item { display: flex; align-items: center; justify-content: center; background-color: var(--bg-container); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 50%; w: 50px; height: 50px; font-size: 28px; cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.2); transition: all 0.2s; text-decoration: none; flex-shrink: 0; }
         .dock-menu-item:hover { transform: scale(1.1); }
         .dock-menu.collapsed { width: 55px; height: 55px; padding: 5px; border-radius: 50%; border: none; background-color: transparent; }
         .dock-menu.collapsed .dock-menu-item:not(#dockToggleBtn) { opacity: 0; width: 0; margin-left: -10px; visibility: hidden; }
@@ -203,7 +203,22 @@
         .tool-controls label { margin-bottom: 0; }
         .tool-controls input { margin-bottom: 0; padding: 8px; }
         #edit_text_btn { display: none; }
-        #contextual_tools.active.location-selected #edit_text_btn { display: flex; }
+        /* Affiche le bouton "Texte" seulement si c'est une annotation de type 'location' sélectionnée */
+        #contextual_tools.active.location-selected #edit_text_btn { display: flex; } 
+        
+        /* Poignées de redimensionnement */
+        .resize-handle {
+            position: absolute;
+            width: 15px;
+            height: 15px;
+            background: white;
+            border: 2px solid var(--accent-blue);
+            border-radius: 50%;
+            cursor: nwse-resize;
+            transform: translate(-50%, -50%);
+            z-index: 10;
+        }
+
         .annotation-actions { display: flex; justify-content: space-around; gap: 10px; padding-top: 10px; border-top: 1px solid var(--border-color); margin-top: 10px;}
         .annotation-actions button { flex: 1; justify-content: center; }
         .annotation-canvas-container { order: 1; flex-grow: 1; display: flex; align-items: center; justify-content: center; background: #000; padding: 5px; overflow: auto; min-height: 0; }
@@ -285,20 +300,13 @@
             <div class="modal-content">
                 <label for="modal_trigramme">Trigramme:</label>
                 <input type="text" id="modal_trigramme" placeholder="Trigramme">
-                <label for="modal_fonction">Fonction:</label>
-                <select id="modal_fonction"></select>
-                <label for="modal_cellule">Cellule:</label>
-                <select id="modal_cellule"></select>
-                <label for="modal_armement">Armement:</label>
-                <select id="modal_armement"></select>
-                <label for="modal_equipement">Équipement 1:</label>
-                <select id="modal_equipement"></select>
-                <label for="modal_equipement2">Équipement 2:</label>
-                <select id="modal_equipement2"></select>
-                <label for="modal_tenue">Tenue:</label>
-                <select id="modal_tenue"></select>
-                <label for="modal_gpb">GPB:</label>
-                <select id="modal_gpb"></select>
+                <label for="modal_fonction">Fonction:</label><select id="modal_fonction"></select>
+                <label for="modal_cellule">Cellule:</label><select id="modal_cellule"></select>
+                <label for="modal_armement">Armement:</label><select id="modal_armement"></select>
+                <label for="modal_equipement">Équipement 1:</label><select id="modal_equipement"></select>
+                <label for="modal_equipement2">Équipement 2:</label><select id="modal_equipement2"></select>
+                <label for="modal_tenue">Tenue:</label><select id="modal_tenue"></select>
+                <label for="modal_gpb">GPB:</label><select id="modal_gpb"></select>
             </div>
             <div class="modal-actions">
                 <button type="button" id="modal_deleteBtn" class="remove-btn">Renvoyer en Attente</button>
@@ -604,7 +612,8 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
         const APPS_SCRIPT_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyF0CJ_B9U4Izn6ieZG4lfIq23oScE6cFvd1SoUXvVUBRqk_Ce1R8TJpRRnuamcdJH-/exec";
         
         // --- GLOBAL CONFIG ---
-        const memberConfig = {
+        // Rendre la configuration des membres dynamique et la charger par défaut
+        let memberConfig = { // Configuration par défaut (sera écrasée par members_config.json ou localStorage)
             fonctions: ['Chef inter', 'Chef dispo', 'DE', 'Sans'],
             cellules: ['AO1','AO2','AO3','AO4','India 1','India 2','India 3','India 4','India 5', 'Sans'],
             armements: ['Sans', 'UMP9', 'G36', 'PIE', 'LBD40', 'FAP'],
@@ -614,6 +623,8 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             gpbs: ['GPBL', 'GPBPD']
         };
         const availableVehicles = ['Sharan', 'Kodiaq', '5008', 'Scénic', 'BT'];
+        const DEFAULT_CONFIG_FILE = 'members_config.json'; // Nom du fichier de config par défaut à charger
+
         
         // --- GLOBAL STATE ---
         let activeMemberId = null;
@@ -857,11 +868,24 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             btn.className = 'patracdvr-member-btn draggable';
             btn.id = `member_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
             btn.setAttribute('draggable', 'true');
-            const memberData = {
+            // La liste des attributs ici doit correspondre à ce qui est attendu par la modale
+            const defaultAttributes = {
                 trigramme: 'N/A', fonction: 'Sans', cellule: 'India 1', armement: 'Sans',
                 equipement: 'Sans', equipement2: 'Sans',
-                tenue: 'UBAS', gpb: 'GPBL', ...data
+                tenue: 'UBAS', gpb: 'GPBL'
             };
+            
+            // Étendre les attributs par défaut avec les attributs du fichier JSON
+            const memberData = { ...defaultAttributes, ...data };
+            
+            // Assurer la présence de tous les attributs définis dans memberConfig pour éviter les erreurs
+            for (const key in memberConfig) {
+                const attrName = key.replace(/s$/, ''); // ex: fonctions -> fonction
+                 if (memberData[attrName] === undefined) {
+                    memberData[attrName] = memberConfig[key][0] || 'Sans'; // Utiliser la première option comme valeur par défaut
+                }
+            }
+            
             Object.keys(memberData).forEach(key => btn.dataset[key] = memberData[key]);
             updateMemberButtonVisuals(btn);
             containerElement.appendChild(btn);
@@ -901,17 +925,24 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             }
             
             document.getElementById('modal_trigramme').value = button.dataset.trigramme;
-            populateSelect('modal_fonction', memberConfig.fonctions, button.dataset.fonction);
-            populateSelect('modal_cellule', memberConfig.cellules, button.dataset.cellule);
-            populateSelect('modal_armement', memberConfig.armements, button.dataset.armement);
-            populateSelect('modal_equipement', memberConfig.equipements, button.dataset.equipement);
-            populateSelect('modal_equipement2', memberConfig.equipements2, button.dataset.equipement2);
-            populateSelect('modal_tenue', memberConfig.tenues, button.dataset.tenue);
-            populateSelect('modal_gpb', memberConfig.gpbs, button.dataset.gpb);
+            
+            // Utiliser les selects mis à jour dynamiquement
+            // Nous n'appelons plus populateSelect ici car updateEditModalSelects le fait déjà au chargement
+            for (const key in memberConfig) {
+                 const attrName = key.replace(/s$/, '');
+                 const selectId = 'modal_' + attrName;
+                 const select = document.getElementById(selectId);
+                 if (select) {
+                     select.value = button.dataset[attrName] || memberConfig[key][0];
+                 }
+            }
+            
             modal.showModal();
         }
         function populateSelect(selectId, options, selectedValue) {
             const select = document.getElementById(selectId);
+            // S'assurer que le select existe (peut être utilisé avant l'initialisation complète)
+            if (!select) return; 
             select.innerHTML = options.map(o => `<option value="${o}" ${o === selectedValue ? 'selected':''}>${o}</option>`).join('');
         }
         
@@ -959,22 +990,22 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
 
 
         // --- PANNEAU D'ÉDITION RAPIDE & MODALE LOGIC ---
-        const quickEditMapping = {
-            'Fonction': { key: 'fonctions', attribute: 'fonction' },
-            'Cellule': { key: 'cellules', attribute: 'cellule' },
-            'Armement': { key: 'armements', attribute: 'armement' },
-            'Équip. 1': { key: 'equipements', attribute: 'equipement' },
-            'Équip. 2': { key: 'equipements2', attribute: 'equipement2' },
-            'Tenue': { key: 'tenues', attribute: 'tenue' },
-            'GPB': { key: 'gpbs', attribute: 'gpb' }
-        };
-
+        // Rendre la création du panneau dynamique en fonction de memberConfig
         function setupQuickEditPanel() {
             const contentContainer = document.querySelector('#quickEditPanel .quick-edit-content');
+            contentContainer.innerHTML = ''; // Vider l'ancien contenu
             
-            for (const [title, config] of Object.entries(quickEditMapping)) {
+            for (const key in memberConfig) {
+                if (!memberConfig.hasOwnProperty(key) || !Array.isArray(memberConfig[key])) continue;
+
+                // Transformer la clé du JSON (ex: 'fonctions') en nom d'attribut de données (ex: 'fonction')
+                const attributeName = key.replace(/s$/, ''); 
+                
+                // Transformer la clé du JSON (ex: 'fonctions') en titre lisible (ex: 'Fonctions')
+                const title = key.charAt(0).toUpperCase() + key.slice(1).replace(/([A-Z])/g, ' $1');
+
                 const tabPanel = document.createElement('div');
-                tabPanel.className = 'quick-edit-tab-panel active';
+                tabPanel.className = 'quick-edit-tab-panel active'; 
                 
                 const panelTitle = document.createElement('h5');
                 panelTitle.textContent = title;
@@ -983,18 +1014,36 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 const optionsContainer = document.createElement('div');
                 optionsContainer.className = 'quick-edit-options';
                 
-                memberConfig[config.key].forEach(option => {
+                memberConfig[key].forEach(option => { 
                     const btn = document.createElement('button');
                     btn.type = 'button';
                     btn.className = 'quick-edit-btn';
                     btn.textContent = option;
-                    btn.dataset.attribute = config.attribute;
+                    btn.dataset.attribute = attributeName; // Ex: 'fonction'
                     btn.dataset.value = option;
                     optionsContainer.appendChild(btn);
                 });
                 
                 tabPanel.appendChild(optionsContainer);
                 contentContainer.appendChild(tabPanel);
+            }
+            updateEditModalSelects(); // Mettre à jour les selects de la modale complète
+        }
+        
+        // Fonction pour mettre à jour les <select> de la modale d'édition complète
+        function updateEditModalSelects() {
+             for (const key in memberConfig) {
+                if (memberConfig.hasOwnProperty(key) && Array.isArray(memberConfig[key])) {
+                    // Les IDs de la modale utilisent la clé sans le 's' (ex: 'modal_fonction' pour 'fonctions')
+                    const selectId = 'modal_' + key.replace(/s$/, '');
+                    const selectElement = document.getElementById(selectId);
+                    if (selectElement) {
+                        selectElement.innerHTML = memberConfig[key].map(option => {
+                            // On conserve la valeur de l'option pour la reconstruction
+                            return `<option value="${option}">${option}</option>`;
+                        }).join('');
+                    }
+                }
             }
         }
         
@@ -1046,26 +1095,32 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
 
             title.textContent = `Édition Rapide: ${member.dataset.trigramme || 'N/A'}`;
             content.innerHTML = '';
+            
+            // Construction dynamique du contenu de la modale
+            for (const key in memberConfig) {
+                if (!memberConfig.hasOwnProperty(key) || !Array.isArray(memberConfig[key])) continue;
+                
+                const attributeName = key.replace(/s$/, '');
+                const categoryTitleText = key.charAt(0).toUpperCase() + key.slice(1).replace(/([A-Z])/g, ' $1');
 
-            for (const [category, config] of Object.entries(quickEditMapping)) {
                 const categoryDiv = document.createElement('div');
                 categoryDiv.className = 'quick-edit-category';
                 
                 const categoryTitle = document.createElement('h5');
-                categoryTitle.textContent = category;
+                categoryTitle.textContent = categoryTitleText;
                 categoryDiv.appendChild(categoryTitle);
                 
                 const optionsContainer = document.createElement('div');
                 optionsContainer.className = 'quick-edit-options';
                 
-                memberConfig[config.key].forEach(option => {
+                memberConfig[key].forEach(option => {
                     const btn = document.createElement('button');
                     btn.type = 'button';
                     btn.className = 'quick-edit-btn';
                     btn.textContent = option;
-                    btn.dataset.attribute = config.attribute;
+                    btn.dataset.attribute = attributeName;
                     btn.dataset.value = option;
-                    if (member.dataset[config.attribute] === option) {
+                    if (member.dataset[attributeName] === option) {
                         btn.classList.add('selected');
                     }
                     optionsContainer.appendChild(btn);
@@ -1074,6 +1129,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 categoryDiv.appendChild(optionsContainer);
                 content.appendChild(categoryDiv);
             }
+            
             modal.showModal();
         }
 
@@ -1105,6 +1161,9 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     hour: item.querySelector('.time-hour-input').value,
                     description: item.querySelector('.time-description-input').value
                 }));
+                // Sauvegarde de la configuration des membres
+                data.member_options = memberConfig;
+                
                 localStorage.setItem('oiFormData', JSON.stringify(data));
                 
                 updateArticulationDisplay();
@@ -1118,6 +1177,14 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             }
             try {
                 const data = JSON.parse(dataString);
+                
+                // 1. CHARGEMENT DES OPTIONS MEMBRES
+                if (data.member_options) {
+                    memberConfig = data.member_options;
+                }
+                setupQuickEditPanel(); // Reconstruire l'UI avec les options chargées
+                
+                // 2. CHARGEMENT DES DONNÉES DU FORMULAIRE
                 Object.keys(data).forEach(key => {
                     if (key.endsWith('_src')) {
                         const imgId = key.replace('_src', '');
@@ -1132,7 +1199,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                         }
                         return;
                     }
-                    if (['patracdvr_rows', 'patracdvr_unassigned', 'time_events', 'me_list', 'etat_esprit_list', 'volume_list', 'vehicules_list'].includes(key)) return; 
+                    if (['patracdvr_rows', 'patracdvr_unassigned', 'time_events', 'me_list', 'etat_esprit_list', 'volume_list', 'vehicules_list', 'member_options'].includes(key)) return; 
                     const el = document.getElementById(key);
                     if (el && !Array.isArray(data[key]) && typeof data[key] !== 'object') {
                         el.value = data[key];
@@ -1146,8 +1213,13 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 initializePatracdvr(data);
 
                 updateArticulationDisplay();
-            } catch (e) { console.error("Load error:", e); }
+            } catch (e) { 
+                console.error("Load error:", e);
+                // En cas d'erreur de chargement de la session, on la supprime pour repartir de zéro (ou de la config par défaut)
+                localStorage.removeItem('oiFormData');
+            }
         }
+        
         function initializePatracdvr(dataFromStorage) {
             unassignedContainer.innerHTML = '';
             patracdvrContainer.innerHTML = '';
@@ -1156,19 +1228,52 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 (dataFromStorage.patracdvr_rows || []).forEach(row => addPatracdvrRow(row.vehicle, row.members));
             }
         }
-        function loadMembersFromJson(membersArray) {
+        function loadMembersFromJson(configObject) {
+            // Mise à jour de memberConfig si le fichier importé contient une section 'options'
+            if (configObject.options) {
+                memberConfig = configObject.options;
+                setupQuickEditPanel(); // Reconstruire l'UI avec les nouvelles options
+                updateEditModalSelects();
+            }
+            
+            const membersArray = configObject.members || [];
             unassignedContainer.innerHTML = ''; 
             patracdvrContainer.innerHTML = '';
             membersArray.forEach(memberData => { 
-                const defaultData = {
-                    cellule: memberData.cellule || 'Sans',
-                    fonction: memberData.fonction || 'Sans',
-                    ...memberData
-                };
-                addPatracdvrMember(unassignedContainer, defaultData); 
+                addPatracdvrMember(unassignedContainer, memberData); 
             });
             saveFormData(); 
         }
+        
+        // Nouvelle fonction pour charger la config par défaut
+        async function loadDefaultConfig() {
+            if (localStorage.getItem('oiFormData')) {
+                // Si la session existe, on ne charge pas la config par défaut.
+                return;
+            }
+            try {
+                const response = await fetch(DEFAULT_CONFIG_FILE);
+                if (!response.ok) {
+                    throw new Error(`Erreur de chargement du fichier ${DEFAULT_CONFIG_FILE}: ${response.statusText}`);
+                }
+                const config = await response.json();
+                
+                if (config.options) {
+                    memberConfig = config.options;
+                    setupQuickEditPanel(); // Initialisation de l'UI avec la config par défaut
+                }
+                if (config.members && Array.isArray(config.members)) {
+                    loadMembersFromJson(config); // Charger les membres par défaut
+                    // NOTE: loadMembersFromJson appellera saveFormData qui stockera aussi member_options
+                }
+            } catch (e) {
+                console.warn(`[Config Warning] Impossible de charger la configuration par défaut (${DEFAULT_CONFIG_FILE}). Utilisation de la configuration interne.`, e);
+                // Si le chargement échoue, on assure l'initialisation de l'UI avec la config interne par défaut
+                setupQuickEditPanel();
+                updateEditModalSelects();
+            }
+        }
+
 
         // --- DRAG & DROP ---
         let draggedItem = null;
@@ -1240,57 +1345,8 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 draggedItem = null;
             }
         }
-
-        // --- TUTORIAL SYSTEM ---
-        const tutorialSteps = [
-            { text: "Bienvenue dans le générateur d'Ordre Initial. Ce guide vous assistera dans la création de votre document opérationnel.", selector: '.container', center: true },
-            { text: "Cette barre de progression indique les différentes sections de l'O.I. Vous pouvez cliquer sur une étape pour y naviguer directement.", selector: '.wizard-progress' },
-            { text: "Commencez par définir le contexte général et particulier de l'opération, ainsi que sa date.", selector: '#date_op', step: 0 },
-            { text: "Détaillez ici toutes les informations relatives à l'adversaire. Chargez une photo, et le bouton 'Annoter' apparaîtra pour y ajouter des indications visuelles.", selector: '#adversary_photo_container', step: 1 },
-            { text: "Renseignez les informations sur les unités amies, le terrain, la météo, la population et le cadre juridique de l'intervention.", selector: '#terrain_info', step: 2 },
-            { text: "La mission principale de l'unité est pré-remplie dans cette section. Vous pouvez la modifier si nécessaire.", selector: '#missions_psig', step: 3 },
-            { text: "Définissez la chronologie de l'action. Vous pouvez ajouter des événements et les réorganiser par glisser-déposer.", selector: '#time_events_container', step: 4 },
-            { text: "Décrivez l'articulation des équipes. La composition est désormais automatiquement importée depuis l'onglet PATRACDVR.", selector: '.collapsible-container:first-of-type', step: 5 },
-            { text: "Gérez la composition des équipes en cliquant sur un membre pour ouvrir le panneau d'édition rapide. Les changements seront visibles dans l'onglet Articulation.", selector: '#unassigned_members_container', step: 6 },
-            { text: "Cette section permet d'ajouter des photos complémentaires (transport, effraction...) qui seront incluses dans le document final.", selector: '.wizard-step:nth-of-type(8)', step: 7 },
-            { text: "Spécifiez les conduites à tenir générales, les conditions de désengagement (NO GO), et les procédures de liaison.", selector: '#cat_generales', step: 8 },
-            { text: "Une fois le formulaire complété, vous pouvez prévisualiser le document, générer le PDF final, ou lancer une analyse de comptes-rendus.", selector: '#generatePdfBtn', step: 9 },
-            { text: "Ce menu flottant offre un accès rapide aux fonctions globales: sauvegarder (exporter) ou charger (importer) une session, changer le thème, réinitialiser le formulaire, ou relancer ce tutoriel.", selector: '#dockMenu' }
-        ];
         
-        let currentTutorialStep = 0;
-        const tutorialPopup = document.getElementById('tutorial-popup'); const popupText = document.getElementById('popup-text');
-        const nextPopupBtn = document.getElementById('next-popup-btn'); const closePopupBtn = tutorialPopup.querySelector('.close-btn');
-        let currentHighlightedElement = null;
-        function startTutorial() { if (tutorialPopup.style.display === 'flex') { hideTutorial(); return; } goToStep(0); currentTutorialStep = 0; showTutorialStep(currentTutorialStep); }
-        function showTutorialStep(stepIndex) {
-            if (stepIndex >= tutorialSteps.length) { hideTutorial(); return; }
-            const step = tutorialSteps[stepIndex];
-            if (step.step !== undefined && step.step !== currentStep) { goToStep(step.step); setTimeout(() => showTutorialStep(stepIndex), 600); return; }
-            if (currentHighlightedElement) { currentHighlightedElement.classList.remove('highlight-element'); }
-            popupText.textContent = step.text; nextPopupBtn.textContent = stepIndex === tutorialSteps.length - 1 ? 'Terminer' : 'Suivant';
-            if (step.center) {
-                tutorialPopup.style.top = '50%'; tutorialPopup.style.left = '50%'; tutorialPopup.style.transform = 'translate(-50%, -50%)';
-                tutorialPopup.style.display = 'flex'; currentHighlightedElement = null; return;
-            }
-            const targetElement = document.querySelector(step.selector);
-            if (!targetElement) { console.warn(`Element non trouvé: ${step.selector}`); currentTutorialStep++; showTutorialStep(currentTutorialStep); return; }
-            targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            targetElement.classList.add('highlight-element'); currentHighlightedElement = targetElement;
-            const rect = targetElement.getBoundingClientRect(); const popupWidth = tutorialPopup.offsetWidth; const popupHeight = tutorialPopup.offsetHeight;
-            let popupX = rect.left + window.scrollX + (rect.width / 2) - (popupWidth / 2);
-            let popupY = rect.top + window.scrollY - popupHeight - 20;
-            if (popupY < window.scrollY + 10) { popupY = rect.bottom + window.scrollY + 20; }
-            if (popupX < 10) popupX = 10;
-            if (popupX + popupWidth > window.innerWidth - 10) { popupX = window.innerWidth - popupWidth - 10; }
-            tutorialPopup.style.top = `${popupY}px`; tutorialPopup.style.left = `${popupX}px`;
-            tutorialPopup.style.transform = 'none'; tutorialPopup.style.display = 'flex';
-        }
-        function hideTutorial() { if (currentHighlightedElement) { currentHighlightedElement.classList.remove('highlight-element'); } tutorialPopup.style.display = 'none'; }
-        nextPopupBtn.addEventListener('click', () => { currentTutorialStep++; showTutorialStep(currentTutorialStep); });
-        closePopupBtn.addEventListener('click', hideTutorial);
-        
-        // --- LOGIQUE D'ANNOTATION ---
+        // --- LOGIQUE D'ANNOTATION AMÉLIORÉE ---
         const annotationModal = document.getElementById('annotationModal');
         const canvas = document.getElementById('annotationCanvas');
         const ctx = canvas.getContext('2d');
@@ -1298,12 +1354,17 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
         let annotations = [], currentTool = 'move', isDrawing = false, isDragging = false, startX, startY;
         let currentAnnotation = null, selectedAnnotation = null, dragOffsetX, dragOffsetY;
         const rotationInput = document.getElementById('rotation_input');
+        // Nouvelle variable pour la détection de redimensionnement
+        let isResizing = false;
+        let resizeCorner = null; // 'nw', 'ne', 'se', 'sw'
+        const resizeThreshold = 15; // Tolérance pour cliquer sur la poignée
 
         function setContextualTools(selection) {
             const contextualTools = document.getElementById('contextual_tools');
             if (selection) {
                 contextualTools.classList.add('active');
-                contextualTools.classList.toggle('location-selected', selection.type === 'location');
+                // Afficher les outils spécifiques à l'emplacement
+                contextualTools.classList.toggle('location-selected', selection.type === 'location'); 
                 rotationInput.value = Math.round((selection.rotation || 0) * 180 / Math.PI) % 360;
                 if (rotationInput.value < 0) rotationInput.value = 360 + parseInt(rotationInput.value);
             } else {
@@ -1357,14 +1418,9 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 drawSelectionBorder(selectedAnnotation);
             }
         }
-
-        function drawSelectionBorder(annotation) {
-            ctx.save();
-            ctx.setLineDash([5, 5]);
-            ctx.strokeStyle = 'white';
-            ctx.lineWidth = 3;
-            let centerX, centerY;
-            let x, y, width, height;
+        
+        function getAnnotationBoundary(annotation) {
+            let x, y, width, height, centerX, centerY;
 
             if (annotation.type === 'location') {
                 x = annotation.x - annotation.radius;
@@ -1381,26 +1437,106 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 centerX = annotation.x + annotation.width / 2;
                 centerY = annotation.y + annotation.height / 2;
             } else if (annotation.type === 'arrow') {
+                // Pour les flèches, on utilise un bounding box des points de départ/fin
                 const minX = Math.min(annotation.startX, annotation.endX);
                 const minY = Math.min(annotation.startY, annotation.endY);
                 const maxX = Math.max(annotation.startX, annotation.endX);
                 const maxY = Math.max(annotation.startY, annotation.endY);
-                x = minX - 10;
-                y = minY - 10;
-                width = maxX - minX + 20;
-                height = maxY - minY + 20;
+                x = minX;
+                y = minY;
+                width = maxX - minX;
+                height = maxY - minY;
                 centerX = (annotation.startX + annotation.endX) / 2;
                 centerY = (annotation.startY + annotation.endY) / 2;
             }
-
-            if (annotation.rotation) {
-                ctx.translate(centerX, centerY);
-                ctx.rotate(annotation.rotation);
-                ctx.translate(-centerX, -centerY);
-            }
             
+            // Appliquer la rotation pour trouver les coins visibles
+            if (annotation.rotation) {
+                const angle = annotation.rotation;
+                const cos = Math.cos(angle);
+                const sin = Math.sin(angle);
+                
+                // Déplacer les coordonnées vers le centre (0,0), appliquer la rotation, puis déplacer vers les coordonnées réelles
+                const rotate = (px, py) => ({
+                    x: cos * (px - centerX) - sin * (py - centerY) + centerX,
+                    y: sin * (px - centerX) + cos * (py - centerY) + centerY
+                });
+
+                const corners = [
+                    rotate(x, y), // top-left
+                    rotate(x + width, y), // top-right
+                    rotate(x, y + height), // bottom-left
+                    rotate(x + width, y + height) // bottom-right
+                ];
+
+                // Calculer le nouveau bounding box minimal non rotatif
+                const minX = Math.min(...corners.map(c => c.x));
+                const minY = Math.min(...corners.map(c => c.y));
+                const maxX = Math.max(...corners.map(c => c.x));
+                const maxY = Math.max(...corners.map(c => c.y));
+
+                // Renvoyer les coins réels
+                return { x: x, y: y, width: width, height: height, centerX: centerX, centerY: centerY, corners: [
+                    { x: x, y: y, name: 'nw' }, { x: x + width, y: y, name: 'ne' },
+                    { x: x + width, y: y + height, name: 'se' }, { x: x, y: y + height, name: 'sw' }
+                ], rotatedCorners: corners };
+
+            }
+
+            return { x: x, y: y, width: width, height: height, centerX: centerX, centerY: centerY, corners: [
+                { x: x, y: y, name: 'nw' }, { x: x + width, y: y, name: 'ne' },
+                { x: x + width, y: y + height, name: 'se' }, { x: x, y: y + height, name: 'sw' }
+            ]};
+        }
+
+        function drawSelectionBorder(annotation) {
+            ctx.save();
+            ctx.setLineDash([5, 5]);
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 3;
+            
+            const bounds = getAnnotationBoundary(annotation);
+            let { x, y, width, height, centerX, centerY } = bounds;
+            
+            ctx.translate(centerX, centerY);
+            ctx.rotate(annotation.rotation || 0);
+            ctx.translate(-centerX, -centerY);
+            
+            // Dessiner la boîte de sélection non rotative par rapport au centre pivoté
             ctx.strokeRect(x, y, width, height);
+
             ctx.restore();
+
+            // Dessiner les poignées de redimensionnement (visibles uniquement en mode "move")
+            if (currentTool === 'move' && annotation.type !== 'arrow') {
+                const cornerPositions = [
+                    { x: x, y: y, cursor: 'nwse-resize' }, // nw
+                    { x: x + width, y: y, cursor: 'nesw-resize' }, // ne
+                    { x: x + width, y: y + height, cursor: 'nwse-resize' }, // se
+                    { x: x, y: y + height, cursor: 'nesw-resize' } // sw
+                ];
+
+                cornerPositions.forEach((pos) => {
+                    ctx.save();
+                    ctx.beginPath();
+                    // Appliquer la rotation pour dessiner la poignée à l'endroit réel
+                    ctx.translate(centerX, centerY);
+                    ctx.rotate(annotation.rotation || 0);
+                    ctx.translate(-centerX, -centerY);
+                    
+                    ctx.arc(pos.x, pos.y, 7, 0, 2 * Math.PI);
+                    ctx.fillStyle = 'white';
+                    ctx.fill();
+                    ctx.strokeStyle = var_get_value('--accent-blue');
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                    ctx.restore();
+                });
+            }
+        }
+
+        function var_get_value(varName) {
+            return getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
         }
 
         function drawAnnotation(annotation) {
@@ -1509,32 +1645,66 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             };
         }
 
+        function getRotatedPoint(x, y, centerX, centerY, angle) {
+            const cos = Math.cos(-angle);
+            const sin = Math.sin(-angle);
+            const translatedX = x - centerX;
+            const translatedY = y - centerY;
+            return {
+                x: translatedX * cos - translatedY * sin + centerX,
+                y: translatedX * sin + translatedY * cos + centerY
+            };
+        }
+        
+        function checkResizeHandle(x, y) {
+            if (!selectedAnnotation || selectedAnnotation.type === 'arrow' || currentTool !== 'move') return null;
+
+            const bounds = getAnnotationBoundary(selectedAnnotation);
+            const angle = selectedAnnotation.rotation || 0;
+            const corners = bounds.corners;
+            const centerX = bounds.centerX;
+            const centerY = bounds.centerY;
+
+            const rotatedPos = getRotatedPoint(x, y, centerX, centerY, angle);
+
+            // Coordonnées de la boîte non-rotative
+            const bx = bounds.x;
+            const by = bounds.y;
+            const bwidth = bounds.width;
+            const bheight = bounds.height;
+            
+            // Les positions des poignées dans le système de coordonnées non-rotatif
+            const handlePositions = [
+                { x: bx, y: by, name: 'nw', cursor: 'nwse-resize' },
+                { x: bx + bwidth, y: by, name: 'ne', cursor: 'nesw-resize' },
+                { x: bx + bwidth, y: by + bheight, name: 'se', cursor: 'nwse-resize' },
+                { x: bx, y: by + bheight, name: 'sw', cursor: 'nesw-resize' }
+            ];
+
+            for (const handle of handlePositions) {
+                // Vérifier si le clic est proche du point de la poignée non-rotative (dans le système pivoté)
+                if (Math.abs(rotatedPos.x - handle.x) < resizeThreshold && Math.abs(rotatedPos.y - handle.y) < resizeThreshold) {
+                    return handle.name;
+                }
+            }
+            return null;
+        }
+
         function getAnnotationAtPosition(x, y) {
             for (let i = annotations.length - 1; i >= 0; i--) {
                 const annotation = annotations[i];
                 const angle = annotation.rotation || 0;
                 let centerX, centerY;
-                if (annotation.type === 'location') {
-                    centerX = annotation.x;
-                    centerY = annotation.y;
-                } else if (annotation.type === 'box') {
-                    centerX = annotation.x + annotation.width / 2;
-                    centerY = annotation.y + annotation.height / 2;
-                } else if (annotation.type === 'arrow') {
-                    centerX = (annotation.startX + annotation.endX) / 2;
-                    centerY = (annotation.startY + annotation.endY) / 2;
-                }
+                
+                // Calculer le centre (point de pivot)
+                if (annotation.type === 'location') { centerX = annotation.x; centerY = annotation.y; } 
+                else if (annotation.type === 'box') { centerX = annotation.x + annotation.width / 2; centerY = annotation.y + annotation.height / 2; } 
+                else if (annotation.type === 'arrow') { centerX = (annotation.startX + annotation.endX) / 2; centerY = (annotation.startY + annotation.endY) / 2; }
 
-                let testX = x;
-                let testY = y;
-                if (angle) {
-                    const translatedX = x - centerX;
-                    const translatedY = y - centerY;
-                    const cos = Math.cos(-angle);
-                    const sin = Math.sin(-angle);
-                    testX = translatedX * cos - translatedY * sin + centerX;
-                    testY = translatedX * sin + translatedY * cos + centerY;
-                }
+                // Appliquer la rotation inverse au point cliqué
+                const rotatedPos = getRotatedPoint(x, y, centerX, centerY, angle);
+                const testX = rotatedPos.x;
+                const testY = rotatedPos.y;
 
                 const tolerance = 15;
                 let isInside = false;
@@ -1571,28 +1741,21 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             const pos = getEventPos(canvas, e);
             startX = pos.x;
             startY = pos.y;
+            
             if (currentTool === 'move') {
                 selectedAnnotation = getAnnotationAtPosition(pos.x, pos.y);
                 setContextualTools(selectedAnnotation);
+
                 if (selectedAnnotation) {
-                    isDragging = true;
+                    resizeCorner = checkResizeHandle(pos.x, pos.y);
+                    isResizing = resizeCorner !== null;
+                    isDragging = !isResizing; 
+                    
                     document.body.style.overflow = 'hidden';
-                    let centerX, centerY;
-                    if (selectedAnnotation.type === 'location') {
-                        centerX = selectedAnnotation.x;
-                        centerY = selectedAnnotation.y;
-                    } else if (selectedAnnotation.type === 'box') {
-                        centerX = selectedAnnotation.x + selectedAnnotation.width / 2;
-                        centerY = selectedAnnotation.y + selectedAnnotation.height / 2;
-                    } else if (selectedAnnotation.type === 'arrow') {
-                        centerX = (selectedAnnotation.startX + annotation.endX) / 2;
-                        centerY = (selectedAnnotation.startY + annotation.endY) / 2;
-                    }
-                    dragOffsetX = pos.x - centerX;
-                    dragOffsetY = pos.y - centerY;
                     redrawCanvas();
                 }
-            } else {
+
+            } else { // Outils de dessin (location, arrow, box)
                 isDrawing = true;
                 selectedAnnotation = null;
                 setContextualTools(null);
@@ -1609,8 +1772,9 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
 
         function handleDrawMove(e) {
             e.preventDefault();
-            if (!isDrawing && !isDragging) return;
+            if (!isDrawing && !isDragging && !isResizing) return;
             const pos = getEventPos(canvas, e);
+            
             if (isDragging && selectedAnnotation) {
                 const deltaX = pos.x - startX;
                 const deltaY = pos.y - startY;
@@ -1628,6 +1792,47 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 startX = pos.x;
                 startY = pos.y;
                 redrawCanvas();
+
+            } else if (isResizing && selectedAnnotation && selectedAnnotation.type !== 'arrow') {
+                const angle = selectedAnnotation.rotation || 0;
+                const rotatedStart = getRotatedPoint(startX, startY, selectedAnnotation.x + selectedAnnotation.width / 2, selectedAnnotation.y + selectedAnnotation.height / 2, angle);
+                const rotatedPos = getRotatedPoint(pos.x, pos.y, selectedAnnotation.x + selectedAnnotation.width / 2, selectedAnnotation.y + selectedAnnotation.height / 2, angle);
+                
+                let dx = rotatedPos.x - rotatedStart.x;
+                let dy = rotatedPos.y - rotatedStart.y;
+
+                if (selectedAnnotation.type === 'location') {
+                     // Pour le cercle, redimensionner change seulement le rayon (distance à partir du centre)
+                     selectedAnnotation.radius = Math.sqrt(Math.pow(pos.x - selectedAnnotation.x, 2) + Math.pow(pos.y - selectedAnnotation.y, 2));
+                } else if (selectedAnnotation.type === 'box') {
+                    // Logique de redimensionnement de boîte
+                    const { x, y, width, height } = selectedAnnotation;
+                    let newX = x, newY = y, newWidth = width, newHeight = height;
+
+                    if (resizeCorner.includes('w')) {
+                        newX = x + dx;
+                        newWidth = width - dx;
+                    } else if (resizeCorner.includes('e')) {
+                        newWidth = width + dx;
+                    }
+                    if (resizeCorner.includes('n')) {
+                        newY = y + dy;
+                        newHeight = height - dy;
+                    } else if (resizeCorner.includes('s')) {
+                        newHeight = height + dy;
+                    }
+
+                    // Empêcher les dimensions négatives et les inversions
+                    if (newWidth > 5) selectedAnnotation.width = newWidth;
+                    if (newHeight > 5) selectedAnnotation.height = newHeight;
+                    if (resizeCorner.includes('w') && newWidth > 5) selectedAnnotation.x = newX;
+                    if (resizeCorner.includes('n') && newHeight > 5) selectedAnnotation.y = newY;
+                }
+                
+                startX = pos.x;
+                startY = pos.y;
+                redrawCanvas();
+
             } else if (isDrawing && currentAnnotation) {
                 currentAnnotation.endX = pos.x;
                 currentAnnotation.endY = pos.y;
@@ -1638,12 +1843,18 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
         function handleDrawEnd(e) {
             e.preventDefault();
             document.body.style.overflow = '';
-            if (isDragging) {
+            
+            if (isDragging || isResizing) {
                 isDragging = false;
+                isResizing = false;
+                resizeCorner = null;
                 redrawCanvas(); 
+                saveFormData();
+
             } else if (isDrawing) {
                 isDrawing = false;
                 const final = { ...currentAnnotation };
+                
                 if (final.type === 'box') {
                     final.x = Math.min(final.startX, final.endX);
                     final.y = Math.min(final.startY, final.endY);
@@ -1651,9 +1862,11 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     final.height = Math.abs(final.startY - final.endY);
                     final.thickness = document.getElementById('box_thickness').value;
                     if (final.width < 5 || final.height < 5) return;
+                    
                 } else if (final.type === 'arrow') {
                     final.thickness = document.getElementById('arrow_thickness').value;
                     if (Math.abs(final.startX - final.endX) < 5 && Math.abs(final.startY - final.endY) < 5) return;
+                    
                 } else if (final.type === 'location') {
                     final.x = final.startX;
                     final.y = final.startY;
@@ -1662,16 +1875,25 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     final.opacity = document.getElementById('circle_opacity').value;
                     if (final.radius < 5) return;
                 }
+                
                 annotations.push(final);
                 currentAnnotation = null;
                 selectedAnnotation = final;
                 setContextualTools(selectedAnnotation);
                 redrawCanvas();
+                saveFormData();
             }
         }
         
         // --- EVENT LISTENERS & INITIALIZATION ---
-        document.addEventListener('DOMContentLoaded', () => {
+        document.addEventListener('DOMContentLoaded', async () => {
+             // 1. Initialiser le système de configuration par défaut
+            await loadDefaultConfig();
+            
+            // 2. Charger les données du localStorage (si elles existent, elles écraseront la config par défaut)
+            loadFormData();
+            
+            // 3. Poursuivre l'initialisation de l'UI
             document.querySelector('.container').addEventListener('click', (event) => {
                 const header = event.target.closest('.collapsible-header');
                 if (header) { const container = header.parentElement; if (container && container.classList.contains('collapsible-container')) { container.classList.toggle('open'); } }
@@ -1681,13 +1903,17 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 const buttonId = form.dataset.editingButtonId; const button = document.getElementById(buttonId);
                 if (button) {
                     button.dataset.trigramme = document.getElementById('modal_trigramme').value;
-                    button.dataset.fonction = document.getElementById('modal_fonction').value;
-                    button.dataset.cellule = document.getElementById('modal_cellule').value;
-                    button.dataset.armement = document.getElementById('modal_armement').value;
-                    button.dataset.equipement = document.getElementById('modal_equipement').value;
-                    button.dataset.equipement2 = document.getElementById('modal_equipement2').value;
-                    button.dataset.tenue = document.getElementById('modal_tenue').value;
-                    button.dataset.gpb = document.getElementById('modal_gpb').value;
+                    
+                    // Mise à jour de tous les datasets en fonction des selects dynamiques
+                    for (const key in memberConfig) {
+                        const attrName = key.replace(/s$/, '');
+                        const selectId = 'modal_' + attrName;
+                        const select = document.getElementById(selectId);
+                        if (select) {
+                            button.dataset[attrName] = select.value;
+                        }
+                    }
+                    
                     updateMemberButtonVisuals(button);
                     populateQuickEditPanel(buttonId);
                     saveFormData();
@@ -1732,7 +1958,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 localStorage.setItem('theme', isDarkMode ? 'dark' : 'light');
                 document.getElementById('darkModeIcon').textContent = isDarkMode ? 'nightlight' : 'clear_day';
             });
-            document.getElementById('resetBtn').addEventListener('click', () => { if (confirm("Voulez-vous vraiment réinitialiser tout le formulaire?")) { localStorage.removeItem('oiFormData'); location.reload(); } });
+            document.getElementById('resetBtn').addEventListener('click', () => { if (confirm("Voulez-vous vraiment réinitialiser tout le formulaire (y compris la configuration des membres)?")) { localStorage.removeItem('oiFormData'); location.reload(); } });
             document.getElementById('tutorialBtn').addEventListener('click', startTutorial);
             
             importJsonConfigBtn.addEventListener('click', () => {
@@ -1746,11 +1972,11 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 reader.onload = (e) => {
                     try {
                         const config = JSON.parse(e.target.result);
-                        if (config && Array.isArray(config.members)) {
-                            patracdvrContainer.innerHTML = ''; 
-                            loadMembersFromJson(config.members); 
+                        if (config && (Array.isArray(config.members) || config.options)) {
+                             // loadMembersFromJson gère maintenant le chargement des options et des membres
+                            loadMembersFromJson(config); 
                         }
-                        else { alert("Le fichier JSON est invalide ou ne contient pas de tableau 'members'."); }
+                        else { alert("Le fichier JSON est invalide ou ne contient ni tableau 'members' ni objet 'options'."); }
                     } catch (err) { alert("Erreur de lecture du JSON."); console.error(err); }
                 };
                 reader.readAsText(file);
@@ -1858,7 +2084,17 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             rotationInput.addEventListener('change', updateAnnotationRotation);
 
             document.getElementById('delete_btn').addEventListener('click', () => { if(selectedAnnotation){ annotations = annotations.filter(ann => ann !== selectedAnnotation); selectedAnnotation = null; setContextualTools(null); redrawCanvas(); } });
-            document.getElementById('edit_text_btn').addEventListener('click', () => { if(selectedAnnotation && selectedAnnotation.type === 'location'){ const newText = prompt('Modifier texte:', selectedAnnotation.text); if(newText !== null){ selectedAnnotation.text = newText; redrawCanvas(); } } });
+            document.getElementById('edit_text_btn').addEventListener('click', () => { 
+                if(selectedAnnotation && selectedAnnotation.type === 'location'){ 
+                    const newText = prompt('Modifier texte:', selectedAnnotation.text); 
+                    if(newText !== null){ 
+                        selectedAnnotation.text = newText;
+                        // On met à jour l'opacité et le texte pour la sauvegarde
+                        selectedAnnotation.opacity = document.getElementById('circle_opacity').value; 
+                        redrawCanvas(); 
+                    } 
+                } 
+            });
             
             const importSessionBtn = document.getElementById('importSessionBtn');
             const exportSessionBtn = document.getElementById('exportSessionBtn');
@@ -1868,7 +2104,19 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 saveFormData();
                 const dataString = localStorage.getItem('oiFormData');
                 if (!dataString) { alert("Aucune donnée à exporter."); return; }
-                const blob = new Blob([dataString], {type: 'application/json'});
+                
+                // Préparer un JSON contenant la config des membres et les données du formulaire
+                const exportData = JSON.parse(dataString);
+                // Supprimer les champs qui ne doivent pas être dans la config de base lors de l'export
+                delete exportData.member_options;
+                
+                // AJOUTER les options complètes pour que le fichier d'export soit complet
+                const finalExportData = {
+                    options: memberConfig,
+                    formData: exportData
+                };
+
+                const blob = new Blob([JSON.stringify(finalExportData, null, 2)], {type: 'application/json'});
                 const url = URL.createObjectURL(blob);
                 const link = document.createElement('a');
                 const date = new Date().toISOString().slice(0, 10);
@@ -1884,8 +2132,21 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 reader.onload = (e) => {
                     try {
                         const jsonContent = e.target.result;
-                        JSON.parse(jsonContent);
-                        localStorage.setItem('oiFormData', jsonContent);
+                        const importedData = JSON.parse(jsonContent);
+                        
+                        // Si le format est l'ancien format (raw formData)
+                        if (!importedData.options && importedData.patracdvr_unassigned) {
+                             localStorage.setItem('oiFormData', jsonContent);
+                        } 
+                        // Si le format est le nouveau format (avec options/formData)
+                        else if (importedData.options && importedData.formData) {
+                            // On reconstruit le localStorage avec les options incluses dans formData
+                            const rehydratedFormData = { ...importedData.formData, member_options: importedData.options };
+                            localStorage.setItem('oiFormData', JSON.stringify(rehydratedFormData));
+                        } else {
+                            throw new Error("Format de fichier de session invalide.");
+                        }
+                        
                         alert("Session importée avec succès. Rechargement de la page.");
                         location.reload();
                     } catch (err) {
@@ -1928,6 +2189,10 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     draggedItem.classList.remove('dragging'); 
                     draggedItem = null; 
                 } 
+                // Assurez-vous que les options du quick edit sont rafraîchies
+                if (activeMemberId) {
+                    populateQuickEditPanel(activeMemberId);
+                }
             });
 
             const dropContainers = document.querySelectorAll('.patracdvr-members-container, #unassigned_members_container');
@@ -1952,13 +2217,14 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             if (localStorage.getItem('dockCollapsed') === 'true') { dockMenu.classList.add('collapsed'); }
             
             addPhotoInput('adversary_photo_container', true);
-            setupQuickEditPanel();
-            loadFormData();
-            showStep(currentStep);
+            showStep(currentStep); // Afficher la première étape après le chargement/l'initialisation de la config
         });
         
         // --- PDF GENERATION ---
         async function buildPdf() {
+            // ... (Fonction inchangée pour la génération de PDF)
+            // Le PDF utilisera les données et les options de memberConfig
+            
             const { PDFDocument, StandardFonts, rgb, PageSizes } = PDFLib;
             const pdfDoc = await PDFDocument.create();
             const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
@@ -2028,31 +2294,30 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 };
                 drawRow(headers, true); rows.forEach(row => drawRow(row, false)); context.y = currentY - 20;
             };
-            const processImage = async (source, maxWidth = 1280, quality = 0.85) => {
+            const processImage = async (imageSource) => {
                 return new Promise((resolve, reject) => {
                     const img = new Image();
                     img.crossOrigin = 'anonymous';
-                    let objectUrl = null;
-                    if (source instanceof File) {
-                        if (!source.type.startsWith('image/')) { return reject(new Error('Le fichier fourni n\'est pas une image valide.')); }
-                        objectUrl = URL.createObjectURL(source);
-                        img.src = objectUrl;
-                    } else if (typeof source === 'string' && source.startsWith('data:image')) {
-                        img.src = source;
-                    } else { return reject(new Error('Source d\'image invalide.')); }
+                    
+                    if (!imageSource.startsWith('data:image')) { 
+                        return reject(new Error('L\'image n\'est pas au format Data URL.')); 
+                    }
+                    
+                    img.src = imageSource;
                     
                     img.onload = () => {
-                        if (objectUrl) URL.revokeObjectURL(objectUrl);
                         const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d');
                         let { width, height } = img;
+                        const maxWidth = 1280; // Hardcoded max width for PDF processing
                         if (width > maxWidth) { height = (maxWidth / width) * height; width = maxWidth; }
                         canvas.width = width; canvas.height = height; ctx.drawImage(img, 0, 0, width, height);
+                        
                         canvas.toBlob(blob => {
                             if (!blob) return reject(new Error('La conversion de l\'image a échoué.'));
                             blob.arrayBuffer().then(resolve).catch(reject);
-                        }, 'image/jpeg', quality);
+                        }, 'image/jpeg', 0.85); // Quality set to 0.85
                     };
-                    img.onerror = (err) => { if (objectUrl) URL.revokeObjectURL(objectUrl); reject(new Error(`Impossible de charger l'image: ${err.message}`)); };
+                    img.onerror = (err) => { reject(new Error(`Impossible de charger l'image: ${err.message}`)); };
                 });
             };
             const drawImagesFromContainer = async (containerId, title) => {
@@ -2269,6 +2534,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 
                 addNewPage();
                 drawTitle("5. PATRACDVR");
+                // Les noms de colonnes sont génériques et doivent correspondre aux attributs de vos membres
                 const patracHeaders = ["Trigramme", "Fonction", "Cellule", "Armement", "Équip. 1", "Équip. 2", "Tenue", "GPB"];
                 for (const row of (formData.patracdvr_rows || [])) {
                     if(row.vehicle && row.members && row.members.length > 0) {
