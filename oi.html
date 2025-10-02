@@ -163,7 +163,7 @@
             min-height: unset;
             font-size: 12px;
         }
-        #vehicle_creation_buttons { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; padding: 10px; border: 1px dashed var(--border-color); border-radius: 5px; }
+        #vehicle_creation_buttons { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; padding: 15px; border: 1px dashed var(--border-color); border-radius: 5px; }
         .add-vehicle-btn { background-color: var(--bg-interactive); color: var(--text-primary); border: 1px solid var(--border-color); }
         
         #editMemberModal, #quickEditModal { color: var(--text-primary); background: var(--bg-container); width: 100vw; max-width: 100vw; height: 100vh; max-height: 100vh; margin: 0; border: none; border-radius: 0; padding: 15px; }
@@ -597,8 +597,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
         const RETEX_BASE_URL = "https://oxsilaris06.github.io/CET/retex.html";
         const APPS_SCRIPT_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyF0CJ_B9U4Izn6ieZG4lfIq23oScE6cFvd1SoUXvVUBRqk_Ce1R8TJpRRnuamcdJH-/exec";
         
-        // --- GLOBAL CONFIG (Défaut interne) ---
-        // Cette configuration initiale est essentielle pour le premier chargement sans fichier/localStorage.
+        // --- GLOBAL CONFIG (Défaut interne, utilisée si aucune autre configuration n'est chargée) ---
         let memberConfig = { 
             fonctions: ['Chef inter', 'Chef dispo', 'DE', 'Sans', 'Inter', 'AO'],
             cellules: ['AO1','AO2','AO3','AO4','AO5','AO6','India 1','India 2','India 3','India 4','India 5', 'Sans'],
@@ -669,7 +668,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
         prevBtn.addEventListener('click', () => changeStep(-1));
         nextBtn.addEventListener('click', () => changeStep(1));
         
-        // --- DYNAMIC FIELD & PHOTO MANAGEMENT (Corrected to clear annotations on new file) ---
+        // --- DYNAMIC FIELD & PHOTO MANAGEMENT ---
         function addPhotoInput(containerId, isSingle = false) {
             const container = document.getElementById(containerId);
             if (isSingle) container.innerHTML = '';
@@ -698,9 +697,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 const reader = new FileReader();
                 reader.onload = e => {
                     previewImg.src = e.target.result;
-                    // Stocker l'original pour la base de l'annotation
                     previewImg.dataset.originalSrc = e.target.result; 
-                    // Assurer que les annotations sont vides pour un nouveau fichier
                     previewImg.dataset.annotations = '[]'; 
                     previewImg.style.display = 'block';
                     if (annotateBtn) annotateBtn.style.display = 'inline-block';
@@ -772,7 +769,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             container.appendChild(item);
         }
 
-        // --- PATRACDVR & MEMBER MANAGEMENT (Bugs corrected) ---
+        // --- PATRACDVR & MEMBER MANAGEMENT ---
         function addPatracdvrRow(vehicleName, members = []) {
             const container = document.getElementById('patracdvr_container');
             if (container.querySelector(`[data-vehicle-name="${vehicleName}"]`)) {
@@ -857,13 +854,10 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             btn.id = `member_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
             btn.setAttribute('draggable', 'true');
             
-            // Construire les données en s'assurant que tous les attributs sont présents
             const memberData = { ...data };
             for (const key in memberConfig) {
-                // ex: fonctions -> fonction
                 const attrName = key.replace(/s$/, ''); 
                 if (memberData[attrName] === undefined) {
-                    // Utiliser la première option comme valeur par défaut
                     memberData[attrName] = memberConfig[key][0] || 'Sans'; 
                 }
             }
@@ -908,7 +902,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             
             document.getElementById('modal_trigramme').value = button.dataset.trigramme;
             
-            // Assurer que les selects sont remplis et la valeur est sélectionnée
             for (const key in memberConfig) {
                  const attrName = key.replace(/s$/, '');
                  const selectId = 'modal_' + attrName;
@@ -1148,7 +1141,8 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 if (data.member_options) {
                     memberConfig = data.member_options;
                 }
-                setupQuickEditPanel(); 
+                
+                // Note: setupQuickEditPanel est appelé dans le DOMContentLoaded après cette fonction
                 
                 Object.keys(data).forEach(key => {
                     if (key.endsWith('_src')) {
@@ -1198,10 +1192,12 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
         function loadMembersFromJson(configObject) {
             if (configObject.options) {
                 memberConfig = configObject.options;
-                setupQuickEditPanel(); 
-                updateEditModalSelects();
             }
             
+            // On s'assure que l'UI est mise à jour avec la nouvelle config avant de charger les membres
+            setupQuickEditPanel(); 
+            updateEditModalSelects();
+
             const membersArray = configObject.members || [];
             unassignedContainer.innerHTML = ''; 
             patracdvrContainer.innerHTML = '';
@@ -1225,12 +1221,15 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 
                 if (config.members && Array.isArray(config.members)) {
                     loadMembersFromJson(config); 
+                } else {
+                    // Si le fichier est chargé mais sans membres, on force juste la construction de l'UI avec les options
+                    setupQuickEditPanel();
                 }
             } catch (e) {
                 console.warn(`[Config Warning] Could not load default config (${DEFAULT_CONFIG_FILE}). Using internal default.`, e);
+                // Si le chargement par défaut échoue, on assure au moins que l'UI se construit avec la config interne par défaut
+                setupQuickEditPanel();
             }
-            // Assure l'initialisation de l'UI même si le chargement par défaut a échoué.
-            setupQuickEditPanel();
         }
 
 
@@ -1305,7 +1304,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             }
         }
         
-        // --- LOGIQUE D'ANNOTATION AMÉLIORÉE (Bugs corrected) ---
+        // --- LOGIQUE D'ANNOTATION AMÉLIORÉE ---
         const annotationModal = document.getElementById('annotationModal');
         const canvas = document.getElementById('annotationCanvas');
         const ctx = canvas.getContext('2d');
@@ -1334,7 +1333,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 const degrees = parseFloat(rotationInput.value) || 0;
                 selectedAnnotation.rotation = degrees * Math.PI / 180;
                 redrawCanvas();
-                // Pas besoin de saveFormData ici, save est fait à la fermeture de la modale
             }
         }
 
@@ -1378,7 +1376,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
         }
 
         function getCssVarValue(varName) {
-            return getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+            return window.getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
         }
 
         function drawSelectionBorder(annotation) {
@@ -1711,7 +1709,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             } else if (isResizing && selectedAnnotation && selectedAnnotation.type !== 'arrow') {
                 const angle = selectedAnnotation.rotation || 0;
                 
-                // Point de départ et point actuel dans un système non-rotatif
                 let centerX, centerY;
                 if (selectedAnnotation.type === 'location') {
                     centerX = selectedAnnotation.x;
@@ -1812,15 +1809,21 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
         
         // --- EVENT LISTENERS & INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', async () => {
-             // 1. Charger la configuration par défaut (seulement si pas de session locale)
-            if (!loadFormData()) {
+             // 1. Définir le comportement de chargement
+            const isLocalDataLoaded = loadFormData();
+            if (!isLocalDataLoaded) {
                 await loadDefaultConfig();
             }
 
-            // 2. Assurer que l'UI est bien construite avec la configuration actuelle (interne ou chargée)
+            // 2. Initialisation finale de l'UI (Quick Edit Panel et Modales)
+            // Note: setupQuickEditPanel est déjà appelée par loadFormData/loadDefaultConfig, mais on peut l'appeler ici
+            // pour garantir qu'elle est exécutée au moins une fois après le chargement des options.
             setupQuickEditPanel();
+
+            // 3. Afficher la première étape après l'initialisation des données
+            showStep(currentStep); 
             
-            // 3. Poursuivre l'initialisation de l'UI
+            // 4. LIAISON DE TOUS LES ÉVÉNEMENTS
             document.querySelector('.container').addEventListener('click', (event) => {
                 const header = event.target.closest('.collapsible-header');
                 if (header) { const container = header.parentElement; if (container && container.classList.contains('collapsible-container')) { container.classList.toggle('open'); } }
@@ -1876,7 +1879,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 }
             });
             
-            // --- DOCK MENU & SESSIONS (Fixed Export/Import) ---
+            // --- DOCK MENU & SESSIONS ---
             const dockMenu = document.getElementById('dockMenu'); const dockToggleBtn = document.getElementById('dockToggleBtn');
             dockToggleBtn.addEventListener('click', (event) => { event.stopPropagation(); dockMenu.classList.toggle('collapsed'); localStorage.setItem('dockCollapsed', dockMenu.classList.contains('collapsed')); });
             document.getElementById('darkModeToggle').addEventListener('click', () => {
@@ -1900,7 +1903,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     try {
                         const config = JSON.parse(e.target.result);
                         if (config && (Array.isArray(config.members) || config.options)) {
-                            // On utilise loadMembersFromJson qui gère le remplacement des options et le chargement des membres
                             loadMembersFromJson(config); 
                         }
                         else { alert("Le fichier JSON est invalide ou ne contient ni tableau 'members' ni objet 'options'."); }
@@ -1991,6 +1993,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             });
 
 
+            // --- ANNOTATION LISTENERS ---
             canvas.addEventListener('mousedown', handleDrawStart); canvas.addEventListener('mousemove', handleDrawMove);
             canvas.addEventListener('mouseup', handleDrawEnd); canvas.addEventListener('mouseout', handleDrawEnd);
             canvas.addEventListener('touchstart', handleDrawStart, { passive: false }); canvas.addEventListener('touchmove', handleDrawMove, { passive: false });
@@ -2024,6 +2027,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 } 
             });
             
+            // --- SESSION LISTENERS (Export/Import) ---
             const importSessionBtn = document.getElementById('importSessionBtn');
             const exportSessionBtn = document.getElementById('exportSessionBtn');
             const sessionFileInput = document.getElementById('sessionFileInput');
@@ -2137,7 +2141,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             if (localStorage.getItem('dockCollapsed') === 'true') { dockMenu.classList.add('collapsed'); }
             
             addPhotoInput('adversary_photo_container', true);
-            showStep(currentStep); 
         });
         
         // --- PDF GENERATION (Unchanged Logic) ---
@@ -2451,7 +2454,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 
                 addNewPage();
                 drawTitle("5. PATRACDVR");
-                // Le PDF utilise les headers dynamiques basés sur memberConfig
                 const dynamicHeaders = ["Trigramme"];
                 for(const key in memberConfig) {
                     dynamicHeaders.push(key.charAt(0).toUpperCase() + key.slice(1).replace(/([A-Z])/g, ' $1'));
