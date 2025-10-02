@@ -222,7 +222,7 @@
             .toolbar-main-tools, .toolbar-contextual-tools { flex-direction: column; overflow-x: hidden; }
             .tool-btn { flex-direction: row; justify-content: flex-start; }
             .annotation-actions { flex-direction: column; margin-top: auto; padding-top: 20px; }
-            .annotation-actions button { justify: flex-start; }
+            .annotation-actions button { justify-content: flex-start; }
             .annotation-canvas-container { order: 2; padding: 10px; }
             
             /* Styles desktop pour le panneau d'édition */
@@ -865,7 +865,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 equipement: 'Sans', equipement2: 'Sans',
                 tenue: 'UBAS', gpb: 'GPBL', ...data
             };
-
+            
             // Ajout des données manquantes en fonction de memberConfig, pour la robustesse.
             for (const key in memberConfig) {
                 const attrName = key.replace(/s$/, ''); 
@@ -930,8 +930,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             modal.showModal();
         }
         
-        // La fonction populateSelect n'est plus nécessaire car elle est fusionnée dans openMemberModal et updateEditModalSelects
-        
         function updateArticulationDisplay() {
             const indiaContainer = document.getElementById('india_composition_display');
             const aoContainer = document.getElementById('ao_composition_display');
@@ -976,7 +974,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
 
 
         // --- PANNEAU D'ÉDITION RAPIDE & MODALE LOGIC (Dynamique) ---
-        // Le Quick Edit Mapping initial est supprimé car le panneau est maintenant construit dynamiquement
 
         function setupQuickEditPanel() {
             const contentContainer = document.querySelector('#quickEditPanel .quick-edit-content');
@@ -1011,7 +1008,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 tabPanel.appendChild(optionsContainer);
                 contentContainer.appendChild(tabPanel);
             }
-            updateEditModalSelects(); // Met à jour les selects de la modale complète
+            updateEditModalSelects(); 
         }
         
         function updateEditModalSelects() {
@@ -1158,11 +1155,10 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 const data = JSON.parse(dataString);
                 
                 if (data.member_options) {
-                    // Si les options sont dans la sauvegarde, on les charge AVANT de reconstruire l'UI.
                     Object.assign(memberConfig, data.member_options);
                 }
                 
-                setupQuickEditPanel(); // Construit l'UI Quick Edit avec les options chargées (ou par défaut)
+                setupQuickEditPanel(); 
                 
                 Object.keys(data).forEach(key => {
                     if (key.endsWith('_src')) {
@@ -1211,12 +1207,12 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
         
         function loadMembersFromJson(configObject) {
             if (configObject.options) {
-                // Utiliser Object.assign pour mettre à jour memberConfig
                 Object.assign(memberConfig, configObject.options);
-                setupQuickEditPanel(); 
-                updateEditModalSelects();
             }
             
+            setupQuickEditPanel(); 
+            updateEditModalSelects();
+
             const membersArray = configObject.members || [];
             unassignedContainer.innerHTML = ''; 
             patracdvrContainer.innerHTML = '';
@@ -1321,7 +1317,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             }
         }
 
-        // --- TUTORIAL SYSTEM ---
+        // --- TUTORIAL SYSTEM (Fixed: relies on correct DOM loading) ---
         const tutorialSteps = [
             { text: "Bienvenue dans le générateur d'Ordre Initial. Ce guide vous assistera dans la création de votre document opérationnel.", selector: '.container', center: true },
             { text: "Cette barre de progression indique les différentes sections de l'O.I. Vous pouvez cliquer sur une étape pour y naviguer directement.", selector: '.wizard-progress' },
@@ -1370,7 +1366,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
         nextPopupBtn.addEventListener('click', () => { currentTutorialStep++; showTutorialStep(currentTutorialStep); });
         closePopupBtn.addEventListener('click', hideTutorial);
         
-        // --- LOGIQUE D'ANNOTATION ---
+        // --- LOGIQUE D'ANNOTATION (Correction des coordonnées de drag/resize) ---
         const annotationModal = document.getElementById('annotationModal');
         const canvas = document.getElementById('annotationCanvas');
         const ctx = canvas.getContext('2d');
@@ -2081,7 +2077,15 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             rotationInput.addEventListener('change', updateAnnotationRotation);
 
             document.getElementById('delete_btn').addEventListener('click', () => { if(selectedAnnotation){ annotations = annotations.filter(ann => ann !== selectedAnnotation); selectedAnnotation = null; setContextualTools(null); redrawCanvas(); } });
-            document.getElementById('edit_text_btn').addEventListener('click', () => { if(selectedAnnotation && selectedAnnotation.type === 'location'){ const newText = prompt('Modifier texte:', selectedAnnotation.text); if(newText !== null){ selectedAnnotation.text = newText; redrawCanvas(); } } });
+            document.getElementById('edit_text_btn').addEventListener('click', () => { 
+                if(selectedAnnotation && selectedAnnotation.type === 'location'){ 
+                    const newText = prompt('Modifier texte:', selectedAnnotation.text); 
+                    if(newText !== null){ 
+                        selectedAnnotation.text = newText;
+                        redrawCanvas(); 
+                    } 
+                } 
+            });
             
             const importSessionBtn = document.getElementById('importSessionBtn');
             const exportSessionBtn = document.getElementById('exportSessionBtn');
@@ -2170,17 +2174,9 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     else { targetContainer.insertBefore(draggedItem, afterElement); }
                 }
             });
-
-            if (localStorage.getItem('theme') === 'light') { document.body.classList.replace('dark-mode', 'light-mode'); document.getElementById('darkModeIcon').textContent = 'clear_day'; }
-            if (localStorage.getItem('dockCollapsed') === 'true') { dockMenu.classList.add('collapsed'); }
-            
-            addPhotoInput('adversary_photo_container', true);
-            setupQuickEditPanel();
-            loadFormData();
-            showStep(currentStep);
         });
         
-        // --- PDF GENERATION ---
+        // --- PDF GENERATION (Fixed: Image source processing) ---
         async function buildPdf() {
             const { PDFDocument, StandardFonts, rgb, PageSizes } = PDFLib;
             const pdfDoc = await PDFDocument.create();
@@ -2251,33 +2247,39 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 };
                 drawRow(headers, true); rows.forEach(row => drawRow(row, false)); context.y = currentY - 20;
             };
-            const processImage = async (source, maxWidth = 1280, quality = 0.85) => {
+            
+            // Correction: Permettre le passage des data:image (annotées) sans les traiter comme un File
+            const processImage = async (source) => {
                 return new Promise((resolve, reject) => {
                     const img = new Image();
                     img.crossOrigin = 'anonymous';
-                    let objectUrl = null;
-                    if (source instanceof File) {
-                        if (!source.type.startsWith('image/')) { return reject(new Error('Le fichier fourni n\'est pas une image valide.')); }
-                        objectUrl = URL.createObjectURL(source);
-                        img.src = objectUrl;
-                    } else if (typeof source === 'string' && source.startsWith('data:image')) {
+                    let isDataURL = typeof source === 'string' && source.startsWith('data:image');
+                    
+                    if (isDataURL) {
                         img.src = source;
-                    } else { return reject(new Error('Source d\'image invalide.')); }
+                    } else if (source instanceof File) {
+                        if (!source.type.startsWith('image/')) return reject(new Error('Le fichier fourni n\'est pas une image valide.'));
+                        img.src = URL.createObjectURL(source);
+                    } else {
+                        return reject(new Error('Source d\'image invalide ou non supportée.'));
+                    }
                     
                     img.onload = () => {
-                        if (objectUrl) URL.revokeObjectURL(objectUrl);
                         const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d');
                         let { width, height } = img;
+                        const maxWidth = 1280; 
                         if (width > maxWidth) { height = (maxWidth / width) * height; width = maxWidth; }
                         canvas.width = width; canvas.height = height; ctx.drawImage(img, 0, 0, width, height);
+                        
                         canvas.toBlob(blob => {
                             if (!blob) return reject(new Error('La conversion de l\'image a échoué.'));
                             blob.arrayBuffer().then(resolve).catch(reject);
-                        }, 'image/jpeg', quality);
+                        }, 'image/jpeg', 0.85); 
                     };
-                    img.onerror = (err) => { if (objectUrl) URL.revokeObjectURL(objectUrl); reject(new Error(`Impossible de charger l'image: ${err.message}`)); };
+                    img.onerror = (err) => { reject(new Error(`Impossible de charger l'image: ${err.message}`)); };
                 });
             };
+            
             const drawImagesFromContainer = async (containerId, title) => {
                 const imageSrcs = [];
                 const wrappers = document.querySelectorAll(`#${containerId} .photo-input-wrapper`);
@@ -2314,8 +2316,8 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 
                 allMembers.forEach(member => {
                     if (member.cellule && member.cellule.toLowerCase().startsWith(teamPrefix)) {
-                        if (!membersByCell[cellule]) membersByCell[cellule] = [];
-                        membersByCell[cellule].push(member.trigramme);
+                        if (!membersByCell[member.cellule]) membersByCell[member.cellule] = [];
+                        membersByCell[member.cellule].push(member.trigramme);
                     }
                 });
 
