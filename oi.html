@@ -519,9 +519,6 @@ CONDUITE AU LIEU DE GAV.</textarea>
                         
                         <div style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px;">
                             <button type="button" id="importJsonConfigBtn" class="add-btn" style="background-color: var(--success-green); flex-grow: 1;">Importer Configuration Membres (.json) 📤</button>
-                            
-                            <button type="button" id="loadTypeConfigBtn" class="add-btn" style="background-color: #5b9bd5; flex-grow: 1;">Charger config type 🔄</button>
-                            
                             <button type="button" id="resetPatracdvrBtn" class="remove-btn" style="flex-grow: 1;">Réinitialiser PATRACDVR</button>
                         </div>
                     </div>
@@ -637,7 +634,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
         const jsonConfigInput = document.getElementById('jsonConfigInput');
         const resetPatracdvrBtn = document.getElementById('resetPatracdvrBtn');
         const importJsonConfigBtn = document.getElementById('importJsonConfigBtn');
-        const loadTypeConfigBtn = document.getElementById('loadTypeConfigBtn');
 
         function showStep(n) {
             steps.forEach((step, index) => step.classList.toggle('active', index === n));
@@ -1248,37 +1244,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 setupQuickEditPanel();
             }
         }
-        
-        // --- NOUVELLE FONCTION POUR CHARGER DEPUIS LE FICHIER RACINE ---
-        async function loadConfigFromRoot() {
-            const btn = document.getElementById('loadTypeConfigBtn');
-            const originalText = btn.textContent;
-            
-            btn.textContent = 'Chargement...'; 
-            btn.disabled = true;
-
-            try {
-                const response = await fetch(DEFAULT_CONFIG_FILE);
-                
-                if (!response.ok) {
-                    throw new Error(`Erreur HTTP : Le fichier '${DEFAULT_CONFIG_FILE}' est introuvable ou illisible. Statut: ${response.status}`);
-                }
-                
-                const config = await response.json();
-                
-                // Appliquer la configuration chargée (options + membres)
-                loadMembersFromJson(config); 
-                
-                alert(`Configuration de type (${DEFAULT_CONFIG_FILE}) chargée avec succès !`);
-
-            } catch (error) {
-                console.error("Erreur lors du chargement de la config de type:", error);
-                alert(`Échec du chargement de la configuration de type.\nDétails: ${error.message}`);
-            } finally {
-                btn.textContent = originalText; 
-                btn.disabled = false;
-            }
-        }
 
 
         // --- DRAG & DROP ---
@@ -1352,7 +1317,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             }
         }
 
-        // --- TUTORIAL SYSTEM ---
+        // --- TUTORIAL SYSTEM (Fixed: relies on correct DOM loading) ---
         const tutorialSteps = [
             { text: "Bienvenue dans le générateur d'Ordre Initial. Ce guide vous assistera dans la création de votre document opérationnel.", selector: '.container', center: true },
             { text: "Cette barre de progression indique les différentes sections de l'O.I. Vous pouvez cliquer sur une étape pour y naviguer directement.", selector: '.wizard-progress' },
@@ -1401,13 +1366,13 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
         nextPopupBtn.addEventListener('click', () => { currentTutorialStep++; showTutorialStep(currentTutorialStep); });
         closePopupBtn.addEventListener('click', hideTutorial);
         
-        // --- LOGIQUE D'ANNOTATION ---
+        // --- LOGIQUE D'ANNOTATION (Correction des coordonnées de drag/resize) ---
         const annotationModal = document.getElementById('annotationModal');
         const canvas = document.getElementById('annotationCanvas');
         const ctx = canvas.getContext('2d');
         const baseImage = new Image();
         let annotations = [], currentTool = 'move', isDrawing = false, isDragging = false, startX, startY;
-        let currentAnnotation = null, selectedAnnotation = null, dragOffsetX, dragOffsetY;
+        let currentAnnotation = null, selectedAnnotation = null;
         const rotationInput = document.getElementById('rotation_input');
         let isResizing = false;
         let resizeCorner = null; 
@@ -2009,9 +1974,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 event.target.value = null; 
             });
             
-            // Événement pour le nouveau bouton de chargement de config de type
-            loadTypeConfigBtn.addEventListener('click', loadConfigFromRoot);
-
             // --- PATRACDVR & Quick Edit Listeners ---
             resetPatracdvrBtn.addEventListener('click', () => { if (confirm("Voulez-vous vraiment effacer TOUS les véhicules et membres du PATRACDVR ?")) { patracdvrContainer.innerHTML = ''; unassignedContainer.innerHTML = ''; saveFormData(); } });
             
@@ -2214,7 +2176,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             });
         });
         
-        // --- PDF GENERATION ---
+        // --- PDF GENERATION (Fixed: Image source processing) ---
         async function buildPdf() {
             const { PDFDocument, StandardFonts, rgb, PageSizes } = PDFLib;
             const pdfDoc = await PDFDocument.create();
@@ -2285,34 +2247,39 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 };
                 drawRow(headers, true); rows.forEach(row => drawRow(row, false)); context.y = currentY - 20;
             };
-            const processImage = async (source, maxWidth = 1280, quality = 0.85) => {
+            
+            // Correction: Permettre le passage des data:image (annotées) sans les traiter comme un File
+            const processImage = async (source) => {
                 return new Promise((resolve, reject) => {
                     const img = new Image();
                     img.crossOrigin = 'anonymous';
-                    let objectUrl = null;
+                    let isDataURL = typeof source === 'string' && source.startsWith('data:image');
                     
-                    if (typeof source === 'string' && source.startsWith('data:image')) {
+                    if (isDataURL) {
                         img.src = source;
                     } else if (source instanceof File) {
-                        if (!source.type.startsWith('image/')) { return reject(new Error('Le fichier fourni n\'est pas une image valide.')); }
-                        objectUrl = URL.createObjectURL(source);
-                        img.src = objectUrl;
-                    } else { return reject(new Error('Source d\'image invalide.')); }
+                        if (!source.type.startsWith('image/')) return reject(new Error('Le fichier fourni n\'est pas une image valide.'));
+                        img.src = URL.createObjectURL(source);
+                    } else {
+                        return reject(new Error('Source d\'image invalide ou non supportée.'));
+                    }
                     
                     img.onload = () => {
-                        if (objectUrl) URL.revokeObjectURL(objectUrl);
                         const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d');
                         let { width, height } = img;
+                        const maxWidth = 1280; 
                         if (width > maxWidth) { height = (maxWidth / width) * height; width = maxWidth; }
                         canvas.width = width; canvas.height = height; ctx.drawImage(img, 0, 0, width, height);
+                        
                         canvas.toBlob(blob => {
                             if (!blob) return reject(new Error('La conversion de l\'image a échoué.'));
                             blob.arrayBuffer().then(resolve).catch(reject);
-                        }, 'image/jpeg', quality);
+                        }, 'image/jpeg', 0.85); 
                     };
-                    img.onerror = (err) => { if (objectUrl) URL.revokeObjectURL(objectUrl); reject(new Error(`Impossible de charger l'image: ${err.message}`)); };
+                    img.onerror = (err) => { reject(new Error(`Impossible de charger l'image: ${err.message}`)); };
                 });
             };
+            
             const drawImagesFromContainer = async (containerId, title) => {
                 const imageSrcs = [];
                 const wrappers = document.querySelectorAll(`#${containerId} .photo-input-wrapper`);
@@ -2349,7 +2316,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 
                 allMembers.forEach(member => {
                     if (member.cellule && member.cellule.toLowerCase().startsWith(teamPrefix)) {
-                        if (!membersByCell[member.cellule]) membersByCell[cellule] = [];
+                        if (!membersByCell[member.cellule]) membersByCell[member.cellule] = [];
                         membersByCell[member.cellule].push(member.trigramme);
                     }
                 });
