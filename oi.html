@@ -332,7 +332,7 @@
                     </div>
                  </div>
                  <div class="toolbar-main-tools">
-                     <button id="tool_move" class="tool-btn active"><span class="material-symbols-outlined">open_with</span>Déplacer</button>
+                     <button id="tool_move" class="tool-btn active"><span class="material-symbols-outlined">open_with</span>Déplacer/Redim.</button>
                      <button id="tool_location" class="tool-btn"><span class="material-symbols-outlined">place</span>Emplacement</button>
                      <button id="tool_arrow" class="tool-btn"><span class="material-symbols-outlined">arrow_right_alt</span>Désigner</button>
                      <button id="tool_box" class="tool-btn"><span class="material-symbols-outlined">crop_square</span>Encadrer</button>
@@ -519,9 +519,6 @@ CONDUITE AU LIEU DE GAV.</textarea>
                         
                         <div style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px;">
                             <button type="button" id="importJsonConfigBtn" class="add-btn" style="background-color: var(--success-green); flex-grow: 1;">Importer Configuration Membres (.json) 📤</button>
-                            
-                            <button type="button" id="loadTypeConfigBtn" class="add-btn" style="background-color: #5b9bd5; flex-grow: 1;">Charger config type 🔄</button>
-                            
                             <button type="button" id="resetPatracdvrBtn" class="remove-btn" style="flex-grow: 1;">Réinitialiser PATRACDVR</button>
                         </div>
                     </div>
@@ -606,10 +603,9 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
         const RETEX_BASE_URL = "https://oxsilaris06.github.io/CET/retex.html";
         const APPS_SCRIPT_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyF0CJ_B9U4Izn6ieZG4lfIq23oScE6cFvd1SoUXvVUBRqk_Ce1R8TJpRRnuamcdJH-/exec";
         
-        // --- GLOBAL CONFIG (Options par défaut, doit être la même que dans config.json pour l'initialisation) ---
-        // J'utilise la configuration par défaut de config.json (sans les champs manquants qui causeraient des erreurs)
+        // --- GLOBAL CONFIG (Défaut interne, mutable pour le chargement) ---
         let memberConfig = { 
-            fonctions: ['Chef inter', 'Chef dispo', 'DE', 'Sans'],
+            fonctions: ['Chef inter', 'Chef dispo', 'DE', 'Sans', 'Inter', 'AO'],
             cellules: ['AO1','AO2','AO3','AO4','AO5','AO6','India 1','India 2','India 3','India 4','India 5', 'Sans'],
             armements: ['Sans', 'UMP9', 'G36', 'PIE', 'LBD40', 'FAP'],
             equipements: ['Sans', 'BBAL', 'GENL', 'EFFRAC', 'MP7', 'IL'],
@@ -638,7 +634,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
         const jsonConfigInput = document.getElementById('jsonConfigInput');
         const resetPatracdvrBtn = document.getElementById('resetPatracdvrBtn');
         const importJsonConfigBtn = document.getElementById('importJsonConfigBtn');
-        const loadTypeConfigBtn = document.getElementById('loadTypeConfigBtn');
 
         function showStep(n) {
             steps.forEach((step, index) => step.classList.toggle('active', index === n));
@@ -651,7 +646,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             const isLastStep = n === (steps.length - 1);
             nextBtn.style.display = isLastStep ? "none" : "inline-block";
             
-            // Masquer les boutons de finalisation s'ils ne sont pas sur la dernière étape
             previewBtn.style.display = isLastStep ? "inline-block" : "none";
             generatePdfBtn.style.display = isLastStep ? "inline-block" : "none";
             retexReportBtn.style.display = isLastStep ? "inline-block" : "none";
@@ -694,7 +688,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     <label for="${uniqueId}" class="file-upload-label">Choisir une photo</label>
                     <span id="span_${uniqueId}" class="file-name-display">Aucun fichier</span>
                     <button type="button" class="add-btn annotate-btn" style="display:none; margin-left:5px; background-color: var(--accent-blue);" onclick="openAnnotationModal('${previewId}')">Annoter</button>
-                    ${!isSingle ? '<button type="button" class="remove-btn" onclick="this.closest(\'.photo-input-wrapper\').remove(); saveFormData();">❌</button>' : ''}
+                    ${!isSingle ? '<button type="button" class="remove-btn" onclick="this.closest(\'.photo-input-wrapper\').remove()">❌</button>' : ''}
                 </div>
                 <img id="${previewId}" class="image-preview" style="display:none;" alt="Aperçu"/>`;
             container.appendChild(itemWrapper);
@@ -849,7 +843,8 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     addPatracdvrMember(unassignedContainer, { trigramme: trigramme, cellule: 'Sans', fonction: 'Sans' });
                     const newMemberBtn = unassignedContainer.lastChild;
                     if (newMemberBtn) {
-                        handleMemberSelection({ target: newMemberBtn });
+                        // AMÉLIORATION : Ouvre directement la modale complète au lieu de juste sélectionner
+                        openMemberModal(newMemberBtn.id);
                     }
                     saveFormData();
                 } else {
@@ -865,11 +860,21 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             btn.className = 'patracdvr-member-btn draggable';
             btn.id = `member_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
             btn.setAttribute('draggable', 'true');
+            
             const memberData = {
                 trigramme: 'N/A', fonction: 'Sans', cellule: 'India 1', armement: 'Sans',
                 equipement: 'Sans', equipement2: 'Sans',
                 tenue: 'UBAS', gpb: 'GPBL', ...data
             };
+            
+            // Ajout des données manquantes en fonction de memberConfig, pour la robustesse.
+            for (const key in memberConfig) {
+                const attrName = key.replace(/s$/, ''); 
+                if (memberData[attrName] === undefined) {
+                    memberData[attrName] = memberConfig[key][0] || 'Sans'; 
+                }
+            }
+            
             Object.keys(memberData).forEach(key => btn.dataset[key] = memberData[key]);
             updateMemberButtonVisuals(btn);
             containerElement.appendChild(btn);
@@ -909,18 +914,21 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             }
             
             document.getElementById('modal_trigramme').value = button.dataset.trigramme;
-            populateSelect('modal_fonction', memberConfig.fonctions, button.dataset.fonction);
-            populateSelect('modal_cellule', memberConfig.cellules, button.dataset.cellule);
-            populateSelect('modal_armement', memberConfig.armements, button.dataset.armement);
-            populateSelect('modal_equipement', memberConfig.equipements, button.dataset.equipement);
-            populateSelect('modal_equipement2', memberConfig.equipements2, button.dataset.equipement2);
-            populateSelect('modal_tenue', memberConfig.tenues, button.dataset.tenue);
-            populateSelect('modal_gpb', memberConfig.gpbs, button.dataset.gpb);
+            
+            // Reconstruire les selects avec les options dynamiques et sélectionner la valeur actuelle
+            for (const key in memberConfig) {
+                 const attrName = key.replace(/s$/, '');
+                 const selectId = 'modal_' + attrName;
+                 const select = document.getElementById(selectId);
+                 if (select) {
+                     select.innerHTML = memberConfig[key].map(option => {
+                        const selected = (button.dataset[attrName] === option) ? 'selected' : '';
+                        return `<option value="${option}" ${selected}>${option}</option>`;
+                    }).join('');
+                 }
+            }
+            
             modal.showModal();
-        }
-        function populateSelect(selectId, options, selectedValue) {
-            const select = document.getElementById(selectId);
-            select.innerHTML = options.map(o => `<option value="${o}" ${o === selectedValue ? 'selected':''}>${o}</option>`).join('');
         }
         
         function updateArticulationDisplay() {
@@ -966,23 +974,20 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
         }
 
 
-        // --- PANNEAU D'ÉDITION RAPIDE & MODALE LOGIC ---
-        const quickEditMapping = {
-            'Fonction': { key: 'fonctions', attribute: 'fonction' },
-            'Cellule': { key: 'cellules', attribute: 'cellule' },
-            'Armement': { key: 'armements', attribute: 'armement' },
-            'Équip. 1': { key: 'equipements', attribute: 'equipement' },
-            'Équip. 2': { key: 'equipements2', attribute: 'equipement2' },
-            'Tenue': { key: 'tenues', attribute: 'tenue' },
-            'GPB': { key: 'gpbs', attribute: 'gpb' }
-        };
+        // --- PANNEAU D'ÉDITION RAPIDE & MODALE LOGIC (Dynamique) ---
 
         function setupQuickEditPanel() {
             const contentContainer = document.querySelector('#quickEditPanel .quick-edit-content');
+            contentContainer.innerHTML = ''; 
             
-            for (const [title, config] of Object.entries(quickEditMapping)) {
+            for (const key in memberConfig) {
+                if (!memberConfig.hasOwnProperty(key) || !Array.isArray(memberConfig[key])) continue;
+
+                const attributeName = key.replace(/s$/, ''); // ex: fonctions -> fonction
+                const title = key.charAt(0).toUpperCase() + key.slice(1).replace(/([A-Z])/g, ' $1');
+
                 const tabPanel = document.createElement('div');
-                tabPanel.className = 'quick-edit-tab-panel active';
+                tabPanel.className = 'quick-edit-tab-panel active'; 
                 
                 const panelTitle = document.createElement('h5');
                 panelTitle.textContent = title;
@@ -991,18 +996,33 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 const optionsContainer = document.createElement('div');
                 optionsContainer.className = 'quick-edit-options';
                 
-                memberConfig[config.key].forEach(option => {
+                memberConfig[key].forEach(option => { 
                     const btn = document.createElement('button');
                     btn.type = 'button';
                     btn.className = 'quick-edit-btn';
                     btn.textContent = option;
-                    btn.dataset.attribute = config.attribute;
+                    btn.dataset.attribute = attributeName; 
                     btn.dataset.value = option;
                     optionsContainer.appendChild(btn);
                 });
                 
                 tabPanel.appendChild(optionsContainer);
                 contentContainer.appendChild(tabPanel);
+            }
+            updateEditModalSelects(); 
+        }
+        
+        function updateEditModalSelects() {
+             for (const key in memberConfig) {
+                if (memberConfig.hasOwnProperty(key) && Array.isArray(memberConfig[key])) {
+                    const selectId = 'modal_' + key.replace(/s$/, '');
+                    const selectElement = document.getElementById(selectId);
+                    if (selectElement) {
+                        selectElement.innerHTML = memberConfig[key].map(option => {
+                            return `<option value="${option}">${option}</option>`;
+                        }).join('');
+                    }
+                }
             }
         }
         
@@ -1054,26 +1074,31 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
 
             title.textContent = `Édition Rapide: ${member.dataset.trigramme || 'N/A'}`;
             content.innerHTML = '';
+            
+            for (const key in memberConfig) {
+                if (!memberConfig.hasOwnProperty(key) || !Array.isArray(memberConfig[key])) continue;
+                
+                const attributeName = key.replace(/s$/, '');
+                const categoryTitleText = key.charAt(0).toUpperCase() + key.slice(1).replace(/([A-Z])/g, ' $1');
 
-            for (const [category, config] of Object.entries(quickEditMapping)) {
                 const categoryDiv = document.createElement('div');
                 categoryDiv.className = 'quick-edit-category';
                 
                 const categoryTitle = document.createElement('h5');
-                categoryTitle.textContent = category;
+                categoryTitle.textContent = categoryTitleText;
                 categoryDiv.appendChild(categoryTitle);
                 
                 const optionsContainer = document.createElement('div');
                 optionsContainer.className = 'quick-edit-options';
                 
-                memberConfig[config.key].forEach(option => {
+                memberConfig[key].forEach(option => {
                     const btn = document.createElement('button');
                     btn.type = 'button';
                     btn.className = 'quick-edit-btn';
                     btn.textContent = option;
-                    btn.dataset.attribute = config.attribute;
+                    btn.dataset.attribute = attributeName;
                     btn.dataset.value = option;
-                    if (member.dataset[config.attribute] === option) {
+                    if (member.dataset[attributeName] === option) {
                         btn.classList.add('selected');
                     }
                     optionsContainer.appendChild(btn);
@@ -1082,6 +1107,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 categoryDiv.appendChild(optionsContainer);
                 content.appendChild(categoryDiv);
             }
+            
             modal.showModal();
         }
 
@@ -1113,6 +1139,8 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     hour: item.querySelector('.time-hour-input').value,
                     description: item.querySelector('.time-description-input').value
                 }));
+                data.member_options = memberConfig;
+                
                 localStorage.setItem('oiFormData', JSON.stringify(data));
                 
                 updateArticulationDisplay();
@@ -1122,10 +1150,17 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
         function loadFormData() {
             const dataString = localStorage.getItem('oiFormData');
             if (!dataString) {
-                return;
+                return false; 
             }
             try {
                 const data = JSON.parse(dataString);
+                
+                if (data.member_options) {
+                    Object.assign(memberConfig, data.member_options);
+                }
+                
+                setupQuickEditPanel(); 
+                
                 Object.keys(data).forEach(key => {
                     if (key.endsWith('_src')) {
                         const imgId = key.replace('_src', '');
@@ -1140,7 +1175,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                         }
                         return;
                     }
-                    if (['patracdvr_rows', 'patracdvr_unassigned', 'time_events', 'me_list', 'etat_esprit_list', 'volume_list', 'vehicules_list'].includes(key)) return; 
+                    if (['patracdvr_rows', 'patracdvr_unassigned', 'time_events', 'me_list', 'etat_esprit_list', 'volume_list', 'vehicules_list', 'member_options'].includes(key)) return; 
                     const el = document.getElementById(key);
                     if (el && !Array.isArray(data[key]) && typeof data[key] !== 'object') {
                         el.value = data[key];
@@ -1154,8 +1189,14 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 initializePatracdvr(data);
 
                 updateArticulationDisplay();
-            } catch (e) { console.error("Load error:", e); }
+                return true; 
+            } catch (e) { 
+                console.error("Load error: Failed to parse or apply saved data. Clearing localStorage.", e);
+                localStorage.removeItem('oiFormData');
+                return false; 
+            }
         }
+        
         function initializePatracdvr(dataFromStorage) {
             unassignedContainer.innerHTML = '';
             patracdvrContainer.innerHTML = '';
@@ -1164,19 +1205,47 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 (dataFromStorage.patracdvr_rows || []).forEach(row => addPatracdvrRow(row.vehicle, row.members));
             }
         }
-        function loadMembersFromJson(membersArray) {
+        
+        function loadMembersFromJson(configObject) {
+            if (configObject.options) {
+                Object.assign(memberConfig, configObject.options);
+            }
+            
+            setupQuickEditPanel(); 
+            updateEditModalSelects();
+
+            const membersArray = configObject.members || [];
             unassignedContainer.innerHTML = ''; 
             patracdvrContainer.innerHTML = '';
             membersArray.forEach(memberData => { 
-                const defaultData = {
-                    cellule: memberData.cellule || 'Sans',
-                    fonction: memberData.fonction || 'Sans',
-                    ...memberData
-                };
-                addPatracdvrMember(unassignedContainer, defaultData); 
+                addPatracdvrMember(unassignedContainer, memberData); 
             });
             saveFormData(); 
         }
+        
+        async function loadDefaultConfig() {
+            try {
+                const response = await fetch(DEFAULT_CONFIG_FILE);
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch default config: ${response.statusText}`);
+                }
+                const config = await response.json();
+                
+                if (config.options) {
+                    Object.assign(memberConfig, config.options);
+                }
+                
+                if (config.members && Array.isArray(config.members)) {
+                    loadMembersFromJson(config); 
+                } else {
+                    setupQuickEditPanel();
+                }
+            } catch (e) {
+                console.warn(`[Config Warning] Could not load default config (${DEFAULT_CONFIG_FILE}). Using internal default.`, e);
+                setupQuickEditPanel();
+            }
+        }
+
 
         // --- DRAG & DROP ---
         let draggedItem = null;
@@ -1249,7 +1318,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             }
         }
 
-        // --- TUTORIAL SYSTEM ---
+        // --- TUTORIAL SYSTEM (Fixed: relies on correct DOM loading) ---
         const tutorialSteps = [
             { text: "Bienvenue dans le générateur d'Ordre Initial. Ce guide vous assistera dans la création de votre document opérationnel.", selector: '.container', center: true },
             { text: "Cette barre de progression indique les différentes sections de l'O.I. Vous pouvez cliquer sur une étape pour y naviguer directement.", selector: '.wizard-progress' },
@@ -1298,14 +1367,17 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
         nextPopupBtn.addEventListener('click', () => { currentTutorialStep++; showTutorialStep(currentTutorialStep); });
         closePopupBtn.addEventListener('click', hideTutorial);
         
-        // --- LOGIQUE D'ANNOTATION ---
+        // --- LOGIQUE D'ANNOTATION (Correction des coordonnées de drag/resize) ---
         const annotationModal = document.getElementById('annotationModal');
         const canvas = document.getElementById('annotationCanvas');
         const ctx = canvas.getContext('2d');
         const baseImage = new Image();
         let annotations = [], currentTool = 'move', isDrawing = false, isDragging = false, startX, startY;
-        let currentAnnotation = null, selectedAnnotation = null, dragOffsetX, dragOffsetY;
+        let currentAnnotation = null, selectedAnnotation = null;
         const rotationInput = document.getElementById('rotation_input');
+        let isResizing = false;
+        let resizeCorner = null; 
+        const resizeThreshold = 15; 
 
         function setContextualTools(selection) {
             const contextualTools = document.getElementById('contextual_tools');
@@ -1362,49 +1434,80 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 drawAnnotation(currentAnnotation);
             }
             if (selectedAnnotation) {
-                // Rendu des poignées de sélection
-                ctx.save();
-                ctx.setLineDash([5, 5]);
-                ctx.strokeStyle = 'white';
-                ctx.lineWidth = 3;
-                let centerX, centerY;
-                let x, y, width, height;
-    
-                if (selectedAnnotation.type === 'location') {
-                    x = selectedAnnotation.x - selectedAnnotation.radius;
-                    y = selectedAnnotation.y - selectedAnnotation.radius;
-                    width = selectedAnnotation.radius * 2;
-                    height = selectedAnnotation.radius * 2;
-                    centerX = selectedAnnotation.x;
-                    centerY = selectedAnnotation.y;
-                } else if (selectedAnnotation.type === 'box') {
-                    x = selectedAnnotation.x;
-                    y = selectedAnnotation.y;
-                    width = selectedAnnotation.width;
-                    height = selectedAnnotation.height;
-                    centerX = selectedAnnotation.x + selectedAnnotation.width / 2;
-                    centerY = selectedAnnotation.y + selectedAnnotation.height / 2;
-                } else if (selectedAnnotation.type === 'arrow') {
-                    const minX = Math.min(selectedAnnotation.startX, selectedAnnotation.endX);
-                    const minY = Math.min(selectedAnnotation.startY, selectedAnnotation.endY);
-                    const maxX = Math.max(selectedAnnotation.startX, selectedAnnotation.endX);
-                    const maxY = Math.max(selectedAnnotation.startY, selectedAnnotation.endY);
-                    x = minX - 10;
-                    y = minY - 10;
-                    width = maxX - minX + 20;
-                    height = maxY - minY + 20;
-                    centerX = (selectedAnnotation.startX + selectedAnnotation.endX) / 2;
-                    centerY = (selectedAnnotation.startY + selectedAnnotation.endY) / 2;
-                }
-    
-                if (selectedAnnotation.rotation) {
+                drawSelectionBorder(selectedAnnotation);
+            }
+        }
+
+        function getCssVarValue(varName) {
+            return window.getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+        }
+
+        function drawSelectionBorder(annotation) {
+            ctx.save();
+            ctx.setLineDash([5, 5]);
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 3;
+            
+            let x, y, width, height, centerX, centerY;
+            const angle = annotation.rotation || 0;
+
+            if (annotation.type === 'location') {
+                x = annotation.x - annotation.radius;
+                y = annotation.y - annotation.radius;
+                width = annotation.radius * 2;
+                height = annotation.radius * 2;
+                centerX = annotation.x;
+                centerY = annotation.y;
+            } else if (annotation.type === 'box') {
+                x = annotation.x;
+                y = annotation.y;
+                width = annotation.width;
+                height = annotation.height;
+                centerX = annotation.x + annotation.width / 2;
+                centerY = annotation.y + annotation.height / 2;
+            } else if (annotation.type === 'arrow') {
+                const minX = Math.min(annotation.startX, annotation.endX);
+                const minY = Math.min(annotation.startY, annotation.endY);
+                const maxX = Math.max(annotation.startX, annotation.endX);
+                const maxY = Math.max(annotation.startY, annotation.endY);
+                x = minX - 10;
+                y = minY - 10;
+                width = maxX - minX + 20;
+                height = maxY - minY + 20;
+                centerX = (annotation.startX + annotation.endX) / 2;
+                centerY = (annotation.startY + annotation.endY) / 2;
+            }
+
+            ctx.translate(centerX, centerY);
+            ctx.rotate(angle);
+            ctx.translate(-centerX, -centerY);
+            
+            ctx.strokeRect(x, y, width, height);
+            ctx.restore();
+
+            if (currentTool === 'move' && annotation.type !== 'arrow') {
+                const cornerPositions = [
+                    { x: x, y: y }, // nw
+                    { x: x + width, y: y }, // ne
+                    { x: x + width, y: y + height }, // se
+                    { x: x, y: y + height } // sw
+                ];
+
+                cornerPositions.forEach((pos) => {
+                    ctx.save();
+                    ctx.beginPath();
                     ctx.translate(centerX, centerY);
-                    ctx.rotate(selectedAnnotation.rotation);
+                    ctx.rotate(angle);
                     ctx.translate(-centerX, -centerY);
-                }
-                
-                ctx.strokeRect(x, y, width, height);
-                ctx.restore();
+                    
+                    ctx.arc(pos.x, pos.y, 7, 0, 2 * Math.PI);
+                    ctx.fillStyle = 'white';
+                    ctx.fill();
+                    ctx.strokeStyle = getCssVarValue('--accent-blue');
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                    ctx.restore();
+                });
             }
         }
 
@@ -1549,7 +1652,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             } else { return null; }
 
             const rotatedPos = getRotatedPoint(x, y, centerX, centerY, angle);
-            const resizeThreshold = 15; 
             
             const handlePositions = [
                 { x: boundsX, y: boundsY, name: 'nw' },
@@ -1571,27 +1673,14 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 const annotation = annotations[i];
                 const angle = annotation.rotation || 0;
                 let centerX, centerY;
-                if (annotation.type === 'location') {
-                    centerX = annotation.x;
-                    centerY = annotation.y;
-                } else if (annotation.type === 'box') {
-                    centerX = annotation.x + annotation.width / 2;
-                    centerY = annotation.y + annotation.height / 2;
-                } else if (annotation.type === 'arrow') {
-                    centerX = (annotation.startX + annotation.endX) / 2;
-                    centerY = (annotation.startY + annotation.endY) / 2;
-                }
+                
+                if (annotation.type === 'location') { centerX = annotation.x; centerY = annotation.y; } 
+                else if (annotation.type === 'box') { centerX = annotation.x + annotation.width / 2; centerY = annotation.y + annotation.height / 2; } 
+                else if (annotation.type === 'arrow') { centerX = (annotation.startX + annotation.endX) / 2; centerY = (annotation.startY + annotation.endY) / 2; }
 
-                let testX = x;
-                let testY = y;
-                if (angle) {
-                    const translatedX = x - centerX;
-                    const translatedY = y - centerY;
-                    const cos = Math.cos(-angle);
-                    const sin = Math.sin(-angle);
-                    testX = translatedX * cos - translatedY * sin + centerX;
-                    testY = translatedX * sin + translatedY * cos + centerY;
-                }
+                const rotatedPos = getRotatedPoint(x, y, centerX, centerY, angle);
+                const testX = rotatedPos.x;
+                const testY = rotatedPos.y;
 
                 const tolerance = 15;
                 let isInside = false;
@@ -1628,15 +1717,21 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             const pos = getEventPos(canvas, e);
             startX = pos.x;
             startY = pos.y;
+            
             if (currentTool === 'move') {
                 selectedAnnotation = getAnnotationAtPosition(pos.x, pos.y);
                 setContextualTools(selectedAnnotation);
+
                 if (selectedAnnotation) {
-                    isDragging = true;
+                    resizeCorner = checkResizeHandle(pos.x, pos.y);
+                    isResizing = resizeCorner !== null;
+                    isDragging = !isResizing; 
+                    
                     document.body.style.overflow = 'hidden';
                     redrawCanvas();
                 }
-            } else {
+
+            } else { 
                 isDrawing = true;
                 selectedAnnotation = null;
                 setContextualTools(null);
@@ -1653,8 +1748,9 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
 
         function handleDrawMove(e) {
             e.preventDefault();
-            if (!isDrawing && !isDragging) return;
+            if (!isDrawing && !isDragging && !isResizing) return;
             const pos = getEventPos(canvas, e);
+            
             if (isDragging && selectedAnnotation) {
                 const deltaX = pos.x - startX;
                 const deltaY = pos.y - startY;
@@ -1672,6 +1768,56 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 startX = pos.x;
                 startY = pos.y;
                 redrawCanvas();
+
+            } else if (isResizing && selectedAnnotation && selectedAnnotation.type !== 'arrow') {
+                const angle = selectedAnnotation.rotation || 0;
+                
+                let centerX, centerY;
+                if (selectedAnnotation.type === 'location') {
+                    centerX = selectedAnnotation.x;
+                    centerY = selectedAnnotation.y;
+                } else if (selectedAnnotation.type === 'box') {
+                    centerX = selectedAnnotation.x + selectedAnnotation.width / 2;
+                    centerY = selectedAnnotation.y + selectedAnnotation.height / 2;
+                }
+                
+                let pStart = getRotatedPoint(startX, startY, centerX, centerY, angle);
+                let pCurrent = getRotatedPoint(pos.x, pos.y, centerX, centerY, angle);
+                
+                if (selectedAnnotation.type === 'location') {
+                     selectedAnnotation.radius = Math.sqrt(Math.pow(pos.x - selectedAnnotation.x, 2) + Math.pow(pos.y - selectedAnnotation.y, 2));
+                     if (selectedAnnotation.radius < 5) selectedAnnotation.radius = 5;
+                } else if (selectedAnnotation.type === 'box') {
+                    
+                    let dx = pCurrent.x - pStart.x;
+                    let dy = pCurrent.y - pStart.y;
+                    
+                    let newX = selectedAnnotation.x;
+                    let newY = selectedAnnotation.y;
+                    let newWidth = selectedAnnotation.width;
+                    let newHeight = selectedAnnotation.height;
+
+                    if (resizeCorner.includes('w')) {
+                        newX = selectedAnnotation.x + dx;
+                        newWidth = selectedAnnotation.width - dx;
+                    } else if (resizeCorner.includes('e')) {
+                        newWidth = selectedAnnotation.width + dx;
+                    }
+                    if (resizeCorner.includes('n')) {
+                        newY = selectedAnnotation.y + dy;
+                        newHeight = selectedAnnotation.height - dy;
+                    } else if (resizeCorner.includes('s')) {
+                        newHeight = selectedAnnotation.height + dy;
+                    }
+
+                    if (newWidth > 5) { selectedAnnotation.width = newWidth; if (resizeCorner.includes('w')) selectedAnnotation.x = newX; }
+                    if (newHeight > 5) { selectedAnnotation.height = newHeight; if (resizeCorner.includes('n')) selectedAnnotation.y = newY; }
+                }
+                
+                startX = pos.x;
+                startY = pos.y;
+                redrawCanvas();
+
             } else if (isDrawing && currentAnnotation) {
                 currentAnnotation.endX = pos.x;
                 currentAnnotation.endY = pos.y;
@@ -1682,21 +1828,12 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
         function handleDrawEnd(e) {
             e.preventDefault();
             document.body.style.overflow = '';
-            const clickTolerance = 5;
-            if (currentTool === 'move' && selectedAnnotation && !isDragging && 
-                Math.abs(getEventPos(canvas, e).x - startX) < clickTolerance && 
-                Math.abs(getEventPos(canvas, e).y - startY) < clickTolerance) {
-                
-                selectedAnnotation = null;
-                setContextualTools(null);
-                redrawCanvas();
-                return; 
-            }
-
-            if (isDragging) {
+            if (isDragging || isResizing) {
                 isDragging = false;
+                isResizing = false;
+                resizeCorner = null;
                 redrawCanvas(); 
-                saveFormData(); 
+                saveFormData();
             } else if (isDrawing) {
                 isDrawing = false;
                 const final = { ...currentAnnotation };
@@ -1733,20 +1870,22 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             if (localStorage.getItem('theme') === 'light') { document.body.classList.replace('dark-mode', 'light-mode'); document.getElementById('darkModeIcon').textContent = 'clear_day'; }
             if (localStorage.getItem('dockCollapsed') === 'true') { dockMenu.classList.add('collapsed'); }
 
-            // 2. Initialiser le champ de la photo principale de l'adversaire (CRUCIAL pour loadFormData)
-            addPhotoInput('adversary_photo_container', true); 
-             
-             // 3. Charger les données : Session Locale > Fichier par défaut > Configuration Interne
+             // 2. Charger les données : Session Locale > Fichier par défaut > Configuration Interne
             const isLocalDataLoaded = loadFormData();
             if (!isLocalDataLoaded) {
                 await loadDefaultConfig();
             }
 
-            // 4. Finalisation de l'UI (Quick Edit, doit être après le chargement des options)
+            // 3. Initialisation de l'UI (Quick Edit, etc.) après le chargement des options
             setupQuickEditPanel(); 
+
+            // 4. Ajouter le champ photo par défaut (Adversaire)
+            addPhotoInput('adversary_photo_container', true);
+            
+            // 5. Afficher la première étape
             showStep(currentStep); 
             
-            // 5. LIAISON DE TOUS LES ÉVÉNEMENTS
+            // 6. LIAISON DE TOUS LES ÉVÉNEMENTS
 
             document.querySelector('.container').addEventListener('click', (event) => {
                 const header = event.target.closest('.collapsible-header');
@@ -1757,6 +1896,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 const buttonId = form.dataset.editingButtonId; const button = document.getElementById(buttonId);
                 if (button) {
                     button.dataset.trigramme = document.getElementById('modal_trigramme').value;
+                    
                     for (const key in memberConfig) {
                         const attrName = key.replace(/s$/, '');
                         const selectId = 'modal_' + attrName;
@@ -1765,6 +1905,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                             button.dataset[attrName] = select.value;
                         }
                     }
+                    
                     updateMemberButtonVisuals(button);
                     populateQuickEditPanel(buttonId);
                     saveFormData();
@@ -1774,10 +1915,12 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             document.getElementById('modal_cancelBtn').addEventListener('click', () => modal.close());
             
             document.getElementById('modal_deleteBtn').addEventListener('click', () => {
-                const buttonId = form.dataset.editingButtonId; const button = document.getElementById(buttonId);
-                const isUnassigned = button.closest('#unassigned_members_container');
-
+                const buttonId = form.dataset.editingButtonId; 
+                const button = document.getElementById(buttonId);
                 if (!button) return;
+
+                // CORRECTION : On vérifie la position du membre au moment du clic pour éviter les erreurs d'état.
+                const isUnassigned = button.closest('#unassigned_members_container');
 
                 if (isUnassigned) {
                     if(confirm(`Voulez-vous vraiment SUPPRIMER DÉFINITIVEMENT le membre ${button.dataset.trigramme || 'N/A'}? Cette action est irréversible.`)) {
@@ -1810,7 +1953,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 localStorage.setItem('theme', isDarkMode ? 'dark' : 'light');
                 document.getElementById('darkModeIcon').textContent = isDarkMode ? 'nightlight' : 'clear_day';
             });
-            document.getElementById('resetBtn').addEventListener('click', () => { if (confirm("Voulez-vous vraiment réinitialiser tout le formulaire?")) { localStorage.removeItem('oiFormData'); location.reload(); } });
+            document.getElementById('resetBtn').addEventListener('click', () => { if (confirm("Voulez-vous vraiment réinitialiser tout le formulaire (y compris la configuration des membres)?")) { localStorage.removeItem('oiFormData'); location.reload(); } });
             document.getElementById('tutorialBtn').addEventListener('click', startTutorial);
             
             importJsonConfigBtn.addEventListener('click', () => {
@@ -1824,17 +1967,17 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 reader.onload = (e) => {
                     try {
                         const config = JSON.parse(e.target.result);
-                        if (config && Array.isArray(config.members)) {
-                            patracdvrContainer.innerHTML = ''; 
-                            loadMembersFromJson(config.members); 
+                        if (config && (Array.isArray(config.members) || config.options)) {
+                            loadMembersFromJson(config); 
                         }
-                        else { alert("Le fichier JSON est invalide ou ne contient pas de tableau 'members'."); }
+                        else { alert("Le fichier JSON est invalide ou ne contient ni tableau 'members' ni objet 'options'."); }
                     } catch (err) { alert("Erreur de lecture du JSON."); console.error(err); }
                 };
                 reader.readAsText(file);
                 event.target.value = null; 
             });
             
+            // --- PATRACDVR & Quick Edit Listeners ---
             resetPatracdvrBtn.addEventListener('click', () => { if (confirm("Voulez-vous vraiment effacer TOUS les véhicules et membres du PATRACDVR ?")) { patracdvrContainer.innerHTML = ''; unassignedContainer.innerHTML = ''; saveFormData(); } });
             
             const vehicleCreationContainer = document.getElementById('vehicle_creation_buttons');
@@ -1915,6 +2058,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             });
 
 
+            // --- ANNOTATION LISTENERS ---
             canvas.addEventListener('mousedown', handleDrawStart); canvas.addEventListener('mousemove', handleDrawMove);
             canvas.addEventListener('mouseup', handleDrawEnd); canvas.addEventListener('mouseout', handleDrawEnd);
             canvas.addEventListener('touchstart', handleDrawStart, { passive: false }); canvas.addEventListener('touchmove', handleDrawMove, { passive: false });
@@ -1936,7 +2080,15 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             rotationInput.addEventListener('change', updateAnnotationRotation);
 
             document.getElementById('delete_btn').addEventListener('click', () => { if(selectedAnnotation){ annotations = annotations.filter(ann => ann !== selectedAnnotation); selectedAnnotation = null; setContextualTools(null); redrawCanvas(); } });
-            document.getElementById('edit_text_btn').addEventListener('click', () => { if(selectedAnnotation && selectedAnnotation.type === 'location'){ const newText = prompt('Modifier texte:', selectedAnnotation.text); if(newText !== null){ selectedAnnotation.text = newText; redrawCanvas(); } } });
+            document.getElementById('edit_text_btn').addEventListener('click', () => { 
+                if(selectedAnnotation && selectedAnnotation.type === 'location'){ 
+                    const newText = prompt('Modifier texte:', selectedAnnotation.text); 
+                    if(newText !== null){ 
+                        selectedAnnotation.text = newText;
+                        redrawCanvas(); 
+                    } 
+                } 
+            });
             
             const importSessionBtn = document.getElementById('importSessionBtn');
             const exportSessionBtn = document.getElementById('exportSessionBtn');
@@ -2026,6 +2178,399 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 }
             });
         });
+        
+        // --- PDF GENERATION (Fixed: Image source processing) ---
+        async function buildPdf() {
+            const { PDFDocument, StandardFonts, rgb, PageSizes } = PDFLib;
+            const pdfDoc = await PDFDocument.create();
+            const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
+            const helveticaBoldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+            saveFormData();
+            const formDataString = localStorage.getItem('oiFormData');
+            if (!formDataString) { alert("Aucune donnée à générer."); return null; }
+            const formData = JSON.parse(formDataString);
+            const getVal = (id) => formData[id] || '';
+            const isDarkMode = document.body.classList.contains('dark-mode');
+            const context = {
+                pdfDoc, helveticaFont, helveticaBoldFont,
+                currentPage: null, y: 0, pageWidth: 0, pageHeight: 0, margin: 40,
+                colors: isDarkMode ? { background: rgb(30/255, 30/255, 30/255), text: rgb(1, 1, 1), accent: rgb(91/255, 155/255, 213/255) } : { background: rgb(1, 1, 1), text: rgb(0, 0, 0), accent: rgb(0, 51/255, 160/255) }
+            };
+            let backgroundImage = null;
+            try {
+                const bgImageUrl = 'Fd.png';
+                const bgImageBytes = await fetch(bgImageUrl).then(res => res.arrayBuffer());
+                backgroundImage = await pdfDoc.embedPng(bgImageBytes);
+            } catch (e) { console.warn("L'image de fond 'Fd.png' n'a pas pu être chargée.", e); }
+            
+            const addNewPage = () => {
+                context.currentPage = context.pdfDoc.addPage([PageSizes.A4[1], PageSizes.A4[0]]);
+                const { width, height } = context.currentPage.getSize();
+                context.pageWidth = width; context.pageHeight = height; context.y = height - context.margin;
+                context.currentPage.drawRectangle({ x: 0, y: 0, width, height, color: context.colors.background });
+            };
+            const checkY = (spaceNeeded) => { if (context.y - spaceNeeded < context.margin) { addNewPage(); return true; } return false; };
+            const drawTitle = (text) => { checkY(30); context.currentPage.drawText(text, { x: context.margin, y: context.y, font: helveticaBoldFont, size: 18, color: context.colors.accent }); context.y -= 30; };
+            const drawSubTitle = (text) => { if (checkY(25)) { context.y -= 10; } context.currentPage.drawText(text, { x: context.margin, y: context.y, font: helveticaBoldFont, size: 14, color: context.colors.accent }); context.y -= 25; };
+            const wrapText = (text, font, size, maxWidth) => {
+                const words = String(text || '').replace(/\n/g, ' \n ').split(' ');
+                let lines = []; let currentLine = '';
+                for (const word of words) {
+                    if (word === '\n') { lines.push(currentLine); currentLine = ''; continue; }
+                    const lineWithWord = currentLine === '' ? word : `${currentLine} ${word}`;
+                    if (font.widthOfTextAtSize(lineWithWord, size) > maxWidth && currentLine !== '') { lines.push(currentLine); currentLine = word; } 
+                    else { currentLine = lineWithWord; }
+                }
+                lines.push(currentLine); return lines;
+            };
+            const drawWrappedText = (text, options = {}) => {
+                const { font = helveticaFont, size = 12, color = context.colors.text, x = context.margin + 15 } = options;
+                const maxWidth = context.pageWidth - x - context.margin;
+                const lines = wrapText(text, font, size, maxWidth);
+                const totalHeight = lines.length * (size + 4);
+                if (checkY(totalHeight + 10)) { context.y -= (size + 4); }
+                lines.forEach((line, index) => { context.currentPage.drawText(line, { x, y: context.y - (index * (size + 4)), font, size, color }); });
+                context.y -= (totalHeight + 10);
+            };
+            const drawTable = (headers, rows, columnWidths, startX) => {
+                let currentY = context.y; const rowPadding = 5; const headerFontSize = 10; const contentFontSize = 10;
+                const drawRow = (rowData, isHeader) => {
+                    const font = isHeader ? helveticaBoldFont : helveticaFont; const size = isHeader ? headerFontSize : contentFontSize;
+                    const cellContents = rowData.map((text, i) => wrapText(text, font, size, columnWidths[i] - 2 * rowPadding));
+                    const maxLines = Math.max(...cellContents.map(lines => lines.length));
+                    const rowHeight = maxLines * (size + 2) + 2 * rowPadding;
+                    if (currentY - rowHeight < context.margin) { addNewPage(); currentY = context.y; drawRow(headers, true); }
+                    currentY -= rowHeight; let currentX = startX;
+                    rowData.forEach((_, i) => {
+                        context.currentPage.drawRectangle({ x: currentX, y: currentY, width: columnWidths[i], height: rowHeight, borderColor: context.colors.accent, borderWidth: 0.5 });
+                        const lines = cellContents[i];
+                        lines.forEach((line, lineIndex) => { context.currentPage.drawText(line, { x: currentX + rowPadding, y: currentY + rowHeight - rowPadding - (lineIndex + 1) * (size + 2) + 2, font, size, color: context.colors.text }); });
+                        currentX += columnWidths[i];
+                    });
+                };
+                drawRow(headers, true); rows.forEach(row => drawRow(row, false)); context.y = currentY - 20;
+            };
+            
+            const processImage = async (source) => {
+                return new Promise((resolve, reject) => {
+                    const img = new Image();
+                    img.crossOrigin = 'anonymous';
+                    let isDataURL = typeof source === 'string' && source.startsWith('data:image');
+                    
+                    if (isDataURL) {
+                        img.src = source;
+                    } else if (source instanceof File) {
+                        if (!source.type.startsWith('image/')) return reject(new Error('Le fichier fourni n\'est pas une image valide.'));
+                        img.src = URL.createObjectURL(source);
+                    } else {
+                        return reject(new Error('Source d\'image invalide ou non supportée.'));
+                    }
+                    
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d');
+                        let { width, height } = img;
+                        const maxWidth = 1280; 
+                        if (width > maxWidth) { height = (maxWidth / width) * height; width = maxWidth; }
+                        canvas.width = width; canvas.height = height; ctx.drawImage(img, 0, 0, width, height);
+                        
+                        canvas.toBlob(blob => {
+                            if (!blob) return reject(new Error('La conversion de l\'image a échoué.'));
+                            blob.arrayBuffer().then(resolve).catch(reject);
+                        }, 'image/jpeg', 0.85); 
+                    };
+                    img.onerror = (err) => { reject(new Error(`Impossible de charger l'image: ${err.message}`)); };
+                });
+            };
+            
+            const drawImagesFromContainer = async (containerId, title) => {
+                const imageSrcs = [];
+                const wrappers = document.querySelectorAll(`#${containerId} .photo-input-wrapper`);
+                wrappers.forEach(wrapper => {
+                    const previewImg = wrapper.querySelector('.image-preview');
+                    if (previewImg && previewImg.src && previewImg.src.startsWith('data:image')) {
+                        imageSrcs.push(previewImg.src);
+                    }
+                });
+                for (let i = 0; i < imageSrcs.length; i++) {
+                    const imageSource = imageSrcs[i];
+                    addNewPage();
+                    try {
+                        const imageBytes = await processImage(imageSource);
+                        const image = await pdfDoc.embedJpg(imageBytes);
+                        const { width, height } = context.currentPage.getSize();
+                        const paddedW = width - context.margin * 2; const paddedH = height - context.margin * 2 - 30;
+                        const scaled = image.scaleToFit(paddedW, paddedH);
+                        const x = (width - scaled.width) / 2; const y = (height - scaled.height) / 2 + 15;
+                        context.currentPage.drawImage(image, { x, y, width: scaled.width, height: scaled.height });
+                        const finalTitle = wrappers.length > 1 ? `${title} (${i+1})` : title;
+                        const textWidth = helveticaBoldFont.widthOfTextAtSize(finalTitle, 14);
+                        context.currentPage.drawText(finalTitle, { x: width / 2 - textWidth / 2, y: y - 20, font: helveticaBoldFont, size: 14, color: context.colors.text });
+                    } catch (e) {
+                        console.error(`Erreur d'intégration de l'image pour: ${title}`, e);
+                        drawTitle("Erreur d'image"); drawWrappedText(`Impossible de charger une image.\n\nErreur: ${e.message}`);
+                    }
+                }
+            };
+            
+            const getCompositionData = (teamPrefix) => {
+                const membersByCell = {};
+                const allMembers = (formData.patracdvr_rows || []).flatMap(row => row.members);
+                
+                allMembers.forEach(member => {
+                    if (member.cellule && member.cellule.toLowerCase().startsWith(teamPrefix)) {
+                        if (!membersByCell[member.cellule]) membersByCell[member.cellule] = [];
+                        membersByCell[member.cellule].push(member.trigramme);
+                    }
+                });
+
+                const naturalSort = (a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+                const sortedKeys = Object.keys(membersByCell).sort(naturalSort);
+                
+                return sortedKeys.map(cell => ({ cell: cell, members: membersByCell[cell] }));
+            };
+
+            const drawCompositionList = (compositionData) => {
+                const fontSize = 12;
+                const lineHeight = fontSize + 4;
+                if (checkY(lineHeight)) { context.y -= 10; }
+
+                let currentX = context.margin + 15;
+                const cellStyle = { font: helveticaBoldFont, color: rgb(1, 0, 0), size: fontSize };
+                const trigrammeStyle = { font: helveticaBoldFont, color: context.colors.text, size: fontSize };
+                const separatorStyle = { font: helveticaFont, color: context.colors.text, size: fontSize };
+                
+                compositionData.forEach((group, groupIndex) => {
+                    const cellShortName = group.cell.toLowerCase().replace('india ', 'I').replace('ao', 'AO').toUpperCase();
+                    
+                    const groupParts = [];
+                    groupParts.push({ text: cellShortName, style: cellStyle });
+                    groupParts.push({ text: ' : ', style: separatorStyle });
+                    group.members.forEach((member, memberIndex) => {
+                        groupParts.push({ text: member, style: trigrammeStyle });
+                        if (memberIndex < group.members.length - 1) {
+                            groupParts.push({ text: ' - ', style: separatorStyle });
+                        }
+                    });
+                     if (groupIndex < compositionData.length - 1) {
+                         groupParts.push({ text: '   ', style: separatorStyle });
+                    }
+
+                    for(const part of groupParts) {
+                        const partWidth = part.style.font.widthOfTextAtSize(part.text, part.style.size);
+                        if (currentX + partWidth > context.pageWidth - context.margin) {
+                            context.y -= lineHeight;
+                            currentX = context.margin + 15;
+                            if (checkY(lineHeight)) { context.y -= 10; }
+                        }
+                        context.currentPage.drawText(part.text, { x: currentX, y: context.y, ...part.style });
+                        currentX += partWidth;
+                    }
+                });
+                context.y -= (lineHeight + 10);
+            };
+
+
+            const pdfCreationLogic = async () => {
+                addNewPage();
+                if (backgroundImage) { context.currentPage.drawImage(backgroundImage, { x: 0, y: 0, width: context.pageWidth, height: context.pageHeight }); }
+                const mainTitle = "OPÉRATION DE POLICE JUDICIAIRE";
+                const dateTitle = `DU ${getVal('date_op') || '(DATE)'}`;
+                const titleWidth = helveticaBoldFont.widthOfTextAtSize(mainTitle, 24);
+                const dateTitleWidth = helveticaBoldFont.widthOfTextAtSize(dateTitle, 18);
+                context.currentPage.drawText(mainTitle, { x: context.pageWidth / 2 - titleWidth / 2, y: context.pageHeight / 2 + 10, font: helveticaBoldFont, size: 24, color: context.colors.accent });
+                context.currentPage.drawText(dateTitle, { x: context.pageWidth / 2 - dateTitleWidth / 2, y: context.pageHeight / 2 - 20, font: helveticaBoldFont, size: 18, color: context.colors.text });
+
+                addNewPage();
+                drawTitle("1. SITUATION");
+                drawSubTitle("1.1 Situation Générale"); drawWrappedText(getVal('situation_generale'), { size: 14 });
+                drawSubTitle("1.2 Situation Particulière"); drawWrappedText(getVal('situation_particuliere'), { size: 14 });
+                
+                addNewPage();
+                drawTitle("1.3 ADVERSAIRE");
+                const photoInput = document.querySelector('#adversary_photo_container .photo-input');
+                const adversaireHeaders = ["Information", "Détail"];
+                const meText = (formData.me_list || []).map((me, i) => `ME${i+1}: ${me}`).join(' | ');
+                const adversaireRows = [
+                    ['Nom/Prénom', getVal('nom_adversaire')], ['Domicile', getVal('domicile_adversaire')],
+                    ['Naissance', `${getVal('date_naissance')} à ${getVal('lieu_naissance')}`],
+                    ['Description', `${getVal('stature_adversaire')} / ${getVal('ethnie_adversaire')}`],
+                    ['Signes particuliers', getVal('signes_particuliers')], ['Profession', getVal('profession_adversaire')],
+                    ['Antécédents', getVal('antecedents_adversaire')], ['État d\'esprit', (formData.etat_esprit_list || []).join(', ')],
+                    ['Attitude', getVal('attitude_adversaire')], ['Volume (renfort)', (formData.volume_list || []).join(', ')],
+                    ['Substances', getVal('substances_adversaire')], ['Véhicules', (formData.vehicules_list || []).join(', ')],
+                    ['Armes', getVal('armes_connues')], ['Moyens Employés', meText],
+                ];
+
+                const previewImg = document.querySelector('#adversary_photo_container .image-preview');
+                let imageSource = null;
+                if (previewImg && previewImg.src.startsWith('data:image')) {
+                     imageSource = previewImg.src;
+                } else if (photoInput && photoInput.files.length > 0) { 
+                     imageSource = photoInput.files[0]; 
+                }
+                
+                const maxTableWidth = context.pageWidth - context.margin * 2;
+                if (imageSource) {
+                    const initialAdversaireY = context.y; 
+                    const photoBoxWidth = 200; 
+                    const photoMargin = 10;
+                    const tableWidth = maxTableWidth - photoBoxWidth - photoMargin;
+                    
+                    drawTable(adversaireHeaders, adversaireRows.filter(r => r[1] && r[1].trim() !== 'à'), [150, tableWidth - 150], context.margin);
+                    const tableBottomY = context.y;
+                    let photoBottomY = tableBottomY;
+
+                    const photoBoxX = context.margin + tableWidth + photoMargin;
+                    try {
+                        const imageBytes = await processImage(imageSource);
+                        const image = await pdfDoc.embedJpg(imageBytes);
+                        const scaled = image.scaleToFit(photoBoxWidth - 10, initialAdversaireY - context.margin);
+                        const photoBoxHeight = scaled.height + 10;
+                        const frameY = initialAdversaireY - photoBoxHeight;
+
+                        if(frameY >= context.margin) {
+                            context.currentPage.drawRectangle({ x: photoBoxX, y: frameY, width: photoBoxWidth, height: photoBoxHeight, borderColor: context.colors.accent, borderWidth: 1 });
+                            context.currentPage.drawImage(image, { x: photoBoxX + 5, y: frameY + 5, width: scaled.width, height: scaled.height });
+                            photoBottomY = frameY;
+                        }
+                    } catch(e) { console.error("Échec du traitement de la photo de l'adversaire:", e); }
+                    context.y = Math.min(tableBottomY, photoBottomY);
+                } else {
+                    drawTable(adversaireHeaders, adversaireRows.filter(r => r[1] && r[1].trim() !== 'à'), [150, maxTableWidth - 150], context.margin);
+                }
+                await drawImagesFromContainer('adversary_extra_photos_container', 'Photo Supplémentaire - Adversaire');
+                await drawImagesFromContainer('renforts_photo_container', 'Photo - Renfort Potentiel');
+
+                addNewPage();
+                drawTitle("1.4 ENVIRONNEMENT");
+                drawSubTitle("Ami(e)s (soutien)"); drawWrappedText(getVal('amies'), { size: 14 });
+                drawSubTitle("Terrain / Météo"); drawWrappedText(getVal('terrain_info'), { size: 14 });
+                drawSubTitle("Population"); drawWrappedText(getVal('population'), { size: 14 });
+                drawSubTitle("Cadre juridique"); drawWrappedText(getVal('cadre_juridique'), { size: 14 });
+                
+                addNewPage();
+                drawTitle("2. MISSION");
+                drawWrappedText(getVal('missions_psig'), { font: helveticaBoldFont, size: 30, x: context.margin });
+                
+                await drawImagesFromContainer('photo_container_transport_pr', 'Transport PSIG vers PR');
+                await drawImagesFromContainer('photo_container_transport_domicile', 'Transport PR vers Domicile');
+                await drawImagesFromContainer('photo_container_bapteme_terrain', 'Baptême terrain');
+
+                addNewPage();
+                drawTitle("3. EXÉUTION");
+                const execText = `En vue d'appréhender le mis en cause et empêcher la déperdition des preuves,\nJe veux, le ${getVal('date_execution') || '(date)'} à partir de ${getVal('heure_execution') || '(heure)'}, pour une action ${getVal('type_action') || '(type d\'action)'} investir le domicile\nprésumé de ${getVal('nom_adversaire') || '(nom de l\'adversaire)'} après avoir bouclé celui-ci.`;
+                drawWrappedText(execText, { size: 16, x: context.margin, lineHeight: 8 });
+                drawSubTitle("Chronologie des temps");
+                const chronoHeaders = ["Type", "Heure", "Description"];
+                const chronoRows = (formData.time_events || []).map(e => [e.type || 'N/A', e.hour || 'N/A', e.description || 'N/A']);
+                drawTable(chronoHeaders, chronoRows, [80, 120, 550], context.margin);
+                drawSubTitle("Hypothèses");
+                drawWrappedText(`H1: ${getVal('hypothese_h1')}\nH2: ${getVal('hypothese_h2')}\nH3: ${getVal('hypothese_h3')}`, { size: 14 });
+
+                addNewPage();
+                drawTitle("4. ARTICULATION");
+                drawWrappedText(`Place du Chef (Générale): ${getVal('place_chef')}`, { size: 14, x: context.margin });
+                drawSubTitle("Équipe INDIA (INTER)"); 
+                drawSubTitle("Composition:"); drawCompositionList(getCompositionData('india'));
+                drawSubTitle("Mission:"); drawWrappedText(getVal('india_mission'));
+                drawSubTitle("Objectif:"); drawWrappedText(getVal('india_objectif')); drawSubTitle("Itinéraire:");
+                drawWrappedText(getVal('india_itineraire')); drawSubTitle("Points Particuliers:"); drawWrappedText(getVal('india_points_particuliers'));
+                drawSubTitle("Conduite à Tenir:"); drawWrappedText(getVal('india_cat'));
+                
+                await drawImagesFromContainer('photo_container_itineraire_exterieur', 'Itinéraire Extérieur India');
+                await drawImagesFromContainer('photo_container_itineraire_interieur', 'Itinéraire Intérieur India');
+                await drawImagesFromContainer('photo_container_cellule_effraction', 'Cellule Effraction');
+                
+                addNewPage();
+                drawTitle("4. ARTICULATION (Suite)");
+                drawSubTitle("Équipe Appui/Observation (AO) - ZMSPCP"); 
+                drawSubTitle("Composition:"); drawCompositionList(getCompositionData('ao'));
+                drawSubTitle("Zone d'installation (Z):");
+                drawWrappedText(getVal('ao_zone_installation')); drawSubTitle("Mission (M):"); drawWrappedText(getVal('ao_mission'));
+                drawSubTitle("Secteur de surveillance (S):"); drawWrappedText(getVal('ao_secteur_surveillance'));
+                drawSubTitle("Points Particuliers (P):"); drawWrappedText(getVal('ao_points_particuliers'));
+                drawSubTitle("Place du Chef (P):"); drawWrappedText(getVal('ao_place_chef'));
+                drawSubTitle("Conduite à Tenir (C):"); drawWrappedText(getVal('ao_cat'));
+
+                await drawImagesFromContainer('photo_container_emplacement_ao', 'Emplacement AO');
+                
+                addNewPage();
+                drawTitle("5. PATRACDVR");
+                const patracHeaders = ["Trigramme", "Fonction", "Cellule", "Armement", "Équip. 1", "Équip. 2", "Tenue", "GPB"];
+                for (const row of (formData.patracdvr_rows || [])) {
+                    if(row.vehicle && row.members && row.members.length > 0) {
+                        drawSubTitle(`Véhicule: ${row.vehicle}`);
+                        const patracRows = row.members.filter(m => m.trigramme).map(m => [m.trigramme, m.fonction, m.cellule, m.armement, m.equipement, m.equipement2, m.tenue, m.gpb]);
+                        if (patracRows.length > 0) { drawTable(patracHeaders, patracRows, [80, 90, 90, 90, 90, 90, 80, 80], context.margin); }
+                    }
+                }
+                
+                addNewPage();
+                drawTitle("Conduites à tenir");
+                drawSubTitle("Générales"); drawWrappedText(getVal('cat_generales'), {x: context.margin, font: helveticaBoldFont});
+                const noGoText = getVal('no_go');
+                if (noGoText) {
+                    drawSubTitle("NO GO");
+                    drawWrappedText(noGoText, { x: context.margin, font: helveticaBoldFont, size: 14.4, color: rgb(1, 0.2, 0.2) });
+                }
+                drawSubTitle("Liaison"); drawWrappedText(getVal('cat_liaison'), {x: context.margin, font: helveticaBoldFont});
+
+                const dateOp = getVal('date_op');
+                const nomAdversaire = getVal('nom_adversaire');
+                if (dateOp && nomAdversaire) {
+                    const safeAdversaireName = nomAdversaire.trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
+                    const oiId = `${dateOp}_${safeAdversaireName}`;
+                    const retexUrl = `${RETEX_BASE_URL}?oiId=${encodeURIComponent(oiId)}`;
+
+                    addNewPage();
+                    const operationTitle = getVal('nom_adversaire') || 'OPERATION';
+                    drawTitle(`RETEX: ${operationTitle.toUpperCase()}`);
+                    drawWrappedText("Chaque membre ayant participé à l'opération est tenu de remplir le formulaire de Retour d'Expérience (Retex) en utilisant le lien ci-dessous.", { size: 14, x: context.margin });
+                    context.y -= 40;
+                    drawWrappedText(retexUrl, { x: context.margin, font: helveticaBoldFont, size: 14, color: context.colors.accent });
+                }
+                
+                addNewPage();
+                if (backgroundImage) { context.currentPage.drawImage(backgroundImage, { x: 0, y: 0, width: context.pageWidth, height: context.pageHeight }); }
+                const finalText = "Avez vous des questions?";
+                const finalTextWidth = helveticaBoldFont.widthOfTextAtSize(finalText, 48);
+                context.currentPage.drawText(finalText, { x: context.pageWidth / 2 - finalTextWidth / 2, y: context.pageHeight / 2, font: helveticaBoldFont, size: 48, color: context.colors.accent });
+            };
+
+            await pdfCreationLogic();
+            const pdfBytes = await pdfDoc.save();
+            return { pdfBytes, formData };
+        }
+
+        async function handlePdfAction(isPreview) {
+            if (typeof PDFLib === 'undefined') { alert("Erreur: La bibliothèque PDF n'est pas encore chargée."); return; }
+            const btn = isPreview ? previewBtn : generatePdfBtn;
+            const originalText = btn.textContent;
+            btn.textContent = 'Génération...'; btn.disabled = true;
+            try {
+                const result = await buildPdf();
+                if (!result) { btn.textContent = originalText; btn.disabled = false; return; }
+                const { pdfBytes, formData } = result;
+                const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+                const url = URL.createObjectURL(blob);
+                if (isPreview) { window.open(url, '_blank'); } 
+                else {
+                    const getVal = (id) => formData[id] || 'RAS';
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = `OI_${getVal('date_op').replace(/[\/\\?%*:|"<>]/g, '-')}_${getVal('nom_adversaire').replace(/ /g, '_')}.pdf`;
+                    document.body.appendChild(link); link.click(); document.body.removeChild(link);
+                }
+            } catch (error) {
+                console.error("Erreur critique lors de la génération du PDF:", error);
+                alert("Une erreur critique est survenue. Consultez la console (F12).");
+            } finally {
+                btn.textContent = originalText; btn.disabled = false;
+            }
+        }
+
+        previewBtn.addEventListener('click', () => handlePdfAction(true));
+        generatePdfBtn.addEventListener('click', () => handlePdfAction(false));
     </script>
 </body>
 </html>
