@@ -73,16 +73,16 @@
             margin-bottom: 0; 
             min-height: 48px; /* Assure que les inputs et selects sont de bonne taille */
         }
-        /* Permettre à l'input de date et de texte de se mettre côte à côte si la largeur le permet, mais par défaut en colonne */
+        /* Forcer le retour à la ligne pour chaque input sur mobile */
         .wizard-step .dynamic-list-item:has(#date_naissance) input {
-            width: 100%; /* Forcer le retour à la ligne pour chaque input sur mobile */
+            width: 100%;
         }
         @media (min-width: 480px) {
             .wizard-step .dynamic-list-item:has(#date_naissance) {
                 flex-direction: row;
             }
             .wizard-step .dynamic-list-item:has(#date_naissance) input {
-                width: auto; /* Laisser le flex gérer la largeur sur écrans plus larges */
+                width: auto;
             }
         }
         
@@ -672,8 +672,15 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     </div>
                     
                     <div class="retex-section">
-                        <h3>🧠 Analyse RETEX par IA</h3>
-                        <p>Sélectionnez les fichiers JSON des comptes-rendus à analyser.</p>
+                        <h3>🔗 Rapport RETEX (Lien)</h3>
+                        <p>Utilisez ce bouton pour générer le lien vers la plateforme externe de compte-rendu d'opération.</p>
+                        <div class="retex-actions">
+                            <button id="retexReportBtn" class="wizard-nav-btn" type="button" style="background-color: #008080;">Consulter Rapport RETEX 🧠</button>
+                        </div>
+                    </div>
+                    <div class="retex-section" style="margin-top: 10px;">
+                        <h3>🧠 Analyse RETEX par IA (Fichiers locaux)</h3>
+                        <p>Sélectionnez les fichiers JSON des comptes-rendus à analyser localement (Nécessite Clé API Gemini).</p>
                         <div class="retex-file-selector">
                             <label for="retexFileInput" class="file-upload-label" style="background-color: var(--accent-blue);">
                                 <span class="material-symbols-outlined">upload_file</span> Choisir des fichiers
@@ -688,7 +695,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                         <p id="retex_status" class="retex-status"></p>
                         <div id="retex_output" class="retex-output-content" style="display: none;"></div>
                     </div>
-                </div>
+                    </div>
             </div>
         </form>
 
@@ -706,8 +713,9 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
     <script>
         // --- NOUVELLE CONFIGURATION & VARIABLES GLOBALES ---
         const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent";
-        const RETEX_BASE_URL = "https://oxsilaris06.github.io/Praxis/retex.html";
-        const APPS_SCRIPT_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyF0CJ_B9U4Izn6ieZG4lfIq23oScE6cFvd1SoUXzVUBRqk_Ce1R8TJpRRnuamcdJH-/exec";
+        // L'URL RETEX a été conservée
+        const RETEX_BASE_URL = "https://oxsilaris06.github.io/Praxis/retex.html"; 
+        const APPS_SCRIPT_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyF0CJ_B9U4Izn6ieZG4lfIq23oScE6cFvd1SoUXvVUBRqk_Ce1R8TJpRRnuamcdJH-/exec";
         
         // --- GLOBAL CONFIG ---
         const memberConfig = {
@@ -733,6 +741,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
         const nextBtn = document.getElementById('nextBtn');
         const previewBtn = document.getElementById('previewBtn');
         const generatePdfBtn = document.getElementById('generatePdfBtn');
+        const retexReportBtn = document.getElementById('retexReportBtn'); // Ancien bouton RETEX
         const retexStatus = document.getElementById('retex_status');
         const retexOutput = document.getElementById('retex_output');
         const launchRetexAnalysisBtn = document.getElementById('launchRetexAnalysisBtn');
@@ -760,9 +769,11 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             if (isLastStep) {
                 previewBtn.style.display = "inline-block";
                 generatePdfBtn.style.display = "inline-block";
+                retexReportBtn.style.display = "inline-block"; // Afficher l'ancien bouton
             } else {
                 previewBtn.style.display = "none";
                 generatePdfBtn.style.display = "none";
+                retexReportBtn.style.display = "none";
             }
         }
         function goToStep(n) {
@@ -1827,7 +1838,10 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             // Assure le chargement des données et l'initialisation de l'UI
             loadFormData();
             setupQuickEditPanel(); 
-            addPhotoInput('adversary_photo_container', true); // Assure la présence du champ photo
+            // N'ajoute l'input photo que s'il n'y en a pas déjà (lors du chargement des données)
+            if (document.querySelectorAll('#adversary_photo_container .photo-input-wrapper').length === 0) {
+                 addPhotoInput('adversary_photo_container', true); 
+            }
 
             document.querySelector('.container').addEventListener('click', (event) => {
                 const header = event.target.closest('.collapsible-header');
@@ -1941,6 +1955,21 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 // Réinitialise l'input pour permettre l'import du même fichier si besoin
                 event.target.value = null; 
             });
+
+            // --- Logique RETEX originale (Génération de lien externe) ---
+            retexReportBtn.addEventListener('click', () => {
+                 const dateOp = document.getElementById('date_op').value;
+                 const nomAdversaire = document.getElementById('nom_adversaire').value;
+                 if (!dateOp || !nomAdversaire) {
+                    alert("Veuillez renseigner la date de l'opération et le nom de l'adversaire pour créer le lien RETEX.");
+                    return;
+                 }
+                 const safeAdversaireName = nomAdversaire.trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
+                 const oiId = `${dateOp}_${safeAdversaireName}`;
+                 const retexUrl = `${RETEX_BASE_URL}?oiId=${encodeURIComponent(oiId)}`;
+                 window.open(retexUrl, '_blank');
+            });
+            // --- Fin Logique RETEX originale ---
             
             resetPatracdvrBtn.addEventListener('click', () => { if (confirm("Voulez-vous vraiment effacer TOUS les véhicules et membres du PATRACDVR ?")) { patracdvrContainer.innerHTML = ''; unassignedContainer.innerHTML = ''; saveFormData(); } });
             
