@@ -448,7 +448,7 @@
     </dialog>
 
     <div class="container">
-        <h1>Generateur d'OI</h1>
+        <h1>OI</h1>
         
         <ul class="wizard-progress">
             <li class="wizard-progress-step" onclick="goToStep(0)">Situation</li>
@@ -602,6 +602,7 @@ CONDUITE AU LIEU DE GAV.</textarea>
                     <div style="margin-bottom: 20px; padding: 15px; border: 1px solid var(--border-color); border-radius: 5px;">
                         
                         <div style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px;">
+                            <button type="button" id="importDefaultConfigBtn" class="add-btn" style="background-color: var(--accent-blue); flex-grow: 1;">Charger Config par Défaut ⚙️</button>
                             <button type="button" id="importJsonConfigBtn" class="add-btn" style="background-color: var(--success-green); flex-grow: 1;">Importer Configuration Membres (.json) 📤</button>
                             <button type="button" id="resetPatracdvrBtn" class="remove-btn" style="flex-grow: 1;">Réinitialiser PATRACDVR</button>
                         </div>
@@ -713,12 +714,12 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
     <script>
         // --- NOUVELLE CONFIGURATION & VARIABLES GLOBALES ---
         const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent";
-        // L'URL RETEX a été conservée
-        const RETEX_BASE_URL = "https://oxsilaris06.github.io/Praxis/retex.html"; 
-        const APPS_SCRIPT_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyF0CJ_B9U4Izn6ieZG4lfIq23oScE6cFvd1SoUXvVUBRqk_Ce1R8TJpRRnuamcdJH-/exec";
+        const RETEX_BASE_URL = "https://oxsilaris06.github.io/Praxis/retex.html";
+        const APPS_SCRIPT_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyF0CJ_B9U4Izn6ieZG4lfIq23oScE6cFvd1SoUXzVUBRqk_Ce1R8TJpRRnuamcdJH-/exec";
+        const DEFAULT_CONFIG_FILE = 'members_config.json'; // Fichier de configuration par défaut
         
-        // --- GLOBAL CONFIG ---
-        const memberConfig = {
+        // --- GLOBAL CONFIG (Par défaut, sera écrasé par le JSON) ---
+        let memberConfig = {
             fonctions: ['Chef inter', 'Chef dispo', 'DE', 'Sans'],
             cellules: ['AO1','AO2','AO3','AO4','AO5','AO6','India 1','India 2','India 3','India 4','India 5', 'Sans'],
             armements: ['Sans', 'UMP9', 'G36', 'PIE', 'LBD40', 'FAP'],
@@ -741,7 +742,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
         const nextBtn = document.getElementById('nextBtn');
         const previewBtn = document.getElementById('previewBtn');
         const generatePdfBtn = document.getElementById('generatePdfBtn');
-        const retexReportBtn = document.getElementById('retexReportBtn'); // Ancien bouton RETEX
+        const retexReportBtn = document.getElementById('retexReportBtn');
         const retexStatus = document.getElementById('retex_status');
         const retexOutput = document.getElementById('retex_output');
         const launchRetexAnalysisBtn = document.getElementById('launchRetexAnalysisBtn');
@@ -751,7 +752,8 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
         const jsonConfigInput = document.getElementById('jsonConfigInput');
         const resetPatracdvrBtn = document.getElementById('resetPatracdvrBtn');
         const importJsonConfigBtn = document.getElementById('importJsonConfigBtn');
-
+        const importDefaultConfigBtn = document.getElementById('importDefaultConfigBtn'); // Nouveau bouton
+        
         const retexFileInput = document.getElementById('retexFileInput');
         const retexFileNames = document.getElementById('retexFileNames');
 
@@ -769,7 +771,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             if (isLastStep) {
                 previewBtn.style.display = "inline-block";
                 generatePdfBtn.style.display = "inline-block";
-                retexReportBtn.style.display = "inline-block"; // Afficher l'ancien bouton
+                retexReportBtn.style.display = "inline-block";
             } else {
                 previewBtn.style.display = "none";
                 generatePdfBtn.style.display = "none";
@@ -1258,8 +1260,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
         function loadFormData() {
             const dataString = localStorage.getItem('oiFormData');
             if (!dataString) {
-                // Pas d'initialisation par défaut, le conteneur reste vide (selon la demande)
-                return;
+                return false; // Indique qu'aucune donnée n'a été chargée
             }
             try {
                 const data = JSON.parse(dataString);
@@ -1298,7 +1299,11 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 initializePatracdvr(data);
 
                 updateArticulationDisplay();
-            } catch (e) { console.error("Load error:", e); }
+                return true; // Indique que les données ont été chargées
+            } catch (e) { 
+                console.error("Load error:", e); 
+                return false;
+            }
         }
         function initializePatracdvr(dataFromStorage) {
             unassignedContainer.innerHTML = '';
@@ -1308,20 +1313,50 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 (dataFromStorage.patracdvr_rows || []).forEach(row => addPatracdvrRow(row.vehicle, row.members));
             }
         }
-        function loadMembersFromJson(membersArray) {
-            unassignedContainer.innerHTML = ''; 
-            patracdvrContainer.innerHTML = '';
-            membersArray.forEach(memberData => { 
-                // Assure que les membres importés sans cellule/fonction sont "Sans"
-                const defaultData = {
-                    cellule: memberData.cellule || 'Sans',
-                    fonction: memberData.fonction || 'Sans',
-                    ...memberData
-                };
-                addPatracdvrMember(unassignedContainer, defaultData); 
-            });
+        // Fonction unique pour charger les membres et les options depuis un objet config
+        function loadConfigObject(config) {
+            if (config.options) {
+                // Met à jour la configuration globale
+                Object.assign(memberConfig, config.options);
+                setupQuickEditPanel(); 
+                // Assurez-vous que les selects d'édition complète sont également mis à jour
+                const modal = document.getElementById('editMemberModal'); 
+                const form = document.getElementById('editMemberForm');
+                if (form.dataset.editingButtonId) {
+                    openMemberModal(form.dataset.editingButtonId);
+                }
+            }
+            
+            if (config.members && Array.isArray(config.members)) {
+                unassignedContainer.innerHTML = ''; 
+                patracdvrContainer.innerHTML = '';
+                config.members.forEach(memberData => { 
+                    const defaultData = {
+                        cellule: memberData.cellule || 'Sans',
+                        fonction: memberData.fonction || 'Sans',
+                        ...memberData
+                    };
+                    addPatracdvrMember(unassignedContainer, defaultData); 
+                });
+            }
             saveFormData(); 
         }
+
+        // Fonction pour charger la config par défaut depuis le fichier
+        async function loadDefaultConfig() {
+            try {
+                const response = await fetch(DEFAULT_CONFIG_FILE);
+                if (!response.ok) {
+                    throw new Error(`Échec du chargement de ${DEFAULT_CONFIG_FILE}`);
+                }
+                const config = await response.json();
+                loadConfigObject(config);
+            } catch (e) {
+                console.warn(`[Config Info] Impossible de charger la configuration par défaut (${DEFAULT_CONFIG_FILE}). Utilisation de la configuration interne.`, e);
+                setupQuickEditPanel(); // Au moins initialiser le panneau avec la config par défaut interne
+            }
+        }
+
 
         // --- DRAG & DROP ---
         let draggedItem = null;
@@ -1834,9 +1869,15 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
         }
         
         // --- EVENT LISTENERS & INITIALIZATION ---
-        document.addEventListener('DOMContentLoaded', () => {
-            // Assure le chargement des données et l'initialisation de l'UI
-            loadFormData();
+        document.addEventListener('DOMContentLoaded', async () => {
+            
+            // 1. Charger les données locales ou la config par défaut
+            const isLocalDataLoaded = loadFormData();
+            if (!isLocalDataLoaded) {
+                 await loadDefaultConfig();
+            }
+
+            // 2. Initialiser l'UI (Quick Edit, etc.) après le chargement des options
             setupQuickEditPanel(); 
             // N'ajoute l'input photo que s'il n'y en a pas déjà (lors du chargement des données)
             if (document.querySelectorAll('#adversary_photo_container .photo-input-wrapper').length === 0) {
@@ -1942,13 +1983,12 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 reader.onload = (e) => {
                     try {
                         const config = JSON.parse(e.target.result);
-                        if (config && Array.isArray(config.members)) {
-                            // Supprime tous les véhicules existants
+                        if (config && (Array.isArray(config.members) || config.options)) {
+                            // Supprime les données existantes avant de charger la nouvelle config
                             patracdvrContainer.innerHTML = ''; 
-                            // Charge les nouveaux membres
-                            loadMembersFromJson(config.members); 
+                            loadConfigObject(config); 
                         }
-                        else { alert("Le fichier JSON est invalide ou ne contient pas de tableau 'members'."); }
+                        else { alert("Le fichier JSON est invalide ou ne contient pas de tableau 'members' ou d'objet 'options'."); }
                     } catch (err) { alert("Erreur de lecture du JSON."); console.error(err); }
                 };
                 reader.readAsText(file);
@@ -1956,6 +1996,13 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 event.target.value = null; 
             });
 
+            // --- NOUVEAU: Chargement de la config par défaut sur clic ---
+            importDefaultConfigBtn.addEventListener('click', () => {
+                if(confirm("Ceci va remplacer la configuration PATRACDVR et les options d'équipement actuelles. Continuer?")) {
+                    loadDefaultConfig();
+                }
+            });
+            
             // --- Logique RETEX originale (Génération de lien externe) ---
             retexReportBtn.addEventListener('click', () => {
                  const dateOp = document.getElementById('date_op').value;
@@ -1971,7 +2018,15 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             });
             // --- Fin Logique RETEX originale ---
             
-            resetPatracdvrBtn.addEventListener('click', () => { if (confirm("Voulez-vous vraiment effacer TOUS les véhicules et membres du PATRACDVR ?")) { patracdvrContainer.innerHTML = ''; unassignedContainer.innerHTML = ''; saveFormData(); } });
+            resetPatracdvrBtn.addEventListener('click', () => { 
+                if (confirm("Voulez-vous vraiment effacer TOUS les véhicules et membres du PATRACDVR ?")) { 
+                    patracdvrContainer.innerHTML = ''; 
+                    unassignedContainer.innerHTML = ''; 
+                    localStorage.removeItem('oiFormData'); // Assurez-vous d'effacer les données du stockage local
+                    saveFormData(); 
+                    alert("PATRACDVR réinitialisé. La prochaine fois, une configuration par défaut sera chargée (si disponible).");
+                } 
+            });
             
             const vehicleCreationContainer = document.getElementById('vehicle_creation_buttons');
             availableVehicles.forEach(vehicle => {
@@ -2546,7 +2601,8 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     drawTitle(`RETEX: ${operationTitle.toUpperCase()}`);
                     drawWrappedText("Chaque membre ayant participé à l'opération est tenu de remplir le formulaire de Retour d'Expérience (Retex) en utilisant le lien ci-dessous.", { size: 14, x: context.margin });
                     context.y -= 40;
-                    drawWrappedText(retexUrl, { x: context.margin, font: helveticaBoldFont, size: 14, color: context.colors.accent });
+                    context.currentPage.drawText(retexUrl, { x: context.margin, y: context.y, font: helveticaBoldFont, size: 14, color: context.colors.accent, A: { URI: retexUrl } });
+                    context.y -= 20;
                 }
                 // --- FIN DE L'AJOUT ---
                 
@@ -2593,21 +2649,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
         generatePdfBtn.addEventListener('click', () => handlePdfAction(false));
         
         // --- NOUVELLE LOGIQUE RETEX PAR IA ---
-        async function fetchRetexReport(url) {
-            try {
-                retexStatus.textContent = `Téléchargement du rapport...`;
-                const response = await fetch(url);
-                if (!response.ok) {
-                    throw new Error(`Erreur HTTP: ${response.status}`);
-                }
-                return await response.text();
-            } catch (error) {
-                console.error(`Erreur lors du téléchargement de ${url}:`, error);
-                retexStatus.textContent = `Échec du téléchargement: ${error.message}`;
-                return null;
-            }
-        }
-
         async function generateGeminiAnalysis(reports) {
             const apiKey = localStorage.getItem('geminiApiKey');
             if (!apiKey) {
@@ -2766,13 +2807,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
         });
 
         generateRetexPdfBtn.addEventListener('click', generateRetexPdf);
-        
-        async function loadDefaultMembersConfig() {
-            // Cette fonction est désormais vide. Les membres sont chargés uniquement depuis le stockage local 
-            // ou importés via un fichier JSON (via le nouveau bouton).
-            console.log("Initialisation: Aucun membre par défaut n'est chargé.");
-            saveFormData();
-        }
     </script>
 </body>
 </html>
