@@ -757,6 +757,10 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
         const retexFileInput = document.getElementById('retexFileInput');
         const retexFileNames = document.getElementById('retexFileNames');
 
+        // Déclaration du canvas temporaire pour la génération PDF
+        const tempCanvas = document.createElement('canvas');
+        const tempCtx = tempCanvas.getContext('2d');
+
 
         function showStep(n) {
             steps.forEach((step, index) => step.classList.toggle('active', index === n));
@@ -831,7 +835,8 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 const reader = new FileReader();
                 reader.onload = e => {
                     previewImg.src = e.target.result;
-                    previewImg.dataset.originalSrc = e.target.result;
+                    previewImg.dataset.originalSrc = e.target.result; // Stocke la source non annotée
+                    previewImg.dataset.annotations = '[]'; // Réinitialise les annotations
                     previewImg.style.display = 'block';
                     if (annotateBtn) annotateBtn.style.display = 'inline-block';
                     saveFormData(); // Sauvegarder après le chargement du fichier
@@ -841,6 +846,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 fileNameSpan.textContent = 'Aucun fichier';
                 previewImg.src = '';
                 previewImg.dataset.originalSrc = '';
+                previewImg.dataset.annotations = '[]';
                 previewImg.style.display = 'none';
                 if (annotateBtn) annotateBtn.style.display = 'none';
                 saveFormData(); // Sauvegarder si on vide le champ
@@ -1232,12 +1238,12 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     if (field.id) data[field.id] = field.value;
                 });
                 
-                // Collecte des données, y compris les images
+                // Collecte des données, y compris les images et leurs annotations
                 document.querySelectorAll('.image-preview').forEach(img => {
                     if(img.id && img.src.startsWith('data:image')) {
-                        data[img.id + '_src'] = img.src;
-                        data[img.id + '_original_src'] = img.dataset.originalSrc;
-                        data[img.id + '_annotations'] = img.dataset.annotations || '[]';
+                        data[img.id + '_src'] = img.src; // La source actuelle (annotée ou non)
+                        data[img.id + '_original_src'] = img.dataset.originalSrc; // La source non annotée
+                        data[img.id + '_annotations'] = img.dataset.annotations || '[]'; // Les annotations JSON
                     }
                 });
                 
@@ -1293,20 +1299,29 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             }
             try {
                 const data = JSON.parse(dataString);
-                Object.keys(data).forEach(key => {
-                    if (key.endsWith('_src')) {
-                        const imgId = key.replace('_src', '');
-                        const img = document.getElementById(imgId);
-                        if (img) {
-                           img.src = data[key];
-                           img.dataset.originalSrc = data[imgId + '_original_src'];
-                           img.dataset.annotations = data[imgId + '_annotations'] || '[]';
-                           img.style.display = 'block';
-                           const annotateBtn = img.closest('.photo-input-wrapper').querySelector('.annotate-btn');
-                           if(annotateBtn) annotateBtn.style.display = 'inline-block';
-                        }
-                        return;
+                // Retrouver les wrappers photo et appliquer les données stockées
+                document.querySelectorAll('.photo-input-wrapper').forEach(wrapper => {
+                    const previewImg = wrapper.querySelector('.image-preview');
+                    const input = wrapper.querySelector('.photo-input');
+                    const span = wrapper.querySelector('.file-name-display');
+                    const annotateBtn = wrapper.querySelector('.annotate-btn');
+                    
+                    const srcKey = previewImg.id + '_src';
+                    const originalSrcKey = previewImg.id + '_original_src';
+                    const annotationsKey = previewImg.id + '_annotations';
+                    
+                    if (data[srcKey]) {
+                        previewImg.src = data[srcKey];
+                        previewImg.dataset.originalSrc = data[originalSrcKey];
+                        previewImg.dataset.annotations = data[annotationsKey] || '[]';
+                        previewImg.style.display = 'block';
+                        if (annotateBtn) annotateBtn.style.display = 'inline-block';
+                        if (span) span.textContent = 'Image chargée'; // Le nom original du fichier est perdu ici
                     }
+                });
+
+                Object.keys(data).forEach(key => {
+                    if (key.endsWith('_src') || key.endsWith('_original_src') || key.endsWith('_annotations')) return;
                     if (['patracdvr_rows', 'patracdvr_unassigned', 'time_events', 'me_list', 'etat_esprit_list', 'volume_list', 'vehicules_list'].includes(key)) return; 
                     const el = document.getElementById(key);
                     if (el && !Array.isArray(data[key]) && typeof data[key] !== 'object') {
@@ -1541,6 +1556,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 const degrees = parseFloat(rotationInput.value) || 0;
                 selectedAnnotation.rotation = degrees * Math.PI / 180;
                 redrawCanvas();
+                saveFormData(); // Sauvegarder la rotation
             }
         }
 
@@ -1558,7 +1574,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
 
         function openAnnotationModal(previewImgId) {
             const previewImg = document.getElementById(previewImgId);
-            if (!previewImg || !previewImg.src) return;
+            if (!previewImg || !previewImg.dataset.originalSrc) return;
             baseImage.onload = () => {
                 canvas.width = baseImage.width;
                 canvas.height = baseImage.height;
@@ -1569,7 +1585,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 annotationModal.dataset.targetPreviewId = previewImgId;
                 annotationModal.showModal();
             };
-            baseImage.src = previewImg.dataset.originalSrc || previewImg.src;
+            baseImage.src = previewImg.dataset.originalSrc; // Charge TOUJOURS l'image originale
         }
 
         function redrawCanvas() {
@@ -1897,6 +1913,111 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             }
         }
         
+        // --- LOGIQUE CRITIQUE DE GÉNÉRATION D'IMAGE ANNOTÉE POUR PDF ---
+        /**
+         * Re-génère l'image avec toutes ses annotations et la retourne comme un Blob.
+         * @param {string} originalSrc L'URL de l'image de base non annotée (dataURL).
+         * @param {Array} annotationsData L'array d'objets d'annotation.
+         * @returns {Promise<Blob>} Le Blob de l'image annotée.
+         */
+        function createAnnotatedImageBlob(originalSrc, annotationsData) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                img.crossOrigin = 'anonymous'; 
+                img.src = originalSrc;
+                
+                img.onload = () => {
+                    tempCanvas.width = img.width;
+                    tempCanvas.height = img.height;
+                    tempCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
+                    tempCtx.drawImage(img, 0, 0);
+
+                    // Dessin des annotations sur le canvas temporaire
+                    annotationsData.forEach(annotation => drawAnnotationOnContext(tempCtx, img.width, img.height, annotation));
+
+                    // Conversion du canvas en Blob
+                    tempCanvas.toBlob(blob => {
+                        if (blob) {
+                            resolve(blob);
+                        } else {
+                            reject(new Error('La conversion de l\'image annotée en Blob a échoué.'));
+                        }
+                    }, 'image/jpeg', 0.9); // Utilise JPEG pour réduire la taille du PDF
+                };
+                img.onerror = () => reject(new Error('Impossible de charger l\'image de base pour l\'annotation.'));
+            });
+        }
+        
+        /**
+         * Fonction de dessin d'annotation réutilisable (pour le canvas normal et le canvas temporaire PDF).
+         * @param {CanvasRenderingContext2D} context Le contexte de dessin.
+         * @param {number} canvasWidth Largeur du canvas.
+         * @param {number} canvasHeight Hauteur du canvas.
+         * @param {Object} annotation L'objet d'annotation.
+         */
+        function drawAnnotationOnContext(context, canvasWidth, canvasHeight, annotation) {
+            context.save();
+            let centerX, centerY;
+            if (annotation.type === 'location') {
+                centerX = annotation.x;
+                centerY = annotation.y;
+            } else if (annotation.type === 'box') {
+                centerX = annotation.x + annotation.width / 2;
+                centerY = annotation.y + annotation.height / 2;
+            } else if (annotation.type === 'arrow') {
+                centerX = (annotation.startX + annotation.endX) / 2;
+                centerY = (annotation.startY + annotation.endY) / 2;
+            }
+            
+            if (annotation.rotation) {
+                context.translate(centerX, centerY);
+                context.rotate(annotation.rotation);
+                context.translate(-centerX, -centerY);
+            }
+
+            switch (annotation.type) {
+                case 'location': {
+                    const radius = annotation.radius || 0;
+                    if (radius < 2) { context.restore(); return; }
+                    context.beginPath(); context.arc(annotation.x, annotation.y, radius, 0, 2 * Math.PI);
+                    context.fillStyle = `rgba(91, 155, 213, ${annotation.opacity || 0.5})`; context.fill();
+                    context.strokeStyle = '#5b9bd5'; context.lineWidth = 2; context.stroke();
+                    if (annotation.text) {
+                        context.fillStyle = 'black'; context.font = `bold ${Math.max(12, radius / 2)}px Oswald`;
+                        context.textAlign = 'center'; context.textBaseline = 'middle';
+                        context.fillText(annotation.text, annotation.x, annotation.y);
+                    }
+                    break;
+                }
+                case 'arrow': {
+                    // Utilise une version locale et simplifiée de drawArrow pour le contexte PDF
+                    const drawArrowLocal = (fromx, fromy, tox, toy, lineWidth) => {
+                         if (fromx === tox && fromy === toy) return;
+                         context.strokeStyle = '#c0392b'; context.fillStyle = '#c0392b'; context.lineWidth = lineWidth;
+                         const headlen = Math.max(lineWidth * 3, 10); 
+                         const dx = tox - fromx; const dy = toy - fromy;
+                         const angle = Math.atan2(dy, dx);
+                         const lineToX = tox - (headlen * 0.7) * Math.cos(angle);
+                         const lineToY = toy - (headlen * 0.7) * Math.sin(angle);
+                         
+                         context.beginPath(); context.moveTo(fromx, fromy); context.lineTo(lineToX, lineToY); context.stroke();
+                         context.beginPath(); context.moveTo(tox, toy);
+                         context.lineTo(tox - headlen * Math.cos(angle - Math.PI / 7), toy - headlen * Math.sin(angle - Math.PI / 7));
+                         context.lineTo(tox - headlen * Math.cos(angle + Math.PI / 7), toy - headlen * Math.sin(angle + Math.PI / 7));
+                         context.closePath(); context.fill();
+                    };
+                    drawArrowLocal(annotation.startX, annotation.startY, annotation.endX, annotation.endY, annotation.thickness || 5);
+                    break;
+                }
+                case 'box': {
+                    context.strokeStyle = '#c0392b'; context.lineWidth = annotation.thickness || 5;
+                    context.strokeRect(annotation.x, annotation.y, annotation.width, annotation.height);
+                    break;
+                }
+            }
+            context.restore();
+        }
+        
         // --- EVENT LISTENERS & INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', async () => {
             
@@ -2149,22 +2270,24 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             document.querySelectorAll('.toolbar-main-tools .tool-btn').forEach(btn => {
                 btn.addEventListener('click', () => { const toolId = btn.id.split('_')[1]; if (['move', 'location', 'arrow', 'box'].includes(toolId)) setActiveTool(toolId); });
             });
-            document.getElementById('tool_reset').addEventListener('click', () => { annotations = []; selectedAnnotation = null; setContextualTools(null); redrawCanvas(); });
+            document.getElementById('tool_reset').addEventListener('click', () => { annotations = []; selectedAnnotation = null; setContextualTools(null); redrawCanvas(); saveFormData();});
             document.getElementById('annotation_cancel').addEventListener('click', () => annotationModal.close());
             document.getElementById('annotation_save').addEventListener('click', () => {
                 const targetId = annotationModal.dataset.targetPreviewId; const previewImg = document.getElementById(targetId);
                 if(previewImg) {
-                    previewImg.src = canvas.toDataURL('image/png');
+                    // La source affichée reste la dernière image annotée (ou l'originale si pas d'annotation)
+                    // Mais on sauvegarde les annotations dans le dataset
                     previewImg.dataset.annotations = JSON.stringify(annotations);
                 }
+                // NOTE: La source du previewImg n'est plus mise à jour ici car l'image annotée sera re-générée DANS buildPdf.
                 saveFormData(); annotationModal.close();
             });
             
             // Événement pour la rotation libre
             rotationInput.addEventListener('change', updateAnnotationRotation);
 
-            document.getElementById('delete_btn').addEventListener('click', () => { if(selectedAnnotation){ annotations = annotations.filter(ann => ann !== selectedAnnotation); selectedAnnotation = null; setContextualTools(null); redrawCanvas(); } });
-            document.getElementById('edit_text_btn').addEventListener('click', () => { if(selectedAnnotation && selectedAnnotation.type === 'location'){ const newText = prompt('Modifier texte:', selectedAnnotation.text); if(newText !== null){ selectedAnnotation.text = newText; redrawCanvas(); } } });
+            document.getElementById('delete_btn').addEventListener('click', () => { if(selectedAnnotation){ annotations = annotations.filter(ann => ann !== selectedAnnotation); selectedAnnotation = null; setContextualTools(null); redrawCanvas(); saveFormData(); } });
+            document.getElementById('edit_text_btn').addEventListener('click', () => { if(selectedAnnotation && selectedAnnotation.type === 'location'){ const newText = prompt('Modifier texte:', selectedAnnotation.text); if(newText !== null){ selectedAnnotation.text = newText; redrawCanvas(); saveFormData(); } } });
             
             const importSessionBtn = document.getElementById('importSessionBtn');
             const exportSessionBtn = document.getElementById('exportSessionBtn');
@@ -2268,6 +2391,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             let backgroundImage = null;
             try {
                 const bgImageUrl = 'Fd.png';
+                // Assurez-vous que l'URL 'Fd.png' est accessible
                 const bgImageBytes = await fetch(bgImageUrl).then(res => res.arrayBuffer());
                 backgroundImage = await pdfDoc.embedPng(bgImageBytes);
             } catch (e) { console.warn("L'image de fond 'Fd.png' n'a pas pu être chargée.", e); }
@@ -2320,47 +2444,58 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 };
                 drawRow(headers, true); rows.forEach(row => drawRow(row, false)); context.y = currentY - 20;
             };
-            const processImage = async (source, maxWidth = 1280, quality = 0.85) => {
-                return new Promise((resolve, reject) => {
-                    const img = new Image();
-                    img.crossOrigin = 'anonymous'; // Important for canvas.toDataURL
-                    let isDataURL = typeof source === 'string' && source.startsWith('data:image');
-                    
-                    if (isDataURL) {
-                        img.src = source;
-                    } else if (source instanceof File) {
-                         if (!source.type.startsWith('image/')) { return reject(new Error('Le fichier fourni n\'est pas une image valide.')); }
-                         img.src = URL.createObjectURL(source);
-                    } else { return reject(new Error('Source d\'image invalide ou non supportée.')); }
-                    
-                    img.onload = () => {
-                        const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d');
-                        let { width, height } = img;
-                        if (width > maxWidth) { height = (maxWidth / width) * height; width = maxWidth; }
-                        canvas.width = width; canvas.height = height; ctx.drawImage(img, 0, 0, width, height);
-                        canvas.toBlob(blob => {
-                            if (!blob) return reject(new Error('La conversion de l\'image a échoué.'));
-                            blob.arrayBuffer().then(resolve).catch(reject);
-                        }, 'image/jpeg', quality);
-                    };
-                    img.onerror = (err) => { reject(new Error(`Impossible de charger l'image: ${err.message}`)); };
-                });
+            
+            // Fonction unifiée pour l'image, gère l'image de base OU l'image annotée
+            const processImage = async (imageSrc, originalSrc, annotationsJson, maxWidth = 1280, quality = 0.85) => {
+                const annotations = JSON.parse(annotationsJson || '[]');
+                
+                if (annotations.length > 0 && originalSrc) {
+                    // Si annotations, recréer l'image annotée via le canvas temporaire
+                    const blob = await createAnnotatedImageBlob(originalSrc, annotations);
+                    return blob.arrayBuffer();
+                } else {
+                    // Sinon, traiter l'image de base (ou la dernière source)
+                    return new Promise((resolve, reject) => {
+                        const img = new Image();
+                        img.crossOrigin = 'anonymous'; 
+                        
+                        let srcToLoad = imageSrc || originalSrc; // Priorise imageSrc s'il y a une dataURL de chargée.
+                        if (!srcToLoad || !srcToLoad.startsWith('data:image')) {
+                             return reject(new Error('Source d\'image invalide ou manquante.'));
+                        }
+                        img.src = srcToLoad;
+
+                        img.onload = () => {
+                            const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d');
+                            let { width, height } = img;
+                            if (width > maxWidth) { height = (maxWidth / width) * height; width = maxWidth; }
+                            canvas.width = width; canvas.height = height; ctx.drawImage(img, 0, 0, width, height);
+                            canvas.toBlob(blob => {
+                                if (!blob) return reject(new Error('La conversion de l\'image a échoué.'));
+                                blob.arrayBuffer().then(resolve).catch(reject);
+                            }, 'image/jpeg', quality);
+                        };
+                        img.onerror = (err) => { reject(new Error(`Impossible de charger l'image: ${err.message}`)); };
+                    });
+                }
             };
+
             const drawImagesFromContainer = async (containerId, title) => {
-                const imageSrcs = [];
                 const wrappers = document.querySelectorAll(`#${containerId} .photo-input-wrapper`);
-                wrappers.forEach(wrapper => {
+                for (let i = 0; i < wrappers.length; i++) {
+                    const wrapper = wrappers[i];
                     const previewImg = wrapper.querySelector('.image-preview');
-                    if (previewImg && previewImg.src && previewImg.src.startsWith('data:image')) {
-                        imageSrcs.push(previewImg.src);
-                    }
-                });
-                for (let i = 0; i < imageSrcs.length; i++) {
-                    const imageSource = imageSrcs[i];
+                    if (!previewImg || !previewImg.dataset.originalSrc) continue;
+
                     addNewPage();
                     try {
-                        const imageBytes = await processImage(imageSource);
+                        const imageSrc = previewImg.src;
+                        const originalSrc = previewImg.dataset.originalSrc;
+                        const annotationsJson = previewImg.dataset.annotations;
+
+                        const imageBytes = await processImage(imageSrc, originalSrc, annotationsJson);
                         const image = await pdfDoc.embedJpg(imageBytes);
+                        
                         const { width, height } = context.currentPage.getSize();
                         const paddedW = width - context.margin * 2; const paddedH = height - context.margin * 2 - 30;
                         const scaled = image.scaleToFit(paddedW, paddedH);
@@ -2459,9 +2594,23 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 const photoBoxHeight = 220;
                 const photoBoxX = context.pageWidth - context.margin - photoBoxWidth;
                 const photoBoxY = initialAdversaireY - photoBoxHeight;
-                const imageKey = Object.keys(formData).find(k => k.includes('adversary_photo_container') && k.endsWith('_src'));
-                const imageSource = imageKey ? formData[imageKey] : null;
                 
+                let imageKey = null;
+                let imageSource = null;
+                let originalSrc = null;
+                let annotationsJson = '[]';
+                
+                // Cherche l'image principale de l'adversaire
+                const allPhotoKeys = Object.keys(formData).filter(k => k.startsWith('preview_photo_'));
+                const mainPhotoKey = allPhotoKeys.find(k => document.getElementById(k.replace('_src', ''))?.closest('#adversary_photo_container'));
+                
+                if (mainPhotoKey) {
+                    imageKey = mainPhotoKey;
+                    imageSource = formData[mainPhotoKey];
+                    originalSrc = formData[mainPhotoKey.replace('_src', '') + '_original_src'];
+                    annotationsJson = formData[mainPhotoKey.replace('_src', '') + '_annotations'];
+                }
+
                 const adversaireHeaders = ["Information", "Détail"];
                 const meText = (formData.me_list || []).map((me, i) => `ME${i+1}: ${me}`).join(' | ');
                 const adversaireRows = [
@@ -2489,10 +2638,11 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 
                 let photoBottomY = tableBottomY;
 
-                if (imageSource) {
+                if (imageSource && originalSrc) { // Image de base présente
                     try {
-                        const imageBytes = await processImage(imageSource);
+                        const imageBytes = await processImage(imageSource, originalSrc, annotationsJson);
                         const image = await pdfDoc.embedJpg(imageBytes);
+                        
                         // Calcul de la taille de l'image
                         const scaled = image.scaleToFit(photoBoxWidth - 10, initialAdversaireY - context.margin - 30); // Réduit un peu plus la hauteur
                         const frameY = initialAdversaireY - photoBoxHeight;
@@ -2518,7 +2668,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                             photoBottomY = frameY;
                         }
                     } catch (e) {
-                         console.error("Échec du traitement de la photo de l'adversaire:", e);
+                         console.error("Échec du traitement de la photo de l'adversaire (annotée ou non):", e);
                         // En cas d'erreur ou d'absence d'image, afficher un cadre simple
                         context.currentPage.drawRectangle({
                             x: photoBoxX, y: photoBoxY, width: photoBoxWidth, height: photoBoxHeight,
@@ -2771,6 +2921,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 width: 550, // a4 width is 595.28 (595.28 - 40 margin)
                 windowWidth: 800,
             });
+             content.style.display = originalDisplay; // Rétablit l'affichage original
         }
 
         retexFileInput.addEventListener('change', () => {
