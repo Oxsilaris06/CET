@@ -715,7 +715,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
         // --- NOUVELLE CONFIGURATION & VARIABLES GLOBALES ---
         const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent";
         const RETEX_BASE_URL = "https://oxsilaris06.github.io/Praxis/retex.html";
-        const APPS_SCRIPT_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyF0CJ_B9U4Izn6ieZG4lfIq23oScE6cFvd1SoUXs/exec";
+        const APPS_SCRIPT_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyF0CJ_B9U4Izn6ieZG4lfIq23oScE6cFvd1SoUXvVUBRqk_Ce1R8TJpRRnuamcdJH-/exec";
         const DEFAULT_CONFIG_FILE = 'members_config.json'; // Fichier de configuration par défaut
         
         // --- GLOBAL CONFIG (Par défaut, sera écrasé par le JSON) ---
@@ -1112,16 +1112,21 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
 
 
         // --- PANNEAU D'ÉDITION RAPIDE & MODALE LOGIC ---
-        // La logique d'initialisation du panneau est rendue dynamique pour supporter les changements de config
+        const quickEditMapping = {
+            'Cellule': { key: 'cellules', attribute: 'cellule' },
+            'Fonction': { key: 'fonctions', attribute: 'fonction' },
+            'Armement': { key: 'armements', attribute: 'armement' },
+            'Équip. 1': { key: 'equipements', attribute: 'equipement' },
+            'Équip. 2': { key: 'equipements2', attribute: 'equipement2' },
+            'Tenue': { key: 'tenues', attribute: 'tenue' },
+            'GPB': { key: 'gpbs', attribute: 'gpb' }
+        };
+        
         function setupQuickEditPanel() {
             const contentContainer = document.querySelector('#quickEditPanel .quick-edit-content');
             contentContainer.innerHTML = '';
             
-            for (const key in memberConfig) {
-                 if (!memberConfig.hasOwnProperty(key) || !Array.isArray(memberConfig[key])) continue;
-                 
-                const attributeName = key.replace(/s$/, ''); // ex: fonctions -> fonction
-                const title = key.charAt(0).toUpperCase() + key.slice(1).replace(/([A-Z])/g, ' $1'); // ex: equipements2 -> Équipements2
+            for (const [title, config] of Object.entries(quickEditMapping)) {
                 
                 const tabPanel = document.createElement('div');
                 tabPanel.className = 'quick-edit-tab-panel active';
@@ -1133,12 +1138,12 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 const optionsContainer = document.createElement('div');
                 optionsContainer.className = 'quick-edit-options';
                 
-                memberConfig[key].forEach(option => {
+                (memberConfig[config.key] || []).forEach(option => {
                     const btn = document.createElement('button');
                     btn.type = 'button';
                     btn.className = 'quick-edit-btn';
                     btn.textContent = option;
-                    btn.dataset.attribute = attributeName;
+                    btn.dataset.attribute = config.attribute;
                     btn.dataset.value = option;
                     optionsContainer.appendChild(btn);
                 });
@@ -1197,23 +1202,22 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             title.textContent = `Édition Rapide: ${member.dataset.trigramme || 'N/A'}`;
             content.innerHTML = '';
 
-            for (const key in memberConfig) {
-                 if (!memberConfig.hasOwnProperty(key) || !Array.isArray(memberConfig[key])) continue;
+            for (const [category, config] of Object.entries(quickEditMapping)) {
+                 if (!memberConfig[config.key] || memberConfig[config.key].length === 0) continue;
                  
-                const attributeName = key.replace(/s$/, ''); 
-                const categoryTitleText = key.charAt(0).toUpperCase() + key.slice(1).replace(/([A-Z])/g, ' $1'); 
+                const attributeName = config.attribute; 
                 
                 const categoryDiv = document.createElement('div');
                 categoryDiv.className = 'quick-edit-category';
                 
                 const categoryTitle = document.createElement('h5');
-                categoryTitle.textContent = categoryTitleText;
+                categoryTitle.textContent = category;
                 categoryDiv.appendChild(categoryTitle);
                 
                 const optionsContainer = document.createElement('div');
                 optionsContainer.className = 'quick-edit-options';
                 
-                memberConfig[key].forEach(option => {
+                memberConfig[config.key].forEach(option => {
                     const btn = document.createElement('button');
                     btn.type = 'button';
                     btn.className = 'quick-edit-btn';
@@ -2602,19 +2606,17 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 addNewPage();
                 drawTitle("1.3 ADVERSAIRE");
       
-                // --- DÉBUT DE LA LOGIQUE D'AJOUT DE LA PHOTO DE L'ADVERSAIRE PRINCIPALE ---
+                // --- DÉBUT DE LA LOGIQUE D'AJOUT DE LA PHOTO DE L'ADVERSAIRE PRINCIPALE (MODIFIÉE) ---
                 const photoBoxWidth = 200;
                 const photoBoxHeight = 220;
                 const photoBoxX = context.pageWidth - context.margin - photoBoxWidth;
                 const photoBoxMargin = 10;
                 
-                let imageKey = null;
                 let imageSource = null;
                 let originalSrc = null;
                 let annotationsJson = '[]';
                 
                 // Cherche l'image principale de l'adversaire
-                const allPhotoKeys = Object.keys(formData).filter(k => k.endsWith('_src'));
                 let mainPhotoPreview = null;
                 document.querySelectorAll('#adversary_photo_container .image-preview').forEach(img => {
                     if (formData[img.id + '_src']) {
@@ -2645,26 +2647,57 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 const maxTableWidth = imageSource ? photoBoxX - tableX - photoBoxMargin : context.pageWidth - context.margin * 2;
                 
                 let tableBottomY = context.y;
+                let photoBottomY = context.y; 
 
+                // 1. Dessin du tableau (espace réservé pour l'image si présente)
                 if (adversaireRows.length > 0) {
-                    drawTable(adversaireHeaders, adversaireRows, [150, maxTableWidth - 150], tableX);
-                    tableBottomY = context.y;
-                } else {
-                    tableBottomY = context.y - 20; // Si pas de tableau, on laisse de la place
-                    context.y = tableBottomY;
-                }
-                
-                let photoBottomY = tableBottomY;
+                    // Pour savoir combien d'espace le tableau va prendre, on simule le dessin
+                    const tempTableY = context.y;
+                    let simulatedY = tempTableY;
+                    const rowPadding = 5; const headerFontSize = 10; const contentFontSize = 10;
+                    const headerHeight = wrapText(adversaireHeaders[0], context.helveticaBoldFont, headerFontSize, 150 - 2 * rowPadding).length * (headerFontSize + 2) + 2 * rowPadding;
+                    simulatedY -= headerHeight;
 
-                if (imageSource && originalSrc) { // Image de base présente
-                    const spaceNeeded = photoBoxHeight + photoBoxMargin;
-                    
-                    // Si l'image ne rentre pas à droite de la table, elle doit aller sur une nouvelle page.
-                    if ((tableBottomY - spaceNeeded) < context.margin) {
-                        addNewPage();
+                    for (const row of adversaireRows) {
+                        const cellContents = row.map((text, i) => {
+                            const font = context.helveticaFont; const size = contentFontSize;
+                            const colWidth = i === 0 ? 150 : maxTableWidth - 150;
+                            return wrapText(text, font, size, colWidth - 2 * rowPadding);
+                        });
+                        const maxLines = Math.max(...cellContents.map(lines => lines.length));
+                        const rowHeight = maxLines * (contentFontSize + 2) + 2 * rowPadding;
+                        simulatedY -= rowHeight;
                     }
                     
-                    const frameY = context.y - photoBoxHeight;
+                    const requiredTableHeight = tempTableY - simulatedY;
+                    
+                    // 2. Vérification de l'espace pour le TABLEAU + IMAGE
+                    let finalTableDrawY = tempTableY;
+
+                    if (imageSource) {
+                        const spaceNeeded = Math.max(requiredTableHeight, photoBoxHeight + photoBoxMargin); // S'assurer que les deux rentrent
+                        if ((context.y - spaceNeeded) < context.margin) {
+                            addNewPage();
+                            finalTableDrawY = context.y;
+                        }
+                    } else {
+                        if (checkY(requiredTableHeight)) {
+                            finalTableDrawY = context.y;
+                        }
+                    }
+                    
+                    context.y = finalTableDrawY;
+                    drawTable(adversaireHeaders, adversaireRows, [150, maxTableWidth - 150], tableX);
+                    tableBottomY = context.y;
+
+                } else {
+                    tableBottomY = context.y - 20; // Si pas de tableau
+                    context.y = tableBottomY;
+                }
+
+                // 3. Dessin de l'image à côté du tableau
+                if (imageSource && originalSrc) {
+                    const frameY = finalTableDrawY - photoBoxHeight; // Position Y pour le cadre de l'image
                     
                     try {
                         const imageBytes = await processImage(imageSource, originalSrc, annotationsJson);
@@ -2674,26 +2707,28 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                         const scaled = image.scaleToFit(photoBoxWidth - 10, photoBoxHeight - 30); // Réduit un peu plus la hauteur pour le titre
                         const imageY = frameY + (photoBoxHeight - scaled.height) / 2; // Centrage vertical de l'image dans le cadre
 
-                        // Dessin du cadre
-                        context.currentPage.drawRectangle({
-                            x: photoBoxX, y: frameY, width: photoBoxWidth, height: photoBoxHeight,
-                            borderColor: context.colors.accent, borderWidth: 1
-                        });
-                        // Dessin de l'image
-                        context.currentPage.drawImage(image, {
-                            x: photoBoxX + (photoBoxWidth - scaled.width) / 2,
-                            y: imageY,
-                            width: scaled.width, height: scaled.height
-                        });
-                        const photoTitle = "Photo de l'objectif";
-                        const titleWidth = helveticaFont.widthOfTextAtSize(photoTitle, 10);
-                        // Dessin du titre
-                        context.currentPage.drawText(photoTitle, {
-                            x: photoBoxX + (photoBoxWidth - titleWidth) / 2,
-                            y: frameY + 5,
-                            font: helveticaFont, size: 10, color: context.colors.text
-                        });
-                        photoBottomY = frameY;
+                        if(frameY >= context.margin) {
+                            // Dessin du cadre
+                            context.currentPage.drawRectangle({
+                                x: photoBoxX, y: frameY, width: photoBoxWidth, height: photoBoxHeight,
+                                borderColor: context.colors.accent, borderWidth: 1
+                            });
+                            // Dessin de l'image
+                            context.currentPage.drawImage(image, {
+                                x: photoBoxX + (photoBoxWidth - scaled.width) / 2,
+                                y: imageY,
+                                width: scaled.width, height: scaled.height
+                            });
+                            const photoTitle = "Photo de l'objectif";
+                            const titleWidth = helveticaFont.widthOfTextAtSize(photoTitle, 10);
+                            // Dessin du titre
+                            context.currentPage.drawText(photoTitle, {
+                                x: photoBoxX + (photoBoxWidth - titleWidth) / 2,
+                                y: frameY + 5,
+                                font: helveticaFont, size: 10, color: context.colors.text
+                            });
+                            photoBottomY = frameY;
+                        }
                     } catch (e) {
                          console.error("Échec du traitement de la photo de l'adversaire (annotée ou non):", e);
                         // En cas d'erreur ou d'absence d'image, afficher un cadre simple
