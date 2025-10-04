@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF--8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Générateur d'OI </title>
+    <title>Générateur d'OI</title>
     <link rel="icon" href="maskable_icon(2).png" sizes="any" type="image/png">
     <link rel="icon" href="maskable_icon(2).png" type="image/svg+xml">
     <link rel="apple-touch-icon" href="maskable_icon(2).png">
@@ -102,7 +102,7 @@
         .articulation-composition-display strong { color: var(--accent-blue); }
 
         .dock-menu { position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; padding: 10px; z-index: 1000; background-color: rgba(30, 30, 30, 0.7); border: 1px solid var(--border-color); border-radius: 35px; backdrop-filter: blur(10px); transition: all 0.3s ease-in-out; }
-        .dock-menu-item { display: flex; align-items: center; justify-content: center; background-color: var(--bg-container); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 50%; width: 50px; height: 50px; font-size: 28px; cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.2); transition: all 0.2s; text-decoration: none; flex-shrink: 0; }
+        .dock-menu-item { display: flex; align-items: center; justify-content: center; background-color: var(--bg-container); color: var(--text-primary); border: 11px solid var(--border-color); border-radius: 50%; width: 50px; height: 50px; font-size: 28px; cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.2); transition: all 0.2s; text-decoration: none; flex-shrink: 0; }
         .dock-menu-item:hover { transform: scale(1.1); }
         .dock-menu.collapsed { width: 55px; height: 55px; padding: 5px; border-radius: 50%; border: none; background-color: transparent; }
         .dock-menu.collapsed .dock-menu-item:not(#dockToggleBtn) { opacity: 0; width: 0; margin-left: -10px; visibility: hidden; }
@@ -448,7 +448,7 @@
     </dialog>
 
     <div class="container">
-        <h1>Générateur d'oi</h1>
+        <h1>Générateur d'OI</h1>
         
         <ul class="wizard-progress">
             <li class="wizard-progress-step" onclick="goToStep(0)">Situation</li>
@@ -1057,8 +1057,10 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 if (select) {
                     select.innerHTML = memberConfig[key].map(option => {
                         const selected = (button.dataset[attrName] === option) ? 'selected' : '';
-                        return `<option value="${option}" ${selected}>${option}</option>`;
+                        return `<option value="${option}" ${o === option && o !== '' ? 'selected':''}>${option}</option>`;
                     }).join('');
+                    // Correction: Assurez-vous que la valeur est correctement sélectionnée si elle existe
+                    select.value = button.dataset[attrName];
                 }
             }
             
@@ -1267,8 +1269,13 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     localStorage.setItem('oiFormData', JSON.stringify(data));
                 } catch (e) {
                     if (e.name === 'QuotaExceededError' || e.name === 'DOMException') {
-                        // Si l'erreur de quota est levée, on supprime les données volumineuses (images)
-                        alert("Alerte: Espace de stockage (5Mo) atteint. Les données textuelles sont sauvegardées, mais les images ont été retirées de la sauvegarde locale pour éviter l'erreur. Veuillez exporter la session si vous souhaitez conserver les images pour la prochaine fois.");
+                        
+                        // --- DÉBUT DE LA CORRECTION POUR L'ALERTE UNIQUE ---
+                        if (localStorage.getItem('quotaAlertShown') !== 'true') {
+                            alert("Alerte: Espace de stockage (5Mo) atteint. Les données textuelles sont sauvegardées, mais les images ont été retirées de la sauvegarde locale pour éviter l'erreur. Veuillez exporter la session si vous souhaitez conserver les images pour la prochaine fois.");
+                            localStorage.setItem('quotaAlertShown', 'true');
+                        }
+                        // --- FIN DE LA CORRECTION POUR L'ALERTE UNIQUE ---
 
                         // 1. Suppression des images dans l'objet de sauvegarde
                         Object.keys(data).forEach(key => {
@@ -2119,7 +2126,14 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     alert("Veuillez saisir une clé API.");
                 }
             });
-            document.getElementById('resetBtn').addEventListener('click', () => { if (confirm("Voulez-vous vraiment réinitialiser tout le formulaire?")) { localStorage.removeItem('oiFormData'); location.reload(); } });
+            document.getElementById('resetBtn').addEventListener('click', () => { 
+                if (confirm("Voulez-vous vraiment réinitialiser tout le formulaire?")) { 
+                    localStorage.removeItem('oiFormData'); 
+                    // Supprime le drapeau d'alerte pour qu'il s'affiche à nouveau si l'erreur se reproduit
+                    localStorage.removeItem('quotaAlertShown'); 
+                    location.reload(); 
+                } 
+            });
             document.getElementById('tutorialBtn').addEventListener('click', startTutorial);
             
             // Nouveau gestionnaire d'événement pour le bouton d'import JSON
