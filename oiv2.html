@@ -2315,7 +2315,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 saveFormData();
                 const dataString = localStorage.getItem('oiFormData');
                 if (!dataString) { alert("Aucune donnée à exporter."); return; }
-                const blob = new Blob([dataString], {type: 'application/json'});
+                const blob = new Blob([pdfBytes], {type: 'application/pdf'});
                 const url = URL.createObjectURL(blob);
                 const link = document.createElement('a');
                 const date = new Date().toISOString().slice(0, 10);
@@ -2390,6 +2390,31 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
         });
         
         // --- PDF GENERATION ---
+
+        /**
+         * Récupère les données d'image pour l'adversaire principal.
+         * @param {Object} formData Les données du formulaire.
+         * @returns {Object|null} Les informations de l'image (source, originalSrc, annotationsJson) ou null.
+         */
+        function getAdversaryImageInfo(formData) {
+            let imageSource = null;
+            let originalSrc = null;
+            let annotationsJson = '[]';
+
+            // Trouvez l'élément d'image principal dans le DOM pour obtenir son ID
+            const mainPhotoWrapper = document.querySelector('#adversary_photo_container .photo-input-wrapper');
+            if (mainPhotoWrapper) {
+                const previewImg = mainPhotoWrapper.querySelector('.image-preview');
+                if (previewImg && formData[previewImg.id + '_src']) {
+                    imageSource = formData[previewImg.id + '_src'];
+                    originalSrc = formData[previewImg.id + '_original_src'];
+                    annotationsJson = formData[previewImg.id + '_annotations'];
+                    return { imageSource, originalSrc, annotationsJson };
+                }
+            }
+            return null;
+        }
+
         async function buildPdf() {
             const { PDFDocument, StandardFonts, rgb, PageSizes } = PDFLib;
             const pdfDoc = await PDFDocument.create();
@@ -2606,30 +2631,14 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 addNewPage();
                 drawTitle("1.3 ADVERSAIRE");
       
-                // --- DÉBUT DE LA LOGIQUE D'AJOUT DE LA PHOTO DE L'ADVERSAIRE PRINCIPALE (MODIFIÉE) ---
+                // --- DÉBUT DE LA LOGIQUE D'AJOUT DE LA PHOTO DE L'ADVERSAIRE PRINCIPALE ---
+                const imageInfo = getAdversaryImageInfo(formData);
+                const isImagePresent = imageInfo !== null;
                 const photoBoxWidth = 200;
                 const photoBoxHeight = 220;
                 const photoBoxX = context.pageWidth - context.margin - photoBoxWidth;
                 const photoBoxMargin = 10;
                 
-                let imageSource = null;
-                let originalSrc = null;
-                let annotationsJson = '[]';
-                
-                // Cherche l'image principale de l'adversaire
-                let mainPhotoPreview = null;
-                document.querySelectorAll('#adversary_photo_container .image-preview').forEach(img => {
-                    if (formData[img.id + '_src']) {
-                        mainPhotoPreview = img;
-                    }
-                });
-
-                if (mainPhotoPreview) {
-                    imageSource = formData[mainPhotoPreview.id + '_src'];
-                    originalSrc = formData[mainPhotoPreview.id + '_original_src'];
-                    annotationsJson = formData[mainPhotoPreview.id + '_annotations'];
-                }
-
                 const adversaireHeaders = ["Information", "Détail"];
                 const meText = (formData.me_list || []).map((me, i) => `ME${i+1}: ${me}`).join(' | ');
                 const adversaireRows = [
@@ -2641,63 +2650,56 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     ['Attitude', getVal('attitude_adversaire')], ['Volume (renfort)', (formData.volume_list || []).join(', ')],
                     ['Substances', getVal('substances_adversaire')], ['Véhicules', (formData.vehicules_list || []).join(', ')],
                     ['Armes', getVal('armes_connues')], ['Moyens Employés', meText],
-                ].filter(row => row[1] && String(row[1]).trim() !== 'à'); // Filtration pour enlever les lignes vides
+                ].filter(row => row[1] && String(row[1]).trim() !== 'à');
 
                 const tableX = context.margin;
-                const maxTableWidth = imageSource ? photoBoxX - tableX - photoBoxMargin : context.pageWidth - context.margin * 2;
+                const maxTableWidth = isImagePresent ? photoBoxX - tableX - photoBoxMargin : context.pageWidth - context.margin * 2;
                 
-                let tableBottomY = context.y;
-                let photoBottomY = context.y; 
+                let initialY = context.y; 
+                let tableBottomY = initialY;
+                let photoBottomY = initialY; 
 
-                // 1. Dessin du tableau (espace réservé pour l'image si présente)
+                // 1. Simulation pour déterminer la hauteur du tableau
+                const rowPadding = 5; const headerFontSize = 10; const contentFontSize = 10;
+                let simulatedY = initialY;
+                
+                const headerLines = wrapText(adversaireHeaders[0], context.helveticaBoldFont, headerFontSize, 150 - 2 * rowPadding);
+                const headerHeight = headerLines.length * (headerFontSize + 2) + 2 * rowPadding;
+                simulatedY -= headerHeight;
+
+                for (const row of adversaireRows) {
+                    const colWidth = [150, maxTableWidth - 150];
+                    const cellContents = row.map((text, i) => {
+                        const font = context.helveticaFont; const size = contentFontSize;
+                        return wrapText(text, font, size, colWidth[i] - 2 * rowPadding);
+                    });
+                    const maxLines = Math.max(...cellContents.map(lines => lines.length));
+                    const rowHeight = maxLines * (contentFontSize + 2) + 2 * rowPadding;
+                    simulatedY -= rowHeight;
+                }
+                const requiredTableHeight = initialY - simulatedY + 20; // + 20 pour l'espace après
+
+                // 2. Vérification de l'espace sur la page
+                const combinedHeight = isImagePresent ? Math.max(requiredTableHeight, photoBoxHeight + photoBoxMargin) : requiredTableHeight;
+                
+                if (checkY(combinedHeight)) {
+                    initialY = context.y; // Nouvelle Y de départ
+                }
+                
+                // 3. Dessin du tableau
+                context.y = initialY;
                 if (adversaireRows.length > 0) {
-                    // Pour savoir combien d'espace le tableau va prendre, on simule le dessin
-                    const tempTableY = context.y;
-                    let simulatedY = tempTableY;
-                    const rowPadding = 5; const headerFontSize = 10; const contentFontSize = 10;
-                    const headerHeight = wrapText(adversaireHeaders[0], context.helveticaBoldFont, headerFontSize, 150 - 2 * rowPadding).length * (headerFontSize + 2) + 2 * rowPadding;
-                    simulatedY -= headerHeight;
-
-                    for (const row of adversaireRows) {
-                        const cellContents = row.map((text, i) => {
-                            const font = context.helveticaFont; const size = contentFontSize;
-                            const colWidth = i === 0 ? 150 : maxTableWidth - 150;
-                            return wrapText(text, font, size, colWidth - 2 * rowPadding);
-                        });
-                        const maxLines = Math.max(...cellContents.map(lines => lines.length));
-                        const rowHeight = maxLines * (contentFontSize + 2) + 2 * rowPadding;
-                        simulatedY -= rowHeight;
-                    }
-                    
-                    const requiredTableHeight = tempTableY - simulatedY;
-                    
-                    // 2. Vérification de l'espace pour le TABLEAU + IMAGE
-                    let finalTableDrawY = tempTableY;
-
-                    if (imageSource) {
-                        const spaceNeeded = Math.max(requiredTableHeight, photoBoxHeight + photoBoxMargin); // S'assurer que les deux rentrent
-                        if ((context.y - spaceNeeded) < context.margin) {
-                            addNewPage();
-                            finalTableDrawY = context.y;
-                        }
-                    } else {
-                        if (checkY(requiredTableHeight)) {
-                            finalTableDrawY = context.y;
-                        }
-                    }
-                    
-                    context.y = finalTableDrawY;
                     drawTable(adversaireHeaders, adversaireRows, [150, maxTableWidth - 150], tableX);
                     tableBottomY = context.y;
-
                 } else {
-                    tableBottomY = context.y - 20; // Si pas de tableau
-                    context.y = tableBottomY;
+                    context.y -= 20;
+                    tableBottomY = context.y;
                 }
 
-                // 3. Dessin de l'image à côté du tableau
-                if (imageSource && originalSrc) {
-                    const frameY = finalTableDrawY - photoBoxHeight; // Position Y pour le cadre de l'image
+                // 4. Dessin de l'image (si présente) à côté du tableau
+                if (isImagePresent) {
+                    const { imageSource, originalSrc, annotationsJson } = imageInfo;
+                    const frameY = initialY - photoBoxHeight; // Position Y pour le cadre de l'image (aligné au haut du tableau)
                     
                     try {
                         const imageBytes = await processImage(imageSource, originalSrc, annotationsJson);
@@ -2731,7 +2733,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                         }
                     } catch (e) {
                          console.error("Échec du traitement de la photo de l'adversaire (annotée ou non):", e);
-                        // En cas d'erreur ou d'absence d'image, afficher un cadre simple
+                        // En cas d'erreur, dessiner un cadre simple
                         context.currentPage.drawRectangle({
                             x: photoBoxX, y: frameY, width: photoBoxWidth, height: photoBoxHeight,
                             borderColor: context.colors.accent, borderWidth: 1
@@ -2747,7 +2749,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     }
                 }
                 
-                // On s'assure que le contenu suivant commence sous l'élément le plus bas (tableau ou photo)
+                // On s'assure que le contenu suivant commence sous l'élément le plus bas
                 context.y = Math.min(tableBottomY, photoBottomY) - 20;
 
                 // --- FIN DE LA LOGIQUE D'AJOUT DE LA PHOTO PRINCIPALE ---
