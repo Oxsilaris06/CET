@@ -2059,12 +2059,18 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 case 'location': {
                     const radius = annotation.radius || 0;
                     if (radius < 2) { context.restore(); return; }
-                    context.beginPath(); context.arc(annotation.x, annotation.y, radius, 0, 2 * Math.PI);
-                    context.fillStyle = `rgba(91, 155, 213, ${annotation.opacity || 0.5})`; context.fill();
-                    context.strokeStyle = '#5b9bd5'; context.lineWidth = 2; context.stroke();
+                    context.beginPath();
+                    context.arc(annotation.x, annotation.y, radius, 0, 2 * Math.PI);
+                    context.fillStyle = `rgba(91, 155, 213, ${annotation.opacity || 0.5})`;
+                    context.fill();
+                    context.strokeStyle = '#5b9bd5';
+                    context.lineWidth = 2;
+                    context.stroke();
                     if (annotation.text) {
-                        context.fillStyle = 'black'; context.font = `bold ${Math.max(12, radius / 2)}px Oswald`;
-                        context.textAlign = 'center'; context.textBaseline = 'middle';
+                        context.fillStyle = 'black';
+                        context.font = `bold ${Math.max(12, radius / 2)}px Oswald`;
+                        context.textAlign = 'center';
+                        context.textBaseline = 'middle';
                         context.fillText(annotation.text, annotation.x, annotation.y);
                     }
                     break;
@@ -2460,31 +2466,24 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
 
             // 1. Fonction de téléchargement du PDF (appelée depuis la modale)
             async function downloadOiPdf() {
-                if (typeof PDFLib === 'undefined') { alert("Erreur: La bibliothèque PDF n'est pas encore chargée."); return; }
+                if (typeof HTML2Canvas === 'undefined' || typeof jsPDF === 'undefined') {
+                    alert("Erreur: Les bibliothèques de capture d'écran (html2canvas/jspdf) ne sont pas chargées.");
+                    return;
+                }
+                
                 const btn = downloadPdfBtn;
                 const originalText = btn.textContent;
                 btn.textContent = 'Génération en cours...'; btn.disabled = true;
                 
                 try {
-                    const result = await buildPdf();
-                    if (!result) { 
-                        alert("La génération a échoué. Vérifiez vos données.");
-                        return; 
+                    // Utilise la nouvelle fonction de capture/assemblage
+                    const result = await downloadOiAsScreenshottedPdf();
+                    
+                    if (result && result.pdfBytes) { 
+                        alert("Le document PDF a été téléchargé.");
+                    } else {
+                        alert("La génération du PDF a échoué. Vérifiez vos données.");
                     }
-                    const { pdfBytes, formData } = result;
-                    const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-                    const url = URL.createObjectURL(blob);
-                    
-                    const getVal = (id) => formData[id] || 'RAS';
-                    const link = document.createElement('a');
-                    link.href = url;
-                    // Définir le nom du fichier
-                    link.download = `OI_${getVal('date_op').replace(/[\/\\?%*:|"<>]/g, '-')}_${getVal('nom_adversaire').replace(/ /g, '_')}.pdf`;
-                    document.body.appendChild(link); 
-                    link.click(); 
-                    document.body.removeChild(link);
-                    
-                    alert("Le document PDF a été téléchargé.");
                     
                 } catch (error) {
                     console.error("Erreur critique lors de la génération du PDF:", error);
@@ -2493,7 +2492,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     btn.textContent = originalText; btn.disabled = false;
                 }
             }
-
+            
             // 2. Fonction d'ouverture du Mode Présentation (HTML + bouton PDF)
             function openPresentationMode() {
                 const presentationContent = document.getElementById('presentation-content');
@@ -2540,448 +2539,143 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             
         });
         
-        // --- PDF GENERATION (CORRIGÉ) ---
+        // --- LOGIQUE DE CAPTURE UHD ET D'ASSEMBLAGE PDF (NOUVEAU) ---
 
         /**
-         * Récupère les données d'image pour l'adversaire principal.
-         * @param {Object} formData Les données du formulaire.
-         * @returns {Object|null} Les informations de l'image (source, originalSrc, annotationsJson) ou null.
+         * Capture une section spécifique du formulaire à haute résolution (facteur d'échelle 3) et la retourne en tant que Data URL.
+         * @param {HTMLElement} element L'élément DOM à capturer (doit être visible).
+         * @param {string} title Le titre à utiliser pour les messages d'erreur.
+         * @returns {Promise<string>} La Data URL de l'image (PNG).
          */
-        function getAdversaryImageInfo(formData) {
-            const mainPhotoWrapper = document.querySelector('#adversary_photo_container .photo-input-wrapper');
-            if (mainPhotoWrapper) {
-                const previewImg = mainPhotoWrapper.querySelector('.image-preview');
-                const previewId = previewImg ? previewImg.id : null;
-                
-                if (previewId && formData[previewId + '_src']) {
-                    return {
-                        imageSource: formData[previewId + '_src'],
-                        originalSrc: formData[previewId + '_original_src'],
-                        annotationsJson: formData[previewId + '_annotations'] || '[]'
-                    };
-                }
+        async function captureElementToDataURL(element, title) {
+            if (!element) {
+                console.error(`Élément à capturer non trouvé pour : ${title}`);
+                return null;
             }
-            return null;
-        }
 
-        async function buildPdf() {
-            const { PDFDocument, StandardFonts, rgb, PageSizes } = PDFLib;
-            const pdfDoc = await PDFDocument.create();
-            const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
-            const helveticaBoldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-            saveFormData();
-            const formDataString = localStorage.getItem('oiFormData');
-            if (!formDataString) { return null; }
-            const formData = JSON.parse(formDataString);
-            const getVal = (id) => formData[id] || '';
-            const isDarkMode = document.body.classList.contains('dark-mode');
-            const context = {
-                pdfDoc, helveticaFont, helveticaBoldFont,
-                currentPage: null, y: 0, pageWidth: 0, pageHeight: 0, margin: 40,
-                colors: isDarkMode ? { background: rgb(30/255, 30/255, 30/255), text: rgb(1, 1, 1), accent: rgb(91/255, 155/255, 213/255), danger: rgb(192/255, 57/255, 43/255) } : { background: rgb(1, 1, 1), text: rgb(0, 0, 0), accent: rgb(0, 51/255, 160/255), danger: rgb(192/255, 57/255, 43/255) }
-            };
-            let backgroundImage = null;
             try {
-                const bgImageUrl = 'Fd.png';
-                const bgImageBytes = await fetch(bgImageUrl).then(res => res.arrayBuffer());
-                backgroundImage = await pdfDoc.embedPng(bgImageBytes);
-            } catch (e) { console.warn("L'image de fond 'Fd.png' n'a pas pu être chargée.", e); }
-            
-            const addNewPage = () => {
-                context.currentPage = context.pdfDoc.addPage([PageSizes.A4[1], PageSizes.A4[0]]);
-                const { width, height } = context.currentPage.getSize();
-                context.pageWidth = width; context.pageHeight = height; context.y = height - context.margin;
-                context.currentPage.drawRectangle({ x: 0, y: 0, width, height, color: context.colors.background });
-            };
-            const checkY = (spaceNeeded) => { if (context.y - spaceNeeded < context.margin) { addNewPage(); return true; } return false; };
-            const drawTitle = (text) => { checkY(30); context.currentPage.drawText(text, { x: context.margin, y: context.y, font: helveticaBoldFont, size: 18, color: context.colors.accent }); context.y -= 30; };
-            const drawSubTitle = (text) => { if (checkY(25)) { context.y -= 10; } context.currentPage.drawText(text, { x: context.margin, y: context.y, font: helveticaBoldFont, size: 14, color: context.colors.accent }); context.y -= 25; };
-            const wrapText = (text, font, size, maxWidth) => {
-                const words = String(text || '').replace(/\n/g, ' \n ').split(' ');
-                let lines = []; let currentLine = '';
-                for (const word of words) {
-                    if (word === '\n') { lines.push(currentLine); currentLine = ''; continue; }
-                    const lineWithWord = currentLine === '' ? word : `${currentLine} ${word}`;
-                    if (font.widthOfTextAtSize(lineWithWord, size) > maxWidth && currentLine !== '') { lines.push(currentLine); currentLine = word; } 
-                    else { currentLine = lineWithWord; }
-                }
-                lines.push(currentLine); return lines;
-            };
-            const drawWrappedText = (text, options = {}) => {
-                const { font = helveticaFont, size = 12, color = context.colors.text, x = context.margin + 15 } = options;
-                const maxWidth = context.pageWidth - x - context.margin;
-                const lines = wrapText(text, font, size, maxWidth);
-                const totalHeight = lines.length * (size + 4);
-                if (checkY(totalHeight + 10)) { context.y -= (size + 4); }
-                lines.forEach((line, index) => { context.currentPage.drawText(line, { x, y: context.y - (index * (size + 4)), font, size, color }); });
-                context.y -= (totalHeight + 10);
-            };
-            // Fonction modifiée pour inclure la position de départ X
-            const drawTable = (headers, rows, columnWidths, startX) => {
-                let currentY = context.y; const rowPadding = 5; const headerFontSize = 10; const contentFontSize = 10;
-                const drawRow = (rowData, isHeader) => {
-                    const font = isHeader ? helveticaBoldFont : helveticaFont; const size = isHeader ? headerFontSize : contentFontSize;
-                    const cellContents = rowData.map((text, i) => wrapText(text, font, size, columnWidths[i] - 2 * rowPadding));
-                    const maxLines = Math.max(...cellContents.map(lines => lines.length));
-                    const rowHeight = maxLines * (size + 2) + 2 * rowPadding;
-                    if (currentY - rowHeight < context.margin) { addNewPage(); currentY = context.y; drawRow(headers, true); }
-                    currentY -= rowHeight; let currentX = startX;
-                    rowData.forEach((_, i) => {
-                        context.currentPage.drawRectangle({ x: currentX, y: currentY, width: columnWidths[i], height: rowHeight, borderColor: context.colors.accent, borderWidth: 0.5 });
-                        const lines = cellContents[i];
-                        lines.forEach((line, lineIndex) => { context.currentPage.drawText(line, { x: currentX + rowPadding, y: currentY + rowHeight - rowPadding - (lineIndex + 1) * (size + 2) + 2, font, size, color: context.colors.text }); });
-                        currentX += columnWidths[i];
-                    });
-                };
-                drawRow(headers, true); rows.forEach(row => drawRow(row, false)); context.y = currentY - 20;
-            };
-            
-            // Fonction unifiée pour l'image, gère l'image de base OU l'image annotée
-            const processImage = async (imageSrc, originalSrc, annotationsJson, maxWidth = 1280, quality = 0.85) => {
-                const annotations = JSON.parse(annotationsJson || '[]');
-                
-                if (annotations.length > 0 && originalSrc) {
-                    const buffer = await createAnnotatedImageBlob(originalSrc, annotations);
-                    return buffer;
-                } else {
-                    return new Promise((resolve, reject) => {
-                        const img = new Image();
-                        img.crossOrigin = 'anonymous'; 
-                        
-                        let srcToLoad = imageSrc || originalSrc;
-                        if (!srcToLoad || !srcToLoad.startsWith('data:image')) {
-                             return reject(new Error('Source d\'image invalide ou manquante.'));
-                        }
-                        img.src = srcToLoad;
+                // S'assurer que les images sont chargées avant la capture
+                const images = element.querySelectorAll('img');
+                const imageLoadPromises = Array.from(images).filter(img => !img.complete).map(img => new Promise(resolve => {
+                    img.onload = resolve;
+                    img.onerror = resolve; // Continue même si une image échoue à charger
+                }));
+                await Promise.all(imageLoadPromises);
 
-                        img.onload = () => {
-                            const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d');
-                            let { width, height } = img;
-                            if (width > maxWidth) { height = (maxWidth / width) * height; width = maxWidth; }
-                            canvas.width = width; canvas.height = height; ctx.drawImage(img, 0, 0, width, height);
-                            canvas.toBlob(blob => {
-                                if (!blob) return reject(new Error('La conversion de l\'image a échoué.'));
-                                blob.arrayBuffer().then(resolve).catch(reject);
-                            }, 'image/jpeg', quality);
-                        };
-                        img.onerror = (err) => { reject(new Error(`Impossible de charger l'image: ${err.message}`)); };
-                    });
-                }
-            };
-
-            const drawImagesFromContainer = async (containerId, title) => {
-                const wrappers = document.querySelectorAll(`#${containerId} .photo-input-wrapper`);
-                for (let i = 0; i < wrappers.length; i++) {
-                    const wrapper = wrappers[i];
-                    const previewImg = wrapper.querySelector('.image-preview');
-                    if (!previewImg || !previewImg.dataset.originalSrc) continue;
-
-                    addNewPage();
-                    try {
-                        const imageSrc = previewImg.src;
-                        const originalSrc = previewImg.dataset.originalSrc;
-                        const annotationsJson = previewImg.dataset.annotations;
-
-                        const imageBytes = await processImage(imageSrc, originalSrc, annotationsJson);
-                        const image = await pdfDoc.embedJpg(imageBytes);
-                        
-                        const { width, height } = context.currentPage.getSize();
-                        const paddedW = width - context.margin * 2; const paddedH = height - context.margin * 2 - 30;
-                        const scaled = image.scaleToFit(paddedW, paddedH);
-                        const x = (width - scaled.width) / 2; const y = (height - scaled.height) / 2 + 15;
-                        context.currentPage.drawImage(image, { x, y, width: scaled.width, height: scaled.height });
-                        const finalTitle = wrappers.length > 1 ? `${title} (${i+1})` : title;
-                        const textWidth = helveticaBoldFont.widthOfTextAtSize(finalTitle, 14);
-                        context.currentPage.drawText(finalTitle, { x: width / 2 - textWidth / 2, y: y - 20, font: helveticaBoldFont, size: 14, color: context.colors.text });
-                    } catch (e) {
-                        console.error(`Erreur d'intégration de l'image pour: ${title}`, e);
-                        drawTitle("Erreur d'image"); drawWrappedText(`Impossible de charger une image.\n\nErreur: ${e.message}`);
-                    }
-                }
-            };
-            
-            // --- FONCTIONS POUR LA COMPOSITION STYLISÉE ---
-            const getCompositionData = (teamPrefix) => {
-                const membersByCell = {};
-                const allMembers = (formData.patracdvr_rows || []).flatMap(row => row.members);
-                
-                allMembers.forEach(member => {
-                    if (member.cellule && member.cellule.toLowerCase().startsWith(teamPrefix)) {
-                        if (!membersByCell[member.cellule]) membersByCell[member.cellule] = [];
-                        member.trigramme && membersByCell[member.cellule].push(member.trigramme);
-                    }
+                const canvas = await html2canvas(element, {
+                    scale: 3, // Facteur d'échelle 3 pour une haute résolution (UHD)
+                    logging: false,
+                    useCORS: true,
+                    allowTaint: true
                 });
-
-                const naturalSort = (a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
-                const sortedKeys = Object.keys(membersByCell).sort(naturalSort);
-                
-                return sortedKeys.map(cell => ({ cell: cell, members: membersByCell[cell] }));
-            };
-
-            const drawCompositionList = (compositionData) => {
-                const fontSize = 12;
-                const lineHeight = fontSize + 4;
-                if (checkY(lineHeight)) { context.y -= 10; }
-
-                let currentX = context.margin + 15;
-                const cellStyle = { font: helveticaBoldFont, color: context.colors.danger, size: fontSize };
-                const trigrammeStyle = { font: helveticaBoldFont, color: context.colors.text, size: fontSize };
-                const separatorStyle = { font: helveticaFont, color: context.colors.text, size: fontSize };
-                
-                compositionData.forEach((group, groupIndex) => {
-                    const cellShortName = group.cell.toLowerCase().replace('india ', 'I').replace('ao', 'AO').toUpperCase();
-                    
-                    const groupParts = [];
-                    groupParts.push({ text: cellShortName, style: cellStyle });
-                    groupParts.push({ text: ' : ', style: separatorStyle });
-                    group.members.forEach((member, memberIndex) => {
-                        groupParts.push({ text: member, style: trigrammeStyle });
-                        if (memberIndex < group.members.length - 1) {
-                            groupParts.push({ text: ' - ', style: separatorStyle });
-                        }
-                    });
-                     if (groupIndex < compositionData.length - 1) {
-                        groupParts.push({ text: '    ', style: separatorStyle });
-                    }
-
-                    for(const part of groupParts) {
-                        const partWidth = part.style.font.widthOfTextAtSize(part.text, part.style.size);
-                        if (currentX + partWidth > context.pageWidth - context.margin) {
-                            context.y -= lineHeight;
-                            currentX = context.margin + 15;
-                            if (checkY(lineHeight)) { context.y -= 10; }
-                        }
-                        context.currentPage.drawText(part.text, { x: currentX, y: context.y, ...part.style });
-                        currentX += partWidth;
-                    }
-                });
-                context.y -= (lineHeight + 10);
-            };
-
-
-            const pdfCreationLogic = async () => {
-                // PAGE 1: Couverture
-                addNewPage();
-                if (backgroundImage) { context.currentPage.drawImage(backgroundImage, { x: 0, y: 0, width: context.pageWidth, height: context.pageHeight }); }
-                const mainTitle = "OPÉRATION DE POLICE JUDICIAIRE";
-                const dateTitle = `DU ${getVal('date_op') || '(DATE)'}`;
-                const titleWidth = helveticaBoldFont.widthOfTextAtSize(mainTitle, 24);
-                const dateTitleWidth = helveticaBoldFont.widthOfTextAtSize(dateTitle, 18);
-                context.currentPage.drawText(mainTitle, { x: context.pageWidth / 2 - titleWidth / 2, y: context.pageHeight / 2 + 10, font: helveticaBoldFont, size: 24, color: context.colors.accent });
-                context.currentPage.drawText(dateTitle, { x: context.pageWidth / 2 - dateTitleWidth / 2, y: context.pageHeight / 2 - 20, font: helveticaBoldFont, size: 18, color: context.colors.text });
-
-                // PAGE 2: 1. SITUATION
-                addNewPage();
-                drawTitle("1. SITUATION");
-                drawSubTitle("1.1 Situation Générale"); drawWrappedText(getVal('situation_generale'), { size: 14 });
-                drawSubTitle("1.2 Situation Particulière"); drawWrappedText(getVal('situation_particuliere'), { size: 14 });
-                
-                // PAGE 3: 1.3 ADVERSAIRE
-                addNewPage();
-                drawTitle("1.3 ADVERSAIRE");
-      
-                const imageInfo = getAdversaryImageInfo(formData);
-                let isImagePresent = imageInfo !== null;
-                const photoBoxWidth = 200;
-                const photoBoxHeight = 220;
-                const photoBoxX = context.pageWidth - context.margin - photoBoxWidth;
-                const photoBoxMargin = 10;
-                const topY = context.y; 
-                
-                let tableStartX = context.margin;
-                let tableMaxWidth = context.pageWidth - context.margin * 2;
-                
-                if (isImagePresent) {
-                    tableMaxWidth = photoBoxX - tableStartX - photoBoxMargin;
-                }
-                
-                const adversaireHeaders = ["Information", "Détail"];
-                const meText = (formData.me_list || []).map((me, i) => `ME${i+1}: ${me}`).join(' | ');
-                const adversaireRows = [
-                    ['Nom/Prénom', getVal('nom_adversaire')], ['Domicile', getVal('domicile_adversaire')],
-                    ['Naissance', `${getVal('date_naissance')} à ${getVal('lieu_naissance')}`],
-                    ['Description', `${getVal('stature_adversaire')} / ${getVal('ethnie_adversaire')}`],
-                    ['Signes particuliers', getVal('signes_particuliers')], ['Profession', getVal('profession_adversaire')],
-                    ['Antécédents', getVal('antecedents_adversaire')], ['État d\'esprit', (formData.etat_esprit_list || []).join(', ')],
-                    ['Attitude', getVal('attitude_adversaire')], ['Volume (renfort)', (formData.volume_list || []).join(', ')],
-                    ['Substances', getVal('substances_adversaire')], ['Véhicules', (formData.vehicules_list || []).join(', ')],
-                    ['Armes', getVal('armes_connues')], ['Moyens Employés', meText],
-                ].filter(row => row[1] && String(row[1]).trim() !== 'à');
-                
-                let photoBottomY = topY;
-                let tableBottomY = topY;
-                
-                // 1. Dessiner l'image en haut à droite (si présente)
-                if (isImagePresent) {
-                    const { imageSource, originalSrc, annotationsJson } = imageInfo;
-                    const frameY = topY - photoBoxHeight; 
-                    
-                    try {
-                        const imageBytes = await processImage(imageSource, originalSrc, annotationsJson);
-                        const image = await pdfDoc.embedJpg(imageBytes);
-                        
-                        const scaled = image.scaleToFit(photoBoxWidth - 10, photoBoxHeight - 30);
-                        const imageY = frameY + (photoBoxHeight - scaled.height) / 2;
-
-                        if(frameY >= context.margin) {
-                            context.currentPage.drawRectangle({
-                                x: photoBoxX, y: frameY, width: photoBoxWidth, height: photoBoxHeight,
-                                borderColor: context.colors.accent, borderWidth: 1
-                            });
-                            context.currentPage.drawImage(image, {
-                                x: photoBoxX + (photoBoxWidth - scaled.width) / 2,
-                                y: imageY,
-                                width: scaled.width, height: scaled.height
-                            });
-                            const photoTitle = "Photo de l'objectif";
-                            const titleWidth = helveticaFont.widthOfTextAtSize(photoTitle, 10);
-                            context.currentPage.drawText(photoTitle, {
-                                x: photoBoxX + (photoBoxWidth - titleWidth) / 2,
-                                y: frameY + 5,
-                                font: helveticaFont, size: 10, color: context.colors.text
-                            });
-                            photoBottomY = frameY;
-                        } else {
-                            isImagePresent = false;
-                        }
-                    } catch (e) {
-                         console.error("Échec du traitement de la photo de l'adversaire (annotée ou non):", e);
-                        const frameY = topY - photoBoxHeight;
-                        if(frameY >= context.margin) {
-                            context.currentPage.drawRectangle({
-                                x: photoBoxX, y: frameY, width: photoBoxWidth, height: photoBoxHeight,
-                                borderColor: context.colors.danger, borderWidth: 1
-                            });
-                            photoBottomY = frameY;
-                        }
-                    }
-                }
-
-                // 2. Dessiner le tableau
-                if (adversaireRows.length > 0) {
-                    context.y = topY;
-                    drawTable(adversaireHeaders, adversaireRows, [150, tableMaxWidth - 150], tableStartX);
-                    tableBottomY = context.y;
-                } else {
-                    tableBottomY = topY;
-                }
-                
-                const finalDrawY = Math.min(tableBottomY, photoBottomY);
-                context.y = finalDrawY - 20;
-
-                // PAGE 4: 1.4 ENVIRONNEMENT
-                addNewPage();
-                drawTitle("1.4 ENVIRONNEMENT");
-                drawSubTitle("Ami(e)s (soutien)"); drawWrappedText(getVal('amies'), { size: 14 });
-                drawSubTitle("Terrain / Météo"); drawWrappedText(getVal('terrain_info'), { size: 14 });
-                drawSubTitle("Population"); drawWrappedText(getVal('population'), { size: 14 });
-                drawSubTitle("Cadre juridique"); drawWrappedText(getVal('cadre_juridique'), { size: 14 });
-
-                // PAGE 5: 2. MISSION
-                addNewPage();
-                drawTitle("2. MISSION");
-                drawWrappedText(getVal('missions_psig'), { font: helveticaBoldFont, size: 30, x: context.margin });
-                
-                // PAGE 6: 3. EXÉCUTION
-                addNewPage();
-                drawTitle("3. EXÉUTION");
-                const execText = `En vue d'appréhender le mis en cause et empêcher la déperdition des preuves,\nJe veux, le ${getVal('date_execution') || '(date)'} à partir de ${getVal('heure_execution') || '(heure)'}, pour une action ${getVal('type_action') || '(type d\'action)'} investir le domicile\nprésumé de ${getVal('nom_adversaire') || '(nom de l\'adversaire)'} après avoir bouclé celui-ci.`;
-                drawWrappedText(execText, { size: 16, x: context.margin });
-                drawSubTitle("Chronologie des temps");
-                const chronoHeaders = ["Type", "Heure", "Description"];
-                const chronoRows = (formData.time_events || []).map(e => [e.type || 'N/A', e.hour || 'N/A', e.description || 'N/A']);
-                drawTable(chronoHeaders, chronoRows, [80, 120, 550], context.margin);
-                drawSubTitle("Hypothèses");
-                drawWrappedText(`H1: ${getVal('hypothese_h1')}\nH2: ${getVal('hypothese_h2')}\nH3: ${getVal('hypothese_h3')}`, { size: 14 });
-                
-                // PAGE 7: 4. ARTICULATION INDIA
-                addNewPage();
-                drawTitle("4. ARTICULATION");
-                drawWrappedText(`Place du Chef (Générale): ${getVal('place_chef')}`, { size: 14, x: context.margin });
-                drawSubTitle("Équipe INDIA (INTER)"); 
-                drawSubTitle("Composition:"); drawCompositionList(getCompositionData('india'));
-                drawSubTitle("Mission:"); drawWrappedText(getVal('india_mission'));
-                drawSubTitle("Objectif:"); drawWrappedText(getVal('india_objectif')); drawSubTitle("Itinéraire:");
-                drawWrappedText(getVal('india_itineraire')); drawSubTitle("Points Particuliers:"); drawWrappedText(getVal('india_points_particuliers'));
-                drawSubTitle("Conduite à Tenir:"); drawWrappedText(getVal('india_cat'));
-                
-                // PAGE 8: 4. ARTICULATION AO
-                addNewPage();
-                drawTitle("4. ARTICULATION (Suite)");
-                drawSubTitle("Équipe Appui/Observation (AO) - ZMSPCP"); 
-                drawSubTitle("Composition:"); drawCompositionList(getCompositionData('ao'));
-                drawSubTitle("Zone d'installation (Z):");
-                drawWrappedText(getVal('ao_zone_installation')); drawSubTitle("Mission (M):"); drawWrappedText(getVal('ao_mission'));
-                drawSubTitle("Secteur de surveillance (S):"); drawWrappedText(getVal('ao_secteur_surveillance'));
-                drawSubTitle("Points Particuliers (P):"); drawWrappedText(getVal('ao_points_particuliers'));
-                drawSubTitle("Place du Chef (P):"); drawWrappedText(getVal('ao_place_chef'));
-                drawSubTitle("Conduite à Tenir (C):"); drawWrappedText(getVal('ao_cat'));
-                
-                // PAGE 9: 5. PATRACDVR
-                addNewPage();
-                drawTitle("5. PATRACDVR");
-                const patracHeaders = ["Trigramme", "Fonction", "Cellule", "Armement", "Équip. 1", "Équip. 2", "Tenue", "GPB"];
-                for (const row of (formData.patracdvr_rows || [])) {
-                    if(row.vehicle && row.members && row.members.length > 0) {
-                        drawSubTitle(`Véhicule: ${row.vehicle}`);
-                        const patracRows = row.members.filter(m => m.trigramme).map(m => [m.trigramme, m.fonction, m.cellule, m.armement, m.equipement, m.equipement2, m.tenue, m.gpb]);
-                        if (patracRows.length > 0) { drawTable(patracHeaders, patracRows, [80, 90, 90, 90, 90, 90, 80, 80], context.margin); }
-                    }
-                }
-                
-                // PAGE 10: 6. CAT
-                addNewPage();
-                drawTitle("6. CONDUITES À TENIR");
-                drawSubTitle("Générales"); drawWrappedText(getVal('cat_generales'), {x: context.margin, font: helveticaBoldFont});
-                const noGoText = getVal('no_go');
-                if (noGoText) {
-                    drawSubTitle("NO GO");
-                    drawWrappedText(noGoText, { x: context.margin, font: helveticaBoldFont, size: 14.4, color: context.colors.danger });
-                }
-                drawSubTitle("Liaison"); drawWrappedText(getVal('cat_liaison'), {x: context.margin, font: helveticaBoldFont});
-
-                // PAGE 11: LIEN RETEX (Conservation de l'élément unique)
-                const dateOp = getVal('date_op');
-                const nomAdversaire = getVal('nom_adversaire');
-                if (dateOp && nomAdversaire) {
-                    const safeAdversaireName = nomAdversaire.trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
-                    const oiId = `${dateOp}_${safeAdversaireName}`;
-                    const retexUrl = `${RETEX_BASE_URL}?oiId=${encodeURIComponent(oiId)}`;
-
-                    addNewPage();
-                    const operationTitle = getVal('nom_adversaire') || 'OPERATION';
-                    drawTitle(`RETEX: ${operationTitle.toUpperCase()}`);
-                    drawWrappedText("Chaque membre ayant participé à l'opération est tenu de remplir le formulaire de Retour d'Expérience (Retex) en utilisant le lien ci-dessous.", { size: 14, x: context.margin });
-                    context.y -= 40;
-                    context.currentPage.drawText(retexUrl, { x: context.margin, y: context.y, font: helveticaBoldFont, size: 14, color: context.colors.accent, A: { URI: retexUrl } });
-                    context.y -= 20;
-                }
-                
-                // ANNEXES IMAGES (Ajout après les sections principales)
-                await drawImagesFromContainer('adversary_extra_photos_container', 'Photo Supplémentaire - Adversaire');
-                await drawImagesFromContainer('renforts_photo_container', 'Photo - Renfort Potentiel');
-                await drawImagesFromContainer('photo_container_transport_pr', 'Transport PSIG vers PR');
-                await drawImagesFromContainer('photo_container_transport_domicile', 'Transport PR vers Domicile');
-                await drawImagesFromContainer('photo_container_bapteme_terrain', 'Baptême terrain');
-                await drawImagesFromContainer('photo_container_itineraire_exterieur', 'Itinéraire Extérieur India');
-                await drawImagesFromContainer('photo_container_itineraire_interieur', 'Itinéraire Intérieur India');
-                await drawImagesFromContainer('photo_container_cellule_effraction', 'Cellule Effraction');
-                await drawImagesFromContainer('photo_container_emplacement_ao', 'Emplacement AO');
-
-                // Dernière Page (Si non déjà la dernière page)
-                if (context.pdfDoc.getPages().length > 1 || context.y < context.pageHeight - context.margin - 10) { 
-                    addNewPage();
-                    if (backgroundImage) { context.currentPage.drawImage(backgroundImage, { x: 0, y: 0, width: context.pageWidth, height: context.pageHeight }); }
-                    const finalText = "Avez vous des questions?";
-                    const finalTextWidth = helveticaBoldFont.widthOfTextAtSize(finalText, 48);
-                    context.currentPage.drawText(finalText, { x: context.pageWidth / 2 - finalTextWidth / 2, y: context.pageHeight / 2, font: helveticaBoldFont, size: 48, color: context.colors.accent });
-                }
-            };
-
-            await pdfCreationLogic();
-            const pdfBytes = await pdfDoc.save();
-            return { pdfBytes, formData };
+                return canvas.toDataURL('image/png');
+            } catch (error) {
+                console.error(`Erreur lors de la capture de ${title}:`, error);
+                return null;
+            }
         }
+
+        /**
+         * Gère la capture séquentielle des sections et assemble le PDF final (remplace buildPdf).
+         * NOTE: Utilise jspdf/html2canvas, le texte sera pixélisé.
+         * @returns {Promise<{pdfBytes: Blob, formData: Object}|null>} L'objet Blob et les données du formulaire, ou null en cas d'échec.
+         */
+        async function downloadOiAsScreenshottedPdf() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF('p', 'mm', 'a4');
+            const sectionsToCapture = [
+                { id: 0, selector: '.wizard-step:nth-of-type(1)', title: '1. Situation' },
+                { id: 1, selector: '.wizard-step:nth-of-type(2)', title: '1.3 Adversaire' },
+                { id: 2, selector: '.wizard-step:nth-of-type(3)', title: '1.4 Environnement' },
+                { id: 3, selector: '.wizard-step:nth-of-type(4)', title: '2. Mission du PSIG' },
+                { id: 4, selector: '.wizard-step:nth-of-type(5)', title: '3. Exécution' },
+                { id: 5, selector: '.wizard-step:nth-of-type(6)', title: '4. Articulation' },
+                { id: 6, selector: '.wizard-step:nth-of-type(7)', title: '5. PATRACDVR' },
+                { id: 7, selector: '.wizard-step:nth-of-type(8)', title: 'Photos/Annexes' },
+                { id: 8, selector: '.wizard-step:nth-of-type(9) .retex-section:nth-of-type(1)', title: 'Lien RETEX' }, 
+            ];
+
+            const initialStep = currentStep;
+            let capturedDataURLs = [];
+
+            // Assurer que le conteneur principal du formulaire est visible
+            const formContainer = document.querySelector('.wizard-content');
+            formContainer.style.display = 'block'; // Temporairement visible pour la capture
+
+            try {
+                // 1. Capture séquentielle de chaque section
+                for (let i = 0; i < sectionsToCapture.length; i++) {
+                    const section = sectionsToCapture[i];
+                    const element = document.querySelector(section.selector);
+                    if (!element) continue;
+
+                    // Passer à l'étape pour s'assurer que l'élément est dans le DOM actif
+                    goToStep(i);
+                    await new Promise(resolve => setTimeout(resolve, 300)); // Laisser le temps au DOM de se rafraîchir
+
+                    // Assurer que les sous-éléments repliables sont ouverts pour la capture
+                    const collapsibleContainers = element.querySelectorAll('.collapsible-container');
+                    collapsibleContainers.forEach(c => c.classList.add('open'));
+                    await new Promise(resolve => setTimeout(resolve, 100));
+
+                    const dataURL = await captureElementToDataURL(element, section.title);
+                    if (dataURL) {
+                        capturedDataURLs.push(dataURL);
+                    }
+                }
+
+                // Retour à la section d'origine
+                goToStep(initialStep);
+
+                if (capturedDataURLs.length === 0) {
+                    throw new Error("Aucune section n'a pu être capturée pour le PDF.");
+                }
+
+                // 2. Assemblage du PDF
+                const imgWidth = 200; // Taille légèrement réduite pour les marges (A4 = 210mm)
+                const margin = 5;
+                const pageHeight = 297; 
+                let pageAdded = false;
+
+                capturedDataURLs.forEach((dataURL, index) => {
+                    const img = new Image();
+                    img.src = dataURL;
+                    
+                    const ratio = img.width / img.height;
+                    const finalImgHeight = imgWidth / ratio;
+                    
+                    // Si c'est la première page, on l'ajoute directement (sans addPage() initial)
+                    if (index > 0) {
+                        doc.addPage();
+                    } else if (doc.internal.pages.length === 0) {
+                        doc.addPage();
+                    }
+
+                    // Ajout de l'image capturée
+                    doc.addImage(dataURL, 'PNG', margin, margin, imgWidth, finalImgHeight);
+                    pageAdded = true;
+                });
+
+                // 3. Téléchargement et retour
+                const formData = JSON.parse(localStorage.getItem('oiFormData'));
+                const getVal = (id) => formData[id] || 'RAS';
+                const filename = `OI_Screenshotted_${getVal('date_op').replace(/[\/\\?%*:|"<>]/g, '-')}_${getVal('nom_adversaire').replace(/ /g, '_')}.pdf`;
+                
+                doc.save(filename);
+                
+                return { pdfBytes: new Blob(), formData };
+
+            } catch (error) {
+                console.error("Erreur critique d'assemblage PDF par Screenshot :", error);
+                throw error;
+            } finally {
+                // S'assurer de cacher le formulaire et revenir à l'étape d'origine
+                goToStep(initialStep);
+                document.querySelector('.wizard-content').style.display = 'block'; 
+            }
+        }
+        // --- FIN LOGIQUE DE CAPTURE UHD ET D'ASSEMBLAGE PDF ---
+
 
         // --- NOUVELLE FONCTION DE GÉNÉRATION HTML (MODE PRÉSENTATION) ---
         /**
