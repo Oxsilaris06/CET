@@ -2512,6 +2512,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                             let { width, height } = img;
                             if (width > maxWidth) { height = (maxWidth / width) * height; width = maxWidth; }
                             canvas.width = width; canvas.height = height; ctx.drawImage(img, 0, 0, width, height);
+                            // La conversion en Blob puis ArrayBuffer est la méthode la plus fiable pour forcer le format JPEG
                             canvas.toBlob(blob => {
                                 if (!blob) return reject(new Error('La conversion de l\'image a échoué.'));
                                 blob.arrayBuffer().then(resolve).catch(reject);
@@ -2630,7 +2631,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 addNewPage();
                 drawTitle("1.3 ADVERSAIRE");
       
-                // --- DÉBUT DE LA LOGIQUE D'AJOUT DE LA PHOTO DE L'ADVERSAIRE PRINCIPALE (CORRECTION CRITIQUE) ---
+                // --- DÉBUT DE LA LOGIQUE D'AJOUT DE LA PHOTO DE L'ADVERSAIRE PRINCIPALE ---
                 const imageInfo = getAdversaryImageInfo(formData);
                 const isImagePresent = imageInfo !== null;
                 const photoBoxWidth = 200;
@@ -2674,7 +2675,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                         const scaled = image.scaleToFit(photoBoxWidth - 10, photoBoxHeight - 30);
                         const imageY = frameY + (photoBoxHeight - scaled.height) / 2;
 
-                        // Vérifier si la photo rentre avant de la dessiner
                         if(frameY >= context.margin) {
                             context.currentPage.drawRectangle({
                                 x: photoBoxX, y: frameY, width: photoBoxWidth, height: photoBoxHeight,
@@ -2694,12 +2694,10 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                             });
                             photoBottomY = frameY;
                         } else {
-                             // Si l'image ne rentre pas, on annule son dessin pour cette page
                             console.warn("L'image de l'adversaire principal ne rentre pas sur la page initiale.");
                         }
                     } catch (e) {
                          console.error("Échec du traitement de la photo de l'adversaire (annotée ou non):", e);
-                        // Dessiner un cadre d'erreur pour marquer l'espace réservé (si nécessaire)
                         const frameY = topY - photoBoxHeight;
                         if(frameY >= context.margin) {
                             context.currentPage.drawRectangle({
@@ -2721,7 +2719,8 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 }
                 
                 // 3. On s'assure que le curseur Y pour le contenu suivant est en dessous de l'élément le plus bas (tableau ou photo)
-                context.y = Math.min(tableBottomY, photoBottomY) - 20;
+                const finalDrawY = Math.min(tableBottomY, photoBottomY);
+                context.y = finalDrawY - 20;
 
                 // --- FIN DE LA LOGIQUE D'AJOUT DE LA PHOTO PRINCIPALE ---
                 
