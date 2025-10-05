@@ -323,10 +323,11 @@
              padding: 10px; background-color: var(--bg-container);
         }
         .modal-actions-pdf {
-            display: flex; justify-content: space-between; gap: 10px; margin-top: 20px; 
+            display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; 
             flex-shrink: 0;
         }
-        .modal-actions-pdf button { flex: 1; }
+        .modal-actions-pdf button { width: auto; }
+        .modal-actions-pdf #downloadPdfBtn { flex: 1; max-width: 250px; background-color: var(--success-green); }
 
 
         @media (min-width: 768px) {
@@ -391,7 +392,7 @@
         <div id="presentation-content">
             </div>
         <div class="modal-actions-pdf">
-            <button id="downloadPdfBtn" type="button" class="wizard-nav-btn" style="background-color: var(--success-green); color: white;">
+            <button id="downloadPdfBtn" type="button" class="wizard-nav-btn">
                 Télécharger le PDF 📄
             </button>
             <button id="closePresentationModalBtn" type="button" class="wizard-nav-btn" style="background-color: var(--danger-red); color: white;">
@@ -811,7 +812,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
         const prevBtn = document.getElementById('prevBtn');
         const nextBtn = document.getElementById('nextBtn');
         const previewBtn = document.getElementById('previewBtn');
-        // const generatePdfBtn = document.getElementById('generatePdfBtn'); // Supprimé
         const retexReportBtn = document.getElementById('retexReportBtn');
         const retexStatus = document.getElementById('retex_status');
         const retexOutput = document.getElementById('retex_output');
@@ -2467,7 +2467,10 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 
                 try {
                     const result = await buildPdf();
-                    if (!result) { btn.textContent = originalText; btn.disabled = false; return; }
+                    if (!result) { 
+                        alert("La génération a échoué. Vérifiez vos données.");
+                        return; 
+                    }
                     const { pdfBytes, formData } = result;
                     const blob = new Blob([pdfBytes], { type: 'application/pdf' });
                     const url = URL.createObjectURL(blob);
@@ -2475,8 +2478,11 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     const getVal = (id) => formData[id] || 'RAS';
                     const link = document.createElement('a');
                     link.href = url;
+                    // Définir le nom du fichier
                     link.download = `OI_${getVal('date_op').replace(/[\/\\?%*:|"<>]/g, '-')}_${getVal('nom_adversaire').replace(/ /g, '_')}.pdf`;
-                    document.body.appendChild(link); link.click(); document.body.removeChild(link);
+                    document.body.appendChild(link); 
+                    link.click(); 
+                    document.body.removeChild(link);
                     
                     alert("Le document PDF a été téléchargé.");
                     
@@ -2534,7 +2540,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             
         });
         
-        // --- PDF GENERATION (MISE À JOUR) ---
+        // --- PDF GENERATION (CORRIGÉ) ---
 
         /**
          * Récupère les données d'image pour l'adversaire principal.
@@ -2572,12 +2578,11 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             const context = {
                 pdfDoc, helveticaFont, helveticaBoldFont,
                 currentPage: null, y: 0, pageWidth: 0, pageHeight: 0, margin: 40,
-                colors: isDarkMode ? { background: rgb(30/255, 30/255, 30/255), text: rgb(1, 1, 1), accent: rgb(91/255, 155/255, 213/255) } : { background: rgb(1, 1, 1), text: rgb(0, 0, 0), accent: rgb(0, 51/255, 160/255) }
+                colors: isDarkMode ? { background: rgb(30/255, 30/255, 30/255), text: rgb(1, 1, 1), accent: rgb(91/255, 155/255, 213/255), danger: rgb(192/255, 57/255, 43/255) } : { background: rgb(1, 1, 1), text: rgb(0, 0, 0), accent: rgb(0, 51/255, 160/255), danger: rgb(192/255, 57/255, 43/255) }
             };
             let backgroundImage = null;
             try {
                 const bgImageUrl = 'Fd.png';
-                // Assurez-vous que l'URL 'Fd.png' est accessible
                 const bgImageBytes = await fetch(bgImageUrl).then(res => res.arrayBuffer());
                 backgroundImage = await pdfDoc.embedPng(bgImageBytes);
             } catch (e) { console.warn("L'image de fond 'Fd.png' n'a pas pu être chargée.", e); }
@@ -2722,7 +2727,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 if (checkY(lineHeight)) { context.y -= 10; }
 
                 let currentX = context.margin + 15;
-                const cellStyle = { font: helveticaBoldFont, color: rgb(1, 0, 0), size: fontSize };
+                const cellStyle = { font: helveticaBoldFont, color: context.colors.danger, size: fontSize };
                 const trigrammeStyle = { font: helveticaBoldFont, color: context.colors.text, size: fontSize };
                 const separatorStyle = { font: helveticaFont, color: context.colors.text, size: fontSize };
                 
@@ -2848,7 +2853,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                         if(frameY >= context.margin) {
                             context.currentPage.drawRectangle({
                                 x: photoBoxX, y: frameY, width: photoBoxWidth, height: photoBoxHeight,
-                                borderColor: rgb(1, 0, 0), borderWidth: 1
+                                borderColor: context.colors.danger, borderWidth: 1
                             });
                             photoBottomY = frameY;
                         }
@@ -2934,7 +2939,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 const noGoText = getVal('no_go');
                 if (noGoText) {
                     drawSubTitle("NO GO");
-                    drawWrappedText(noGoText, { x: context.margin, font: helveticaBoldFont, size: 14.4, color: rgb(1, 0.2, 0.2) });
+                    drawWrappedText(noGoText, { x: context.margin, font: helveticaBoldFont, size: 14.4, color: context.colors.danger });
                 }
                 drawSubTitle("Liaison"); drawWrappedText(getVal('cat_liaison'), {x: context.margin, font: helveticaBoldFont});
 
@@ -2967,7 +2972,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 await drawImagesFromContainer('photo_container_emplacement_ao', 'Emplacement AO');
 
                 // Dernière Page (Si non déjà la dernière page)
-                if (context.currentPage.getPages().length > 1) { // Ne pas ajouter si c'est la seule page (couverture)
+                if (context.pdfDoc.getPages().length > 1 || context.y < context.pageHeight - context.margin - 10) { 
                     addNewPage();
                     if (backgroundImage) { context.currentPage.drawImage(backgroundImage, { x: 0, y: 0, width: context.pageWidth, height: context.pageHeight }); }
                     const finalText = "Avez vous des questions?";
@@ -2981,7 +2986,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             return { pdfBytes, formData };
         }
 
-        // --- NOUVELLE FONCTION DE GÉNÉRATION HTML (MODE PRÉSENTATION) - CONSERVÉE POUR AFFICHAGE LOCAL SI NÉCESSAIRE ---
+        // --- NOUVELLE FONCTION DE GÉNÉRATION HTML (MODE PRÉSENTATION) ---
         /**
          * Construit le contenu HTML pour le mode présentation, en nettoyant les **.
          * @returns {string} Le contenu HTML stylisé de l'O.I.
@@ -3002,17 +3007,14 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
 
             let htmlContent = `<div style="font-family: 'Oswald', sans-serif; color: ${primaryText};">`;
 
-            // Fonction pour retirer les marqueurs de gras Markdown (**) et les tags HTML.
-            const cleanText = (text) => String(text || '')
-                .replace(/<br>/g, ' ') // Remplace les <br> par des espaces pour le nettoyage des **
-                .replace(/\*\*(.*?)\*\*/g, '$1') // Supprime les **
-                .trim();
+            // Fonction pour retirer les marqueurs de gras Markdown (**)
+            const cleanText = (text) => String(text || '').replace(/\*\*(.*?)\*\*/g, '$1').trim();
             
             const wrapHtml = (text, tag = 'p', style = {}) => {
                 const styleString = Object.entries(style).map(([key, value]) => `${key}:${value}`).join(';');
-                // Pour l'affichage, on remplace les sauts de ligne par <br>
+                // Retirer les ** du texte pour le HTML et remplacer \n par <br>
                 const formattedText = String(text || '')
-                    .replace(/\*\*/g, '') // Supprime les ** du texte pour le HTML
+                    .replace(/\*\*/g, '') 
                     .replace(/\n/g, '<br>');
                 return `<${tag} style="${styleString}">${formattedText}</${tag}>`;
             };
@@ -3129,7 +3131,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             htmlContent += drawTextHtml(getVal('missions_psig'), true, dangerColor, '1.6em', '0');
             
             htmlContent += drawTitleHtml("3. EXÉUTION");
-            // Le texte d'exécution doit être traité pour enlever les **
             const execText = `En vue d'appréhender le mis en cause et empêcher la déperdition des preuves,<br>Je veux, le ${getVal('date_execution') || '(date)'} à partir de ${getVal('heure_execution') || '(heure)'}, pour une action ${getVal('type_action') || '(type d\'action)'} investir le domicile<br>présumé de ${getVal('nom_adversaire') || '(nom de l\'adversaire)'} après avoir bouclé celui-ci.`;
             htmlContent += wrapHtml(execText, 'p', { 'font-size': '1.4em', 'margin-bottom': '15px', 'padding-left': '0' });
 
@@ -3139,7 +3140,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             htmlContent += drawTableHtml(chronoHeaders, chronoRows);
 
             htmlContent += drawSubTitleHtml("Hypothèses");
-            htmlContent += drawTextHtml(`H1: ${getVal('hypothese_h1')}\nH2: ${getVal('hypothese_h2')}\nH3: ${getVal('hypothese_h3')}`, true, primaryText, '1.2em');
+            htmlContent += drawTextHtml(`H1: ${getVal('hypothese_h1')}<br>H2: ${getVal('hypothese_h2')}<br>H3: ${getVal('hypothese_h3')}`, true, primaryText, '1.2em');
             
             htmlContent += drawImageHtml('photo_container_transport_pr', 'Transport PSIG vers PR');
             htmlContent += drawImageHtml('photo_container_transport_domicile', 'Transport PR vers Domicile');
