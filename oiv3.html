@@ -1392,14 +1392,16 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     const originalSrcKey = previewImg.id + '_original_src';
                     const annotationsKey = previewImg.id + '_annotations';
                     
+                    // --- CORRECTION CRITIQUE POUR LE RECHARGEMENT DES IMAGES/ANNOTATIONS ---
                     if (data[srcKey]) {
-                        previewImg.src = data[srcKey];
+                        previewImg.src = data[srcKey]; // Utilise la source potentiellement annotée/modifiée
                         previewImg.dataset.originalSrc = data[originalSrcKey];
                         previewImg.dataset.annotations = data[annotationsKey] || '[]';
                         previewImg.style.display = 'block';
                         if (annotateBtn) annotateBtn.style.display = 'inline-block';
-                        if (span) span.textContent = 'Image chargée'; // Le nom original du fichier est perdu ici
+                        if (span) span.textContent = 'Image chargée'; 
                     }
+                    // --- FIN CORRECTION CRITIQUE ---
                 });
 
                 Object.keys(data).forEach(key => {
@@ -2106,441 +2108,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             context.restore();
         }
         
-        // --- EVENT LISTENERS & INITIALIZATION ---
-        document.addEventListener('DOMContentLoaded', async () => {
-            
-            // 1. Initialiser le champ photo (avant le chargement des données)
-            if (document.querySelectorAll('#adversary_photo_container .photo-input-wrapper').length === 0) {
-                 addPhotoInput('adversary_photo_container', true); 
-            }
-            
-            // 2. Charger les données locales ou la config par défaut
-            const isLocalDataLoaded = loadFormData();
-            if (!isLocalDataLoaded) {
-                 await loadDefaultConfig();
-            }
-
-            // 3. Initialiser l'UI (Quick Edit, etc.) après le chargement des options
-            setupQuickEditPanel(); 
-
-            document.querySelector('.container').addEventListener('click', (event) => {
-                const header = event.target.closest('.collapsible-header');
-                if (header) { const container = header.parentElement; if (container && container.classList.contains('collapsible-container')) { container.classList.toggle('open'); } }
-            });
-            const modal = document.getElementById('editMemberModal'); const form = document.getElementById('editMemberForm');
-            document.getElementById('modal_saveBtn').addEventListener('click', () => {
-                const buttonId = form.dataset.editingButtonId; const button = document.getElementById(buttonId);
-                if (button) {
-                    button.dataset.trigramme = document.getElementById('modal_trigramme').value;
-                    
-                    for (const key in memberConfig) {
-                        const attrName = key.replace(/s$/, '');
-                        const selectId = 'modal_' + attrName;
-                        const select = document.getElementById(selectId);
-                        if (select) {
-                            button.dataset[attrName] = select.value;
-                        }
-                    }
-                    
-                    updateMemberButtonVisuals(button);
-                    populateQuickEditPanel(buttonId);
-                    saveFormData();
-                }
-                modal.close();
-            });
-            document.getElementById('modal_cancelBtn').addEventListener('click', () => modal.close());
-            
-            // Logique de renvoi en attente / suppression définitive
-            document.getElementById('modal_deleteBtn').addEventListener('click', () => {
-                const buttonId = form.dataset.editingButtonId; const button = document.getElementById(buttonId);
-                const isUnassigned = button.closest('#unassigned_members_container');
-
-                if (!button) return;
-
-                if (isUnassigned) {
-                    // Si dans 'Personnel à attribuer', on supprime définitivement
-                    if(confirm(`Voulez-vous vraiment SUPPRIMER DÉFINITIVEMENT le membre ${button.dataset.trigramme || 'N/A'}? Cette action est irréversible.`)) {
-                        button.remove(); 
-                        saveFormData(); 
-                        modal.close(); 
-                        activeMemberId = null;
-                        document.getElementById('quickEditPanel').style.display = 'none';
-                    }
-                } else {
-                    // Si dans un véhicule, on renvoie dans 'Personnel à attribuer'
-                    if(confirm(`Voulez-vous renvoyer le membre ${button.dataset.trigramme || 'N/A'} dans la section "Personnel à attribuer"?`)) {
-                        button.dataset.cellule = 'Sans'; // On réinitialise sa cellule
-                        button.dataset.fonction = 'Sans'; // On réinitialise sa fonction
-                        updateMemberButtonVisuals(button);
-                        unassignedContainer.appendChild(button);
-                        saveFormData(); 
-                        modal.close(); 
-                        activeMemberId = null;
-                        document.getElementById('quickEditPanel').style.display = 'none';
-                    }
-                }
-            });
-            
-            const dockMenu = document.getElementById('dockMenu'); const dockToggleBtn = document.getElementById('dockToggleBtn');
-            dockToggleBtn.addEventListener('click', (event) => { event.stopPropagation(); dockMenu.classList.toggle('collapsed'); localStorage.setItem('dockCollapsed', dockMenu.classList.contains('collapsed')); });
-            document.getElementById('darkModeToggle').addEventListener('click', () => {
-                document.body.classList.toggle('light-mode'); document.body.classList.toggle('dark-mode');
-                const isDarkMode = document.body.classList.contains('dark-mode');
-                localStorage.setItem('theme', isDarkMode ? 'dark' : 'light');
-                document.getElementById('darkModeIcon').textContent = isDarkMode ? 'nightlight' : 'clear_day';
-            });
-            document.getElementById('settingsBtn').addEventListener('click', () => {
-                const settingsModal = document.getElementById('settingsModal');
-                document.getElementById('geminiApiKey').value = localStorage.getItem('geminiApiKey') || '';
-                settingsModal.showModal();
-            });
-            document.getElementById('settings_closeBtn').addEventListener('click', () => {
-                document.getElementById('settingsModal').close();
-            });
-            document.getElementById('settings_saveBtn').addEventListener('click', () => {
-                const apiKey = document.getElementById('geminiApiKey').value;
-                if (apiKey) {
-                    localStorage.setItem('geminiApiKey', apiKey);
-                    alert("Clé API sauvegardée.");
-                    document.getElementById('settingsModal').close();
-                } else {
-                    alert("Veuillez saisir une clé API.");
-                }
-            });
-            document.getElementById('resetBtn').addEventListener('click', () => { 
-                if (confirm("Voulez-vous vraiment réinitialiser tout le formulaire?")) { 
-                    localStorage.removeItem('oiFormData'); 
-                    // Supprime le drapeau d'alerte pour qu'il s'affiche à nouveau si l'erreur se reproduit
-                    localStorage.removeItem('quotaAlertShown'); 
-                    location.reload(); 
-                } 
-            });
-            document.getElementById('tutorialBtn').addEventListener('click', startTutorial);
-            
-            // Nouveau gestionnaire d'événement pour le bouton d'import JSON
-            importJsonConfigBtn.addEventListener('click', () => {
-                 jsonConfigInput.click();
-            });
-            
-            jsonConfigInput.addEventListener('change', (event) => {
-                const file = event.target.files[0];
-                if (!file) { return; }
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    try {
-                        const config = JSON.parse(e.target.result);
-                        if (config && (Array.isArray(config.members) || config.options)) {
-                            // Supprime les données existantes avant de charger la nouvelle config
-                            patracdvrContainer.innerHTML = ''; 
-                            loadConfigObject(config); 
-                        }
-                        else { alert("Le fichier JSON est invalide ou ne contient pas de tableau 'members' ou d'objet 'options'."); }
-                    } catch (err) { alert("Erreur de lecture du JSON."); console.error(err); }
-                    location.reload(); // Rechargement forcé après l'import pour nettoyer l'état du formulaire
-                };
-                reader.readAsText(file);
-                // Réinitialise l'input pour permettre l'import du même fichier si besoin
-                event.target.value = null; 
-            });
-
-            // --- NOUVEAU: Chargement de la config par défaut sur clic ---
-            importDefaultConfigBtn.addEventListener('click', () => {
-                if(confirm("Ceci va remplacer la configuration PATRACDVR et les options d'équipement actuelles. Continuer?")) {
-                    loadDefaultConfig();
-                }
-            });
-            
-            // --- Logique RETEX originale (Génération de lien externe) ---
-            retexReportBtn.addEventListener('click', () => {
-                 const dateOp = document.getElementById('date_op').value;
-                 const nomAdversaire = document.getElementById('nom_adversaire').value;
-                 if (!dateOp || !nomAdversaire) {
-                    alert("Veuillez renseigner la date de l'opération et le nom de l'adversaire pour créer le lien RETEX.");
-                    return;
-                 }
-                 const safeAdversaireName = nomAdversaire.trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
-                 const oiId = `${dateOp}_${safeAdversaireName}`;
-                 const retexUrl = `${RETEX_BASE_URL}?oiId=${encodeURIComponent(oiId)}`;
-                 window.open(retexUrl, '_blank');
-            });
-            // --- Fin Logique RETEX originale ---
-            
-            resetPatracdvrBtn.addEventListener('click', () => { 
-                if (confirm("Voulez-vous vraiment effacer TOUS les véhicules et membres du PATRACDVR et vider la sauvegarde locale des membres ?")) { 
-                    patracdvrContainer.innerHTML = ''; 
-                    unassignedContainer.innerHTML = ''; 
-                    localStorage.removeItem('oiFormData'); // Assurez-vous d'effacer les données du stockage local
-                    saveFormData(); 
-                    alert("PATRACDVR réinitialisé. La prochaine fois, une configuration par défaut sera chargée (si disponible).");
-                } 
-            });
-            
-            const vehicleCreationContainer = document.getElementById('vehicle_creation_buttons');
-            availableVehicles.forEach(vehicle => {
-                const btn = document.createElement('button');
-                btn.type = 'button';
-                btn.className = 'add-btn add-vehicle-btn';
-                btn.textContent = `➕ ${vehicle}`;
-                btn.addEventListener('click', () => addPatracdvrRow(vehicle));
-                vehicleCreationContainer.insertBefore(btn, document.getElementById('addManualVehicleBtn'));
-            });
-
-            // Ajout des écouteurs d'événements pour les nouveaux boutons manuels
-            document.getElementById('addManualVehicleBtn').addEventListener('click', addManualVehicle);
-            document.getElementById('addManualMemberBtn').addEventListener('click', addManualMember);
-
-            document.querySelector('.wizard-step:has(#patracdvr_container)').addEventListener('click', handleMemberSelection);
-
-            document.getElementById('quickEditPanel').addEventListener('click', (event) => {
-                event.stopPropagation();
-                const target = event.target;
-                const quickEditButton = target.closest('.quick-edit-btn');
-                const fullEditButton = target.closest('#fullEditBtn');
-
-                if (quickEditButton && activeMemberId) {
-                    const activeMember = document.getElementById(activeMemberId);
-                    if (!activeMember) return;
-                    const attribute = quickEditButton.dataset.attribute;
-                    const value = quickEditButton.dataset.value;
-                    activeMember.dataset[attribute] = value;
-                    
-                    // Si on change la cellule, mettre à jour la fonction si on passe à "Sans" ou vice-versa
-                    if (attribute === 'cellule' && value === 'Sans') {
-                        activeMember.dataset.fonction = 'Sans';
-                    }
-                    if (attribute === 'fonction' && value !== 'Sans' && activeMember.dataset.cellule === 'Sans') {
-                        activeMember.dataset.cellule = 'India 1'; // Assure une cellule par défaut si on donne une fonction
-                    }
-                    
-                    updateMemberButtonVisuals(activeMember);
-                    const group = quickEditButton.parentElement;
-                    group.querySelectorAll('.quick-edit-btn').forEach(btn => btn.classList.remove('selected'));
-                    quickEditButton.classList.add('selected');
-                    saveFormData();
-                } else if (fullEditButton && activeMemberId) {
-                    openMemberModal(activeMemberId);
-                }
-            });
-
-            const quickEditModal = document.getElementById('quickEditModal');
-            document.getElementById('quick_modal_closeBtn').addEventListener('click', () => quickEditModal.close());
-            quickEditModal.addEventListener('click', (event) => {
-                const target = event.target.closest('.quick-edit-btn');
-                if (!target || !activeMemberId) return;
-
-                const activeMember = document.getElementById(activeMemberId);
-                if (!activeMember) return;
-
-                const attribute = target.dataset.attribute;
-                const value = target.dataset.value;
-
-                activeMember.dataset[attribute] = value;
-                
-                // Logique de mise à jour de la cellule/fonction
-                if (attribute === 'cellule' && value === 'Sans') {
-                    activeMember.dataset.fonction = 'Sans';
-                }
-                if (attribute === 'fonction' && value !== 'Sans' && activeMember.dataset.cellule === 'Sans') {
-                    activeMember.dataset.cellule = 'India 1';
-                }
-                
-                updateMemberButtonVisuals(activeMember);
-                
-                const group = target.closest('.quick-edit-options');
-                if(group) {
-                    group.querySelectorAll('.quick-edit-btn').forEach(btn => btn.classList.remove('selected'));
-                }
-                target.classList.add('selected');
-
-                saveFormData();
-            });
-
-
-            canvas.addEventListener('mousedown', handleDrawStart); canvas.addEventListener('mousemove', handleDrawMove);
-            canvas.addEventListener('mouseup', handleDrawEnd); canvas.addEventListener('mouseout', handleDrawEnd);
-            // Correction: Utiliser { passive: false } pour empêcher le défilement pendant le dessin/déplacement sur mobile
-            canvas.addEventListener('touchstart', handleDrawStart, { passive: false }); 
-            canvas.addEventListener('touchmove', handleDrawMove, { passive: false });
-            canvas.addEventListener('touchend', handleDrawEnd);
-            
-            document.querySelectorAll('.toolbar-main-tools .tool-btn').forEach(btn => {
-                btn.addEventListener('click', () => { const toolId = btn.id.split('_')[1]; if (['move', 'location', 'arrow', 'box'].includes(toolId)) setActiveTool(toolId); });
-            });
-            document.getElementById('tool_reset').addEventListener('click', () => { annotations = []; selectedAnnotation = null; setContextualTools(null); redrawCanvas(); saveFormData();});
-            document.getElementById('annotation_cancel').addEventListener('click', () => annotationModal.close());
-            document.getElementById('annotation_save').addEventListener('click', () => {
-                const targetId = annotationModal.dataset.targetPreviewId; const previewImg = document.getElementById(targetId);
-                if(previewImg) {
-                    // La source affichée reste la dernière image annotée (ou l'originale si pas d'annotation)
-                    // Mais on sauvegarde les annotations dans le dataset
-                    previewImg.dataset.annotations = JSON.stringify(annotations);
-                }
-                // NOTE: La source du previewImg n'est plus mise à jour ici car l'image annotée sera re-générée DANS buildPdf.
-                saveFormData(); annotationModal.close();
-            });
-            
-            // Événement pour la rotation libre
-            rotationInput.addEventListener('change', updateAnnotationRotation);
-
-            document.getElementById('delete_btn').addEventListener('click', () => { if(selectedAnnotation){ annotations = annotations.filter(ann => ann !== selectedAnnotation); selectedAnnotation = null; setContextualTools(null); redrawCanvas(); saveFormData(); } });
-            document.getElementById('edit_text_btn').addEventListener('click', () => { if(selectedAnnotation && selectedAnnotation.type === 'location'){ const newText = prompt('Modifier texte:', selectedAnnotation.text); if(newText !== null){ selectedAnnotation.text = newText; redrawCanvas(); saveFormData(); } } });
-            
-            const importSessionBtn = document.getElementById('importSessionBtn');
-            const exportSessionBtn = document.getElementById('exportSessionBtn');
-            const sessionFileInput = document.getElementById('sessionFileInput');
-            importSessionBtn.addEventListener('click', () => sessionFileInput.click());
-            exportSessionBtn.addEventListener('click', () => {
-                saveFormData();
-                const dataString = localStorage.getItem('oiFormData');
-                if (!dataString) { alert("Aucune donnée à exporter."); return; }
-                const blob = new Blob([dataString], {type: 'application/json'});
-                const url = URL.createObjectURL(blob);
-                const link = document.createElement('a');
-                const date = new Date().toISOString().slice(0, 10);
-                link.download = `OI_Session_${date}.json`;
-                link.href = url;
-                link.click();
-                URL.revokeObjectURL(url);
-            });
-            sessionFileInput.addEventListener('change', (event) => {
-                const file = event.target.files[0];
-                if (!file) return;
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    try {
-                        const jsonContent = e.target.result;
-                        JSON.parse(jsonContent);
-                        localStorage.setItem('oiFormData', jsonContent);
-                        alert("Session importée avec succès. Rechargement de la page.");
-                        location.reload();
-                    } catch (err) {
-                        alert("Fichier invalide ou corrompu.");
-                    }
-                };
-                reader.readAsText(file);
-                event.target.value = null;
-            });
-
-            // --- GESTION DU DRAG AND DROP GLOBALE ---
-            document.addEventListener('dragstart', e => { 
-                const target = e.target.closest('.patracdvr-member-btn, .time-item');
-                if (target && target.classList.contains('draggable')) { 
-                    draggedItem = target; 
-                    // Stocke l'ID ou toute info nécessaire pour identifier le membre
-                    e.dataTransfer.setData('text/plain', target.id);
-                    setTimeout(() => target.classList.add('dragging'), 0); 
-                } 
-            });
-
-            document.addEventListener('dragend', () => { 
-                if (draggedItem) { 
-                    draggedItem.classList.remove('dragging'); 
-                    draggedItem = null; 
-                    // La sauvegarde se fait dans handleDrop
-                } 
-            });
-
-            // Cibler les conteneurs de dépôt (à la fois les zones de véhicule et la zone non assignée)
-            const dropContainers = document.querySelectorAll('.patracdvr-members-container, #unassigned_members_container');
-            dropContainers.forEach(container => {
-                container.addEventListener('dragenter', handleDragEnter);
-                container.addEventListener('dragleave', handleDragLeave);
-                container.addEventListener('dragover', handleDragOver); // Pour le tri visuel
-                container.addEventListener('drop', handleDrop);
-            });
-
-            // Logique de dragover pour les événements temporels (gestion du tri à l'intérieur)
-            document.addEventListener('dragover', e => {
-                e.preventDefault();
-                const targetContainer = e.target.closest('#time_events_container');
-                if (targetContainer && draggedItem && draggedItem.classList.contains('time-item')) {
-                    const afterElement = getDragAfterElement(targetContainer, e.clientY);
-                    if (afterElement == null) { targetContainer.appendChild(draggedItem); } 
-                    else { targetContainer.insertBefore(draggedItem, afterElement); }
-                }
-            });
-            // --- FIN GESTION DRAG AND DROP GLOBALE ---
-            
-            // --- GESTION DU MODE PRÉSENTATION/TÉLÉCHARGEMENT PDF (MISE À JOUR) ---
-            const presentationModal = document.getElementById('presentationModal');
-            const closePresentationModalBtn = document.getElementById('closePresentationModalBtn');
-            const downloadPdfBtn = document.getElementById('downloadPdfBtn');
-
-            // 1. Fonction de téléchargement du PDF (appelée depuis la modale)
-            async function downloadOiPdf() {
-                if (typeof HTML2Canvas === 'undefined' || typeof jsPDF === 'undefined') {
-                    alert("Erreur: Les bibliothèques de capture d'écran (html2canvas/jspdf) ne sont pas chargées.");
-                    return;
-                }
-                
-                const btn = downloadPdfBtn;
-                const originalText = btn.textContent;
-                btn.textContent = 'Génération en cours...'; btn.disabled = true;
-                
-                try {
-                    // Utilise la nouvelle fonction de capture/assemblage
-                    const result = await downloadOiAsScreenshottedPdf();
-                    
-                    if (result && result.pdfBytes) { 
-                        alert("Le document PDF a été téléchargé.");
-                    } else {
-                        alert("La génération du PDF a échoué. Veuillez vérifier les détails dans la console.");
-                    }
-                    
-                } catch (error) {
-                    console.error("Erreur critique lors de la génération du PDF:", error);
-                    alert("Une erreur critique est survenue lors de la génération du PDF. Consultez la console (F12) pour plus de détails.");
-                } finally {
-                    btn.textContent = originalText; btn.disabled = false;
-                }
-            }
-
-            // 2. Fonction d'ouverture du Mode Présentation (HTML + bouton PDF)
-            function openPresentationMode() {
-                const presentationContent = document.getElementById('presentation-content');
-                
-                if (!presentationModal) {
-                    console.error("Modale 'presentationModal' non trouvée.");
-                    return;
-                }
-
-                // Injecte la version HTML de l'O.I.
-                const html = buildPresentationHtml();
-                presentationContent.innerHTML = html;
-                
-                // Ouvre la modale
-                if(typeof presentationModal.showModal === 'function') {
-                    presentationModal.showModal();
-                } else {
-                    presentationModal.style.display = 'block';
-                }
-            }
-
-            // 3. Configuration des événements
-            previewBtn.addEventListener('click', openPresentationMode);
-            downloadPdfBtn.addEventListener('click', downloadOiPdf);
-
-            if (closePresentationModalBtn) {
-                closePresentationModalBtn.addEventListener('click', () => {
-                    if (presentationModal) {
-                         if(typeof presentationModal.close === 'function') {
-                            presentationModal.close();
-                        } else {
-                            presentationModal.style.display = 'none';
-                        }
-                    }
-                });
-            }
-
-            // FIN GESTION DU MODE PRÉSENTATION
-
-            if (localStorage.getItem('theme') === 'light') { document.body.classList.replace('dark-mode', 'light-mode'); document.getElementById('darkModeIcon').textContent = 'clear_day'; }
-            if (localStorage.getItem('dockCollapsed') === 'true') { dockMenu.classList.add('collapsed'); }
-            
-            showStep(currentStep);
-            
-        });
-        
         // --- LOGIQUE DE CAPTURE UHD ET D'ASSEMBLAGE PDF (NOUVEAU) ---
 
         /**
@@ -2635,9 +2202,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 // 2. Assemblage du PDF
                 const imgWidth = 200; // Taille légèrement réduite pour les marges (A4 = 210mm)
                 const margin = 5;
-                const pageHeight = 297; 
-
-                // Utilisation de la première image comme page de départ pour initialiser le document
+                
                 let firstImageAdded = false;
 
                 capturedDataURLs.forEach((dataURL) => {
@@ -2680,7 +2245,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
 
         // --- NOUVELLE FONCTION DE GÉNÉRATION HTML (MODE PRÉSENTATION) ---
         /**
-         * Construit le contenu HTML pour le mode présentation, en nettoyant les **.
+         * Construit le contenu HTML pour le mode présentation, en nettoyant les ** et en gérant les retours à la ligne.
          * @returns {string} Le contenu HTML stylisé de l'O.I.
          */
         function buildPresentationHtml() {
@@ -2704,14 +2269,14 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             
             const wrapHtml = (text, tag = 'p', style = {}) => {
                 const styleString = Object.entries(style).map(([key, value]) => `${key}:${value}`).join(';');
-                // Retirer les ** du texte pour le HTML et conserver les retours à la ligne grâce à white-space: pre-wrap dans le CSS.
+                // Retirer les ** du texte pour le HTML.
                 const formattedText = String(text || '').replace(/\*\*/g, '');
                 return `<${tag} style="${styleString}">${formattedText}</${tag}>`;
             };
 
             const drawTitleHtml = (text) => wrapHtml(cleanText(text), 'h2', { 'color': accentColor, 'font-size': '1.8em', 'margin-top': '20px', 'padding-bottom': '5px', 'border-bottom': `2px solid ${accentColor}` });
             const drawSubTitleHtml = (text) => wrapHtml(cleanText(text), 'h3', { 'color': accentColor, 'font-size': '1.3em', 'margin-top': '15px', 'margin-bottom': '10px' });
-            // Modification pour appliquer white-space: pre-wrap au niveau du style inline pour surcharger tout CSS non spécifique
+            // Utilise drawTextHtml pour les champs de texte longs (textarea) qui doivent conserver les sauts de ligne.
             const drawTextHtml = (text, bold = false, color = primaryText, size = '1.1em', indent = '15px') => wrapHtml(text, 'p', { 'font-weight': bold ? '500' : '400', 'color': color, 'font-size': size, 'margin-bottom': '8px', 'padding-left': indent, 'white-space': 'pre-wrap' });
             
             const drawTableHtml = (headers, rows) => {
@@ -2724,7 +2289,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     row.forEach(cell => { 
                         // Assure que le contenu des cellules est nettoyé des **
                         const cellContent = String(cell || '').replace(/\*\*/g, '');
-                        // Dans les tableaux HTML, les retours à la ligne sont conservés par <br>
+                        // Applique white-space: pre-wrap pour conserver les sauts de ligne
                         table += `<td style="padding: 10px; border: 1px solid ${secondaryText}; vertical-align: top; white-space: pre-wrap;">${cellContent}</td>`; 
                     });
                     table += `</tr>`;
