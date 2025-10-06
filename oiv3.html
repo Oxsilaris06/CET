@@ -296,11 +296,9 @@
             margin-top: 15px; 
             margin-bottom: 10px; 
         }
-        /* CORRECTION: Ajout de white-space: pre-wrap pour conserver les sauts de ligne */
         #presentation-content p {
             margin-bottom: 8px;
             padding-left: 15px;
-            white-space: pre-wrap; 
         }
         #presentation-content strong {
              /* Conserver le danger color pour la composition des cellules */
@@ -1393,12 +1391,12 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     const annotationsKey = previewImg.id + '_annotations';
                     
                     if (data[srcKey]) {
-                        previewImg.src = data[srcKey]; // Utilise la source potentiellement annotée/modifiée
+                        previewImg.src = data[srcKey];
                         previewImg.dataset.originalSrc = data[originalSrcKey];
                         previewImg.dataset.annotations = data[annotationsKey] || '[]';
                         previewImg.style.display = 'block';
                         if (annotateBtn) annotateBtn.style.display = 'inline-block';
-                        if (span) span.textContent = 'Image chargée'; 
+                        if (span) span.textContent = 'Image chargée'; // Le nom original du fichier est perdu ici
                     }
                 });
 
@@ -1692,7 +1690,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
 
             if (annotation.type === 'location') {
                 x = annotation.x - annotation.radius;
-                y = annotation.y - annotation.y - annotation.radius;
+                y = annotation.y - annotation.radius;
                 width = annotation.radius * 2;
                 height = annotation.radius * 2;
                 centerX = annotation.x;
@@ -1958,20 +1956,16 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             }
         }
 
-        async function handleDrawEnd(e) {
+        function handleDrawEnd(e) {
             e.preventDefault();
             document.body.style.overflow = '';
-            
             if (isMovingAnnotation) {
                 isMovingAnnotation = false;
-                // La sauvegarde a déjà eu lieu dans handleDrawMove, mais on s'assure du nettoyage
                 redrawCanvas(); 
-                saveFormData(); 
+                saveFormData(); // Sauvegarde après le déplacement
             } else if (isDrawing) {
                 isDrawing = false;
                 const final = { ...currentAnnotation };
-                
-                // Logique de finalisation de l'annotation (calcul des dimensions, etc.)
                 if (final.type === 'box') {
                     final.x = Math.min(final.startX, final.endX);
                     final.y = Math.min(final.startY, final.endY);
@@ -1990,37 +1984,23 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     final.opacity = document.getElementById('circle_opacity').value;
                     if (final.radius < 5) return;
                 }
-
                 annotations.push(final);
                 currentAnnotation = null;
-                selectedAnnotation = final; 
+                selectedAnnotation = final; // Sélectionne la nouvelle annotation après la création
                 setContextualTools(selectedAnnotation);
                 redrawCanvas();
-
-                // --- NOUVELLE LOGIQUE CRITIQUE: CUISSON DE L'ANNOTATION DANS L'IMAGE ---
-                const targetId = annotationModal.dataset.targetPreviewId; 
-                const previewImg = document.getElementById(targetId);
-                
-                if(previewImg) {
-                    const annotatedImg = await bakeAnnotationsToDataURL(previewImg.dataset.originalSrc, annotations);
-                    
-                    // Mise à jour de la source de l'image DANS LE FORMULAIRE
-                    previewImg.src = annotatedImg;
-                }
-                // --- FIN LOGIQUE CRITIQUE ---
-
-                saveFormData(); // Sauvegarde après la création et la mise à jour de la source
+                saveFormData(); // Sauvegarde après la création
             }
         }
         
+        // --- LOGIQUE CRITIQUE DE GÉNÉRATION D'IMAGE ANNOTÉE POUR PDF ---
         /**
-         * Fait la cuisine des annotations sur la Data URL originale (pour l'aperçu et le PDF).
-         * Utilise le canvas temporaire.
-         * @param {string} originalSrc 
-         * @param {Array} annotationsData 
-         * @returns {Promise<string>} Data URL de l'image annotée (PNG).
+         * Re-génère l'image avec toutes ses annotations et la retourne comme un ArrayBuffer.
+         * @param {string} originalSrc L'URL de l'image de base non annotée (dataURL).
+         * @param {Array} annotationsData L'array d'objets d'annotation.
+         * @returns {Promise<ArrayBuffer>} L'ArrayBuffer de l'image annotée (JPEG).
          */
-        function bakeAnnotationsToDataURL(originalSrc, annotationsData) {
+        function createAnnotatedImageBlob(originalSrc, annotationsData) {
             return new Promise((resolve, reject) => {
                 const img = new Image();
                 img.crossOrigin = 'anonymous'; 
@@ -2034,15 +2014,26 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
 
                     annotationsData.forEach(annotation => drawAnnotationOnContext(tempCtx, img.width, img.height, annotation));
 
-                    // Retourne la Data URL de l'image annotée (PNG)
-                    resolve(tempCanvas.toDataURL('image/png'));
+                    tempCanvas.toBlob(blob => {
+                        if (blob) {
+                            const reader = new FileReader();
+                            reader.onloadend = () => resolve(reader.result); // Résout avec ArrayBuffer
+                            reader.readAsArrayBuffer(blob);
+                        } else {
+                            reject(new Error('La conversion de l\'image annotée en Blob a échoué.'));
+                        }
+                    }, 'image/jpeg', 0.9);
                 };
-                img.onerror = (e) => reject(new Error(`Impossible de charger l\'image de base pour la cuisson: ${e}`));
+                img.onerror = (e) => reject(new Error(`Impossible de charger l\'image de base pour l\'annotation: ${e}`));
             });
         }
         
         /**
          * Fonction de dessin d'annotation réutilisable (pour le canvas normal et le canvas temporaire PDF).
+         * @param {CanvasRenderingContext2D} context Le contexte de dessin.
+         * @param {number} canvasWidth Largeur du canvas.
+         * @param {number} canvasHeight Hauteur du canvas.
+         * @param {Object} annotation L'objet d'annotation.
          */
         function drawAnnotationOnContext(context, canvasWidth, canvasHeight, annotation) {
             context.save();
@@ -2057,7 +2048,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 centerX = (annotation.startX + annotation.endX) / 2;
                 centerY = (annotation.startY + annotation.endY) / 2;
             }
-
+            
             if (annotation.rotation) {
                 context.translate(centerX, centerY);
                 context.rotate(annotation.rotation);
@@ -2079,6 +2070,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     break;
                 }
                 case 'arrow': {
+                    // Utilise une version locale et simplifiée de drawArrow pour le contexte PDF
                     const drawArrowLocal = (fromx, fromy, tox, toy, lineWidth) => {
                          if (fromx === tox && fromy === toy) return;
                          context.strokeStyle = '#c0392b'; context.fillStyle = '#c0392b'; context.lineWidth = lineWidth;
@@ -2105,175 +2097,898 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             }
             context.restore();
         }
+        
+        // --- EVENT LISTENERS & INITIALIZATION ---
+        document.addEventListener('DOMContentLoaded', async () => {
+            
+            // 1. Initialiser le champ photo (avant le chargement des données)
+            if (document.querySelectorAll('#adversary_photo_container .photo-input-wrapper').length === 0) {
+                 addPhotoInput('adversary_photo_container', true); 
+            }
+            
+            // 2. Charger les données locales ou la config par défaut
+            const isLocalDataLoaded = loadFormData();
+            if (!isLocalDataLoaded) {
+                 await loadDefaultConfig();
+            }
 
-        // --- LOGIQUE DE CAPTURE UHD ET D'ASSEMBLAGE PDF (NOUVEAU) ---
+            // 3. Initialiser l'UI (Quick Edit, etc.) après le chargement des options
+            setupQuickEditPanel(); 
+
+            document.querySelector('.container').addEventListener('click', (event) => {
+                const header = event.target.closest('.collapsible-header');
+                if (header) { const container = header.parentElement; if (container && container.classList.contains('collapsible-container')) { container.classList.toggle('open'); } }
+            });
+            const modal = document.getElementById('editMemberModal'); const form = document.getElementById('editMemberForm');
+            document.getElementById('modal_saveBtn').addEventListener('click', () => {
+                const buttonId = form.dataset.editingButtonId; const button = document.getElementById(buttonId);
+                if (button) {
+                    button.dataset.trigramme = document.getElementById('modal_trigramme').value;
+                    
+                    for (const key in memberConfig) {
+                        const attrName = key.replace(/s$/, '');
+                        const selectId = 'modal_' + attrName;
+                        const select = document.getElementById(selectId);
+                        if (select) {
+                            button.dataset[attrName] = select.value;
+                        }
+                    }
+                    
+                    updateMemberButtonVisuals(button);
+                    populateQuickEditPanel(buttonId);
+                    saveFormData();
+                }
+                modal.close();
+            });
+            document.getElementById('modal_cancelBtn').addEventListener('click', () => modal.close());
+            
+            // Logique de renvoi en attente / suppression définitive
+            document.getElementById('modal_deleteBtn').addEventListener('click', () => {
+                const buttonId = form.dataset.editingButtonId; const button = document.getElementById(buttonId);
+                const isUnassigned = button.closest('#unassigned_members_container');
+
+                if (!button) return;
+
+                if (isUnassigned) {
+                    // Si dans 'Personnel à attribuer', on supprime définitivement
+                    if(confirm(`Voulez-vous vraiment SUPPRIMER DÉFINITIVEMENT le membre ${button.dataset.trigramme || 'N/A'}? Cette action est irréversible.`)) {
+                        button.remove(); 
+                        saveFormData(); 
+                        modal.close(); 
+                        activeMemberId = null;
+                        document.getElementById('quickEditPanel').style.display = 'none';
+                    }
+                } else {
+                    // Si dans un véhicule, on renvoie dans 'Personnel à attribuer'
+                    if(confirm(`Voulez-vous renvoyer le membre ${button.dataset.trigramme || 'N/A'} dans la section "Personnel à attribuer"?`)) {
+                        button.dataset.cellule = 'Sans'; // On réinitialise sa cellule
+                        button.dataset.fonction = 'Sans'; // On réinitialise sa fonction
+                        updateMemberButtonVisuals(button);
+                        unassignedContainer.appendChild(button);
+                        saveFormData(); 
+                        modal.close(); 
+                        activeMemberId = null;
+                        document.getElementById('quickEditPanel').style.display = 'none';
+                    }
+                }
+            });
+            
+            const dockMenu = document.getElementById('dockMenu'); const dockToggleBtn = document.getElementById('dockToggleBtn');
+            dockToggleBtn.addEventListener('click', (event) => { event.stopPropagation(); dockMenu.classList.toggle('collapsed'); localStorage.setItem('dockCollapsed', dockMenu.classList.contains('collapsed')); });
+            document.getElementById('darkModeToggle').addEventListener('click', () => {
+                document.body.classList.toggle('light-mode'); document.body.classList.toggle('dark-mode');
+                const isDarkMode = document.body.classList.contains('dark-mode');
+                localStorage.setItem('theme', isDarkMode ? 'dark' : 'light');
+                document.getElementById('darkModeIcon').textContent = isDarkMode ? 'nightlight' : 'clear_day';
+            });
+            document.getElementById('settingsBtn').addEventListener('click', () => {
+                const settingsModal = document.getElementById('settingsModal');
+                document.getElementById('geminiApiKey').value = localStorage.getItem('geminiApiKey') || '';
+                settingsModal.showModal();
+            });
+            document.getElementById('settings_closeBtn').addEventListener('click', () => {
+                document.getElementById('settingsModal').close();
+            });
+            document.getElementById('settings_saveBtn').addEventListener('click', () => {
+                const apiKey = document.getElementById('geminiApiKey').value;
+                if (apiKey) {
+                    localStorage.setItem('geminiApiKey', apiKey);
+                    alert("Clé API sauvegardée.");
+                    document.getElementById('settingsModal').close();
+                } else {
+                    alert("Veuillez saisir une clé API.");
+                }
+            });
+            document.getElementById('resetBtn').addEventListener('click', () => { 
+                if (confirm("Voulez-vous vraiment réinitialiser tout le formulaire?")) { 
+                    localStorage.removeItem('oiFormData'); 
+                    // Supprime le drapeau d'alerte pour qu'il s'affiche à nouveau si l'erreur se reproduit
+                    localStorage.removeItem('quotaAlertShown'); 
+                    location.reload(); 
+                } 
+            });
+            document.getElementById('tutorialBtn').addEventListener('click', startTutorial);
+            
+            // Nouveau gestionnaire d'événement pour le bouton d'import JSON
+            importJsonConfigBtn.addEventListener('click', () => {
+                 jsonConfigInput.click();
+            });
+            
+            jsonConfigInput.addEventListener('change', (event) => {
+                const file = event.target.files[0];
+                if (!file) { return; }
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const config = JSON.parse(e.target.result);
+                        if (config && (Array.isArray(config.members) || config.options)) {
+                            // Supprime les données existantes avant de charger la nouvelle config
+                            patracdvrContainer.innerHTML = ''; 
+                            loadConfigObject(config); 
+                        }
+                        else { alert("Le fichier JSON est invalide ou ne contient pas de tableau 'members' ou d'objet 'options'."); }
+                    } catch (err) { alert("Erreur de lecture du JSON."); console.error(err); }
+                    location.reload(); // Rechargement forcé après l'import pour nettoyer l'état du formulaire
+                };
+                reader.readAsText(file);
+                // Réinitialise l'input pour permettre l'import du même fichier si besoin
+                event.target.value = null; 
+            });
+
+            // --- NOUVEAU: Chargement de la config par défaut sur clic ---
+            importDefaultConfigBtn.addEventListener('click', () => {
+                if(confirm("Ceci va remplacer la configuration PATRACDVR et les options d'équipement actuelles. Continuer?")) {
+                    loadDefaultConfig();
+                }
+            });
+            
+            // --- Logique RETEX originale (Génération de lien externe) ---
+            retexReportBtn.addEventListener('click', () => {
+                 const dateOp = document.getElementById('date_op').value;
+                 const nomAdversaire = document.getElementById('nom_adversaire').value;
+                 if (!dateOp || !nomAdversaire) {
+                    alert("Veuillez renseigner la date de l'opération et le nom de l'adversaire pour créer le lien RETEX.");
+                    return;
+                 }
+                 const safeAdversaireName = nomAdversaire.trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
+                 const oiId = `${dateOp}_${safeAdversaireName}`;
+                 const retexUrl = `${RETEX_BASE_URL}?oiId=${encodeURIComponent(oiId)}`;
+                 window.open(retexUrl, '_blank');
+            });
+            // --- Fin Logique RETEX originale ---
+            
+            resetPatracdvrBtn.addEventListener('click', () => { 
+                if (confirm("Voulez-vous vraiment effacer TOUS les véhicules et membres du PATRACDVR et vider la sauvegarde locale des membres ?")) { 
+                    patracdvrContainer.innerHTML = ''; 
+                    unassignedContainer.innerHTML = ''; 
+                    localStorage.removeItem('oiFormData'); // Assurez-vous d'effacer les données du stockage local
+                    saveFormData(); 
+                    alert("PATRACDVR réinitialisé. La prochaine fois, une configuration par défaut sera chargée (si disponible).");
+                } 
+            });
+            
+            const vehicleCreationContainer = document.getElementById('vehicle_creation_buttons');
+            availableVehicles.forEach(vehicle => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'add-btn add-vehicle-btn';
+                btn.textContent = `➕ ${vehicle}`;
+                btn.addEventListener('click', () => addPatracdvrRow(vehicle));
+                vehicleCreationContainer.insertBefore(btn, document.getElementById('addManualVehicleBtn'));
+            });
+
+            // Ajout des écouteurs d'événements pour les nouveaux boutons manuels
+            document.getElementById('addManualVehicleBtn').addEventListener('click', addManualVehicle);
+            document.getElementById('addManualMemberBtn').addEventListener('click', addManualMember);
+
+            document.querySelector('.wizard-step:has(#patracdvr_container)').addEventListener('click', handleMemberSelection);
+
+            document.getElementById('quickEditPanel').addEventListener('click', (event) => {
+                event.stopPropagation();
+                const target = event.target;
+                const quickEditButton = target.closest('.quick-edit-btn');
+                const fullEditButton = target.closest('#fullEditBtn');
+
+                if (quickEditButton && activeMemberId) {
+                    const activeMember = document.getElementById(activeMemberId);
+                    if (!activeMember) return;
+                    const attribute = quickEditButton.dataset.attribute;
+                    const value = quickEditButton.dataset.value;
+                    activeMember.dataset[attribute] = value;
+                    
+                    // Si on change la cellule, mettre à jour la fonction si on passe à "Sans" ou vice-versa
+                    if (attribute === 'cellule' && value === 'Sans') {
+                        activeMember.dataset.fonction = 'Sans';
+                    }
+                    if (attribute === 'fonction' && value !== 'Sans' && activeMember.dataset.cellule === 'Sans') {
+                        activeMember.dataset.cellule = 'India 1'; // Assure une cellule par défaut si on donne une fonction
+                    }
+                    
+                    updateMemberButtonVisuals(activeMember);
+                    const group = quickEditButton.parentElement;
+                    group.querySelectorAll('.quick-edit-btn').forEach(btn => btn.classList.remove('selected'));
+                    quickEditButton.classList.add('selected');
+                    saveFormData();
+                } else if (fullEditButton && activeMemberId) {
+                    openMemberModal(activeMemberId);
+                }
+            });
+
+            const quickEditModal = document.getElementById('quickEditModal');
+            document.getElementById('quick_modal_closeBtn').addEventListener('click', () => quickEditModal.close());
+            quickEditModal.addEventListener('click', (event) => {
+                const target = event.target.closest('.quick-edit-btn');
+                if (!target || !activeMemberId) return;
+
+                const activeMember = document.getElementById(activeMemberId);
+                if (!activeMember) return;
+
+                const attribute = target.dataset.attribute;
+                const value = target.dataset.value;
+
+                activeMember.dataset[attribute] = value;
+                
+                // Logique de mise à jour de la cellule/fonction
+                if (attribute === 'cellule' && value === 'Sans') {
+                    activeMember.dataset.fonction = 'Sans';
+                }
+                if (attribute === 'fonction' && value !== 'Sans' && activeMember.dataset.cellule === 'Sans') {
+                    activeMember.dataset.cellule = 'India 1';
+                }
+                
+                updateMemberButtonVisuals(activeMember);
+                
+                const group = target.closest('.quick-edit-options');
+                if(group) {
+                    group.querySelectorAll('.quick-edit-btn').forEach(btn => btn.classList.remove('selected'));
+                }
+                target.classList.add('selected');
+
+                saveFormData();
+            });
+
+
+            canvas.addEventListener('mousedown', handleDrawStart); canvas.addEventListener('mousemove', handleDrawMove);
+            canvas.addEventListener('mouseup', handleDrawEnd); canvas.addEventListener('mouseout', handleDrawEnd);
+            // Correction: Utiliser { passive: false } pour empêcher le défilement pendant le dessin/déplacement sur mobile
+            canvas.addEventListener('touchstart', handleDrawStart, { passive: false }); 
+            canvas.addEventListener('touchmove', handleDrawMove, { passive: false });
+            canvas.addEventListener('touchend', handleDrawEnd);
+            
+            document.querySelectorAll('.toolbar-main-tools .tool-btn').forEach(btn => {
+                btn.addEventListener('click', () => { const toolId = btn.id.split('_')[1]; if (['move', 'location', 'arrow', 'box'].includes(toolId)) setActiveTool(toolId); });
+            });
+            document.getElementById('tool_reset').addEventListener('click', () => { annotations = []; selectedAnnotation = null; setContextualTools(null); redrawCanvas(); saveFormData();});
+            document.getElementById('annotation_cancel').addEventListener('click', () => annotationModal.close());
+            document.getElementById('annotation_save').addEventListener('click', () => {
+                const targetId = annotationModal.dataset.targetPreviewId; const previewImg = document.getElementById(targetId);
+                if(previewImg) {
+                    // La source affichée reste la dernière image annotée (ou l'originale si pas d'annotation)
+                    // Mais on sauvegarde les annotations dans le dataset
+                    previewImg.dataset.annotations = JSON.stringify(annotations);
+                }
+                // NOTE: La source du previewImg n'est plus mise à jour ici car l'image annotée sera re-générée DANS buildPdf.
+                saveFormData(); annotationModal.close();
+            });
+            
+            // Événement pour la rotation libre
+            rotationInput.addEventListener('change', updateAnnotationRotation);
+
+            document.getElementById('delete_btn').addEventListener('click', () => { if(selectedAnnotation){ annotations = annotations.filter(ann => ann !== selectedAnnotation); selectedAnnotation = null; setContextualTools(null); redrawCanvas(); saveFormData(); } });
+            document.getElementById('edit_text_btn').addEventListener('click', () => { if(selectedAnnotation && selectedAnnotation.type === 'location'){ const newText = prompt('Modifier texte:', selectedAnnotation.text); if(newText !== null){ selectedAnnotation.text = newText; redrawCanvas(); saveFormData(); } } });
+            
+            const importSessionBtn = document.getElementById('importSessionBtn');
+            const exportSessionBtn = document.getElementById('exportSessionBtn');
+            const sessionFileInput = document.getElementById('sessionFileInput');
+            importSessionBtn.addEventListener('click', () => sessionFileInput.click());
+            exportSessionBtn.addEventListener('click', () => {
+                saveFormData();
+                const dataString = localStorage.getItem('oiFormData');
+                if (!dataString) { alert("Aucune donnée à exporter."); return; }
+                const blob = new Blob([dataString], {type: 'application/json'});
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                const date = new Date().toISOString().slice(0, 10);
+                link.download = `OI_Session_${date}.json`;
+                link.href = url;
+                link.click();
+                URL.revokeObjectURL(url);
+            });
+            sessionFileInput.addEventListener('change', (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const jsonContent = e.target.result;
+                        JSON.parse(jsonContent);
+                        localStorage.setItem('oiFormData', jsonContent);
+                        alert("Session importée avec succès. Rechargement de la page.");
+                        location.reload();
+                    } catch (err) {
+                        alert("Fichier invalide ou corrompu.");
+                    }
+                };
+                reader.readAsText(file);
+                event.target.value = null;
+            });
+
+            // --- GESTION DU DRAG AND DROP GLOBALE ---
+            document.addEventListener('dragstart', e => { 
+                const target = e.target.closest('.patracdvr-member-btn, .time-item');
+                if (target && target.classList.contains('draggable')) { 
+                    draggedItem = target; 
+                    // Stocke l'ID ou toute info nécessaire pour identifier le membre
+                    e.dataTransfer.setData('text/plain', target.id);
+                    setTimeout(() => target.classList.add('dragging'), 0); 
+                } 
+            });
+
+            document.addEventListener('dragend', () => { 
+                if (draggedItem) { 
+                    draggedItem.classList.remove('dragging'); 
+                    draggedItem = null; 
+                    // La sauvegarde se fait dans handleDrop
+                } 
+            });
+
+            // Cibler les conteneurs de dépôt (à la fois les zones de véhicule et la zone non assignée)
+            const dropContainers = document.querySelectorAll('.patracdvr-members-container, #unassigned_members_container');
+            dropContainers.forEach(container => {
+                container.addEventListener('dragenter', handleDragEnter);
+                container.addEventListener('dragleave', handleDragLeave);
+                container.addEventListener('dragover', handleDragOver); // Pour le tri visuel
+                container.addEventListener('drop', handleDrop);
+            });
+
+            // Logique de dragover pour les événements temporels (gestion du tri à l'intérieur)
+            document.addEventListener('dragover', e => {
+                e.preventDefault();
+                const targetContainer = e.target.closest('#time_events_container');
+                if (targetContainer && draggedItem && draggedItem.classList.contains('time-item')) {
+                    const afterElement = getDragAfterElement(targetContainer, e.clientY);
+                    if (afterElement == null) { targetContainer.appendChild(draggedItem); } 
+                    else { targetContainer.insertBefore(draggedItem, afterElement); }
+                }
+            });
+            // --- FIN GESTION DRAG AND DROP GLOBALE ---
+            
+            // --- GESTION DU MODE PRÉSENTATION/TÉLÉCHARGEMENT PDF (MISE À JOUR) ---
+            const presentationModal = document.getElementById('presentationModal');
+            const closePresentationModalBtn = document.getElementById('closePresentationModalBtn');
+            const downloadPdfBtn = document.getElementById('downloadPdfBtn');
+
+            // 1. Fonction de téléchargement du PDF (appelée depuis la modale)
+            async function downloadOiPdf() {
+                if (typeof PDFLib === 'undefined') { alert("Erreur: La bibliothèque PDF n'est pas encore chargée."); return; }
+                const btn = downloadPdfBtn;
+                const originalText = btn.textContent;
+                btn.textContent = 'Génération en cours...'; btn.disabled = true;
+                
+                try {
+                    const result = await buildPdf();
+                    if (!result) { 
+                        alert("La génération a échoué. Vérifiez vos données.");
+                        return; 
+                    }
+                    const { pdfBytes, formData } = result;
+                    const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+                    const url = URL.createObjectURL(blob);
+                    
+                    const getVal = (id) => formData[id] || 'RAS';
+                    const link = document.createElement('a');
+                    link.href = url;
+                    // Définir le nom du fichier
+                    link.download = `OI_${getVal('date_op').replace(/[\/\\?%*:|"<>]/g, '-')}_${getVal('nom_adversaire').replace(/ /g, '_')}.pdf`;
+                    document.body.appendChild(link); 
+                    link.click(); 
+                    document.body.removeChild(link);
+                    
+                    alert("Le document PDF a été téléchargé.");
+                    
+                } catch (error) {
+                    console.error("Erreur critique lors de la génération du PDF:", error);
+                    alert("Une erreur critique est survenue lors de la génération du PDF. Consultez la console (F12).");
+                } finally {
+                    btn.textContent = originalText; btn.disabled = false;
+                }
+            }
+
+            // 2. Fonction d'ouverture du Mode Présentation (HTML + bouton PDF)
+            function openPresentationMode() {
+                const presentationContent = document.getElementById('presentation-content');
+                
+                if (!presentationModal) {
+                    console.error("Modale 'presentationModal' non trouvée.");
+                    return;
+                }
+
+                // Injecte la version HTML de l'O.I.
+                const html = buildPresentationHtml();
+                presentationContent.innerHTML = html;
+                
+                // Ouvre la modale
+                if(typeof presentationModal.showModal === 'function') {
+                    presentationModal.showModal();
+                } else {
+                    presentationModal.style.display = 'block';
+                }
+            }
+
+            // 3. Configuration des événements
+            previewBtn.addEventListener('click', openPresentationMode);
+            downloadPdfBtn.addEventListener('click', downloadOiPdf);
+
+            if (closePresentationModalBtn) {
+                closePresentationModalBtn.addEventListener('click', () => {
+                    if (presentationModal) {
+                         if(typeof presentationModal.close === 'function') {
+                            presentationModal.close();
+                        } else {
+                            presentationModal.style.display = 'none';
+                        }
+                    }
+                });
+            }
+
+            // FIN GESTION DU MODE PRÉSENTATION
+
+            if (localStorage.getItem('theme') === 'light') { document.body.classList.replace('dark-mode', 'light-mode'); document.getElementById('darkModeIcon').textContent = 'clear_day'; }
+            if (localStorage.getItem('dockCollapsed') === 'true') { dockMenu.classList.add('collapsed'); }
+            
+            showStep(currentStep);
+            
+        });
+        
+        // --- PDF GENERATION (CORRIGÉ) ---
 
         /**
-         * Capture une section spécifique du formulaire à haute résolution (facteur d'échelle 3) et la retourne en tant que Data URL.
+         * Récupère les données d'image pour l'adversaire principal.
+         * @param {Object} formData Les données du formulaire.
+         * @returns {Object|null} Les informations de l'image (source, originalSrc, annotationsJson) ou null.
          */
-        async function captureElementToDataURL(element, title) {
-            if (!element) {
-                console.error(`Élément à capturer non trouvé pour : ${title}`);
-                return null;
+        function getAdversaryImageInfo(formData) {
+            const mainPhotoWrapper = document.querySelector('#adversary_photo_container .photo-input-wrapper');
+            if (mainPhotoWrapper) {
+                const previewImg = mainPhotoWrapper.querySelector('.image-preview');
+                const previewId = previewImg ? previewImg.id : null;
+                
+                if (previewId && formData[previewId + '_src']) {
+                    return {
+                        imageSource: formData[previewId + '_src'],
+                        originalSrc: formData[previewId + '_original_src'],
+                        annotationsJson: formData[previewId + '_annotations'] || '[]'
+                    };
+                }
             }
-
-            try {
-                const images = element.querySelectorAll('img');
-                const imageLoadPromises = Array.from(images).filter(img => !img.complete).map(img => new Promise(resolve => {
-                    img.onload = resolve;
-                    img.onerror = resolve; 
-                }));
-                await Promise.all(imageLoadPromises);
-
-                const canvas = await html2canvas(element, {
-                    scale: 3, 
-                    logging: false,
-                    useCORS: true,
-                    allowTaint: true
-                });
-                return canvas.toDataURL('image/png');
-            } catch (error) {
-                console.error(`Erreur lors de la capture de ${title}:`, error);
-                return null;
-            }
+            return null;
         }
 
-        /**
-         * Gère la capture séquentielle des sections et assemble le PDF final (remplace buildPdf).
-         */
         async function buildPdf() {
-            const { jsPDF } = window.jspdf;
-            const doc = new jsPDF('p', 'mm', 'a4');
-            const sectionsToCapture = [
-                { id: 0, selector: '.wizard-step:nth-of-type(1)', title: '1. Situation' },
-                { id: 1, selector: '.wizard-step:nth-of-type(2)', title: '1.3 Adversaire' },
-                { id: 2, selector: '.wizard-step:nth-of-type(3)', title: '1.4 Environnement' },
-                { id: 3, selector: '.wizard-step:nth-of-type(4)', title: '2. Mission du PSIG' },
-                { id: 4, selector: '.wizard-step:nth-of-type(5)', title: '3. Exécution' },
-                { id: 5, selector: '.wizard-step:nth-of-type(6)', title: '4. Articulation' },
-                { id: 6, selector: '.wizard-step:nth-of-type(7)', title: '5. PATRACDVR' },
-                { id: 7, selector: '.wizard-step:nth-of-type(8)', title: 'Photos/Annexes' },
-                { id: 8, selector: '.wizard-step:nth-of-type(9) .retex-section:nth-of-type(1)', title: 'Lien RETEX' }, 
-            ];
-
-            const initialStep = currentStep;
-            let capturedDataURLs = [];
-            const formData = JSON.parse(localStorage.getItem('oiFormData'));
-            const getVal = (id) => formData[id] || 'RAS';
-
-            // Assurer que le conteneur principal du formulaire est visible
-            const formContainer = document.querySelector('.wizard-content');
-            formContainer.style.display = 'block'; 
-
+            const { PDFDocument, StandardFonts, rgb, PageSizes } = PDFLib;
+            const pdfDoc = await PDFDocument.create();
+            const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
+            const helveticaBoldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+            saveFormData();
+            const formDataString = localStorage.getItem('oiFormData');
+            if (!formDataString) { return null; }
+            const formData = JSON.parse(formDataString);
+            const getVal = (id) => formData[id] || '';
+            const isDarkMode = document.body.classList.contains('dark-mode');
+            const context = {
+                pdfDoc, helveticaFont, helveticaBoldFont,
+                currentPage: null, y: 0, pageWidth: 0, pageHeight: 0, margin: 40,
+                colors: isDarkMode ? { background: rgb(30/255, 30/255, 30/255), text: rgb(1, 1, 1), accent: rgb(91/255, 155/255, 213/255), danger: rgb(192/255, 57/255, 43/255) } : { background: rgb(1, 1, 1), text: rgb(0, 0, 0), accent: rgb(0, 51/255, 160/255), danger: rgb(192/255, 57/255, 43/255) }
+            };
+            let backgroundImage = null;
             try {
-                // 1. Capture séquentielle de chaque section
-                for (let i = 0; i < sectionsToCapture.length; i++) {
-                    const section = sectionsToCapture[i];
-                    const element = document.querySelector(section.selector);
-                    if (!element) continue;
+                const bgImageUrl = 'Fd.png';
+                const bgImageBytes = await fetch(bgImageUrl).then(res => res.arrayBuffer());
+                backgroundImage = await pdfDoc.embedPng(bgImageBytes);
+            } catch (e) { console.warn("L'image de fond 'Fd.png' n'a pas pu être chargée.", e); }
+            
+            const addNewPage = () => {
+                context.currentPage = context.pdfDoc.addPage([PageSizes.A4[1], PageSizes.A4[0]]);
+                const { width, height } = context.currentPage.getSize();
+                context.pageWidth = width; context.pageHeight = height; context.y = height - context.margin;
+                context.currentPage.drawRectangle({ x: 0, y: 0, width, height, color: context.colors.background });
+            };
+            const checkY = (spaceNeeded) => { if (context.y - spaceNeeded < context.margin) { addNewPage(); return true; } return false; };
+            const drawTitle = (text) => { checkY(30); context.currentPage.drawText(text, { x: context.margin, y: context.y, font: helveticaBoldFont, size: 18, color: context.colors.accent }); context.y -= 30; };
+            const drawSubTitle = (text) => { if (checkY(25)) { context.y -= 10; } context.currentPage.drawText(text, { x: context.margin, y: context.y, font: helveticaBoldFont, size: 14, color: context.colors.accent }); context.y -= 25; };
+            const wrapText = (text, font, size, maxWidth) => {
+                const words = String(text || '').replace(/\n/g, ' \n ').split(' ');
+                let lines = []; let currentLine = '';
+                for (const word of words) {
+                    if (word === '\n') { lines.push(currentLine); currentLine = ''; continue; }
+                    const lineWithWord = currentLine === '' ? word : `${currentLine} ${word}`;
+                    if (font.widthOfTextAtSize(lineWithWord, size) > maxWidth && currentLine !== '') { lines.push(currentLine); currentLine = word; } 
+                    else { currentLine = lineWithWord; }
+                }
+                lines.push(currentLine); return lines;
+            };
+            const drawWrappedText = (text, options = {}) => {
+                const { font = helveticaFont, size = 12, color = context.colors.text, x = context.margin + 15 } = options;
+                const maxWidth = context.pageWidth - x - context.margin;
+                const lines = wrapText(text, font, size, maxWidth);
+                const totalHeight = lines.length * (size + 4);
+                if (checkY(totalHeight + 10)) { context.y -= (size + 4); }
+                lines.forEach((line, index) => { context.currentPage.drawText(line, { x, y: context.y - (index * (size + 4)), font, size, color }); });
+                context.y -= (totalHeight + 10);
+            };
+            // Fonction modifiée pour inclure la position de départ X
+            const drawTable = (headers, rows, columnWidths, startX) => {
+                let currentY = context.y; const rowPadding = 5; const headerFontSize = 10; const contentFontSize = 10;
+                const drawRow = (rowData, isHeader) => {
+                    const font = isHeader ? helveticaBoldFont : helveticaFont; const size = isHeader ? headerFontSize : contentFontSize;
+                    const cellContents = rowData.map((text, i) => wrapText(text, font, size, columnWidths[i] - 2 * rowPadding));
+                    const maxLines = Math.max(...cellContents.map(lines => lines.length));
+                    const rowHeight = maxLines * (size + 2) + 2 * rowPadding;
+                    if (currentY - rowHeight < context.margin) { addNewPage(); currentY = context.y; drawRow(headers, true); }
+                    currentY -= rowHeight; let currentX = startX;
+                    rowData.forEach((_, i) => {
+                        context.currentPage.drawRectangle({ x: currentX, y: currentY, width: columnWidths[i], height: rowHeight, borderColor: context.colors.accent, borderWidth: 0.5 });
+                        const lines = cellContents[i];
+                        lines.forEach((line, lineIndex) => { context.currentPage.drawText(line, { x: currentX + rowPadding, y: currentY + rowHeight - rowPadding - (lineIndex + 1) * (size + 2) + 2, font, size, color: context.colors.text }); });
+                        currentX += columnWidths[i];
+                    });
+                };
+                drawRow(headers, true); rows.forEach(row => drawRow(row, false)); context.y = currentY - 20;
+            };
+            
+            // Fonction unifiée pour l'image, gère l'image de base OU l'image annotée
+            const processImage = async (imageSrc, originalSrc, annotationsJson, maxWidth = 1280, quality = 0.85) => {
+                const annotations = JSON.parse(annotationsJson || '[]');
+                
+                if (annotations.length > 0 && originalSrc) {
+                    // Si annotations, recréer l'image annotée via le canvas temporaire
+                    const buffer = await createAnnotatedImageBlob(originalSrc, annotations);
+                    return buffer;
+                } else {
+                    // Sinon, traiter l'image de base (ou la dernière source)
+                    return new Promise((resolve, reject) => {
+                        const img = new Image();
+                        img.crossOrigin = 'anonymous'; 
+                        
+                        let srcToLoad = imageSrc || originalSrc; // Priorise imageSrc s'il y a une dataURL de chargée.
+                        if (!srcToLoad || !srcToLoad.startsWith('data:image')) {
+                             return reject(new Error('Source d\'image invalide ou manquante.'));
+                        }
+                        img.src = srcToLoad;
 
-                    goToStep(i); 
-                    await new Promise(resolve => setTimeout(resolve, 300)); 
+                        img.onload = () => {
+                            const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d');
+                            let { width, height } = img;
+                            if (width > maxWidth) { height = (maxWidth / width) * height; width = maxWidth; }
+                            canvas.width = width; canvas.height = height; ctx.drawImage(img, 0, 0, width, height);
+                            // La conversion en Blob puis ArrayBuffer est la méthode la plus fiable pour forcer le format JPEG
+                            canvas.toBlob(blob => {
+                                if (!blob) return reject(new Error('La conversion de l\'image a échoué.'));
+                                blob.arrayBuffer().then(resolve).catch(reject);
+                            }, 'image/jpeg', quality);
+                        };
+                        img.onerror = (err) => { reject(new Error(`Impossible de charger l'image: ${err.message}`)); };
+                    });
+                }
+            };
 
-                    const collapsibleContainers = element.querySelectorAll('.collapsible-container');
-                    collapsibleContainers.forEach(c => c.classList.add('open'));
-                    await new Promise(resolve => setTimeout(resolve, 100));
+            const drawImagesFromContainer = async (containerId, title) => {
+                const wrappers = document.querySelectorAll(`#${containerId} .photo-input-wrapper`);
+                for (let i = 0; i < wrappers.length; i++) {
+                    const wrapper = wrappers[i];
+                    const previewImg = wrapper.querySelector('.image-preview');
+                    if (!previewImg || !previewImg.dataset.originalSrc) continue;
 
-                    const dataURL = await captureElementToDataURL(element, section.title);
-                    if (dataURL) {
-                        capturedDataURLs.push(dataURL);
+                    addNewPage();
+                    try {
+                        const imageSrc = previewImg.src;
+                        const originalSrc = previewImg.dataset.originalSrc;
+                        const annotationsJson = previewImg.dataset.annotations;
+
+                        const imageBytes = await processImage(imageSrc, originalSrc, annotationsJson);
+                        const image = await pdfDoc.embedJpg(imageBytes);
+                        
+                        const { width, height } = context.currentPage.getSize();
+                        const paddedW = width - context.margin * 2; const paddedH = height - context.margin * 2 - 30;
+                        const scaled = image.scaleToFit(paddedW, paddedH);
+                        const x = (width - scaled.width) / 2; const y = (height - scaled.height) / 2 + 15;
+                        context.currentPage.drawImage(image, { x, y, width: scaled.width, height: scaled.height });
+                        const finalTitle = wrappers.length > 1 ? `${title} (${i+1})` : title;
+                        const textWidth = helveticaBoldFont.widthOfTextAtSize(finalTitle, 14);
+                        context.currentPage.drawText(finalTitle, { x: width / 2 - textWidth / 2, y: y - 20, font: helveticaBoldFont, size: 14, color: context.colors.text });
+                    } catch (e) {
+                        console.error(`Erreur d'intégration de l'image pour: ${title}`, e);
+                        drawTitle("Erreur d'image"); drawWrappedText(`Impossible de charger une image.\n\nErreur: ${e.message}`);
+                    }
+                }
+            };
+            
+            // --- FONCTIONS POUR LA COMPOSITION STYLISÉE ---
+            const getCompositionData = (teamPrefix) => {
+                const membersByCell = {};
+                const allMembers = (formData.patracdvr_rows || []).flatMap(row => row.members);
+                
+                allMembers.forEach(member => {
+                    if (member.cellule && member.cellule.toLowerCase().startsWith(teamPrefix)) {
+                        if (!membersByCell[member.cellule]) membersByCell[member.cellule] = [];
+                        member.trigramme && membersByCell[member.cellule].push(member.trigramme);
+                    }
+                });
+
+                const naturalSort = (a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+                const sortedKeys = Object.keys(membersByCell).sort(naturalSort);
+                
+                return sortedKeys.map(cell => ({ cell: cell, members: membersByCell[cell] }));
+            };
+
+            const drawCompositionList = (compositionData) => {
+                const fontSize = 12;
+                const lineHeight = fontSize + 4;
+                if (checkY(lineHeight)) { context.y -= 10; }
+
+                let currentX = context.margin + 15;
+                const cellStyle = { font: helveticaBoldFont, color: context.colors.danger, size: fontSize };
+                const trigrammeStyle = { font: helveticaBoldFont, color: context.colors.text, size: fontSize };
+                const separatorStyle = { font: helveticaFont, color: context.colors.text, size: fontSize };
+                
+                compositionData.forEach((group, groupIndex) => {
+                    const cellShortName = group.cell.toLowerCase().replace('india ', 'I').replace('ao', 'AO').toUpperCase();
+                    
+                    const groupParts = [];
+                    groupParts.push({ text: cellShortName, style: cellStyle });
+                    groupParts.push({ text: ' : ', style: separatorStyle });
+                    group.members.forEach((member, memberIndex) => {
+                        groupParts.push({ text: member, style: trigrammeStyle });
+                        if (memberIndex < group.members.length - 1) {
+                            groupParts.push({ text: ' - ', style: separatorStyle });
+                        }
+                    });
+                     if (groupIndex < compositionData.length - 1) {
+                        groupParts.push({ text: '    ', style: separatorStyle });
+                    }
+
+                    for(const part of groupParts) {
+                        const partWidth = part.style.font.widthOfTextAtSize(part.text, part.style.size);
+                        if (currentX + partWidth > context.pageWidth - context.margin) {
+                            context.y -= lineHeight;
+                            currentX = context.margin + 15;
+                            if (checkY(lineHeight)) { context.y -= 10; }
+                        }
+                        context.currentPage.drawText(part.text, { x: currentX, y: context.y, ...part.style });
+                        currentX += partWidth;
+                    }
+                });
+                context.y -= (lineHeight + 10);
+            };
+
+
+            const pdfCreationLogic = async () => {
+                // PAGE 1: Couverture
+                addNewPage();
+                if (backgroundImage) { context.currentPage.drawImage(backgroundImage, { x: 0, y: 0, width: context.pageWidth, height: context.pageHeight }); }
+                const mainTitle = "OPÉRATION DE POLICE JUDICIAIRE";
+                const dateTitle = `DU ${getVal('date_op') || '(DATE)'}`;
+                const titleWidth = helveticaBoldFont.widthOfTextAtSize(mainTitle, 24);
+                const dateTitleWidth = helveticaBoldFont.widthOfTextAtSize(dateTitle, 18);
+                context.currentPage.drawText(mainTitle, { x: context.pageWidth / 2 - titleWidth / 2, y: context.pageHeight / 2 + 10, font: helveticaBoldFont, size: 24, color: context.colors.accent });
+                context.currentPage.drawText(dateTitle, { x: context.pageWidth / 2 - dateTitleWidth / 2, y: context.pageHeight / 2 - 20, font: helveticaBoldFont, size: 18, color: context.colors.text });
+
+                // PAGE 2: 1. SITUATION
+                addNewPage();
+                drawTitle("1. SITUATION");
+                drawSubTitle("1.1 Situation Générale"); drawWrappedText(getVal('situation_generale'), { size: 14 });
+                drawSubTitle("1.2 Situation Particulière"); drawWrappedText(getVal('situation_particuliere'), { size: 14 });
+                
+                // PAGE 3: 1.3 ADVERSAIRE
+                addNewPage();
+                drawTitle("1.3 ADVERSAIRE");
+      
+                const imageInfo = getAdversaryImageInfo(formData);
+                let isImagePresent = imageInfo !== null;
+                const photoBoxWidth = 200;
+                const photoBoxHeight = 220;
+                const photoBoxX = context.pageWidth - context.margin - photoBoxWidth;
+                const photoBoxMargin = 10;
+                const topY = context.y; 
+                
+                let tableStartX = context.margin;
+                let tableMaxWidth = context.pageWidth - context.margin * 2;
+                
+                if (isImagePresent) {
+                    tableMaxWidth = photoBoxX - tableStartX - photoBoxMargin;
+                }
+                
+                const adversaireHeaders = ["Information", "Détail"];
+                const meText = (formData.me_list || []).map((me, i) => `ME${i+1}: ${me}`).join(' | ');
+                const adversaireRows = [
+                    ['Nom/Prénom', getVal('nom_adversaire')], ['Domicile', getVal('domicile_adversaire')],
+                    ['Naissance', `${getVal('date_naissance')} à ${getVal('lieu_naissance')}`],
+                    ['Description', `${getVal('stature_adversaire')} / ${getVal('ethnie_adversaire')}`],
+                    ['Signes particuliers', getVal('signes_particuliers')], ['Profession', getVal('profession_adversaire')],
+                    ['Antécédents', getVal('antecedents_adversaire')], ['État d\'esprit', (formData.etat_esprit_list || []).join(', ')],
+                    ['Attitude', getVal('attitude_adversaire')], ['Volume (renfort)', (formData.volume_list || []).join(', ')],
+                    ['Substances', getVal('substances_adversaire')], ['Véhicules', (formData.vehicules_list || []).join(', ')],
+                    ['Armes', getVal('armes_connues')], ['Moyens Employés', meText],
+                ].filter(row => row[1] && String(row[1]).trim() !== 'à');
+                
+                let photoBottomY = topY;
+                let tableBottomY = topY;
+                
+                // 1. Dessiner l'image en haut à droite (si présente)
+                if (isImagePresent) {
+                    const { imageSource, originalSrc, annotationsJson } = imageInfo;
+                    const frameY = topY - photoBoxHeight; 
+                    
+                    try {
+                        const imageBytes = await processImage(imageSource, originalSrc, annotationsJson);
+                        const image = await pdfDoc.embedJpg(imageBytes);
+                        
+                        const scaled = image.scaleToFit(photoBoxWidth - 10, photoBoxHeight - 30);
+                        const imageY = frameY + (photoBoxHeight - scaled.height) / 2;
+
+                        if(frameY >= context.margin) {
+                            context.currentPage.drawRectangle({
+                                x: photoBoxX, y: frameY, width: photoBoxWidth, height: photoBoxHeight,
+                                borderColor: context.colors.accent, borderWidth: 1
+                            });
+                            context.currentPage.drawImage(image, {
+                                x: photoBoxX + (photoBoxWidth - scaled.width) / 2,
+                                y: imageY,
+                                width: scaled.width, height: scaled.height
+                            });
+                            const photoTitle = "Photo de l'objectif";
+                            const titleWidth = helveticaFont.widthOfTextAtSize(photoTitle, 10);
+                            context.currentPage.drawText(photoTitle, {
+                                x: photoBoxX + (photoBoxWidth - titleWidth) / 2,
+                                y: frameY + 5,
+                                font: helveticaFont, size: 10, color: context.colors.text
+                            });
+                            photoBottomY = frameY;
+                        } else {
+                            isImagePresent = false;
+                        }
+                    } catch (e) {
+                         console.error("Échec du traitement de la photo de l'adversaire (annotée ou non):", e);
+                        const frameY = topY - photoBoxHeight;
+                        if(frameY >= context.margin) {
+                            context.currentPage.drawRectangle({
+                                x: photoBoxX, y: frameY, width: photoBoxWidth, height: photoBoxHeight,
+                                borderColor: context.colors.danger, borderWidth: 1
+                            });
+                            photoBottomY = frameY;
+                        }
                     }
                 }
 
-                // Retour à la section d'origine
-                goToStep(initialStep);
-
-                if (capturedDataURLs.length === 0) {
-                    throw new Error("Aucune section n'a pu être capturée pour le PDF.");
-                }
-
-                // 2. Assemblage du PDF
-                const imgWidth = 200; 
-                const margin = 5;
-                
-                // 2.1 PAGE DE COUVERTURE (avec Fd.png si disponible)
-                try {
-                    const bgImageBytes = await fetch('Fd.png').then(res => res.blob()).then(blob => new Promise(resolve => {
-                        const reader = new FileReader();
-                        reader.onloadend = () => resolve(reader.result);
-                        reader.readAsDataURL(blob);
-                    }));
-                    doc.addImage(bgImageBytes, 'PNG', 0, 0, 210, 297);
-                    
-                    // Ajout du texte de couverture
-                    doc.setFontSize(24).setTextColor('#5b9bd5');
-                    doc.text("OPÉRATION DE POLICE JUDICIAIRE", 105, 140, { align: 'center' });
-                    doc.setFontSize(18).setTextColor('#e0e0e0');
-                    doc.text(`DU ${getVal('date_op') || '(DATE)'}`, 105, 160, { align: 'center' });
-
-                } catch (e) {
-                    // Si Fd.png échoue, ajoute une page blanche pour commencer le PDF
-                    doc.addPage();
-                    doc.text("COUVERTURE (Fichier Fd.png manquant)", 105, 150, { align: 'center' });
+                // 2. Dessiner le tableau
+                if (adversaireRows.length > 0) {
+                    context.y = topY;
+                    drawTable(adversaireHeaders, adversaireRows, [150, tableMaxWidth - 150], tableStartX);
+                    tableBottomY = context.y;
+                } else {
+                    tableBottomY = topY;
                 }
                 
-                // Supprimer la première page blanche ajoutée par défaut par jspdf
-                if (doc.internal.pages.length > 1 && doc.internal.pages[0].obj.content.length === 0) {
-                     doc.deletePage(1);
-                }
+                const finalDrawY = Math.min(tableBottomY, photoBottomY);
+                context.y = finalDrawY - 20;
 
+                // PAGE 4: 1.4 ENVIRONNEMENT
+                addNewPage();
+                drawTitle("1.4 ENVIRONNEMENT");
+                drawSubTitle("Ami(e)s (soutien)"); drawWrappedText(getVal('amies'), { size: 14 });
+                drawSubTitle("Terrain / Météo"); drawWrappedText(getVal('terrain_info'), { size: 14 });
+                drawSubTitle("Population"); drawWrappedText(getVal('population'), { size: 14 });
+                drawSubTitle("Cadre juridique"); drawWrappedText(getVal('cadre_juridique'), { size: 14 });
 
-                capturedDataURLs.forEach((dataURL, index) => {
-                    const img = new Image();
-                    img.src = dataURL;
-                    
-                    const ratio = img.width / img.height;
-                    const finalImgHeight = imgWidth / ratio;
-                    
-                    // Ajout d'une page pour chaque section (sauf la première qui est la couverture)
-                    doc.addPage();
-                    doc.addImage(dataURL, 'PNG', margin, margin, imgWidth, finalImgHeight);
-                });
-
-                // 2.2 DERNIÈRE PAGE (avec Fd.png si disponible)
-                doc.addPage();
-                try {
-                    const bgImageBytes = await fetch('Fd.png').then(res => res.blob()).then(blob => new Promise(resolve => {
-                        const reader = new FileReader();
-                        reader.onloadend = () => resolve(reader.result);
-                        reader.readAsDataURL(blob);
-                    }));
-                    doc.addImage(bgImageBytes, 'PNG', 0, 0, 210, 297);
-                    
-                    doc.setFontSize(48).setTextColor('#5b9bd5');
-                    doc.text("AVEZ-VOUS DES QUESTIONS?", 105, 150, { align: 'center' });
-
-                } catch (e) {
-                    doc.text("FIN DE DOCUMENT", 105, 150, { align: 'center' });
-                }
-
-                // 3. Téléchargement et retour
-                const filename = `OI_Screenshotted_${getVal('date_op').replace(/[\/\\?%*:|"<>]/g, '-')}_${getVal('nom_adversaire').replace(/ /g, '_')}.pdf`;
+                // PAGE 5: 2. MISSION
+                addNewPage();
+                drawTitle("2. MISSION");
+                drawWrappedText(getVal('missions_psig'), { font: helveticaBoldFont, size: 30, x: context.margin });
                 
-                // doc.output('save', filename) est équivalent à doc.save(filename)
-                doc.save(filename);
+                // PAGE 6: 3. EXÉCUTION
+                addNewPage();
+                drawTitle("3. EXÉUTION");
+                const execText = `En vue d'appréhender le mis en cause et empêcher la déperdition des preuves,\nJe veux, le ${getVal('date_execution') || '(date)'} à partir de ${getVal('heure_execution') || '(heure)'}, pour une action ${getVal('type_action') || '(type d\'action)'} investir le domicile\nprésumé de ${getVal('nom_adversaire') || '(nom de l\'adversaire)'} après avoir bouclé celui-ci.`;
+                drawWrappedText(execText, { size: 16, x: context.margin });
+                drawSubTitle("Chronologie des temps");
+                const chronoHeaders = ["Type", "Heure", "Description"];
+                const chronoRows = (formData.time_events || []).map(e => [e.type || 'N/A', e.hour || 'N/A', e.description || 'N/A']);
+                drawTable(chronoHeaders, chronoRows, [80, 120, 550], context.margin);
+                drawSubTitle("Hypothèses");
+                drawWrappedText(`H1: ${getVal('hypothese_h1')}\nH2: ${getVal('hypothese_h2')}\nH3: ${getVal('hypothese_h3')}`, { size: 14 });
                 
-                return { pdfBytes: new Blob(), formData };
+                // PAGE 7: 4. ARTICULATION INDIA
+                addNewPage();
+                drawTitle("4. ARTICULATION");
+                drawWrappedText(`Place du Chef (Générale): ${getVal('place_chef')}`, { size: 14, x: context.margin });
+                drawSubTitle("Équipe INDIA (INTER)"); 
+                drawSubTitle("Composition:"); drawCompositionList(getCompositionData('india'));
+                drawSubTitle("Mission:"); drawWrappedText(getVal('india_mission'));
+                drawSubTitle("Objectif:"); drawWrappedText(getVal('india_objectif')); drawSubTitle("Itinéraire:");
+                drawWrappedText(getVal('india_itineraire')); drawSubTitle("Points Particuliers:"); drawWrappedText(getVal('india_points_particuliers'));
+                drawSubTitle("Conduite à Tenir:"); drawWrappedText(getVal('india_cat'));
+                
+                // PAGE 8: 4. ARTICULATION AO
+                addNewPage();
+                drawTitle("4. ARTICULATION (Suite)");
+                drawSubTitle("Équipe Appui/Observation (AO) - ZMSPCP"); 
+                drawSubTitle("Composition:"); drawCompositionList(getCompositionData('ao'));
+                drawSubTitle("Zone d'installation (Z):");
+                drawWrappedText(getVal('ao_zone_installation')); drawSubTitle("Mission (M):"); drawWrappedText(getVal('ao_mission'));
+                drawSubTitle("Secteur de surveillance (S):"); drawWrappedText(getVal('ao_secteur_surveillance'));
+                drawSubTitle("Points Particuliers (P):"); drawWrappedText(getVal('ao_points_particuliers'));
+                drawSubTitle("Place du Chef (P):"); drawWrappedText(getVal('ao_place_chef'));
+                drawSubTitle("Conduite à Tenir (C):"); drawWrappedText(getVal('ao_cat'));
+                
+                // PAGE 9: 5. PATRACDVR
+                addNewPage();
+                drawTitle("5. PATRACDVR");
+                const patracHeaders = ["Trigramme", "Fonction", "Cellule", "Armement", "Équip. 1", "Équip. 2", "Tenue", "GPB"];
+                for (const row of (formData.patracdvr_rows || [])) {
+                    if(row.vehicle && row.members && row.members.length > 0) {
+                        drawSubTitle(`Véhicule: ${row.vehicle}`);
+                        const patracRows = row.members.filter(m => m.trigramme).map(m => [m.trigramme, m.fonction, m.cellule, m.armement, m.equipement, m.equipement2, m.tenue, m.gpb]);
+                        if (patracRows.length > 0) { drawTable(patracHeaders, patracRows, [80, 90, 90, 90, 90, 90, 80, 80], context.margin); }
+                    }
+                }
+                
+                // PAGE 10: 6. CAT
+                addNewPage();
+                drawTitle("6. CONDUITES À TENIR");
+                drawSubTitle("Générales"); drawWrappedText(getVal('cat_generales'), {x: context.margin, font: helveticaBoldFont});
+                const noGoText = getVal('no_go');
+                if (noGoText) {
+                    drawSubTitle("NO GO");
+                    drawWrappedText(noGoText, { x: context.margin, font: helveticaBoldFont, size: 14.4, color: context.colors.danger });
+                }
+                drawSubTitle("Liaison"); drawWrappedText(getVal('cat_liaison'), {x: context.margin, font: helveticaBoldFont});
 
-            } catch (error) {
-                console.error("Erreur critique d'assemblage PDF par Screenshot :", error);
-                throw error;
-            } finally {
-                // S'assurer de cacher le formulaire et revenir à l'étape d'origine
-                goToStep(initialStep);
-                document.querySelector('.wizard-content').style.display = 'block'; 
-            }
+                // PAGE 11: LIEN RETEX (Conservation de l'élément unique)
+                const dateOp = getVal('date_op');
+                const nomAdversaire = getVal('nom_adversaire');
+                if (dateOp && nomAdversaire) {
+                    const safeAdversaireName = nomAdversaire.trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
+                    const oiId = `${dateOp}_${safeAdversaireName}`;
+                    const retexUrl = `${RETEX_BASE_URL}?oiId=${encodeURIComponent(oiId)}`;
+
+                    addNewPage();
+                    const operationTitle = getVal('nom_adversaire') || 'OPERATION';
+                    drawTitle(`RETEX: ${operationTitle.toUpperCase()}`);
+                    drawWrappedText("Chaque membre ayant participé à l'opération est tenu de remplir le formulaire de Retour d'Expérience (Retex) en utilisant le lien ci-dessous.", { size: 14, x: context.margin });
+                    context.y -= 40;
+                    context.currentPage.drawText(retexUrl, { x: context.margin, y: context.y, font: helveticaBoldFont, size: 14, color: context.colors.accent, A: { URI: retexUrl } });
+                    context.y -= 20;
+                }
+                
+                // ANNEXES IMAGES (Ajout après les sections principales)
+                await drawImagesFromContainer('adversary_extra_photos_container', 'Photo Supplémentaire - Adversaire');
+                await drawImagesFromContainer('renforts_photo_container', 'Photo - Renfort Potentiel');
+                await drawImagesFromContainer('photo_container_transport_pr', 'Transport PSIG vers PR');
+                await drawImagesFromContainer('photo_container_transport_domicile', 'Transport PR vers Domicile');
+                await drawImagesFromContainer('photo_container_bapteme_terrain', 'Baptême terrain');
+                await drawImagesFromContainer('photo_container_itineraire_exterieur', 'Itinéraire Extérieur India');
+                await drawImagesFromContainer('photo_container_itineraire_interieur', 'Itinéraire Intérieur India');
+                await drawImagesFromContainer('photo_container_cellule_effraction', 'Cellule Effraction');
+                await drawImagesFromContainer('photo_container_emplacement_ao', 'Emplacement AO');
+
+                // Dernière Page (Si non déjà la dernière page)
+                if (context.pdfDoc.getPages().length > 1 || context.y < context.pageHeight - context.margin - 10) { 
+                    addNewPage();
+                    if (backgroundImage) { context.currentPage.drawImage(backgroundImage, { x: 0, y: 0, width: context.pageWidth, height: context.pageHeight }); }
+                    const finalText = "Avez vous des questions?";
+                    const finalTextWidth = helveticaBoldFont.widthOfTextAtSize(finalText, 48);
+                    context.currentPage.drawText(finalText, { x: context.pageWidth / 2 - finalTextWidth / 2, y: context.pageHeight / 2, font: helveticaBoldFont, size: 48, color: context.colors.accent });
+                }
+            };
+
+            await pdfCreationLogic();
+            const pdfBytes = await pdfDoc.save();
+            return { pdfBytes, formData };
         }
-
 
         // --- NOUVELLE FONCTION DE GÉNÉRATION HTML (MODE PRÉSENTATION) ---
         /**
-         * Construit le contenu HTML pour le mode présentation, en nettoyant les ** et en gérant les retours à la ligne.
+         * Construit le contenu HTML pour le mode présentation, en nettoyant les **.
          * @returns {string} Le contenu HTML stylisé de l'O.I.
          */
         function buildPresentationHtml() {
@@ -2297,8 +3012,10 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             
             const wrapHtml = (text, tag = 'p', style = {}) => {
                 const styleString = Object.entries(style).map(([key, value]) => `${key}:${value}`).join(';');
-                // Retirer les ** du texte pour le HTML.
-                const formattedText = String(text || '').replace(/\*\*/g, '');
+                // Retirer les ** du texte pour le HTML et remplacer \n par <br>
+                const formattedText = String(text || '')
+                    .replace(/\*\*/g, '') 
+                    .replace(/\n/g, '<br>');
                 return `<${tag} style="${styleString}">${formattedText}</${tag}>`;
             };
 
@@ -2315,9 +3032,8 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     table += `<tr style="background-color: ${isDarkMode ? '#2a2a2a' : '#f8f9fa'};">`;
                     row.forEach(cell => { 
                         // Assure que le contenu des cellules est nettoyé des **
-                        const cellContent = String(cell || '').replace(/\*\*/g, '');
-                        // Applique white-space: pre-wrap pour conserver les sauts de ligne
-                        table += `<td style="padding: 10px; border: 1px solid ${secondaryText}; vertical-align: top; white-space: pre-wrap;">${cellContent}</td>`; 
+                        const cellContent = String(cell || '').replace(/\*\*/g, '').replace(/\n/g, '<br>');
+                        table += `<td style="padding: 10px; border: 1px solid ${secondaryText}; vertical-align: top;">${cellContent}</td>`; 
                     });
                     table += `</tr>`;
                 });
@@ -2415,8 +3131,8 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             htmlContent += drawTextHtml(getVal('missions_psig'), true, dangerColor, '1.6em', '0');
             
             htmlContent += drawTitleHtml("3. EXÉUTION");
-            const execText = `En vue d'appréhender le mis en cause et empêcher la déperdition des preuves,\nJe veux, le ${getVal('date_execution') || '(date)'} à partir de ${getVal('heure_execution') || '(heure)'}, pour une action ${getVal('type_action') || '(type d\'action)'} investir le domicile\nprésumé de ${getVal('nom_adversaire') || '(nom de l\'adversaire)'} après avoir bouclé celui-ci.`;
-            htmlContent += wrapHtml(execText, 'p', { 'font-size': '1.4em', 'margin-bottom': '15px', 'padding-left': '0', 'white-space': 'pre-wrap' });
+            const execText = `En vue d'appréhender le mis en cause et empêcher la déperdition des preuves,<br>Je veux, le ${getVal('date_execution') || '(date)'} à partir de ${getVal('heure_execution') || '(heure)'}, pour une action ${getVal('type_action') || '(type d\'action)'} investir le domicile<br>présumé de ${getVal('nom_adversaire') || '(nom de l\'adversaire)'} après avoir bouclé celui-ci.`;
+            htmlContent += wrapHtml(execText, 'p', { 'font-size': '1.4em', 'margin-bottom': '15px', 'padding-left': '0' });
 
             htmlContent += drawSubTitleHtml("Chronologie des temps");
             const chronoHeaders = ["Type", "Heure", "Description"];
@@ -2424,7 +3140,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             htmlContent += drawTableHtml(chronoHeaders, chronoRows);
 
             htmlContent += drawSubTitleHtml("Hypothèses");
-            htmlContent += drawTextHtml(`H1: ${getVal('hypothese_h1')}\nH2: ${getVal('hypothese_h2')}\nH3: ${getVal('hypothese_h3')}`, true, primaryText, '1.2em');
+            htmlContent += drawTextHtml(`H1: ${getVal('hypothese_h1')}<br>H2: ${getVal('hypothese_h2')}<br>H3: ${getVal('hypothese_h3')}`, true, primaryText, '1.2em');
             
             htmlContent += drawImageHtml('photo_container_transport_pr', 'Transport PSIG vers PR');
             htmlContent += drawImageHtml('photo_container_transport_domicile', 'Transport PR vers Domicile');
