@@ -113,7 +113,7 @@
         .dock-menu-item { 
             display: flex; align-items: center; justify-content: center; 
             background-color: var(--bg-container); color: var(--text-primary); 
-            border: 1px solid var(--border-color); /* Correction: 1px au lieu de 11px */
+            border: 1px solid var(--border-color); 
             border-radius: 50%; width: 50px; height: 50px; 
             font-size: 28px; cursor: pointer; 
             box-shadow: 0 2px 5px rgba(0,0,0,0.2); 
@@ -403,7 +403,6 @@
                 width: 45px;
                 height: 45px;
                 font-size: 24px;
-                /* Supprime les styles de grille pour rester simple comme oi.html */
             }
         }
     </style>
@@ -2295,6 +2294,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 btn.type = 'button';
                 btn.className = 'add-btn add-vehicle-btn';
                 btn.textContent = `➕ ${vehicle}`;
+                btn.addEventListener('click', () => addPatracdvrRow(vehicle));
                 vehicleCreationContainer.insertBefore(btn, document.getElementById('addManualVehicleBtn'));
             });
 
@@ -2524,16 +2524,23 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     return;
                 }
 
-                // Injecte la version HTML de l'O.I.
-                const html = buildPresentationHtml();
-                presentationContent.innerHTML = html;
-                
+                // Afficher le chargement pour les annotations éventuelles
+                presentationContent.innerHTML = '<h2>Chargement de l\'aperçu...</h2><p style="text-align:center;">Veuillez patienter pendant la compilation des images annotées.</p>';
+
                 // Ouvre la modale
                 if(typeof presentationModal.showModal === 'function') {
                     presentationModal.showModal();
                 } else {
                     presentationModal.style.display = 'block';
                 }
+                
+                // Génère le contenu HTML avec les images annotées
+                buildPresentationHtml().then(html => {
+                    presentationContent.innerHTML = html;
+                }).catch(err => {
+                    console.error("Erreur lors de la construction de l'aperçu HTML:", err);
+                    presentationContent.innerHTML = '<h2>Erreur d\'affichage</h2><p style="color:' + dangerColor + ';">Une erreur est survenue lors de la compilation des images annotées pour l\'aperçu. Réessayez ou vérifiez la console.</p>';
+                });
             }
 
             // 3. Configuration des événements
@@ -3010,9 +3017,9 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
         // --- NOUVELLE FONCTION DE GÉNÉRATION HTML (MODE PRÉSENTATION) ---
         /**
          * Construit le contenu HTML pour le mode présentation, en nettoyant les **.
-         * @returns {string} Le contenu HTML stylisé de l'O.I.
+         * @returns {Promise<string>} Le contenu HTML stylisé de l'O.I.
          */
-        function buildPresentationHtml() {
+        async function buildPresentationHtml() {
             saveFormData();
             const formDataString = localStorage.getItem('oiFormData');
             if (!formDataString) { return "<h2>Aucune donnée à présenter.</h2>"; }
@@ -3061,21 +3068,40 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 table += `</tbody></table>`;
                 return table;
             };
-            
-            const drawImageHtml = (id, title) => {
+
+            // Fonction pour gérer le dessin de l'image (PDFLib n'est pas utilisé ici, on utilise le canvas temp)
+            const drawImageHtml = async (id, title) => {
                 let imageHtml = '';
                 const wrappers = document.querySelectorAll(`#${id} .photo-input-wrapper`);
-                wrappers.forEach((wrapper, i) => {
+                
+                for(let i = 0; i < wrappers.length; i++) {
+                    const wrapper = wrappers[i];
                     const previewImg = wrapper.querySelector('.image-preview');
-                    const dataSrc = previewImg ? previewImg.src : null;
-                    if (dataSrc) {
-                        const finalTitle = wrappers.length > 1 ? `${title} (${i+1})` : title;
-                        imageHtml += `<div class="image-container" style="text-align: center; margin: 20px 0; border: 1px solid ${accentColor}; padding: 10px; background-color: ${isDarkMode ? '#1e1e1e' : '#ffffff'};">`;
-                        imageHtml += `<h4 style="color: ${accentColor}; margin-bottom: 10px;">${finalTitle}</h4>`;
-                        imageHtml += `<img src="${dataSrc}" alt="${finalTitle}" style="max-width: 100%; height: auto; border-radius: 4px; box-shadow: 0 4px 8px rgba(0,0,0,${isDarkMode ? 0.4 : 0.1});">`;
-                        imageHtml += `</div>`;
+                    if (!previewImg || !previewImg.dataset.originalSrc) continue;
+
+                    const originalSrc = previewImg.dataset.originalSrc;
+                    const annotationsJson = previewImg.dataset.annotations;
+                    const annotations = JSON.parse(annotationsJson || '[]');
+                    
+                    let dataSrcToDisplay = originalSrc;
+                    if (annotations.length > 0) {
+                        try {
+                             // Générer l'image annotée en base64 pour l'affichage dans le HTML
+                            const arrayBuffer = await createAnnotatedImageBlob(originalSrc, annotations);
+                            const base64String = btoa(new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), ''));
+                            dataSrcToDisplay = `data:image/jpeg;base64,${base64String}`;
+                        } catch (e) {
+                            console.error(`Erreur de génération d'image annotée pour ${title} (index ${i}):`, e);
+                            dataSrcToDisplay = originalSrc; // Revenir à l'original si la génération échoue
+                        }
                     }
-                });
+
+                    const finalTitle = wrappers.length > 1 ? `${title} (${i+1})` : title;
+                    imageHtml += `<div class="image-container" style="text-align: center; margin: 20px 0; border: 1px solid ${accentColor}; padding: 10px; background-color: ${isDarkMode ? '#1e1e1e' : '#ffffff'};">`;
+                    imageHtml += `<h4 style="color: ${accentColor}; margin-bottom: 10px;">${finalTitle}</h4>`;
+                    imageHtml += `<img src="${dataSrcToDisplay}" alt="${finalTitle}" style="max-width: 100%; height: auto; border-radius: 4px; box-shadow: 0 4px 8px rgba(0,0,0,${isDarkMode ? 0.4 : 0.1});">`;
+                    imageHtml += `</div>`;
+                }
                 return imageHtml;
             };
             
@@ -3107,16 +3133,18 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             };
 
 
-            // --- 1. SITUATION ---
+            // --- CONSTRUCTION DU CONTENU ASYNCHRONE ---
+            
+            // 1. SITUATION
             htmlContent += drawTitleHtml(`Ordre Initial - ${getVal('nom_adversaire') || 'OPÉRATION'}`);
             htmlContent += drawTextHtml(`Date de l'opération : ${getVal('date_op') || 'N/A'}`, true, primaryText, '1.2em', '0');
             htmlContent += drawTitleHtml("1. SITUATION");
             htmlContent += drawSubTitleHtml("1.1 Situation Générale"); htmlContent += drawTextHtml(getVal('situation_generale'));
             htmlContent += drawSubTitleHtml("1.2 Situation Particulière"); htmlContent += drawTextHtml(getVal('situation_particuliere'));
 
-            // --- 1.3 ADVERSAIRE ---
+            // 1.3 ADVERSAIRE (Image principale)
             htmlContent += drawTitleHtml("1.3 ADVERSAIRE");
-            htmlContent += drawImageHtml('adversary_photo_container', "Photo de l'objectif"); // Photo principale
+            htmlContent += await drawImageHtml('adversary_photo_container', "Photo de l'objectif"); 
 
             const meText = (formData.me_list || []).map((me, i) => `ME${i+1}: ${me}`).join(' | ');
             const adversaireRows = [
@@ -3136,18 +3164,18 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                  htmlContent += drawTextHtml("Aucune information détaillée sur l'adversaire.");
             }
 
-            htmlContent += drawImageHtml('adversary_extra_photos_container', 'Photo Supplémentaire - Adversaire');
-            htmlContent += drawImageHtml('renforts_photo_container', 'Photo - Renfort Potentiel');
+            htmlContent += await drawImageHtml('adversary_extra_photos_container', 'Photo Supplémentaire - Adversaire');
+            htmlContent += await drawImageHtml('renforts_photo_container', 'Photo - Renfort Potentiel');
 
 
-            // --- 1.4 ENVIRONNEMENT ---
+            // 1.4 ENVIRONNEMENT
             htmlContent += drawTitleHtml("1.4 ENVIRONNEMENT");
             htmlContent += drawSubTitleHtml("Ami(e)s (soutien)"); htmlContent += drawTextHtml(getVal('amies'));
             htmlContent += drawSubTitleHtml("Terrain / Météo"); htmlContent += drawTextHtml(getVal('terrain_info'));
             htmlContent += drawSubTitleHtml("Population"); htmlContent += drawTextHtml(getVal('population'));
             htmlContent += drawSubTitleHtml("Cadre juridique"); htmlContent += drawTextHtml(getVal('cadre_juridique'));
 
-            // --- 2. MISSION & 3. EXÉCUTION ---
+            // 2. MISSION & 3. EXÉCUTION
             htmlContent += drawTitleHtml("2. MISSION DU PSIG");
             htmlContent += drawTextHtml(getVal('missions_psig'), true, dangerColor, '1.6em', '0');
             
@@ -3163,12 +3191,12 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             htmlContent += drawSubTitleHtml("Hypothèses");
             htmlContent += drawTextHtml(`H1: ${getVal('hypothese_h1')}<br>H2: ${getVal('hypothese_h2')}<br>H3: ${getVal('hypothese_h3')}`, true, primaryText, '1.2em');
             
-            htmlContent += drawImageHtml('photo_container_transport_pr', 'Transport PSIG vers PR');
-            htmlContent += drawImageHtml('photo_container_transport_domicile', 'Transport PR vers Domicile');
-            htmlContent += drawImageHtml('photo_container_bapteme_terrain', 'Baptême terrain');
+            htmlContent += await drawImageHtml('photo_container_transport_pr', 'Transport PSIG vers PR');
+            htmlContent += await drawImageHtml('photo_container_transport_domicile', 'Transport PR vers Domicile');
+            htmlContent += await drawImageHtml('photo_container_bapteme_terrain', 'Baptême terrain');
 
 
-            // --- 4. ARTICULATION ---
+            // 4. ARTICULATION
             htmlContent += drawTitleHtml("4. ARTICULATION (MOIPC/ZMSPCP)");
             htmlContent += drawTextHtml(`Place du Chef (Générale): ${getVal('place_chef')}`, true, primaryText, '1.2em', '0');
 
@@ -3181,9 +3209,9 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             htmlContent += drawTextHtml(`Points Particuliers: ${getVal('india_points_particuliers')}`, true);
             htmlContent += drawTextHtml(`Conduite à Tenir: ${getVal('india_cat')}`);
             
-            htmlContent += drawImageHtml('photo_container_itineraire_exterieur', 'Itinéraire Extérieur India');
-            htmlContent += drawImageHtml('photo_container_itineraire_interieur', 'Itinéraire Intérieur India');
-            htmlContent += drawImageHtml('photo_container_cellule_effraction', 'Cellule Effraction');
+            htmlContent += await drawImageHtml('photo_container_itineraire_exterieur', 'Itinéraire Extérieur India');
+            htmlContent += await drawImageHtml('photo_container_itineraire_interieur', 'Itinéraire Intérieur India');
+            htmlContent += await drawImageHtml('photo_container_cellule_effraction', 'Cellule Effraction');
 
             htmlContent += drawSubTitleHtml("Équipe Appui/Observation (AO) - ZMSPCP");
             htmlContent += wrapHtml('<strong style="color: ' + accentColor + ';">Composition:</strong>', 'h4', { 'padding-left': '15px', 'margin-top': '10px' });
@@ -3195,9 +3223,9 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             htmlContent += drawTextHtml(`Place du Chef (P): ${getVal('ao_place_chef')}`, true);
             htmlContent += drawTextHtml(`Conduite à Tenir (C): ${getVal('ao_cat')}`);
             
-            htmlContent += drawImageHtml('photo_container_emplacement_ao', 'Emplacement AO');
+            htmlContent += await drawImageHtml('photo_container_emplacement_ao', 'Emplacement AO');
 
-            // --- 5. PATRACDVR ---
+            // 5. PATRACDVR
             htmlContent += drawTitleHtml("5. PATRACDVR (Détail de la Composition)");
             const patracHeaders = ["Trigramme", "Fonction", "Cellule", "Armement", "Équip. 1", "Équip. 2", "Tenue", "GPB"];
             for (const row of (formData.patracdvr_rows || [])) {
@@ -3208,7 +3236,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 }
             }
             
-            // --- 6. CAT ---
+            // 6. CAT
             htmlContent += drawTitleHtml("6. CONDUITES À TENIR");
             htmlContent += drawSubTitleHtml("Générales"); htmlContent += drawTextHtml(getVal('cat_generales'), true);
             const noGoText = getVal('no_go');
@@ -3218,7 +3246,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             }
             htmlContent += drawSubTitleHtml("Liaison"); htmlContent += drawTextHtml(getVal('cat_liaison'), true);
             
-            // --- LIEN RETEX (Conservation pour la complétude) ---
+            // LIEN RETEX (Conservation pour la complétude)
             const dateOp = getVal('date_op');
             const nomAdversaire = getVal('nom_adversaire');
             if (dateOp && nomAdversaire) {
