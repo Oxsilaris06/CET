@@ -296,9 +296,11 @@
             margin-top: 15px; 
             margin-bottom: 10px; 
         }
+        /* CORRECTION: Ajout de white-space: pre-wrap pour conserver les sauts de ligne */
         #presentation-content p {
             margin-bottom: 8px;
             padding-left: 15px;
+            white-space: pre-wrap; 
         }
         #presentation-content strong {
              /* Conserver le danger color pour la composition des cellules */
@@ -1690,7 +1692,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
 
             if (annotation.type === 'location') {
                 x = annotation.x - annotation.radius;
-                y = annotation.y - annotation.radius;
+                y = annotation.y - annotation.y - annotation.radius;
                 width = annotation.radius * 2;
                 height = annotation.radius * 2;
                 centerX = annotation.x;
@@ -2048,7 +2050,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 centerX = (annotation.startX + annotation.endX) / 2;
                 centerY = (annotation.startY + annotation.endY) / 2;
             }
-            
+
             if (annotation.rotation) {
                 context.translate(centerX, centerY);
                 context.rotate(annotation.rotation);
@@ -2482,7 +2484,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     if (result && result.pdfBytes) { 
                         alert("Le document PDF a été téléchargé.");
                     } else {
-                        alert("La génération du PDF a échoué. Vérifiez vos données.");
+                        alert("La génération du PDF a échoué. Veuillez vérifier les détails dans la console.");
                     }
                     
                 } catch (error) {
@@ -2492,7 +2494,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     btn.textContent = originalText; btn.disabled = false;
                 }
             }
-            
+
             // 2. Fonction d'ouverture du Mode Présentation (HTML + bouton PDF)
             function openPresentationMode() {
                 const presentationContent = document.getElementById('presentation-content');
@@ -2577,7 +2579,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
 
         /**
          * Gère la capture séquentielle des sections et assemble le PDF final (remplace buildPdf).
-         * NOTE: Utilise jspdf/html2canvas, le texte sera pixélisé.
          * @returns {Promise<{pdfBytes: Blob, formData: Object}|null>} L'objet Blob et les données du formulaire, ou null en cas d'échec.
          */
         async function downloadOiAsScreenshottedPdf() {
@@ -2600,7 +2601,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
 
             // Assurer que le conteneur principal du formulaire est visible
             const formContainer = document.querySelector('.wizard-content');
-            formContainer.style.display = 'block'; // Temporairement visible pour la capture
+            formContainer.style.display = 'block'; 
 
             try {
                 // 1. Capture séquentielle de chaque section
@@ -2635,25 +2636,26 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 const imgWidth = 200; // Taille légèrement réduite pour les marges (A4 = 210mm)
                 const margin = 5;
                 const pageHeight = 297; 
-                let pageAdded = false;
 
-                capturedDataURLs.forEach((dataURL, index) => {
+                // Utilisation de la première image comme page de départ pour initialiser le document
+                let firstImageAdded = false;
+
+                capturedDataURLs.forEach((dataURL) => {
                     const img = new Image();
                     img.src = dataURL;
                     
                     const ratio = img.width / img.height;
                     const finalImgHeight = imgWidth / ratio;
                     
-                    // Si c'est la première page, on l'ajoute directement (sans addPage() initial)
-                    if (index > 0) {
+                    if (!firstImageAdded) {
+                        // Ajout de la première image sur la page existante
+                        doc.addImage(dataURL, 'PNG', margin, margin, imgWidth, finalImgHeight);
+                        firstImageAdded = true;
+                    } else {
+                        // Pour les images suivantes, on ajoute une nouvelle page
                         doc.addPage();
-                    } else if (doc.internal.pages.length === 0) {
-                        doc.addPage();
+                        doc.addImage(dataURL, 'PNG', margin, margin, imgWidth, finalImgHeight);
                     }
-
-                    // Ajout de l'image capturée
-                    doc.addImage(dataURL, 'PNG', margin, margin, imgWidth, finalImgHeight);
-                    pageAdded = true;
                 });
 
                 // 3. Téléchargement et retour
@@ -2674,7 +2676,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 document.querySelector('.wizard-content').style.display = 'block'; 
             }
         }
-        // --- FIN LOGIQUE DE CAPTURE UHD ET D'ASSEMBLAGE PDF ---
 
 
         // --- NOUVELLE FONCTION DE GÉNÉRATION HTML (MODE PRÉSENTATION) ---
@@ -2703,15 +2704,14 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             
             const wrapHtml = (text, tag = 'p', style = {}) => {
                 const styleString = Object.entries(style).map(([key, value]) => `${key}:${value}`).join(';');
-                // Retirer les ** du texte pour le HTML et remplacer \n par <br>
-                const formattedText = String(text || '')
-                    .replace(/\*\*/g, '') 
-                    .replace(/\n/g, '<br>');
+                // Retirer les ** du texte pour le HTML et conserver les retours à la ligne grâce à white-space: pre-wrap dans le CSS.
+                const formattedText = String(text || '').replace(/\*\*/g, '');
                 return `<${tag} style="${styleString}">${formattedText}</${tag}>`;
             };
 
             const drawTitleHtml = (text) => wrapHtml(cleanText(text), 'h2', { 'color': accentColor, 'font-size': '1.8em', 'margin-top': '20px', 'padding-bottom': '5px', 'border-bottom': `2px solid ${accentColor}` });
             const drawSubTitleHtml = (text) => wrapHtml(cleanText(text), 'h3', { 'color': accentColor, 'font-size': '1.3em', 'margin-top': '15px', 'margin-bottom': '10px' });
+            // Modification pour appliquer white-space: pre-wrap au niveau du style inline pour surcharger tout CSS non spécifique
             const drawTextHtml = (text, bold = false, color = primaryText, size = '1.1em', indent = '15px') => wrapHtml(text, 'p', { 'font-weight': bold ? '500' : '400', 'color': color, 'font-size': size, 'margin-bottom': '8px', 'padding-left': indent, 'white-space': 'pre-wrap' });
             
             const drawTableHtml = (headers, rows) => {
@@ -2723,8 +2723,9 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     table += `<tr style="background-color: ${isDarkMode ? '#2a2a2a' : '#f8f9fa'};">`;
                     row.forEach(cell => { 
                         // Assure que le contenu des cellules est nettoyé des **
-                        const cellContent = String(cell || '').replace(/\*\*/g, '').replace(/\n/g, '<br>');
-                        table += `<td style="padding: 10px; border: 1px solid ${secondaryText}; vertical-align: top;">${cellContent}</td>`; 
+                        const cellContent = String(cell || '').replace(/\*\*/g, '');
+                        // Dans les tableaux HTML, les retours à la ligne sont conservés par <br>
+                        table += `<td style="padding: 10px; border: 1px solid ${secondaryText}; vertical-align: top; white-space: pre-wrap;">${cellContent}</td>`; 
                     });
                     table += `</tr>`;
                 });
@@ -2756,7 +2757,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 
                 allMembers.forEach(member => {
                     if (member.cellule && member.cellule.toLowerCase().startsWith(teamPrefix)) {
-                        if (!membersByCell[member.cellule]) membersByCell[member.cellule] = [];
+                        if (!membersByCell[cellule]) membersByCell[cellule] = [];
                         // Format: TRIGRAMME (Fonction)
                         member.trigramme && membersByCell[member.cellule].push(
                             `<span style="color: ${primaryText};">${member.trigramme}</span>` + 
@@ -2822,8 +2823,8 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             htmlContent += drawTextHtml(getVal('missions_psig'), true, dangerColor, '1.6em', '0');
             
             htmlContent += drawTitleHtml("3. EXÉUTION");
-            const execText = `En vue d'appréhender le mis en cause et empêcher la déperdition des preuves,<br>Je veux, le ${getVal('date_execution') || '(date)'} à partir de ${getVal('heure_execution') || '(heure)'}, pour une action ${getVal('type_action') || '(type d\'action)'} investir le domicile<br>présumé de ${getVal('nom_adversaire') || '(nom de l\'adversaire)'} après avoir bouclé celui-ci.`;
-            htmlContent += wrapHtml(execText, 'p', { 'font-size': '1.4em', 'margin-bottom': '15px', 'padding-left': '0' });
+            const execText = `En vue d'appréhender le mis en cause et empêcher la déperdition des preuves,\nJe veux, le ${getVal('date_execution') || '(date)'} à partir de ${getVal('heure_execution') || '(heure)'}, pour une action ${getVal('type_action') || '(type d\'action)'} investir le domicile\nprésumé de ${getVal('nom_adversaire') || '(nom de l\'adversaire)'} après avoir bouclé celui-ci.`;
+            htmlContent += wrapHtml(execText, 'p', { 'font-size': '1.4em', 'margin-bottom': '15px', 'padding-left': '0', 'white-space': 'pre-wrap' });
 
             htmlContent += drawSubTitleHtml("Chronologie des temps");
             const chronoHeaders = ["Type", "Heure", "Description"];
@@ -2831,7 +2832,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             htmlContent += drawTableHtml(chronoHeaders, chronoRows);
 
             htmlContent += drawSubTitleHtml("Hypothèses");
-            htmlContent += drawTextHtml(`H1: ${getVal('hypothese_h1')}<br>H2: ${getVal('hypothese_h2')}<br>H3: ${getVal('hypothese_h3')}`, true, primaryText, '1.2em');
+            htmlContent += drawTextHtml(`H1: ${getVal('hypothese_h1')}\nH2: ${getVal('hypothese_h2')}\nH3: ${getVal('hypothese_h3')}`, true, primaryText, '1.2em');
             
             htmlContent += drawImageHtml('photo_container_transport_pr', 'Transport PSIG vers PR');
             htmlContent += drawImageHtml('photo_container_transport_domicile', 'Transport PR vers Domicile');
