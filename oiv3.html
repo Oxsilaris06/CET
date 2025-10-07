@@ -782,8 +782,8 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                             <span id="retexFileNames" class="file-name-display" style="color: var(--text-secondary);">Aucun fichier sélectionné</span>
                         </div>
                         <div class="retex-actions">
-                            <button id="launchRetexAnalysisBtn" class="add-btn">Lancer l'Analyse</button>
-                            <button id="generateRetexPdfBtn" class="wizard-nav-btn" style="display: none; background-color: var(--success-green);">Générer le PDF du rapport</button>
+                            <button id="launchRetexAnalysisBtn" type="button" class="add-btn">Lancer l'Analyse</button>
+                            <button id="generateRetexPdfBtn" type="button" class="wizard-nav-btn" style="display: none; background-color: var(--success-green);">Générer le PDF du rapport</button>
                         </div>
                         <p id="retex_status" class="retex-status"></p>
                         <div id="retex_output" class="retex-output-content" style="display: none;"></div>
@@ -1449,7 +1449,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 this.startX = pos.x;
                 this.startY = pos.y;
                 if (this.currentTool === 'move') {
-                    this.selectedAnnotation = getAnnotationAtPosition(pos.x, pos.y);
+                    this.selectedAnnotation = this.getAnnotationAtPosition(pos.x, pos.y);
                     this.setContextualTools(this.selectedAnnotation);
                     if (this.selectedAnnotation) {
                         this.isMovingAnnotation = true;
@@ -1538,18 +1538,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 }
             },
 
-            getEventPos(evt) {
-                const rect = this.canvas.getBoundingClientRect();
-                const clientX = evt.touches ? evt.touches[0].clientX : evt.clientX;
-                const clientY = evt.touches ? evt.touches[0].clientY : evt.clientY;
-                const scaleX = this.canvas.width / rect.width;
-                const scaleY = this.canvas.height / rect.height;
-                return {
-                    x: (clientX - rect.left) * scaleX,
-                    y: (clientY - rect.top) * scaleY
-                };
-            },
-
             getAnnotationAtPosition(x, y) {
                 for (let i = this.annotations.length - 1; i >= 0; i--) {
                     const annotation = this.annotations[i];
@@ -1606,21 +1594,31 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             }
         };
 
-        // --- FONCTIONS GLOBALEMENT ACCESSIBLES ---
+        // --- FONCTIONS DE BASE ---
+        function saveFormData() { DataService.saveFormData(); }
+        function loadFormData() { return DataService.loadFormData(); }
+        function initializePatracdvr(data) { DataService.initializePatracdvr(data); }
+        function loadDefaultConfig() { return DataService.loadDefaultConfig(); }
+        function loadConfigObject(config) { DataService.loadConfigObject(config); }
+
+        function getEventPos(canvas, evt) {
+            const rect = canvas.getBoundingClientRect();
+            const clientX = evt.touches ? evt.touches[0].clientX : evt.clientX;
+            const clientY = evt.touches ? evt.touches[0].clientY : evt.clientY;
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            return {
+                x: (clientX - rect.left) * scaleX,
+                y: (clientY - rect.top) * scaleY
+            };
+        }
 
         function drawAnnotationOnContext(context, canvasWidth, canvasHeight, annotation) {
             context.save();
             let centerX, centerY;
-            if (annotation.type === 'location') {
-                centerX = annotation.x;
-                centerY = annotation.y;
-            } else if (annotation.type === 'box') {
-                centerX = annotation.x + annotation.width / 2;
-                centerY = annotation.y + annotation.height / 2;
-            } else if (annotation.type === 'arrow') {
-                centerX = (annotation.startX + annotation.endX) / 2;
-                centerY = (annotation.startY + annotation.endY) / 2;
-            }
+            if (annotation.type === 'location') { centerX = annotation.x; centerY = annotation.y; } 
+            else if (annotation.type === 'box') { centerX = annotation.x + annotation.width / 2; centerY = annotation.y + annotation.height / 2; } 
+            else if (annotation.type === 'arrow') { centerX = (annotation.startX + annotation.endX) / 2; centerY = (annotation.startY + annotation.endY) / 2; }
             
             if (annotation.rotation) {
                 context.translate(centerX, centerY);
@@ -1714,7 +1712,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
         function showStep(n) { WizardService.showStep(n); }
         function openAnnotationModal(previewImgId) { AnnotationService.openAnnotationModal(previewImgId); }
         function updateAnnotationRotation() { AnnotationService.updateAnnotationRotation(); }
-        function initializePatracdvr(data) { DataService.initializePatracdvr(data); }
         function setupQuickEditPanel() {
             const contentContainer = document.querySelector('#quickEditPanel .quick-edit-content');
             contentContainer.innerHTML = '';
@@ -1769,29 +1766,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             }
             modal.showModal();
         }
-        function handleMemberSelection(event) {
-            const clickedButton = event.target.closest('.patracdvr-member-btn');
-            if (!clickedButton) return;
-            if (activeMemberId === clickedButton.id) {
-                clickedButton.classList.remove('member-active');
-                activeMemberId = null;
-                document.getElementById('quickEditPanel').style.display = 'none';
-                return;
-            }
-            if (activeMemberId) {
-                const oldActive = document.getElementById(activeMemberId);
-                if (oldActive) oldActive.classList.remove('member-active');
-            }
-            activeMemberId = clickedButton.id;
-            clickedButton.classList.add('member-active');
-            
-            if (window.innerWidth < 768) {
-                openQuickEditModal(activeMemberId);
-            } else {
-                populateQuickEditPanel(activeMemberId);
-                document.getElementById('quickEditPanel').style.display = 'block';
-            }
-        }
         function populateQuickEditPanel(memberId) {
             const member = document.getElementById(memberId);
             if (!member) return;
@@ -1837,6 +1811,83 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             }
             modal.showModal();
         }
+        function handleMemberSelection(event) {
+            const clickedButton = event.target.closest('.patracdvr-member-btn');
+            if (!clickedButton) return;
+            if (activeMemberId === clickedButton.id) {
+                clickedButton.classList.remove('member-active');
+                activeMemberId = null;
+                document.getElementById('quickEditPanel').style.display = 'none';
+                return;
+            }
+            if (activeMemberId) {
+                const oldActive = document.getElementById(activeMemberId);
+                if (oldActive) oldActive.classList.remove('member-active');
+            }
+            activeMemberId = clickedButton.id;
+            clickedButton.classList.add('member-active');
+            
+            if (window.innerWidth < 768) {
+                openQuickEditModal(activeMemberId);
+            } else {
+                populateQuickEditPanel(activeMemberId);
+                document.getElementById('quickEditPanel').style.display = 'block';
+            }
+        }
+        function handleDragEnter(e) {
+            e.preventDefault();
+            const targetContainer = e.currentTarget;
+            if (draggedItem && draggedItem.classList.contains('patracdvr-member-btn')) {
+                targetContainer.style.border = '2px dashed var(--accent-blue)';
+            }
+        }
+        function handleDragOver(e) {
+            e.preventDefault(); 
+            const targetContainer = e.currentTarget;
+            if (draggedItem && draggedItem.classList.contains('patracdvr-member-btn')) {
+                const afterElement = getDragAfterElement(targetContainer, e.clientY);
+                if (afterElement == null) { targetContainer.appendChild(draggedItem); } 
+                else { targetContainer.insertBefore(draggedItem, afterElement); }
+            }
+        }
+        function handleDragLeave(e) {
+            e.currentTarget.style.border = '1px dashed var(--border-color)';
+        }
+        function handleDrop(e) {
+            e.preventDefault();
+            const targetContainer = e.currentTarget;
+            targetContainer.style.border = '1px dashed var(--border-color)';
+            if (draggedItem && draggedItem.classList.contains('patracdvr-member-btn')) {
+                targetContainer.appendChild(draggedItem);
+                const isUnassignedZone = targetContainer.id === 'unassigned_members_container';
+                if (isUnassignedZone) {
+                    draggedItem.dataset.cellule = 'Sans';
+                    draggedItem.dataset.fonction = 'Sans';
+                } else {
+                    if (draggedItem.dataset.cellule === 'Sans') {
+                         draggedItem.dataset.cellule = 'India 1';
+                    }
+                }
+                updateMemberButtonVisuals(draggedItem);
+                if (draggedItem.id === activeMemberId) {
+                    draggedItem.classList.remove('member-active');
+                    activeMemberId = null;
+                    if (window.innerWidth >= 768) {
+                        document.getElementById('quickEditPanel').style.display = 'none';
+                    }
+                }
+                saveFormData();
+                draggedItem = null;
+            }
+        }
+        function getDragAfterElement(container, y) {
+            const draggableElements = [...container.querySelectorAll('.draggable:not(.dragging)')];
+            return draggableElements.reduce((closest, child) => {
+                const box = child.getBoundingClientRect(); const offset = y - box.top - box.height / 2;
+                if (offset < 0 && offset > closest.offset) { return { offset: offset, element: child }; } 
+                else { return closest; }
+            }, { offset: Number.NEGATIVE_INFINITY }).element;
+        }
 
 
         // --- PDF GENERATION & ANNOTATION UTILS ---
@@ -1846,7 +1897,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             const pdfDoc = await PDFDocument.create();
             const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
             const helveticaBoldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-            saveFormData();
+            DataService.saveFormData();
             const formDataString = localStorage.getItem('oiFormData');
             if (!formDataString) { return null; }
             const formData = JSON.parse(formDataString);
@@ -1893,7 +1944,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 lines.forEach((line, index) => { context.currentPage.drawText(line, { x, y: context.y - (index * (size + 4)), font, size, color }); });
                 context.y -= (totalHeight + 10);
             };
-            // Fonction modifiée pour inclure la position de départ X
             const drawTable = (headers, rows, columnWidths, startX) => {
                 let currentY = context.y; const rowPadding = 5; const headerFontSize = 10; const contentFontSize = 10;
                 const drawRow = (rowData, isHeader) => {
@@ -1982,7 +2032,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 
                 allMembers.forEach(member => {
                     if (member.cellule && member.cellule.toLowerCase().startsWith(teamPrefix)) {
-                        if (!membersByCell[member.cellule]) membersByCell[cellule] = [];
+                        if (!membersByCell[member.cellule]) membersByCell[member.cellule] = [];
                         member.trigramme && membersByCell[member.cellule].push(member.trigramme);
                     }
                 });
@@ -2278,34 +2328,36 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
 
             let htmlContent = `<div style="font-family: 'Oswald', sans-serif; color: ${primaryText};">`;
 
-            // Fonction utilitaire pour la coloration d'acronyme
+            // Fonction utilitaire pour la coloration d'acronyme (utilisée pour MOIPC/ZMSPCP)
             const colorizeAcronym = (text, acronyms) => {
                 let html = text.replace(/\n/g, '<br>');
                 const redSpan = `<span style="color:${dangerColor}; font-weight: bold;">`;
-                const blueSpan = `<span style="color:${indiaColor}; font-weight: bold;">`;
+                const endSpan = `</span>`;
 
-                // Fix MOIPC/ZMSPCP for mission titles/headers
-                const missionPatterns = [
-                    { pattern: /M(ission)\:/, replacement: `${redSpan}M</span>ission:` },
-                    { pattern: /O(bjectif)\:/, replacement: `<span style="color:${redSpan}O</span>bjectif:` },
-                    { pattern: /I(tinéraire)\:/, replacement: `<span style="color:${redSpan}I</span>tinéraire:` },
-                    { pattern: /P(oints) P(articuliers)\:/, replacement: `${redSpan}P</span>oints P<span style="color:${redSpan}a</span>rticuliers:` },
-                    { pattern: /C(onduite) à T(enir)\:/, replacement: `${redSpan}C</span>onduite à T<span style="color:${redSpan}e</span>nir:` },
-                    // ZMSPCP equivalents (Zone, Mission, Secteur, Points, Conduite)
-                    { pattern: /Zone d'installation \(Z\)\:/, replacement: `Zone d'installation (${redSpan}Z</span>):` },
-                    { pattern: /Mission \(M\)\:/, replacement: `Mission (${redSpan}M</span>):` },
-                    { pattern: /Secteur de surveillance \(S\)\:/, replacement: `Secteur de surveillance (${redSpan}S</span>):` },
-                    { pattern: /Points Particuliers \(P\)\:/, replacement: `Points Particuliers (${redSpan}P</span>):` },
-                    { pattern: /Conduite à Tenir \(C\)\:/, replacement: `Conduite à Tenir (${redSpan}C</span>):` },
+                const patterns = [
+                    // MOIPC
+                    { pattern: /Mission\s*\((M)\)/i, replacement: `Mission (${redSpan}M${endSpan})` },
+                    { pattern: /Objectif\s*\((O)\)/i, replacement: `Objectif (${redSpan}O${endSpan})` },
+                    { pattern: /Itinéraire\s*\((I)\)/i, replacement: `Itinéraire (${redSpan}I${endSpan})` },
+                    { pattern: /Points Particuliers\s*\((P)\)/i, replacement: `Points Particuliers (${redSpan}P${endSpan})` },
+                    { pattern: /Conduite à Tenir \((C)\)/i, replacement: `Conduite à Tenir (${redSpan}C${endSpan})` },
+                    // ZMSPCP (ZONES)
+                    { pattern: /Zone d'installation \(Z\)\:/, replacement: `Zone d'installation (${redSpan}Z${endSpan}):` },
+                    { pattern: /Mission \(M\)\:/, replacement: `Mission (${redSpan}M${endSpan}):` },
+                    { pattern: /Secteur de surveillance \(S\)\:/, replacement: `Secteur de surveillance (${redSpan}S${endSpan}):` },
+                    { pattern: /Points Particuliers \(P\)\:/, replacement: `Points Particuliers (${redSpan}P${endSpan}):` },
+                    { pattern: /Conduite à Tenir \(C\)\:/, replacement: `Conduite à Tenir (${redSpan}C${endSpan}):` },
                 ];
-                
-                missionPatterns.forEach(({ pattern, replacement }) => {
+
+                patterns.forEach(({ pattern, replacement }) => {
                      html = html.replace(pattern, replacement);
                 });
                 
                 return html;
             };
 
+            const cleanText = (text) => String(text || '').replace(/\*\*(.*?)\*\*/g, '$1').trim();
+            
             const wrapHtml = (text, tag = 'p', style = {}) => {
                 const styleString = Object.entries(style).map(([key, value]) => `${key}:${value}`).join(';');
                 const formattedText = String(text || '').replace(/\*\*/g, '').replace(/\n/g, '<br>');
@@ -2360,7 +2412,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
 
                     const finalTitle = wrappers.length > 1 ? `${title} (${i+1})` : title;
                     imageHtml += `<div class="image-container" style="text-align: center; margin: 20px 0; border: 1px solid ${accentColor}; padding: 10px; background-color: ${isDarkMode ? '#1e1e1e' : '#ffffff'};">`;
-                    htmlContent += `<h4 style="color: ${accentColor}; margin-bottom: 10px;">${finalTitle}</h4>`;
+                    imageHtml += `<h4 style="color: ${accentColor}; margin-bottom: 10px;">${finalTitle}</h4>`;
                     imageHtml += `<img src="${dataSrcToDisplay}" alt="${finalTitle}" style="max-width: 100%; height: auto; border-radius: 4px; box-shadow: 0 4px 8px rgba(0,0,0,${isDarkMode ? 0.4 : 0.1});">`;
                     imageHtml += `</div>`;
                 }
@@ -2470,17 +2522,11 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             htmlContent += getCompositionHtml('india');
             
             // FIX: Coloration des acronymes INDIA (MOIPC)
-            const indiaMissionText = `Mission: ${getVal('india_mission')}`;
-            const indiaObjectifText = `Objectif: ${getVal('india_objectif')}`;
-            const indiaItineraireText = `Itinéraire: ${getVal('india_itineraire')}`;
-            const indiaPointsText = `Points Particuliers: ${getVal('india_points_particuliers')}`;
-            const indiaCatText = `Conduite à Tenir: ${getVal('india_cat')}`;
-
-            htmlContent += drawTextHtml(colorizeAcronym(indiaMissionText, ['M', 'O', 'I', 'P', 'C']), true, primaryText, '1.1em', '15px');
-            htmlContent += drawTextHtml(colorizeAcronym(indiaObjectifText, ['M', 'O', 'I', 'P', 'C']), true, primaryText, '1.1em', '15px');
-            htmlContent += drawTextHtml(colorizeAcronym(indiaItineraireText, ['M', 'O', 'I', 'P', 'C']), true, primaryText, '1.1em', '15px');
-            htmlContent += drawTextHtml(colorizeAcronym(indiaPointsText, ['M', 'O', 'I', 'P', 'C']), true, primaryText, '1.1em', '15px');
-            htmlContent += drawTextHtml(colorizeAcronym(indiaCatText, ['M', 'O', 'I', 'P', 'C']), true, primaryText, '1.1em', '15px');
+            htmlContent += drawTextHtml(colorizeAcronym(`Mission: ${getVal('india_mission')}`, ['M', 'O', 'I', 'P', 'C']), true, primaryText, '1.1em', '15px');
+            htmlContent += drawTextHtml(colorizeAcronym(`Objectif: ${getVal('india_objectif')}`, ['M', 'O', 'I', 'P', 'C']), true, primaryText, '1.1em', '15px');
+            htmlContent += drawTextHtml(colorizeAcronym(`Itinéraire: ${getVal('india_itineraire')}`, ['M', 'O', 'I', 'P', 'C']), true, primaryText, '1.1em', '15px');
+            htmlContent += drawTextHtml(colorizeAcronym(`Points Particuliers: ${getVal('india_points_particuliers')}`, ['M', 'O', 'I', 'P', 'C']), true, primaryText, '1.1em', '15px');
+            htmlContent += drawTextHtml(colorizeAcronym(`Conduite à Tenir: ${getVal('india_cat')}`, ['M', 'O', 'I', 'P', 'C']), true, primaryText, '1.1em', '15px');
 
             htmlContent += await drawImageHtml('photo_container_itineraire_exterieur', 'Itinéraire Extérieur India');
             htmlContent += await drawImageHtml('photo_container_itineraire_interieur', 'Itinéraire Intérieur India');
@@ -2491,18 +2537,12 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             htmlContent += getCompositionHtml('ao');
             
             // FIX: Coloration des acronymes AO (ZMSPCP)
-            const aoZoneText = `Zone d'installation (Z): ${getVal('ao_zone_installation')}`;
-            const aoMissionText = `Mission (M): ${getVal('ao_mission')}`;
-            const aoSecteurText = `Secteur de surveillance (S): ${getVal('ao_secteur_surveillance')}`;
-            const aoPointsText = `Points Particuliers (P): ${getVal('ao_points_particuliers')}`;
-            const aoCatText = `Conduite à Tenir (C): ${getVal('ao_cat')}`;
-            
-            htmlContent += drawTextHtml(colorizeAcronym(aoZoneText, ['Z', 'M', 'S', 'P', 'C']), true, primaryText, '1.1em', '15px');
-            htmlContent += drawTextHtml(colorizeAcronym(aoMissionText, ['Z', 'M', 'S', 'P', 'C']), true, primaryText, '1.1em', '15px');
-            htmlContent += drawTextHtml(colorizeAcronym(aoSecteurText, ['Z', 'M', 'S', 'P', 'C']), true, primaryText, '1.1em', '15px');
-            htmlContent += drawTextHtml(colorizeAcronym(aoPointsText, ['Z', 'M', 'S', 'P', 'C']), true, primaryText, '1.1em', '15px');
+            htmlContent += drawTextHtml(colorizeAcronym(`Zone d'installation (Z): ${getVal('ao_zone_installation')}`, ['Z', 'M', 'S', 'P', 'C']), true, primaryText, '1.1em', '15px');
+            htmlContent += drawTextHtml(colorizeAcronym(`Mission (M): ${getVal('ao_mission')}`, ['Z', 'M', 'S', 'P', 'C']), true, primaryText, '1.1em', '15px');
+            htmlContent += drawTextHtml(colorizeAcronym(`Secteur de surveillance (S): ${getVal('ao_secteur_surveillance')}`, ['Z', 'M', 'S', 'P', 'C']), true, primaryText, '1.1em', '15px');
+            htmlContent += drawTextHtml(colorizeAcronym(`Points Particuliers (P): ${getVal('ao_points_particuliers')}`, ['Z', 'M', 'S', 'P', 'C']), true, primaryText, '1.1em', '15px');
             htmlContent += drawTextHtml(`Place du Chef (P): ${getVal('ao_place_chef')}`, true);
-            htmlContent += drawTextHtml(colorizeAcronym(aoCatText, ['Z', 'M', 'S', 'P', 'C']), true, primaryText, '1.1em', '15px');
+            htmlContent += drawTextHtml(colorizeAcronym(`Conduite à Tenir (C): ${getVal('ao_cat')}`, ['Z', 'M', 'S', 'P', 'C']), true, primaryText, '1.1em', '15px');
 
             htmlContent += await drawImageHtml('photo_container_emplacement_ao', 'Emplacement AO');
 
@@ -2694,11 +2734,8 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             const targetContainer = e.currentTarget;
             if (draggedItem && draggedItem.classList.contains('patracdvr-member-btn')) {
                 const afterElement = getDragAfterElement(targetContainer, e.clientY);
-                if (afterElement == null) { 
-                    targetContainer.appendChild(draggedItem); 
-                } else { 
-                    targetContainer.insertBefore(draggedItem, afterElement); 
-                }
+                if (afterElement == null) { targetContainer.appendChild(draggedItem); } 
+                else { targetContainer.insertBefore(draggedItem, afterElement); }
             }
         }
         function handleDragLeave(e) {
