@@ -404,13 +404,21 @@
     </div>
 
     <script>
-        // --- VARIABLES GLOBALES DE CONFIGURATION ---
+        // --- VARIABLES GLOBALES DE CONFIGURATION (VALEURS PAR DÉFAUT) ---
         let APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxZnl6yZZtNf-yhct5_F6ftkTJud16uUawHC1R_vYm-t0bmMaZUnuU7coYYeYweq0t0wQ/exec";
         let DRIVE_URL = "https://drive.google.com/drive/folders/11kmI-02FFng-Jr_Zr0oPvFc3fQwEML4Z";
         let ANNONCE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyBLq0bZM3tc5V2pN3vSvhNpdY-LE88SLQGIvcMnX5DmSOr9e9b-OTZzfptYJQ_Fx4DIQ/exec';
-        const OI_URL = "oiv3.html";
+        const OI_URL = "oiv3.html"; // Reste constant
         const CONFIG_FILE = 'all.json';
 
+        // --- ÉLÉMENTS DE CONNEXION GLOBALE ---
+        const loginModal = document.getElementById('loginModal');
+        const memberSelect = document.getElementById('member-select');
+        const passwordInput = document.getElementById('password-input');
+        const loginMessage = document.getElementById('loginMessage');
+        let allMembers = [];
+        let loginTarget = ''; 
+        
         // --- LOGIQUE DE CHARGEMENT DE CONFIGURATION EXTERNE ---
         async function loadExternalConfig() {
             try {
@@ -425,24 +433,27 @@
                     APPS_SCRIPT_URL = config.urls.APPS_SCRIPT_URL || APPS_SCRIPT_URL;
                     DRIVE_URL = config.urls.DRIVE_URL || DRIVE_URL;
                     ANNONCE_SCRIPT_URL = config.urls.ANNONCE_SCRIPT_URL || ANNONCE_SCRIPT_URL;
+                    
+                    // S'assurer que OI_URL n'est pas écrasé, ou l'inclure si besoin dans la config
                 }
                 
                 // 2. Mettre à jour les membres pour la connexion
                 if (config.members && Array.isArray(config.members)) {
                     allMembers = config.members.map(member => member.trim());
-                    populateMemberSelect();
-                    console.log("Configuration externe chargée avec succès.");
+                    // Ne pas appeler populateMemberSelect ici, car l'appel est fait dans openLoginModal
+                    console.log("Configuration externe et membres chargés avec succès.");
                 }
                 
                 // 3. Mise à jour du titre si disponible
                 if (config.siteTitle) {
                     document.getElementById('main-title').textContent = config.siteTitle;
                 }
+                
+                return true;
 
             } catch (error) {
                 console.warn(`[Config Info] Impossible de charger la configuration externe (${CONFIG_FILE}). Utilisation des valeurs par défaut.`, error);
-                // Charger les membres par défaut si l'API est accessible (ou laisser vide)
-                await fetchMembers(); 
+                return false;
             }
         }
         
@@ -459,36 +470,25 @@
                     document.getElementById('annonceContent').innerText = 'Annonce non disponible.';
                 });
         }
-
-        document.addEventListener('DOMContentLoaded', async () => {
-            await loadExternalConfig(); // Tente de charger la config avant tout
-            fetchAnnonce(); // Utilise l'URL d'annonce potentiellement mise à jour
-        });
-
-        // Logique pour la modale de connexion
-        const loginModal = document.getElementById('loginModal');
-        const memberSelect = document.getElementById('member-select');
-        const passwordInput = document.getElementById('password-input');
-        const loginMessage = document.getElementById('loginMessage');
-        let allMembers = [];
-        let loginTarget = ''; // 'drive' ou 'oi'
-
+        
+        // Récupère les membres via l'API, mais uniquement si la config externe n'a pas pu les fournir
         async function fetchMembers() {
-             // Si la configuration externe a déjà chargé les membres, ne pas appeler l'API ici
-            if (allMembers && allMembers.length > 0) {
-                 populateMemberSelect();
-                 return;
+             // Si allMembers est vide, on appelle l'API en utilisant l'URL actuellement définie (par défaut ou chargée)
+            if (allMembers.length === 0) {
+                try {
+                    const response = await fetch(`${APPS_SCRIPT_URL}?action=getMembers`);
+                    const data = await response.json();
+                    
+                    // On écrase seulement si on reçoit une liste de membres valide
+                    if (Array.isArray(data) && data.length > 0) {
+                        allMembers = data.map(member => member.trim());
+                    }
+                } catch (error) {
+                    console.error("Erreur lors du chargement des membres via API:", error);
+                }
             }
-            
-            try {
-                // Utilise l'URL potentiellement mise à jour
-                const response = await fetch(`${APPS_SCRIPT_URL}?action=getMembers`);
-                const data = await response.json();
-                allMembers = data.map(member => member.trim());
-                populateMemberSelect();
-            } catch (error) {
-                console.error("Erreur lors du chargement des membres:", error);
-            }
+             // On s'assure de toujours remplir le select avec ce que l'on a
+            populateMemberSelect();
         }
 
         function populateMemberSelect() {
@@ -508,12 +508,8 @@
             memberSelect.value = '';
             loginModal.classList.add('active');
             
-            // Assure que la liste des membres est à jour
-            if (allMembers.length === 0) {
-                 fetchMembers(); // Recharge les membres si la config externe n'a rien donné
-            } else {
-                 populateMemberSelect();
-            }
+            // Tente de récupérer/mettre à jour la liste des membres si nécessaire
+            fetchMembers(); 
         }
 
         function closeLoginModal() {
@@ -530,7 +526,7 @@
             }
 
             try {
-                // Utilise l'URL potentiellement mise à jour
+                // Utilise l'URL actuellement définie
                 const url = `${APPS_SCRIPT_URL}?action=authenticate&member=${selectedMember}&password=${password}`;
                 const response = await fetch(url);
                 const result = await response.json();
@@ -549,6 +545,14 @@
                 loginMessage.innerText = "Erreur de connexion.";
             }
         }
+        
+        // --- INITIALISATION AU CHARGEMENT DU DOCUMENT ---
+        document.addEventListener('DOMContentLoaded', async () => {
+            await loadExternalConfig(); // 1. Charge la config (définit les URLs et les membres si all.json les fournit)
+            fetchAnnonce();            // 2. Affiche l'annonce (utilise l'URL potentiellement mise à jour)
+            
+            // Note: fetchMembers() est maintenant appelé lors de l'ouverture de la modale de connexion.
+        });
     </script>
 </body>
 </html>
