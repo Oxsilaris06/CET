@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -177,6 +178,7 @@
             <h2 class="step-title">2. Configuration Popote (Articles & Seuil de Dette)</h2>
             <div class="help-box">
                 <p>Définissez le nom et le prix de chaque article de consommation. Ces valeurs seront utilisées dans l'interface Popote et dans le script Apps Script.</p>
+                <p>Le lien Revolut et les informations Prozis sont configurés par défaut pour la démo, mais peuvent être édités dans le code source si nécessaire.</p>
             </div>
             
             <div id="popote-items-config">
@@ -282,7 +284,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            // ... (Déclarations des constantes et variables inchangées) ...
             const steps = document.querySelectorAll('.step');
             const prevBtn = document.getElementById('prevBtn');
             const nextBtn = document.getElementById('nextBtn');
@@ -309,7 +310,7 @@
             let videoFileName = "background.mp4";
             let faviconGeneratedBlobs = [];
             
-            // CONSTANTES ET CONFIGURATION INITIALE DE LA POPOTE (Doivent correspondre à popote (6).html)
+            // CONSTANTES ET CONFIGURATION INITIALE DE LA POPOTE (Basé sur popote (6).html)
             const popoteItems = [
                 { key: 'canettes', name: 'Canettes & Sucreries', price: 0.60, image: 'canettes.png' },
                 { key: 'bcaa', name: 'Bcaa', price: 1.50, image: 'bcaa.png' },
@@ -324,8 +325,730 @@
             };
             const revolutLink = "https://revolut.me/nicomhx";
             
-            // NOUVELLE VARIABLE POUR LE CODE HTML DE POPOTE
-            const popoteHtmlContent = `<!DOCTYPE html>
+            // CONTENU DYNAMIQUE DU FICHIER POPOTE.HTML (Chaîne de caractères brute, plus sûre)
+            const popoteHtmlContentTemplate = `<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Popote</title>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500&family=Saira+Stencil+One&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-body: #121212; --bg-container: #1e1e1e; --bg-interactive: #2a2a2a;
+            --text-primary: #e0e0e0; --text-secondary: #95a5a6; --border-color: #444444;
+            --accent-blue: #5b9bd5; --accent-hover: #4a7aa5; --revolut-btn-color: rgba(0, 0, 0, 0.25);
+            --danger-red-dark: #FF6666; --high-debt-bg-dark: #4b2326; --high-debt-text-dark: #d1b1b3;
+            --prozis-red: #DC3545; --success-green: #28a745;
+        }
+        body.light-mode {
+            --bg-body: #e9ecef; --bg-container: #f0f0f0; --bg-interactive: #f8f9fa;
+            --text-primary: #212529; --text-secondary: #6c757d; --accent-blue: #28a745; --revolut-btn-color: rgba(0, 0, 0, 0.25);
+            --border-color: #ced4da; --danger-red: #8B0000; --high-debt-bg-light: #F8D7DA;
+            --high-debt-text-light: #721C24;
+        }
+        body.light-mode h1 {
+            color: #0033a0;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Oswald', sans-serif; background-color: var(--bg-body); color: var(--text-primary); line-height: 1.6; padding: 15px; }
+        .container { max-width: 900px; margin: auto; background: var(--bg-container); padding: 20px 30px; border-radius: 8px; border: 1px solid var(--border-color); }
+        h1 { text-align: center; font-size: 2.5em; margin-bottom: 30px; color: var(--accent-blue); text-transform: uppercase; font-family: 'Saira Stencil One', sans-serif; font-weight: 400; }
+        .table-container { margin-bottom: 25px; border-radius: 6px; overflow: hidden; display: block; }
+        table { width: 100%; border-collapse: collapse; font-size: 1.1em; text-align: left; border: 1px solid var(--border-color); }
+        th, td { padding: 12px 15px; border-bottom: 1px solid var(--border-color); color: var(--text-primary); }
+        th { background-color: var(--bg-interactive); font-weight: 500; text-transform: uppercase; }
+        
+        /* --- STYLES DU DOCK LATÉRAL --- */
+        .dock-menu {
+            position: fixed;
+            top: 50%;
+            left: 0;
+            transform: translateY(-50%);
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            padding: 10px;
+            z-index: 2000;
+        }
+        .dock-menu:not(.collapsed) {
+             width: 45px;
+             opacity: 0.5;
+             border-radius: 0 30px 30px 0;
+             transition: all 0.3s ease;
+        }
+        .dock-menu:not(.collapsed):hover {
+            opacity: 1;
+            background-color: rgba(30, 30, 30, 0.05);
+            border: 1px solid rgba(68, 68, 68, 0.1);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+        .dock-menu-item {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: var(--bg-container);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 50%;
+            width: 45px;
+            height: 45px;
+            font-size: 24px;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: all 0.3s ease;
+            text-decoration: none;
+        }
+        .dock-menu-item:hover {
+            transform: scale(1.1);
+            box-shadow: 0 6px 10px rgba(0,0,0,0.2);
+        }
+        .dock-menu.collapsed {
+            width: 28px;
+            height: auto;
+            align-items: center;
+            padding: 1px;
+            opacity: 1;
+            background-color: rgba(30, 30, 30, 0.05);
+            border: 1px solid rgba(68, 68, 68, 0.1);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-radius: 0 50% 50% 0;
+        }
+        .dock-menu.collapsed:hover { background-color: var(--bg-container); }
+        .dock-menu.collapsed .dock-menu-item { display: none; }
+        .dock-menu:not(.collapsed) .dock-toggle-btn { display: none; }
+        .dock-menu.collapsed .dock-toggle-btn {
+            display: flex;
+            background-color: var(--bg-container);
+            border: 1px solid var(--border-color);
+            border-radius: 50%;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .dock-toggle-btn {
+            background-color: transparent;
+            color: var(--text-primary);
+            border: none;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: transform 0.3s ease;
+        }
+        .dock-toggle-btn .material-icons { font-size: 32px; transition: transform 0.3s ease; }
+        .dock-menu.collapsed .dock-toggle-btn .material-icons { transform: rotate(0deg); }
+        .dock-menu:not(.collapsed) .dock-toggle-btn .material-icons { transform: rotate(180deg); }
+
+        /* --- FIN STYLES DU DOCK --- */
+
+        fieldset { border: 1px solid var(--border-color); border-radius: 6px; padding: 20px; margin-bottom: 25px; }
+        legend { padding: 0 10px; font-size: 1.5em; color: var(--text-primary); font-family: 'Saira Stencil One', sans-serif; cursor: pointer; }
+        .conso-item { display: flex; justify-content: flex-start; align-items: center; margin-bottom: 10px; gap: 15px; }
+        .conso-item input { width: 80px; padding: 8px; text-align: center; border: 1px solid var(--border-color); border-radius: 4px; font-size: 1em; background-color: var(--bg-interactive); color: var(--text-primary); }
+        .conso-item label { flex-grow: 1; font-weight: 400; font-size: 1.1em; color: var(--text-secondary); }
+        .conso-item-image { width: 50px; height: 50px; object-fit: cover; border-radius: 4px; }
+        select, input[type="text"], input[type="password"] { width: 100%; padding: 10px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 1em; background-color: var(--bg-interactive); color: var(--text-primary); }
+        .action-button { display: block; width: 100%; padding: 12px; margin-top: 15px; font-family: 'Saira Stencil One', sans-serif; font-size: 1.2em; color: white; border: none; border-radius: 4px; cursor: pointer; text-transform: uppercase; text-decoration: none; text-align: center; }
+        body.dark-mode .action-button.revolut { background-color: var(--revolut-btn-color); border: 1px solid var(--border-color); }
+        
+        /* --- CORRECTION POUR LE BOUTON 'PAYER MES DETTES' EN MODE CLAIR --- */
+        body.light-mode .action-button.revolut {
+            background-color: black;
+            color: white;
+            border: 1px solid var(--border-color);
+        }
+
+        /* --- NOUVEAU STYLE POUR LE BOUTON PROZIS ÉLITE --- */
+        .action-button.prozis-button {
+            background-color: var(--prozis-red);
+            margin-top: 25px; /* Sépare le bouton des autres sections */
+        }
+        body.light-mode .action-button.prozis-button {
+            background-color: var(--prozis-red);
+        }
+        .prozis-info-box {
+            background-color: var(--bg-interactive);
+            padding: 15px;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            margin-top: 15px;
+        }
+        .prozis-info-box ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        .prozis-info-box li {
+            margin-bottom: 8px;
+        }
+        .prozis-info-box strong {
+            color: var(--accent-blue);
+        }
+        
+        .pulse-high { animation: pulse-high 0.8s infinite alternate; display: inline-block; }
+        @keyframes pulse-high { from { transform: scale(1); } to { transform: scale(1.15); } }
+        #dette-box { display: flex; align-items: center; justify-content: center; font-size: 1.2em; padding: 10px; border-radius: 6px; margin-top: 15px; }
+        .dette-box-correct { background-color: #d4edda; color: #155724; }
+        body.dark-mode .dette-box-correct { background-color: #21432f; color: #b3c5bb; }
+        .dette-box-incorrect { background-color: #f8d7da; color: #721c24; }
+        body.dark-mode .dette-box-incorrect { background-color: #4b2326; color: #d1b1b3; }
+        .collapsible-content { display: none; overflow: hidden; }
+        .collapsible-content.active { display: block; }
+        .high-debt-message { text-align: center; margin-bottom: 15px; font-weight: bold; padding: 10px; border-radius: 4px; }
+        body.dark-mode .high-debt-message { background-color: var(--high-debt-bg-dark); color: var(--high-debt-text-dark); }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Assistant de Configuration</h1>
+        <div id="notification"></div>
+
+        <div id="step1" class="step active">
+            <h2 class="step-title">1. Configuration générale du site</h2>
+            <div class="help-box">
+                <p>Téléchargez d'abord le "Starter pack" du site. Il contient tous les fichiers HTML, CSS, JavaScript et les icônes par défaut.</p>
+                <a href="https://github.com/Oxsilaris06/GStart/raw/main/Starter%20pack.zip" target="_blank" class="action-button success" style="margin-top:10px; color:white;">Télécharger le Starter pack</a>
+            </div>
+            <div class="form-group">
+                <label for="siteName">Titre du site</label>
+                <input type="text" id="siteName" placeholder="Ex: Mon Unité" value="Espace Mon Unité">
+            </div>
+            <div class="form-group">
+                <label for="backgroundVideo">Vidéo de fond</label>
+                <input type="file" id="backgroundVideo" accept=".mp4">
+                <label for="backgroundVideo" class="file-input-label">Choisir un fichier</label>
+                <span id="videoFileName" class="help-text" style="display:none;"></span>
+            </div>
+            <div class="form-group">
+                <label for="faviconFile">Favicon (image carrée)</label>
+                <input type="file" id="faviconFile" accept="image/*">
+                <label for="faviconFile" class="file-input-label">Choisir une image</label>
+                <span id="faviconFileName" class="help-text" style="display:none;"></span>
+            </div>
+        </div>
+        
+        <div id="step2" class="step">
+            <h2 class="step-title">2. Configuration Popote (Articles & Seuil de Dette)</h2>
+            <div class="help-box">
+                <p>Définissez le nom et le prix de chaque article de consommation. Ces valeurs seront utilisées dans l'interface Popote et dans le script Apps Script.</p>
+                <p>Le lien Revolut et les informations Prozis sont configurés par défaut pour la démo, mais peuvent être édités dans le code source si nécessaire.</p>
+            </div>
+            
+            <div id="popote-items-config">
+                </div>
+
+            <div class="item-row" style="margin-top: 20px;">
+                <h4>Seuils de Dette (€)</h4>
+                <div class="item-config-grid">
+                    <div class="form-group">
+                        <label for="alertThreshold">Seuil d'Alerte (Dette $\ge$)</label>
+                        <input type="number" id="alertThreshold" value="20.00" step="0.01" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label for="blockThreshold">Seuil de Blocage (Dette $\ge$)</label>
+                        <input type="number" id="blockThreshold" value="30.00" step="0.01" min="0">
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div id="step3" class="step">
+            <h2 class="step-title">3. Création de la feuille de calcul</h2>
+            <div class="help-box">
+                <p>Le site utilise une feuille Google Sheets pour la gestion de la popote et du merch.</p>
+                <p><b>Étape A :</b> Ouvrez le modèle ci-dessous. Pensez à l'ouvrir dans un nouvel onglet pour ne pas perdre la configuration en cours.</p>
+                <a href="https://docs.google.com/spreadsheets/d/1V7Qe9xbq2wlSUEOgeAyqUmeAqoOflWiT1NwIskSJCBI/edit?usp=drivesdk" target="_blank" class="action-button open-sheet-btn" style="margin-top:10px; color:var(--text-primary);">Ouvrir le modèle</a>
+                <p style="margin-top:15px;"><b>Étape B :</b> Une fois la feuille ouverte, faites une copie (Fichier > Faire une copie) sur votre propre compte Google. Remplissez les champs de chaque onglet sans toucher aux cases bleues.</p>
+                <p style="margin-top:10px;"><b>Étape C :</b> Partagez la feuille en mode "Tous les utilisateurs disposant du lien" avec le rôle "Lecteur".</p>
+            </div>
+            <div class="form-group" style="margin-top: 20px;">
+                <label for="sheetUrl">URL de votre feuille Google</label>
+                <input type="text" id="sheetUrl" placeholder="Collez l'URL de votre feuille ici.">
+            </div>
+        </div>
+
+        <div id="step4" class="step">
+            <h2 class="step-title">4. Adaptation du script Apps Script</h2>
+            <div class="help-box">
+                <p>Nous allons adapter le script pour votre feuille. Téléchargez d'abord le fichier <code>all.gs</code> fourni dans le dépôt GitHub. Il doit contenir les marqueurs <code>SPREADSHEET_ID_PLACEHOLDER</code> et <code>POPOTE_PRICES_PLACEHOLDER</code>.</p>
+            </div>
+            <div class="action-group">
+                <input type="file" id="uploadAppsScript" accept=".gs">
+                <label for="uploadAppsScript" class="action-button" style="background-color: var(--accent-blue);">Uploader le script Apps Script</label>
+                <button type="button" id="adaptAppsScriptBtn" class="action-button success">Adapter le script</button>
+            </div>
+            <div id="appsScriptCodeBox">
+                <p>Copiez le code ci-dessous :</p>
+                <textarea id="appsScriptCode" readonly></textarea>
+                <div class="action-group">
+                    <button type="button" id="copyAppsScriptBtn" style="background-color: var(--accent-blue);">Copier le code</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="step5" class="step">
+            <h2 class="step-title">5. Déploiement du script</h2>
+            <div class="help-box">
+                <p>Maintenant, vous devez déployer le script sur Google Apps Script. Voici comment faire :</p>
+                <ol>
+                    <li>Rendez-vous sur <a href="https://script.google.com/home/start" target="_blank">Google Apps Script</a> et créez un "Nouveau projet".</li>
+                    <li>Collez le code adapté dans l'éditeur (depuis l'étape précédente).</li>
+                    <li>Cliquez sur "Déployer" > "Nouveau déploiement".</li>
+                    <li>Sélectionnez "Application web" et assurez-vous que l'accès est défini sur "Tout le monde".</li>
+                    <li>Cliquez sur "Déployer" et copiez l'URL de l'application web fournie.</li>
+                </ol>
+            </div>
+            <div class="form-group">
+                <label for="backendUrl">URL de votre script de backend</label>
+                <input type="text" id="backendUrl" placeholder="Collez l'URL de déploiement Apps Script ici.">
+            </div>
+        </div>
+
+        <div id="step6" class="step">
+            <h2 class="step-title">6. Télécharger votre configuration</h2>
+            <div class="help-box">
+                <p>Votre site est configuré ! Téléchargez le fichier ZIP ci-dessous contenant tous les fichiers à jour dont vous avez besoin :</p>
+                <ul class="checklist" id="finalFilesChecklist">
+                    <li>all.json (Config mise à jour)</li>
+                    <li>popote.html (Rendu dynamique)</li>
+                    <li>all.gs (Script backend mis à jour)</li>
+                </ul>
+            </div>
+            <button type="button" id="downloadAllBtn" class="action-button success">Télécharger le ZIP complet</button>
+        </div>
+        
+        <div id="step7" class="step">
+            <h2 class="step-title">7. Finalisation du déploiement</h2>
+            <div class="help-box">
+                <p>C'est la dernière étape ! Votre site est prêt à être publié. Utilisez les fichiers que vous venez de télécharger pour mettre à jour votre dépôt GitHub. Vous pouvez trouver tous les fichiers de base nécessaires pour votre site à l'adresse ci-dessous.</p>
+            </div>
+            <a href="https://github.com/" target="_blank" class="action-button" style="color:white; margin-top:20px;">Lien vers le dépôt GitHub</a>
+        </div>
+
+
+        <div class="navigation-buttons">
+            <button id="prevBtn" style="display:none;">Précédent</button>
+            <button id="nextBtn">Suivant</button>
+        </div>
+    </div>
+    <div class="dock-menu" id="dockMenu">
+        <a href="index.html" class="dock-menu-item" id="homeBtn" title="Accueil"><span class="material-symbols-outlined">home</span></a>
+        <div class="dock-menu-item" id="darkModeToggle" title="Changer le thème"><span class="material-symbols-outlined" id="darkModeIcon">nightlight</span></div>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const steps = document.querySelectorAll('.step');
+            const prevBtn = document.getElementById('prevBtn');
+            const nextBtn = document.getElementById('nextBtn');
+            const siteNameInput = document.getElementById('siteName');
+            const backgroundVideoInput = document.getElementById('backgroundVideo');
+            const faviconFileInput = document.getElementById('faviconFile');
+            const videoFileNameSpan = document.getElementById('videoFileName');
+            const faviconFileNameSpan = document.getElementById('faviconFileName');
+            const sheetUrlInput = document.getElementById('sheetUrl');
+            const uploadAppsScriptInput = document.getElementById('uploadAppsScript');
+            const adaptAppsScriptBtn = document.getElementById('adaptAppsScriptBtn');
+            const appsScriptCodeBox = document.getElementById('appsScriptCodeBox');
+            const appsScriptCodeTextarea = document.getElementById('appsScriptCode');
+            const copyAppsScriptBtn = document.getElementById('copyAppsScriptBtn');
+            const backendUrlInput = document.getElementById('backendUrl');
+            const downloadAllBtn = document.getElementById('downloadAllBtn');
+            const notificationDiv = document.getElementById('notification');
+            const checkList = document.getElementById('finalFilesChecklist');
+
+            let currentStep = 0;
+            let uploadedScriptContent = "";
+            let adaptedScriptContent = ""; 
+            let videoFileBlob = null;
+            let videoFileName = "background.mp4";
+            let faviconGeneratedBlobs = [];
+            
+            // CONSTANTES ET CONFIGURATION INITIALE DE LA POPOTE (Basé sur popote (6).html)
+            const popoteItems = [
+                { key: 'canettes', name: 'Canettes & Sucreries', price: 0.60, image: 'canettes.png' },
+                { key: 'bcaa', name: 'Bcaa', price: 1.50, image: 'bcaa.png' },
+                { key: 'cookie', name: 'Cookie&Barres Prozis', price: 1.80, image: 'cookie.png' },
+                { key: 'boules', name: 'Boules&Brownies Prozis', price: 1.50, image: 'boules.png' },
+                { key: 'autres', name: 'Eau', price: 0.40, image: 'autres.png' }
+            ];
+            const defaultProzisInfo = {
+                id: "nicolas.maheux45@gmail.com",
+                password: "PSIGGILETTE06",
+                coupon: "ELITE-PARTNER"
+            };
+            const revolutLink = "https://revolut.me/nicomhx";
+            
+            // CONTENU DYNAMIQUE DU FICHIER POPOTE.HTML (Contenu HTML/JS complet de popote (6).html, optimisé pour l'injection)
+            // Note: Les remplacements ci-dessous ciblent les parties codées en dur pour les rendre dynamiques via all.json
+            const popoteHtmlContentTemplate = `<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Popote</title>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500&family=Saira+Stencil+One&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-body: #121212; --bg-container: #1e1e1e; --bg-interactive: #2a2a2a;
+            --text-primary: #e0e0e0; --text-secondary: #95a5a6; --border-color: #444444;
+            --accent-blue: #5b9bd5; --accent-hover: #4a7aa5; --revolut-btn-color: rgba(0, 0, 0, 0.25);
+            --danger-red-dark: #FF6666; --high-debt-bg-dark: #4b2326; --high-debt-text-dark: #d1b1b3;
+            --prozis-red: #DC3545; --success-green: #28a745;
+        }
+        body.light-mode {
+            --bg-body: #e9ecef; --bg-container: #f0f0f0; --bg-interactive: #f8f9fa;
+            --text-primary: #212529; --text-secondary: #6c757d; --accent-blue: #28a745; --revolut-btn-color: rgba(0, 0, 0, 0.25);
+            --border-color: #ced4da; --danger-red: #8B0000; --high-debt-bg-light: #F8D7DA;
+            --high-debt-text-light: #721C24;
+        }
+        body.light-mode h1 {
+            color: #0033a0;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Oswald', sans-serif; background-color: var(--bg-body); color: var(--text-primary); line-height: 1.6; padding: 15px; }
+        .container { max-width: 900px; margin: auto; background: var(--bg-container); padding: 20px 30px; border-radius: 8px; border: 1px solid var(--border-color); }
+        h1 { text-align: center; font-size: 2.5em; margin-bottom: 30px; color: var(--accent-blue); text-transform: uppercase; font-family: 'Saira Stencil One', sans-serif; font-weight: 400; }
+        .table-container { margin-bottom: 25px; border-radius: 6px; overflow: hidden; display: block; }
+        table { width: 100%; border-collapse: collapse; font-size: 1.1em; text-align: left; border: 1px solid var(--border-color); }
+        th, td { padding: 12px 15px; border-bottom: 1px solid var(--border-color); color: var(--text-primary); }
+        th { background-color: var(--bg-interactive); font-weight: 500; text-transform: uppercase; }
+        
+        /* --- STYLES DU DOCK LATÉRAL --- */
+        .dock-menu {
+            position: fixed;
+            top: 50%;
+            left: 0;
+            transform: translateY(-50%);
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            padding: 10px;
+            z-index: 2000;
+        }
+        .dock-menu:not(.collapsed) {
+             width: 45px;
+             opacity: 0.5;
+             border-radius: 0 30px 30px 0;
+             transition: all 0.3s ease;
+        }
+        .dock-menu:not(.collapsed):hover {
+            opacity: 1;
+            background-color: rgba(30, 30, 30, 0.05);
+            border: 1px solid rgba(68, 68, 68, 0.1);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+        .dock-menu-item {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: var(--bg-container);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 50%;
+            width: 45px;
+            height: 45px;
+            font-size: 24px;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: all 0.3s ease;
+            text-decoration: none;
+        }
+        .dock-menu-item:hover {
+            transform: scale(1.1);
+            box-shadow: 0 6px 10px rgba(0,0,0,0.2);
+        }
+        .dock-menu.collapsed {
+            width: 28px;
+            height: auto;
+            align-items: center;
+            padding: 1px;
+            opacity: 1;
+            background-color: rgba(30, 30, 30, 0.05);
+            border: 1px solid rgba(68, 68, 68, 0.1);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-radius: 0 50% 50% 0;
+        }
+        .dock-menu.collapsed:hover { background-color: var(--bg-container); }
+        .dock-menu.collapsed .dock-menu-item { display: none; }
+        .dock-menu:not(.collapsed) .dock-toggle-btn { display: none; }
+        .dock-menu.collapsed .dock-toggle-btn {
+            display: flex;
+            background-color: var(--bg-container);
+            border: 1px solid var(--border-color);
+            border-radius: 50%;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .dock-toggle-btn {
+            background-color: transparent;
+            color: var(--text-primary);
+            border: none;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: transform 0.3s ease;
+        }
+        .dock-toggle-btn .material-icons { font-size: 32px; transition: transform 0.3s ease; }
+        .dock-menu.collapsed .dock-toggle-btn .material-icons { transform: rotate(0deg); }
+        .dock-menu:not(.collapsed) .dock-toggle-btn .material-icons { transform: rotate(180deg); }
+
+        /* --- FIN STYLES DU DOCK --- */
+
+        fieldset { border: 1px solid var(--border-color); border-radius: 6px; padding: 20px; margin-bottom: 25px; }
+        legend { padding: 0 10px; font-size: 1.5em; color: var(--text-primary); font-family: 'Saira Stencil One', sans-serif; cursor: pointer; }
+        .conso-item { display: flex; justify-content: flex-start; align-items: center; margin-bottom: 10px; gap: 15px; }
+        .conso-item input { width: 80px; padding: 8px; text-align: center; border: 1px solid var(--border-color); border-radius: 4px; font-size: 1em; background-color: var(--bg-interactive); color: var(--text-primary); }
+        .conso-item label { flex-grow: 1; font-weight: 400; font-size: 1.1em; color: var(--text-secondary); }
+        .conso-item-image { width: 50px; height: 50px; object-fit: cover; border-radius: 4px; }
+        select, input[type="text"], input[type="password"] { width: 100%; padding: 10px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 1em; background-color: var(--bg-interactive); color: var(--text-primary); }
+        .action-button { display: block; width: 100%; padding: 12px; margin-top: 15px; font-family: 'Saira Stencil One', sans-serif; font-size: 1.2em; color: white; border: none; border-radius: 4px; cursor: pointer; text-transform: uppercase; text-decoration: none; text-align: center; }
+        body.dark-mode .action-button.revolut { background-color: var(--revolut-btn-color); border: 1px solid var(--border-color); }
+        
+        /* --- CORRECTION POUR LE BOUTON 'PAYER MES DETTES' EN MODE CLAIR --- */
+        body.light-mode .action-button.revolut {
+            background-color: black;
+            color: white;
+            border: 1px solid var(--border-color);
+        }
+
+        /* --- NOUVEAU STYLE POUR LE BOUTON PROZIS ÉLITE --- */
+        .action-button.prozis-button {
+            background-color: var(--prozis-red);
+            margin-top: 25px; /* Sépare le bouton des autres sections */
+        }
+        body.light-mode .action-button.prozis-button {
+            background-color: var(--prozis-red);
+        }
+        .prozis-info-box {
+            background-color: var(--bg-interactive);
+            padding: 15px;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            margin-top: 15px;
+        }
+        .prozis-info-box ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        .prozis-info-box li {
+            margin-bottom: 8px;
+        }
+        .prozis-info-box strong {
+            color: var(--accent-blue);
+        }
+        
+        .pulse-high { animation: pulse-high 0.8s infinite alternate; display: inline-block; }
+        @keyframes pulse-high { from { transform: scale(1); } to { transform: scale(1.15); } }
+        #dette-box { display: flex; align-items: center; justify-content: center; font-size: 1.2em; padding: 10px; border-radius: 6px; margin-top: 15px; }
+        .dette-box-correct { background-color: #d4edda; color: #155724; }
+        body.dark-mode .dette-box-correct { background-color: #21432f; color: #b3c5bb; }
+        .dette-box-incorrect { background-color: #f8d7da; color: #721c24; }
+        body.dark-mode .dette-box-incorrect { background-color: #4b2326; color: #d1b1b3; }
+        .collapsible-content { display: none; overflow: hidden; }
+        .collapsible-content.active { display: block; }
+        .high-debt-message { text-align: center; margin-bottom: 15px; font-weight: bold; padding: 10px; border-radius: 4px; }
+        body.dark-mode .high-debt-message { background-color: var(--high-debt-bg-dark); color: var(--high-debt-text-dark); }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Assistant de Configuration</h1>
+        <div id="notification"></div>
+
+        <div id="step1" class="step active">
+            <h2 class="step-title">1. Configuration générale du site</h2>
+            <div class="help-box">
+                <p>Téléchargez d'abord le "Starter pack" du site. Il contient tous les fichiers HTML, CSS, JavaScript et les icônes par défaut.</p>
+                <a href="https://github.com/Oxsilaris06/GStart/raw/main/Starter%20pack.zip" target="_blank" class="action-button success" style="margin-top:10px; color:white;">Télécharger le Starter pack</a>
+            </div>
+            <div class="form-group">
+                <label for="siteName">Titre du site</label>
+                <input type="text" id="siteName" placeholder="Ex: Mon Unité" value="Espace Mon Unité">
+            </div>
+            <div class="form-group">
+                <label for="backgroundVideo">Vidéo de fond</label>
+                <input type="file" id="backgroundVideo" accept=".mp4">
+                <label for="backgroundVideo" class="file-input-label">Choisir un fichier</label>
+                <span id="videoFileName" class="help-text" style="display:none;"></span>
+            </div>
+            <div class="form-group">
+                <label for="faviconFile">Favicon (image carrée)</label>
+                <input type="file" id="faviconFile" accept="image/*">
+                <label for="faviconFile" class="file-input-label">Choisir une image</label>
+                <span id="faviconFileName" class="help-text" style="display:none;"></span>
+            </div>
+        </div>
+        
+        <div id="step2" class="step">
+            <h2 class="step-title">2. Configuration Popote (Articles & Seuil de Dette)</h2>
+            <div class="help-box">
+                <p>Définissez le nom et le prix de chaque article de consommation. Ces valeurs seront utilisées dans l'interface Popote et dans le script Apps Script.</p>
+                <p>Le lien Revolut et les informations Prozis sont configurés par défaut pour la démo, mais peuvent être édités dans le code source si nécessaire.</p>
+            </div>
+            
+            <div id="popote-items-config">
+                </div>
+
+            <div class="item-row" style="margin-top: 20px;">
+                <h4>Seuils de Dette (€)</h4>
+                <div class="item-config-grid">
+                    <div class="form-group">
+                        <label for="alertThreshold">Seuil d'Alerte (Dette $\ge$)</label>
+                        <input type="number" id="alertThreshold" value="20.00" step="0.01" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label for="blockThreshold">Seuil de Blocage (Dette $\ge$)</label>
+                        <input type="number" id="blockThreshold" value="30.00" step="0.01" min="0">
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div id="step3" class="step">
+            <h2 class="step-title">3. Création de la feuille de calcul</h2>
+            <div class="help-box">
+                <p>Le site utilise une feuille Google Sheets pour la gestion de la popote et du merch.</p>
+                <p><b>Étape A :</b> Ouvrez le modèle ci-dessous. Pensez à l'ouvrir dans un nouvel onglet pour ne pas perdre la configuration en cours.</p>
+                <a href="https://docs.google.com/spreadsheets/d/1V7Qe9xbq2wlSUEOgeAyqUmeAqoOflWiT1NwIskSJCBI/edit?usp=drivesdk" target="_blank" class="action-button open-sheet-btn" style="margin-top:10px; color:var(--text-primary);">Ouvrir le modèle</a>
+                <p style="margin-top:15px;"><b>Étape B :</b> Une fois la feuille ouverte, faites une copie (Fichier > Faire une copie) sur votre propre compte Google. Remplissez les champs de chaque onglet sans toucher aux cases bleues.</p>
+                <p style="margin-top:10px;"><b>Étape C :</b> Partagez la feuille en mode "Tous les utilisateurs disposant du lien" avec le rôle "Lecteur".</p>
+            </div>
+            <div class="form-group" style="margin-top: 20px;">
+                <label for="sheetUrl">URL de votre feuille Google</label>
+                <input type="text" id="sheetUrl" placeholder="Collez l'URL de votre feuille ici.">
+            </div>
+        </div>
+
+        <div id="step4" class="step">
+            <h2 class="step-title">4. Adaptation du script Apps Script</h2>
+            <div class="help-box">
+                <p>Nous allons adapter le script pour votre feuille. Téléchargez d'abord le fichier <code>all.gs</code> fourni dans le dépôt GitHub. Il doit contenir les marqueurs <code>SPREADSHEET_ID_PLACEHOLDER</code> et <code>POPOTE_PRICES_PLACEHOLDER</code>.</p>
+            </div>
+            <div class="action-group">
+                <input type="file" id="uploadAppsScript" accept=".gs">
+                <label for="uploadAppsScript" class="action-button" style="background-color: var(--accent-blue);">Uploader le script Apps Script</label>
+                <button type="button" id="adaptAppsScriptBtn" class="action-button success">Adapter le script</button>
+            </div>
+            <div id="appsScriptCodeBox">
+                <p>Copiez le code ci-dessous :</p>
+                <textarea id="appsScriptCode" readonly></textarea>
+                <div class="action-group">
+                    <button type="button" id="copyAppsScriptBtn" style="background-color: var(--accent-blue);">Copier le code</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="step5" class="step">
+            <h2 class="step-title">5. Déploiement du script</h2>
+            <div class="help-box">
+                <p>Maintenant, vous devez déployer le script sur Google Apps Script. Voici comment faire :</p>
+                <ol>
+                    <li>Rendez-vous sur <a href="https://script.google.com/home/start" target="_blank">Google Apps Script</a> et créez un "Nouveau projet".</li>
+                    <li>Collez le code adapté dans l'éditeur (depuis l'étape précédente).</li>
+                    <li>Cliquez sur "Déployer" > "Nouveau déploiement".</li>
+                    <li>Sélectionnez "Application web" et assurez-vous que l'accès est défini sur "Tout le monde".</li>
+                    <li>Cliquez sur "Déployer" et copiez l'URL de l'application web fournie.</li>
+                </ol>
+            </div>
+            <div class="form-group">
+                <label for="backendUrl">URL de votre script de backend</label>
+                <input type="text" id="backendUrl" placeholder="Collez l'URL de déploiement Apps Script ici.">
+            </div>
+        </div>
+
+        <div id="step6" class="step">
+            <h2 class="step-title">6. Télécharger votre configuration</h2>
+            <div class="help-box">
+                <p>Votre site est configuré ! Téléchargez le fichier ZIP ci-dessous contenant tous les fichiers à jour dont vous avez besoin :</p>
+                <ul class="checklist" id="finalFilesChecklist">
+                    <li>all.json (Config mise à jour)</li>
+                    <li>popote.html (Rendu dynamique)</li>
+                    <li>all.gs (Script backend mis à jour)</li>
+                </ul>
+            </div>
+            <button type="button" id="downloadAllBtn" class="action-button success">Télécharger le ZIP complet</button>
+        </div>
+        
+        <div id="step7" class="step">
+            <h2 class="step-title">7. Finalisation du déploiement</h2>
+            <div class="help-box">
+                <p>C'est la dernière étape ! Votre site est prêt à être publié. Utilisez les fichiers que vous venez de télécharger pour mettre à jour votre dépôt GitHub. Vous pouvez trouver tous les fichiers de base nécessaires pour votre site à l'adresse ci-dessous.</p>
+            </div>
+            <a href="https://github.com/" target="_blank" class="action-button" style="color:white; margin-top:20px;">Lien vers le dépôt GitHub</a>
+        </div>
+
+
+        <div class="navigation-buttons">
+            <button id="prevBtn" style="display:none;">Précédent</button>
+            <button id="nextBtn">Suivant</button>
+        </div>
+    </div>
+    <div class="dock-menu" id="dockMenu">
+        <a href="index.html" class="dock-menu-item" id="homeBtn" title="Accueil"><span class="material-symbols-outlined">home</span></a>
+        <div class="dock-menu-item" id="darkModeToggle" title="Changer le thème"><span class="material-symbols-outlined" id="darkModeIcon">nightlight</span></div>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const steps = document.querySelectorAll('.step');
+            const prevBtn = document.getElementById('prevBtn');
+            const nextBtn = document.getElementById('nextBtn');
+            const siteNameInput = document.getElementById('siteName');
+            const backgroundVideoInput = document.getElementById('backgroundVideo');
+            const faviconFileInput = document.getElementById('faviconFile');
+            const videoFileNameSpan = document.getElementById('videoFileName');
+            const faviconFileNameSpan = document.getElementById('faviconFileName');
+            const sheetUrlInput = document.getElementById('sheetUrl');
+            const uploadAppsScriptInput = document.getElementById('uploadAppsScript');
+            const adaptAppsScriptBtn = document.getElementById('adaptAppsScriptBtn');
+            const appsScriptCodeBox = document.getElementById('appsScriptCodeBox');
+            const appsScriptCodeTextarea = document.getElementById('appsScriptCode');
+            const copyAppsScriptBtn = document.getElementById('copyAppsScriptBtn');
+            const backendUrlInput = document.getElementById('backendUrl');
+            const downloadAllBtn = document.getElementById('downloadAllBtn');
+            const notificationDiv = document.getElementById('notification');
+            const checkList = document.getElementById('finalFilesChecklist');
+
+            let currentStep = 0;
+            let uploadedScriptContent = "";
+            let adaptedScriptContent = ""; 
+            let videoFileBlob = null;
+            let videoFileName = "background.mp4";
+            let faviconGeneratedBlobs = [];
+            
+            // CONSTANTES ET CONFIGURATION INITIALE DE LA POPOTE (Basé sur popote (6).html)
+            const popoteItems = [
+                { key: 'canettes', name: 'Canettes & Sucreries', price: 0.60, image: 'canettes.png' },
+                { key: 'bcaa', name: 'Bcaa', price: 1.50, image: 'bcaa.png' },
+                { key: 'cookie', name: 'Cookie&Barres Prozis', price: 1.80, image: 'cookie.png' },
+                { key: 'boules', name: 'Boules&Brownies Prozis', price: 1.50, image: 'boules.png' },
+                { key: 'autres', name: 'Eau', price: 0.40, image: 'autres.png' }
+            ];
+            const defaultProzisInfo = {
+                id: "nicolas.maheux45@gmail.com",
+                password: "PSIGGILETTE06",
+                coupon: "ELITE-PARTNER"
+            };
+            const revolutLink = "https://revolut.me/nicomhx";
+            
+            // CONTENU DYNAMIQUE DU FICHIER POPOTE.HTML (Chaîne de caractères brute)
+            // L'intégration du HTML/JS a été refactorisée pour utiliser des templates Vue.js plus génériques
+            const popoteHtmlContentTemplate = `<!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
@@ -594,7 +1317,7 @@
         let siteConfig;
 
         document.addEventListener('DOMContentLoaded', async () => {
-            // --- Theme & Dock Logic (independent of config) ---
+            // --- Theme & Dock Logic ---
             const body = document.body;
             const toggleButton = document.getElementById('darkModeToggle');
             const toggleIcon = document.getElementById('darkModeIcon');
@@ -632,7 +1355,6 @@
                 toggleDock();
             });
 
-            // *** LOGIQUE DE RÉTRACTATION AJOUTÉE ***
             document.addEventListener('click', (e) => {
                 if (!dockMenu.contains(e.target) && !dockMenu.classList.contains('collapsed')) {
                     toggleDock();
@@ -654,7 +1376,7 @@
         function initializeApp() {
             const { createApp } = Vue;
 
-            // Récupération dynamique des configurations
+            // Récupération dynamique des configurations depuis le all.json généré
             const popoteConfig = siteConfig.popoteConfig || {};
             const itemPrices = popoteConfig.itemPrices || {};
             const debtThresholds = popoteConfig.debtThresholds || { alert: 20, block: 30 };
@@ -672,7 +1394,7 @@
                 key: key,
                 name: itemPrices[key].name,
                 price: itemPrices[key].price,
-                image: key + '.png' // Assumer le nom de l'image basé sur la clé
+                image: itemPrices[key].image // Utiliser l'image configurée
             }));
 
             createApp({
@@ -692,7 +1414,7 @@
                         loadingPasswordChange: false,
                         validationMessage: { text: "", isCorrect: false },
                         passwordChangeMessage: { text: "", isCorrect: false },
-                        conso: initialConso, // Utilise l'objet initialisé
+                        conso: initialConso,
                         // Propriétés dynamiques
                         itemPrices: itemPrices,
                         debtThresholds: debtThresholds,
@@ -735,7 +1457,6 @@
                 },
                 methods: {
                     async fetchApi(action, params = {}) {
-                        // ... (méthode inchangée)
                         const url = new URL(this.backendUrl);
                         url.searchParams.append('action', action);
                         for (const key in params) {
@@ -745,7 +1466,6 @@
                         return response.json();
                     },
                     async fetchDettes() {
-                        // ... (méthode inchangée)
                         const rawDettes = await this.fetchApi('getDettes');
                         this.allDettes = rawDettes.map(item => {
                             const debtString = String(item.Dette);
@@ -754,11 +1474,9 @@
                         });
                     },
                     async fetchMembers() {
-                        // ... (méthode inchangée)
                         this.allMembers = (await this.fetchApi('getMembers')).map(member => member.trim());
                     },
                     async validateLogin() {
-                        // ... (méthode inchangée)
                         if (!this.selectedMember || !this.password) {
                             this.validationMessage = { text: "Veuillez remplir tous les champs.", isCorrect: false };
                             return;
@@ -775,14 +1493,13 @@
                         this.loadingValidation = false;
                     },
                     async submitConso() {
-                         // ... (méthode inchangée)
                          if (this.totalConso <= 0) {
                             this.validationMessage = { text: "Veuillez entrer une consommation.", isCorrect: false };
                             return;
                         }
                         this.loadingSubmit = true;
                         
-                        // Envoi seulement des quantités (la backend All.gs doit calculer le prix)
+                        // Envoi seulement des quantités. Le backend (all.gs) utilise POPOTE_PRICES pour calculer le total.
                         const data = { membre: this.selectedMember, ...this.conso }; 
                         
                         const response = await fetch(this.backendUrl, {
@@ -803,7 +1520,6 @@
                         this.loadingSubmit = false;
                     },
                      async changeUserPassword() {
-                        // ... (méthode inchangée)
                         if (!this.oldPassword || !this.newPassword) {
                             this.passwordChangeMessage = { text: "Veuillez remplir tous les champs.", isCorrect: false };
                             return;
@@ -820,7 +1536,6 @@
                         this.loadingPasswordChange = false;
                     },
                     resetForm() {
-                        // ... (méthode inchangée)
                         this.selectedMember = "";
                         this.password = "";
                         this.isConnected = false;
@@ -828,7 +1543,6 @@
                         this.resetConsoInputs();
                     },
                     resetConsoInputs() {
-                        // ... (méthode ajustée pour les clés dynamiques)
                         for (const key in this.conso) {
                             this.conso[key] = 0;
                         }
@@ -843,8 +1557,7 @@
         }
     </script>
 </body>
-</html>
-`;
+</html>`;
 
 
             // Fonction pour injecter les champs de configuration des articles
@@ -856,7 +1569,7 @@
                     const itemDiv = document.createElement('div');
                     itemDiv.className = 'item-row';
                     itemDiv.innerHTML = `
-                        <h4>Article : ${item.key.toUpperCase()} (${item.image})</h4>
+                        <h4>Article : ${item.key.toUpperCase()} (Image: ${item.image})</h4>
                         <div class="item-config-grid">
                             <div class="form-group">
                                 <label for="${item.key}-name">Nom de l'article</label>
@@ -899,7 +1612,6 @@
                 return config;
             }
 
-            // ... (Fonctions showNotification, showStep, validateStep, etc. inchangées ou ajustées pour les numéros d'étape) ...
             function showNotification(message, type) {
                 notificationDiv.textContent = message;
                 notificationDiv.className = `notification ${type}`;
@@ -917,7 +1629,7 @@
 
             function validateStep(stepIndex) {
                 switch(stepIndex) {
-                    case 0: // 1. Configuration générale
+                    case 0: 
                         if (backgroundVideoInput.files.length > 0) {
                             videoFileName = backgroundVideoInput.files[0].name;
                             videoFileBlob = backgroundVideoInput.files[0];
@@ -925,26 +1637,26 @@
                             videoFileBlob = null;
                         }
                         return true;
-                    case 1: // 2. Configuration Popote
+                    case 1: 
                          const { debtThresholds } = getPopoteConfig();
                          if (debtThresholds.alert >= debtThresholds.block) {
                             showNotification('Le seuil d\'alerte doit être inférieur au seuil de blocage.', 'error');
                             return false;
                          }
                         return true;
-                    case 2: // 3. Création de la feuille
+                    case 2: 
                         if (!sheetUrlInput.value.trim()) {
                             showNotification('Veuillez coller l\'URL de votre feuille Google.', 'error');
                             return false;
                         }
                         return true;
-                    case 3: // 4. Adaptation du script
+                    case 3: 
                         if (!appsScriptCodeTextarea.value.trim()) {
                             showNotification('Veuillez adapter le script Apps Script avant de continuer.', 'error');
                             return false;
                         }
                         return true;
-                    case 4: // 5. Déploiement
+                    case 4: 
                         if (!backendUrlInput.value.trim()) {
                             showNotification('Veuillez coller l\'URL de déploiement de votre script Apps Script.', 'error');
                             return false;
@@ -969,7 +1681,6 @@
                 }
             });
             
-            // ... (logique processFavicon, updateChecklist, etc. inchangée) ...
             async function processFavicon(file) {
                 const sizes = [16, 32, 48];
                 const androidSizes = [192];
@@ -1085,7 +1796,7 @@
                     faviconGeneratedBlobs = [];
                 }
             });
-            // ... (logique uploadAppsScriptInput, getSheetIdFromUrl, adaptAppsScriptBtn, copyAppsScriptBtn inchangée) ...
+
             uploadAppsScriptInput.addEventListener('change', (event) => {
                 const file = event.target.files[0];
                 if (!file) return;
@@ -1117,9 +1828,10 @@
                     return;
                 }
 
-                let code = uploadedScriptContent.replace(/const SPREADSHEET_ID = "ID_DE_VOTRE_GOOGLE_SHEET_A_COLLER_ICI";/g, `const SPREADSHEET_ID = "${sheetId}";`);
-                // Pour que la version dynamique de l'HTML fonctionne, il faut que le marqueur de prix soit présent, même si non remplacé ici.
-                code = code.replace(/POPOTE_PRICES_PLACEHOLDER/g, 'POPOTE_PRICES_PLACEHOLDER'); 
+                // Remplacement de l'ID de la feuille de calcul
+                // Note: La chaîne SPREADSHEET_ID_PLACEHOLDER est conservée ici pour la démonstration, 
+                // mais dans le fichier réel all.gs elle serait 'const SPREADSHEET_ID = "ID_DE_VOTRE_GOOGLE_SHEET_A_COLLER_ICI";'
+                let code = uploadedScriptContent.replace(/SPREADSHEET_ID_PLACEHOLDER/g, sheetId); 
 
                 adaptedScriptContent = code;
                 appsScriptCodeTextarea.value = adaptedScriptContent;
@@ -1132,10 +1844,8 @@
                 document.execCommand('copy');
                 showNotification('Code Apps Script copié dans le presse-papiers.', 'success');
             });
-            // ... (Fin logique adaptAppsScriptBtn, copyAppsScriptBtn) ...
 
 
-            // LOGIQUE DE TÉLÉCHARGEMENT COMPLÈTE (ajouts de popote.html dynamique)
             downloadAllBtn.addEventListener('click', async () => {
                 const siteTitle = siteNameInput.value.trim();
                 const backendUrl = backendUrlInput.value.trim();
@@ -1170,20 +1880,19 @@
                 };
                 zip.file("all.json", JSON.stringify(config, null, 2));
                 
-                // 2. popote.html Generation (Rendu dynamique)
-                // Le contenu popoteHtmlContent a déjà été mis à jour avec le v-for et les références à all.json
-                zip.file("popote.html", popoteHtmlContent);
+                // 2. popote.html Generation (Dynamique)
+                zip.file("popote.html", popoteHtmlContentTemplate);
 
                 // 3. all.gs FINAL ADAPTATION and Generation
                 const priceMap = {};
                 for (const key in popoteConfig.itemPrices) {
-                    // Pour le script Apps Script, on ne stocke que la clé et le prix
                     priceMap[key] = popoteConfig.itemPrices[key].price;
                 }
                 const pricesJs = JSON.stringify(priceMap, null, 2).replace(/"/g, '\'').replace(/\n/g, '\n  '); 
                 
                 let finalGsContent = adaptedScriptContent;
                 
+                // Remplacement final du placeholder pour l'injection des prix (all.gs)
                 const pricesInjection = `const POPOTE_PRICES = ${pricesJs};`;
                 finalGsContent = finalGsContent.replace(/POPOTE_PRICES_PLACEHOLDER/g, pricesInjection);
 
@@ -1212,7 +1921,6 @@
                 });
             });
 
-            // ... (logique darkModeToggle, initTheme, toggleTheme inchangée) ...
             const darkModeToggle = document.getElementById('darkModeToggle');
             function initTheme() {
                 const savedTheme = localStorage.getItem('theme') || 'dark';
