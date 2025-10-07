@@ -364,7 +364,7 @@
     </video>
 
     <div class="container">
-        <h1></h1>
+        <h1 id="main-title"></h1>
         <span class="material-icons upload-icon" onclick="openLoginModal('drive')">drive_folder_upload</span>
         <div class="annonce-box">
             <span class="material-icons refresh-icon" onclick="fetchAnnonce()">refresh</span>
@@ -404,15 +404,52 @@
     </div>
 
     <script>
-        const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxZnl6yZZtNf-yhct5_F6ftkTJud16uUawHC1R_vYm-t0bmMaZUnuU7coYYeYweq0t0wQ/exec";
-        const DRIVE_URL = "https://drive.google.com/drive/folders/11kmI-02FFng-Jr_Zr0oPvFc3fQwEML4Z";
-        const OI_URL = "oi.html";
+        // --- VARIABLES GLOBALES DE CONFIGURATION ---
+        let APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxZnl6yZZtNf-yhct5_F6ftkTJud16uUawHC1R_vYm-t0bmMaZUnuU7coYYeYweq0t0wQ/exec";
+        let DRIVE_URL = "https://drive.google.com/drive/folders/11kmI-02FFng-Jr_Zr0oPvFc3fQwEML4Z";
+        let ANNONCE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyBLq0bZM3tc5V2pN3vSvhNpdY-LE88SLQGIvcMnX5DmSOr9e9b-OTZzfptYJQ_Fx4DIQ/exec';
+        const OI_URL = "oiv3.html";
+        const CONFIG_FILE = 'all.json';
+
+        // --- LOGIQUE DE CHARGEMENT DE CONFIGURATION EXTERNE ---
+        async function loadExternalConfig() {
+            try {
+                const response = await fetch(CONFIG_FILE);
+                if (!response.ok) {
+                    throw new Error("Fichier de configuration introuvable.");
+                }
+                const config = await response.json();
+                
+                // 1. Mettre à jour les URLs de l'API/Drive si elles existent
+                if (config.urls) {
+                    APPS_SCRIPT_URL = config.urls.APPS_SCRIPT_URL || APPS_SCRIPT_URL;
+                    DRIVE_URL = config.urls.DRIVE_URL || DRIVE_URL;
+                    ANNONCE_SCRIPT_URL = config.urls.ANNONCE_SCRIPT_URL || ANNONCE_SCRIPT_URL;
+                }
+                
+                // 2. Mettre à jour les membres pour la connexion
+                if (config.members && Array.isArray(config.members)) {
+                    allMembers = config.members.map(member => member.trim());
+                    populateMemberSelect();
+                    console.log("Configuration externe chargée avec succès.");
+                }
+                
+                // 3. Mise à jour du titre si disponible
+                if (config.siteTitle) {
+                    document.getElementById('main-title').textContent = config.siteTitle;
+                }
+
+            } catch (error) {
+                console.warn(`[Config Info] Impossible de charger la configuration externe (${CONFIG_FILE}). Utilisation des valeurs par défaut.`, error);
+                // Charger les membres par défaut si l'API est accessible (ou laisser vide)
+                await fetchMembers(); 
+            }
+        }
         
         // Logique pour l'annonce
-        const appsScriptUrlAnnonce = 'https://script.google.com/macros/s/AKfycbyBLq0bZM3tc5V2pN3vSvhNpdY-LE88SLQGIvcMnX5DmSOr9e9b-OTZzfptYJQ_Fx4DIQ/exec';
-
         function fetchAnnonce() {
-            fetch(appsScriptUrlAnnonce)
+            // Utilise l'URL potentiellement mise à jour
+            fetch(ANNONCE_SCRIPT_URL) 
                 .then(response => response.text())
                 .then(data => {
                     document.getElementById('annonceContent').innerText = data;
@@ -423,7 +460,10 @@
                 });
         }
 
-        document.addEventListener('DOMContentLoaded', fetchAnnonce);
+        document.addEventListener('DOMContentLoaded', async () => {
+            await loadExternalConfig(); // Tente de charger la config avant tout
+            fetchAnnonce(); // Utilise l'URL d'annonce potentiellement mise à jour
+        });
 
         // Logique pour la modale de connexion
         const loginModal = document.getElementById('loginModal');
@@ -434,7 +474,14 @@
         let loginTarget = ''; // 'drive' ou 'oi'
 
         async function fetchMembers() {
+             // Si la configuration externe a déjà chargé les membres, ne pas appeler l'API ici
+            if (allMembers && allMembers.length > 0) {
+                 populateMemberSelect();
+                 return;
+            }
+            
             try {
+                // Utilise l'URL potentiellement mise à jour
                 const response = await fetch(`${APPS_SCRIPT_URL}?action=getMembers`);
                 const data = await response.json();
                 allMembers = data.map(member => member.trim());
@@ -460,7 +507,13 @@
             passwordInput.value = '';
             memberSelect.value = '';
             loginModal.classList.add('active');
-            fetchMembers();
+            
+            // Assure que la liste des membres est à jour
+            if (allMembers.length === 0) {
+                 fetchMembers(); // Recharge les membres si la config externe n'a rien donné
+            } else {
+                 populateMemberSelect();
+            }
         }
 
         function closeLoginModal() {
@@ -477,6 +530,7 @@
             }
 
             try {
+                // Utilise l'URL potentiellement mise à jour
                 const url = `${APPS_SCRIPT_URL}?action=authenticate&member=${selectedMember}&password=${password}`;
                 const response = await fetch(url);
                 const result = await response.json();
