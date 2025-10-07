@@ -2539,7 +2539,8 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     presentationContent.innerHTML = html;
                 }).catch(err => {
                     console.error("Erreur lors de la construction de l'aperçu HTML:", err);
-                    presentationContent.innerHTML = '<h2>Erreur d\'affichage</h2><p style="color:' + dangerColor + ';">Une erreur est survenue lors de la compilation des images annotées pour l\'aperçu. Réessayez ou vérifiez la console.</p>';
+                    const dangerColor = getComputedStyle(document.documentElement).getPropertyValue('--danger-red').trim() || '#c0392b';
+                    presentationContent.innerHTML = `<h2>Erreur d\'affichage</h2><p style="color: ${dangerColor};">Une erreur est survenue lors de la compilation des images annotées pour l\'aperçu. Réessayez ou vérifiez la console.</p>`;
                 });
             }
 
@@ -2923,7 +2924,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 const chronoRows = (formData.time_events || []).map(e => [e.type || 'N/A', e.hour || 'N/A', e.description || 'N/A']);
                 drawTable(chronoHeaders, chronoRows, [80, 120, 550], context.margin);
                 drawSubTitle("Hypothèses");
-                drawWrappedText(`H1: ${getVal('hypothese_h1')}\nH2: ${getVal('hypothese_h2')}\nH3: ${getVal('hypothese_h3')}`, { size: 14 });
+                drawWrappedText(`H1: ${getVal('hypothese_h1')}\nH2: ${getVal('hypothese_h2')}\nH3: ${getVal('hypothese_h3')}`, { size: 14, color: context.colors.danger });
                 
                 // PAGE 7: 4. ARTICULATION INDIA
                 addNewPage();
@@ -3027,11 +3028,15 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             const getVal = (id) => formData[id] || '';
             const isDarkMode = document.body.classList.contains('dark-mode');
             
-            // Couleurs et styles pour simuler le rendu
-            const accentColor = isDarkMode ? '#5b9bd5' : '#0033a0';
-            const primaryText = isDarkMode ? '#e0e0e0' : '#212529';
-            const secondaryText = isDarkMode ? '#95a5a6' : '#6c757d';
-            const dangerColor = '#c0392b';
+            // Récupérer les variables CSS
+            const style = getComputedStyle(document.documentElement);
+            const accentColor = style.getPropertyValue('--accent-blue').trim() || '#5b9bd5';
+            const primaryText = style.getPropertyValue('--text-primary').trim() || '#e0e0e0';
+            const secondaryText = style.getPropertyValue('--text-secondary').trim() || '#95a5a6';
+            const dangerColor = style.getPropertyValue('--danger-red').trim() || '#c0392b';
+            const bgContainer = style.getPropertyValue('--bg-container').trim() || '#1e1e1e';
+            const bgInteractive = style.getPropertyValue('--bg-interactive').trim() || '#2a2a2a';
+
 
             let htmlContent = `<div style="font-family: 'Oswald', sans-serif; color: ${primaryText};">`;
 
@@ -3057,7 +3062,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 headers.forEach(h => { table += `<th style="padding: 10px; border: 1px solid ${primaryText}; text-align: left;">${h}</th>`; });
                 table += `</tr></thead><tbody>`;
                 rows.forEach(row => {
-                    table += `<tr style="background-color: ${isDarkMode ? '#2a2a2a' : '#f8f9fa'};">`;
+                    table += `<tr style="background-color: ${bgInteractive};">`;
                     row.forEach(cell => { 
                         // Assure que le contenu des cellules est nettoyé des **
                         const cellContent = String(cell || '').replace(/\*\*/g, '').replace(/\n/g, '<br>');
@@ -3097,7 +3102,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     }
 
                     const finalTitle = wrappers.length > 1 ? `${title} (${i+1})` : title;
-                    imageHtml += `<div class="image-container" style="text-align: center; margin: 20px 0; border: 1px solid ${accentColor}; padding: 10px; background-color: ${isDarkMode ? '#1e1e1e' : '#ffffff'};">`;
+                    imageHtml += `<div class="image-container" style="text-align: center; margin: 20px 0; border: 1px solid ${accentColor}; padding: 10px; background-color: ${bgContainer};">`;
                     imageHtml += `<h4 style="color: ${accentColor}; margin-bottom: 10px;">${finalTitle}</h4>`;
                     imageHtml += `<img src="${dataSrcToDisplay}" alt="${finalTitle}" style="max-width: 100%; height: auto; border-radius: 4px; box-shadow: 0 4px 8px rgba(0,0,0,${isDarkMode ? 0.4 : 0.1});">`;
                     imageHtml += `</div>`;
@@ -3105,7 +3110,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 return imageHtml;
             };
             
-            // --- EXTRACTION DES COMPOSITIONS (SIMPLIFIÉE) ---
+            // --- EXTRACTION DES COMPOSITIONS (MISE À JOUR) ---
             const getCompositionHtml = (teamPrefix) => {
                 const membersByCell = {};
                 const allMembers = (formData.patracdvr_rows || []).flatMap(row => row.members);
@@ -3126,10 +3131,33 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 
                 let compositionHtml = '<div style="padding-left: 15px; margin-bottom: 15px;">';
                 sortedKeys.forEach(cell => {
+                    // Les noms de cellule (e.g. INDIA 1, AO3) en rouge gras
                     compositionHtml += `<p style="margin-bottom: 5px;"><strong style="color: ${dangerColor}; font-size: 1.1em;">${cell.toUpperCase()}</strong> : ${membersByCell[cell].join(', ')}</p>`;
                 });
                 compositionHtml += '</div>';
                 return sortedKeys.length > 0 ? compositionHtml : drawTextHtml('Aucun membre assigné.', false, secondaryText);
+            };
+            
+            // --- Fonction pour formater le texte d'articulation (MOIPC/ZMSPCP) ---
+            const formatArticulationText = (text, acro) => {
+                let formattedText = cleanText(text);
+                const acroMap = {};
+                // MOIPC : M - Mission, O - Objectif, I - Itinéraire, P - Points Particuliers, C - CAT
+                if (acro === 'india') {
+                    acroMap['Mission'] = 'M'; acroMap['Objectif'] = 'O'; acroMap['Itinéraire'] = 'I'; acroMap['Points Particuliers'] = 'P'; acroMap['Conduite à Tenir'] = 'C';
+                } 
+                // ZMSPCP : Z - Zone d'installation, M - Mission, S - Secteur de surveillance, P - Points Particuliers, C - CAT, P - Place du Chef
+                else if (acro === 'ao') {
+                    acroMap['Zone d\'installation'] = 'Z'; acroMap['Mission'] = 'M'; acroMap['Secteur de surveillance'] = 'S'; acroMap['Points Particuliers'] = 'P'; acroMap['Conduite à Tenir'] = 'C'; acroMap['Place du Chef'] = 'P';
+                }
+                
+                for (const [key, value] of Object.entries(acroMap)) {
+                    // Trouver le début du mot clé dans le texte
+                    const regex = new RegExp(`(${key}\\s*):`, 'i'); // Case insensitive
+                    formattedText = formattedText.replace(regex, `<strong style="color: ${dangerColor};">${value}</strong>${key.substring(1)}:`);
+                }
+                
+                return drawTextHtml(formattedText, true);
             };
 
 
@@ -3189,7 +3217,8 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             htmlContent += drawTableHtml(chronoHeaders, chronoRows);
 
             htmlContent += drawSubTitleHtml("Hypothèses");
-            htmlContent += drawTextHtml(`H1: ${getVal('hypothese_h1')}<br>H2: ${getVal('hypothese_h2')}<br>H3: ${getVal('hypothese_h3')}`, true, primaryText, '1.2em');
+            // Hypothèses en rouge
+            htmlContent += drawTextHtml(`H1: ${getVal('hypothese_h1')}<br>H2: ${getVal('hypothese_h2')}<br>H3: ${getVal('hypothese_h3')}`, true, dangerColor, '1.2em');
             
             htmlContent += await drawImageHtml('photo_container_transport_pr', 'Transport PSIG vers PR');
             htmlContent += await drawImageHtml('photo_container_transport_domicile', 'Transport PR vers Domicile');
@@ -3200,28 +3229,32 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             htmlContent += drawTitleHtml("4. ARTICULATION (MOIPC/ZMSPCP)");
             htmlContent += drawTextHtml(`Place du Chef (Générale): ${getVal('place_chef')}`, true, primaryText, '1.2em', '0');
 
-            htmlContent += drawSubTitleHtml("Équipe INDIA (INTER)");
+            htmlContent += drawSubTitleHtml(`<span style="color: ${accentColor}; font-weight: bold;">Équipe INDIA (INTER)</span>`);
             htmlContent += wrapHtml('<strong style="color: ' + accentColor + ';">Composition:</strong>', 'h4', { 'padding-left': '15px', 'margin-top': '10px' });
             htmlContent += getCompositionHtml('india');
-            htmlContent += drawTextHtml(`Mission: ${getVal('india_mission')}`, true);
-            htmlContent += drawTextHtml(`Objectif: ${getVal('india_objectif')}`, true);
-            htmlContent += drawTextHtml(`Itinéraire: ${getVal('india_itineraire')}`, true);
-            htmlContent += drawTextHtml(`Points Particuliers: ${getVal('india_points_particuliers')}`, true);
-            htmlContent += drawTextHtml(`Conduite à Tenir: ${getVal('india_cat')}`);
+            
+            // MOIPC pour INDIA
+            htmlContent += formatArticulationText(`Mission: ${getVal('india_mission')}`, 'india');
+            htmlContent += formatArticulationText(`Objectif: ${getVal('india_objectif')}`, 'india');
+            htmlContent += formatArticulationText(`Itinéraire: ${getVal('india_itineraire')}`, 'india');
+            htmlContent += formatArticulationText(`Points Particuliers: ${getVal('india_points_particuliers')}`, 'india');
+            htmlContent += formatArticulationText(`Conduite à Tenir: ${getVal('india_cat')}`, 'india');
             
             htmlContent += await drawImageHtml('photo_container_itineraire_exterieur', 'Itinéraire Extérieur India');
             htmlContent += await drawImageHtml('photo_container_itineraire_interieur', 'Itinéraire Intérieur India');
             htmlContent += await drawImageHtml('photo_container_cellule_effraction', 'Cellule Effraction');
 
-            htmlContent += drawSubTitleHtml("Équipe Appui/Observation (AO) - ZMSPCP");
+            htmlContent += drawSubTitleHtml(`<span style="color: ${accentColor}; font-weight: bold;">Équipe Appui/Observation (AO) - ZMSPCP</span>`);
             htmlContent += wrapHtml('<strong style="color: ' + accentColor + ';">Composition:</strong>', 'h4', { 'padding-left': '15px', 'margin-top': '10px' });
             htmlContent += getCompositionHtml('ao');
-            htmlContent += drawTextHtml(`Zone d'installation (Z): ${getVal('ao_zone_installation')}`, true);
-            htmlContent += drawTextHtml(`Mission (M): ${getVal('ao_mission')}`, true);
-            htmlContent += drawTextHtml(`Secteur de surveillance (S): ${getVal('ao_secteur_surveillance')}`, true);
-            htmlContent += drawTextHtml(`Points Particuliers (P): ${getVal('ao_points_particuliers')}`, true);
-            htmlContent += drawTextHtml(`Place du Chef (P): ${getVal('ao_place_chef')}`, true);
-            htmlContent += drawTextHtml(`Conduite à Tenir (C): ${getVal('ao_cat')}`);
+            
+            // ZMSPCP pour AO
+            htmlContent += formatArticulationText(`Zone d'installation (Z): ${getVal('ao_zone_installation')}`, 'ao');
+            htmlContent += formatArticulationText(`Mission (M): ${getVal('ao_mission')}`, 'ao');
+            htmlContent += formatArticulationText(`Secteur de surveillance (S): ${getVal('ao_secteur_surveillance')}`, 'ao');
+            htmlContent += formatArticulationText(`Points Particuliers (P): ${getVal('ao_points_particuliers')}`, 'ao');
+            htmlContent += formatArticulationText(`Place du Chef (P): ${getVal('ao_place_chef')}`, 'ao');
+            htmlContent += formatArticulationText(`Conduite à Tenir (C): ${getVal('ao_cat')}`, 'ao');
             
             htmlContent += await drawImageHtml('photo_container_emplacement_ao', 'Emplacement AO');
 
