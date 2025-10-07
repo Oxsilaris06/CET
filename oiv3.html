@@ -824,6 +824,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
         
         // --- GLOBAL STATE ---
         let activeMemberId = null;
+        let retexFiles = []; // Nouveau tableau pour stocker les fichiers Retex JSON
 
         // --- WIZARD & FORM MANAGEMENT ---
         let currentStep = 0;
@@ -2560,7 +2561,92 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 });
             }
 
-            // FIN GESTION DU MODE PRÉSENTATION
+            // --- GESTION DES FICHIERS RETEX (NOUVELLE LOGIQUE) ---
+
+            // Fonction pour lire les fichiers sélectionnés et mettre à jour le tableau global
+            retexFileInput.addEventListener('change', (event) => {
+                retexFiles = [];
+                const files = event.target.files;
+                let fileNames = [];
+                
+                if (files.length === 0) {
+                    retexFileNames.textContent = 'Aucun fichier sélectionné';
+                    return;
+                }
+
+                const processFile = (file) => {
+                    return new Promise((resolve) => {
+                        const reader = new FileReader();
+                        reader.onload = (e) => {
+                            try {
+                                const jsonContent = JSON.parse(e.target.result);
+                                retexFiles.push(jsonContent);
+                                resolve(file.name);
+                            } catch (error) {
+                                console.error(`Erreur de lecture du fichier JSON ${file.name}:`, error);
+                                // On résout tout de même, mais le fichier n'est pas ajouté à retexFiles
+                                resolve(null); 
+                            }
+                        };
+                        reader.onerror = () => {
+                             console.error(`Erreur de lecture du fichier ${file.name}.`);
+                             resolve(null);
+                        };
+                        reader.readAsText(file);
+                    });
+                };
+                
+                // Traiter tous les fichiers
+                const filePromises = Array.from(files).map(processFile);
+                Promise.all(filePromises).then(results => {
+                    fileNames = results.filter(name => name !== null);
+                    if (fileNames.length > 0) {
+                        retexFileNames.textContent = fileNames.join(', ');
+                        retexStatus.textContent = `${fileNames.length} fichier(s) JSON valide(s) chargé(s). Prêt pour l'analyse.`;
+                        retexOutput.style.display = 'none'; // Cacher la sortie si de nouveaux fichiers sont chargés
+                    } else {
+                         retexFileNames.textContent = 'Aucun fichier JSON valide sélectionné.';
+                         retexStatus.textContent = '';
+                    }
+                });
+            });
+
+            // Fonction de lancement de l'analyse (Structure)
+            launchRetexAnalysisBtn.addEventListener('click', () => {
+                if (!retexFiles || retexFiles.length === 0) {
+                    alert("Veuillez charger au moins un fichier JSON de compte-rendu pour lancer l'analyse.");
+                    return;
+                }
+                
+                const apiKey = localStorage.getItem('geminiApiKey');
+                if (!apiKey) {
+                    alert("Veuillez définir votre clé API Google Gemini dans les paramètres pour lancer l'analyse.");
+                    return;
+                }
+
+                // --- LOGIQUE D'ANALYSE IA À IMPLÉMENTER ICI ---
+                retexStatus.textContent = `Analyse de ${retexFiles.length} fichier(s) en cours...`;
+                // Simuler un appel API et un résultat
+                setTimeout(() => {
+                    console.log("Fichiers chargés pour l'analyse:", retexFiles);
+                    const sampleOutput = `Analyse R.E.T.E.X. (Simulée)
+
+Synthèse des Opérations:
+- 3/3 équipes ont confirmé la mise en place.
+- Taux de présence: 95%
+- Problème récurrent identifié: Liaison radio défaillante entre INDIA 2 et AO 1 (mentionné dans 2 rapports).
+
+Recommandations:
+- Revoir la procédure de vérification du matériel de transmission (2).
+- Entraînement sur scénarios de repli tactique (1).`;
+                    
+                    retexOutput.innerHTML = `<h4 style="color: var(--danger-red);">Rapport d'Analyse IA:</h4><pre style="white-space: pre-wrap;">${sampleOutput}</pre>`;
+                    retexOutput.style.display = 'block';
+                    retexStatus.textContent = `Analyse terminée. Consultez le rapport ci-dessous.`;
+                }, 3000);
+            });
+            // --- FIN GESTION DES FICHIERS RETEX ---
+
 
             if (localStorage.getItem('theme') === 'light') { document.body.classList.replace('dark-mode', 'light-mode'); document.getElementById('darkModeIcon').textContent = 'clear_day'; }
             if (localStorage.getItem('dockCollapsed') === 'true') { dockMenu.classList.add('collapsed'); }
@@ -3136,42 +3222,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 });
                 compositionHtml += '</div>';
                 return sortedKeys.length > 0 ? compositionHtml : drawTextHtml('Aucun membre assigné.', false, secondaryText);
-            };
-
-            // --- FONCTIONS CORRIGÉES POUR L'AFFICHAGE DES ACRONYMES EN ROUGE ---
-
-            // Fonction pour mettre en gras rouge la première lettre d'un acronyme dans le texte
-            const highlightAcronym = (text, acronym, color) => {
-                let formattedText = text;
-                const regex = new RegExp(`([\\(])${acronym.charAt(0)}([^\\)]*)`, 'gi');
-                formattedText = formattedText.replace(regex, `$1<span style="color:${color};font-weight:bold;">${acronym.charAt(0)}</span>$2`);
-                return formattedText;
-            };
-
-            // Mise en forme de la section Articulation
-            const formatAOSection = (text, acro, color) => {
-                const acroMap = { 'Z': "Zone d'installation", 'M': 'Mission', 'S': 'Secteur de surveillance', 'P': 'Points Particuliers', 'C': 'Conduite à Tenir', 'P(chef)': 'Place du Chef' };
-                let html = '';
-                
-                // Z
-                html += drawTextHtml(`Z : ${getVal('ao_zone_installation')}`, true);
-                
-                // M
-                html += drawTextHtml(`M : ${getVal('ao_mission')}`, true);
-                
-                // S
-                html += drawTextHtml(`S : ${getVal('ao_secteur_surveillance')}`, true);
-                
-                // P (Points Particuliers)
-                html += drawTextHtml(`P : ${getVal('ao_points_particuliers')}`, true);
-                
-                // C
-                html += drawTextHtml(`C : ${getVal('ao_cat')}`, true);
-                
-                // P (Place du Chef)
-                html += drawTextHtml(`Place du Chef (P) : ${getVal('ao_place_chef')}`, true);
-
-                return html;
             };
             
             // --- CONSTRUCTION DU CONTENU ASYNCHRONE ---
