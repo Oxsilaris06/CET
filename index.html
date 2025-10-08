@@ -4,7 +4,7 @@
     <link rel="manifest" href="manifest.json">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    
+    <title>Espace PSIG</title>
     
     <link rel="icon" href="favicon.ico" type="image/x-icon">
     
@@ -57,7 +57,7 @@
             text-align: center;
         }
         
-        /* PARAMÈTRES PAR DÉFAUT (TABLETTE / PC - MIN 601PX) : MODE COUVERTURE (COVER) */
+        /* PARAMÈTRES PAR DÉFAUT (GRANDS ÉCRANS / COVER) */
         #background-video {
             position: fixed;
             right: 0;
@@ -291,7 +291,7 @@
                 width: 300px;
                 margin-bottom: 20px;
             }
-            /* Pas de modification de #background-video ici, il utilise les règles par défaut (cover) */
+            /* La règle par défaut pour #background-video s'applique ici (cover) */
             .refresh-icon {
                 font-size: 14px; /* Réduit de 30% pour les écrans plus grands */
             }
@@ -333,18 +333,16 @@
                 margin-bottom: 0;
             }
             
-            /* CORRECTION EDEN 11 POUR MOBILE : MODE CONTAIN AVEC DÉCALAGE +3% VERS LE HAUT */
+            /* Règle Mobile : Mode CONTAIN avec Décalage +3% */
             #background-video {
                 position: fixed;
                 top: 50%;
                 left: 50%;
                 z-index: -100;
-                /* Mode 'contain' pour éviter le zoom/rognage */
                 width: auto;
                 height: auto;
                 max-width: 100vw;
                 max-height: 100vh;
-                /* Centrage (-50%) + décalage vers le haut de 3% de la hauteur du viewport */
                 transform: translate(-50%, -53%); 
                 background-size: contain; 
             }
@@ -359,11 +357,10 @@
 <body>
 
     <video autoplay muted loop id="background-video">
-        <source src="psigbackground.mp4" type="video/mp4">
-    </video>
+        <source type="video/mp4"> </video>
 
     <div class="container">
-        <h1></h1>
+        <h1>Espace PSIG</h1>
         <span class="material-icons upload-icon" onclick="openLoginModal('drive')">drive_folder_upload</span>
         <div class="annonce-box">
             <span class="material-icons refresh-icon" onclick="fetchAnnonce()">refresh</span>
@@ -403,9 +400,36 @@
     </div>
 
     <script>
+        // --- LOGIQUE AJOUTÉE EDEN 11 POUR LA SOURCE VIDÉO CONDITIONNELLE ---
+        const MOBILE_BREAKPOINT = 600; // Correspond à max-width: 600px en CSS
+        const VIDEO_SOURCE_MOBILE = 'psigbackground.mp4';
+        const VIDEO_SOURCE_DESKTOP = 'psigbackground2.mp4';
+
+        function setVideoSource() {
+            const videoElement = document.getElementById('background-video');
+            const videoSource = videoElement.querySelector('source');
+            
+            // Détermine la source basée sur la largeur actuelle de la fenêtre
+            const newSrc = window.innerWidth > MOBILE_BREAKPOINT 
+                           ? VIDEO_SOURCE_DESKTOP 
+                           : VIDEO_SOURCE_MOBILE;
+
+            if (videoSource.src.indexOf(newSrc) === -1) {
+                videoSource.src = newSrc;
+                videoElement.load();
+                console.log(`Source vidéo changée pour: ${newSrc}`);
+            }
+        }
+        // -------------------------------------------------------------------
+
+
         let siteConfig;
 
         document.addEventListener('DOMContentLoaded', async () => {
+            // Définition initiale de la source vidéo au chargement
+            setVideoSource();
+            window.addEventListener('resize', setVideoSource);
+
             try {
                 const response = await fetch('all.json');
                 if (!response.ok) throw new Error('Fichier de configuration non trouvé ou invalide.');
@@ -422,11 +446,15 @@
             // --- INJECTION DE LA CONFIGURATION ---
             document.title = siteConfig.global?.pwaName || 'Espace PSIG';
             document.querySelector('h1').textContent = siteConfig.global?.siteTitle || 'Espace PSIG';
+            
+            // Règle de fallback pour la vidéo (si la source n'est pas déjà définie par setVideoSource)
             const videoSource = document.querySelector('#background-video source');
-            if (videoSource) {
-                videoSource.src = siteConfig.global?.backgroundVideoPath || 'psigbackground.mp4';
+            if (!videoSource.src && siteConfig.global?.backgroundVideoPath) {
+                // Cette branche devrait être rarement atteinte si setVideoSource fonctionne
+                videoSource.src = siteConfig.global.backgroundVideoPath;
                 document.querySelector('#background-video').load();
             }
+            
             const backendUrl = siteConfig.backendUrl || '';
 
             // --- LOGIQUE ORIGINELLE DE LA PAGE ---
