@@ -8,11 +8,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Saira+Stencil+One&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
-    <link rel="icon" href="favicon.ico" sizes="any" type="image/png">
-    <link rel="icon" href="favicon.ico" type="image/svg+xml">
-    <link rel="apple-touch-icon" href="favicon.ico">
-    <link rel="manifest" href="site.webmanifest">
-	<style>
+    <style>
         :root {
             --bg-body: #121212; --bg-container: #1e1e1e; --bg-interactive: #2a2a2a;
             --text-primary: #e0e0e0; --text-secondary: #95a5a6; --border-color: #444444;
@@ -2272,7 +2268,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                         } else {
                             reject(new Error('La conversion du canevas en Blob a échoué.'));
                         }
-                    }, 'image/jpeg', 0.9);
+                    }, 'image/png');
                 };
         
                 img.onerror = (e) => {
@@ -3059,6 +3055,51 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             return null;
         }
 
+        async function compressImage(imageBlob, quality) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                const objectURL = URL.createObjectURL(imageBlob);
+                img.src = objectURL;
+        
+                img.onload = () => {
+                    URL.revokeObjectURL(objectURL);
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+        
+                    const MAX_DIMENSION = 1920;
+                    let { naturalWidth: width, naturalHeight: height } = img;
+                    if (width > MAX_DIMENSION || height > MAX_DIMENSION) {
+                        if (width > height) {
+                            height = (MAX_DIMENSION / width) * height;
+                            width = MAX_DIMENSION;
+                        } else {
+                            width = (MAX_DIMENSION / height) * width;
+                            height = MAX_DIMENSION;
+                        }
+                    }
+                    canvas.width = width;
+                    canvas.height = height;
+                    ctx.drawImage(img, 0, 0, width, height);
+        
+                    canvas.toBlob(
+                        (blob) => {
+                            if (blob) {
+                                resolve(blob.arrayBuffer());
+                            } else {
+                                reject(new Error('La conversion du canevas en Blob a échoué.'));
+                            }
+                        },
+                        'image/jpeg',
+                        quality
+                    );
+                };
+                img.onerror = () => {
+                    URL.revokeObjectURL(objectURL);
+                    reject(new Error("Échec du chargement du Blob de l'image dans l'élément Image."));
+                };
+            });
+        }
+
         async function buildPdf() {
             const { PDFDocument, StandardFonts, rgb, PageSizes } = PDFLib;
             const pdfDoc = await PDFDocument.create();
@@ -3068,13 +3109,74 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 helveticaBoldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
             } catch (e) {
                 console.error("Erreur de chargement des polices PDF standard:", e);
-                helveticaFont = helveticaBoldFont = { widthOfTextAtSize: (text, size) => text.length * size / 2 };
+                return null;
             }
-            
+        
             saveFormData();
             const formDataString = localStorage.getItem('oiFormData');
             if (!formDataString) { alert("Aucune donnée à générer."); return null; }
             const formData = JSON.parse(formDataString);
+        
+            // --- Section de Compression Dynamique ---
+            const PDF_TARGET_SIZE_BYTES = 2.5 * 1024 * 1024;
+            const TEXT_OVERHEAD_ESTIMATE = 150 * 1024; // 150KB pour le texte et la structure PDF
+            
+            const allImagesMeta = [];
+            if (formData.dynamic_photos) {
+                for (const category in formData.dynamic_photos) {
+                    formData.dynamic_photos[category].forEach(imgMeta => allImagesMeta.push(imgMeta));
+                }
+            }
+        
+            let quality = 0.9;
+            const minQuality = 0.5;
+            let compressedImages = {};
+            let totalImageSize = 0;
+        
+            if (allImagesMeta.length > 0) {
+                console.log("Début de la compression dynamique...");
+                do {
+                    totalImageSize = 0;
+                    const compressionPromises = allImagesMeta.map(async (imgMeta) => {
+                        const originalBlob = await dbManager.getImage(imgMeta.id);
+                        if (!originalBlob) return { id: imgMeta.id, buffer: null };
+                        
+                        const annotations = JSON.parse(imgMeta.annotations || '[]');
+                        let blobToCompress = originalBlob;
+                        if (annotations.length > 0) {
+                            blobToCompress = await createAnnotatedImageBlob(originalBlob, annotations);
+                        }
+                        
+                        const compressedBuffer = await compressImage(blobToCompress, quality);
+                        return { id: imgMeta.id, buffer: compressedBuffer };
+                    });
+                    
+                    const results = await Promise.all(compressionPromises);
+                    
+                    compressedImages = {};
+                    for (const result of results) {
+                        if (result.buffer) {
+                            compressedImages[result.id] = result.buffer;
+                            totalImageSize += result.buffer.byteLength;
+                        }
+                    }
+                    
+                    console.log(`Qualité: ${quality.toFixed(1)}, Taille totale des images: ${(totalImageSize / 1024 / 1024).toFixed(2)}MB`);
+                    
+                    if (totalImageSize + TEXT_OVERHEAD_ESTIMATE < PDF_TARGET_SIZE_BYTES) {
+                        break; 
+                    }
+                    
+                    quality -= 0.1; 
+                    
+                } while (quality >= minQuality);
+
+                if (totalImageSize + TEXT_OVERHEAD_ESTIMATE > PDF_TARGET_SIZE_BYTES) {
+                    alert(`Avertissement: Le PDF généré pourrait dépasser 2.5Mo. La taille des images compressées est de ${(totalImageSize / 1024 / 1024).toFixed(2)}MB.`);
+                }
+            }
+            // --- Fin de la Section de Compression ---
+
             const getVal = (id) => formData[id] || '';
             const isDarkMode = document.body.classList.contains('dark-mode');
             const context = {
@@ -3137,28 +3239,22 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 drawRow(headers, true); rows.forEach(row => drawRow(row, false)); context.y = currentY - 20;
             };
             
-            async function processImageForPdf(imgId, annotationsJson) {
-                const imageBlob = await dbManager.getImage(imgId);
-                if (!imageBlob) throw new Error(`Image Blob non trouvé pour l'ID: ${imgId}`);
-            
-                const annotations = JSON.parse(annotationsJson || '[]');
-                let finalBlob = imageBlob;
-            
-                if (annotations.length > 0) {
-                    finalBlob = await createAnnotatedImageBlob(imageBlob, annotations);
-                }
-            
-                return await finalBlob.arrayBuffer();
-            }
-            
             const drawImagesFromCategory = async (previewContainerId, title) => {
                 const imagesData = (formData.dynamic_photos || {})[previewContainerId] || [];
                 for (let i = 0; i < imagesData.length; i++) {
                     const imgData = imagesData[i];
                     addNewPage();
                     try {
-                        const imageBytes = await processImageForPdf(imgData.id, imgData.annotations);
-                        const image = await pdfDoc.embedJpg(imageBytes);
+                        const imageBytes = compressedImages[imgData.id];
+                        if (!imageBytes) throw new Error("Données d'image compressées non trouvées.");
+
+                        let image;
+                        try {
+                            image = await pdfDoc.embedJpg(imageBytes);
+                        } catch (e) {
+                            console.warn("Échec de l'intégration en tant que JPEG, tentative en PNG...", e);
+                            image = await pdfDoc.embedPng(imageBytes);
+                        }
                         
                         const { width, height } = context.currentPage.getSize();
                         const paddedW = width - context.margin * 2; const paddedH = height - context.margin * 2 - 30;
@@ -3281,12 +3377,19 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 let tableBottomY = topY;
                 
                 if (isImagePresent) {
-                    const { id, annotationsJson } = imageInfo;
+                    const { id } = imageInfo;
                     const frameY = topY - photoBoxHeight; 
                     
                     try {
-                        const imageBytes = await processImageForPdf(id, annotationsJson);
-                        const image = await pdfDoc.embedJpg(imageBytes);
+                        const imageBytes = compressedImages[id];
+                        if (!imageBytes) throw new Error("Données d'image compressées pour l'adversaire non trouvées.");
+
+                        let image;
+                        try {
+                            image = await pdfDoc.embedJpg(imageBytes);
+                        } catch (e) {
+                            image = await pdfDoc.embedPng(imageBytes);
+                        }
                         
                         const scaled = image.scaleToFit(photoBoxWidth - 10, photoBoxHeight - 30);
                         const imageY = frameY + (photoBoxHeight - scaled.height) / 2;
@@ -3313,7 +3416,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                             isImagePresent = false; 
                         }
                     } catch (e) {
-                         console.error("Échec du traitement de la photo de l'adversaire (annotée ou non):", e);
+                         console.error("Échec du traitement de la photo de l'adversaire :", e);
                         isImagePresent = false; 
                     }
                 }
