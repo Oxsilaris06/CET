@@ -9,6 +9,7 @@
     <link rel="apple-touch-icon" href="favicon.ico">
     <link rel="manifest" href="site.webmanifest">
     <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Saira+Stencil+One&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
     <style>
         :root {
@@ -26,7 +27,7 @@
         html { font-size: 16px; }
         body { font-family: 'Oswald', sans-serif; background-color: var(--bg-body); color: var(--text-primary); line-height: 1.6; padding: 10px; padding-bottom: 90px; transition: background-color 0.3s, color 0.3s; }
         .container { width: 100%; max-width: 800px; margin: auto; background: var(--bg-container); padding: 20px; border-radius: 8px; border: 1px solid var(--border-color); }
-        h1 { font-size: 1.8em; margin-bottom: 20px; color: var(--accent-blue); font-family: 'Oswald', sans-serif; font-weight: 500; text-align: center; }
+        h1 { font-size: 1.8em; margin-bottom: 20px; color: var(--accent-blue); font-family: 'Saira Stencil One', sans-serif; font-weight: 500; text-align: center; }
         h2 { font-size: 1.4em; color: var(--accent-blue); border-bottom: 2px solid var(--accent-blue); padding-bottom: 10px; margin-top: 20px; }
         h3 { font-size: 1.1em; color: var(--text-primary); margin-top: 15px; margin-bottom: 10px; }
         h4 { font-size: 1.0em; color: var(--text-secondary); margin-top: 10px; margin-bottom: 5px; }
@@ -980,46 +981,41 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
         
         /**
          * MODIFIED FUNCTION for MULTIPLE photo uploads
-         * Adds photo input elements to a specified container.
-         * The generated input will accept multiple files, and previews will be generated dynamically.
          */
         function addPhotoInput(containerId, isSingle = false, andTrigger = false) {
             const container = document.getElementById(containerId);
-            if (isSingle) container.innerHTML = ''; // Clear container if only one photo "slot" is allowed
+            if (isSingle) container.innerHTML = ''; 
 
             const itemWrapper = document.createElement('div');
             itemWrapper.className = 'photo-input-wrapper';
-            const uniqueId = `photo_${Date.now()}_${Math.random()}`;
-            const previewId = `preview_${uniqueId}`;
+            const uniqueId = `photo_input_${Date.now()}_${Math.random()}`;
+            const previewContainerId = `preview_container_${uniqueId}`;
 
             itemWrapper.innerHTML = `
                 <div class="dynamic-list-item">
-                    <input type="file" id="${uniqueId}" class="photo-input" accept="image/png, image/jpeg" multiple onchange="handleFileChange(this, 'span_${uniqueId}', '${previewId}')">
+                    <input type="file" id="${uniqueId}" class="photo-input" accept="image/png, image/jpeg" ${isSingle ? '' : 'multiple'} onchange="handleFileChange(this, 'span_${uniqueId}', '${previewContainerId}', ${isSingle})">
                     <label for="${uniqueId}" class="file-upload-label">Choisir photo(s)</label>
                     <span id="span_${uniqueId}" class="file-name-display">Aucun fichier</span>
-                    ${!isSingle ? '<button type="button" class="remove-btn" onclick="this.closest(\'.photo-input-wrapper\').remove(); saveFormData();">❌</button>' : ''}
                 </div>
-                <div id="${previewId}" class="image-preview-container" style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px;"></div>`;
+                <div id="${previewContainerId}" class="image-preview-container" style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px;"></div>`;
             
             container.appendChild(itemWrapper);
 
             if (andTrigger) {
-                const label = itemWrapper.querySelector(`label[for="${uniqueId}"]`);
-                if (label) {
-                    label.click();
-                }
+                document.getElementById(uniqueId).click();
             }
         }
 
         /**
          * MODIFIED FUNCTION for MULTIPLE photo uploads
-         * Handles the file input change event, creating a preview for each selected file.
          */
-        function handleFileChange(input, spanId, previewContainerId) {
+        function handleFileChange(input, spanId, previewContainerId, isSingle) {
             const fileNameSpan = document.getElementById(spanId);
             const previewContainer = document.getElementById(previewContainerId);
             
-            previewContainer.innerHTML = ''; // Clear previous previews for this input slot
+            if (isSingle) {
+                previewContainer.innerHTML = '';
+            }
 
             if (input.files.length > 0) {
                 fileNameSpan.textContent = `${input.files.length} fichier(s) sélectionné(s)`;
@@ -1039,24 +1035,40 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                         previewImg.dataset.annotations = '[]';
                         previewImg.style.display = 'block';
 
+                        const controlsDiv = document.createElement('div');
+                        controlsDiv.style.display = 'flex';
+                        controlsDiv.style.gap = '5px';
+                        controlsDiv.style.marginTop = '5px';
+
                         const annotateBtn = document.createElement('button');
                         annotateBtn.type = 'button';
                         annotateBtn.className = 'add-btn';
-                        annotateBtn.style.marginTop = '5px';
                         annotateBtn.style.backgroundColor = 'var(--accent-blue)';
-                        annotateBtn.textContent = 'Annoter';
+                        annotateBtn.innerHTML = `<span class="material-symbols-outlined" style="font-size: 1em;">edit</span>`;
                         annotateBtn.onclick = () => openAnnotationModal(previewImgId);
                         
+                        const removeBtn = document.createElement('button');
+                        removeBtn.type = 'button';
+                        removeBtn.className = 'remove-btn';
+                        removeBtn.innerHTML = `&times;`;
+                        removeBtn.onclick = () => {
+                            itemContainer.remove();
+                            setTimeout(saveFormData, 100);
+                        };
+
+                        controlsDiv.appendChild(annotateBtn);
+                        controlsDiv.appendChild(removeBtn);
                         itemContainer.appendChild(previewImg);
-                        itemContainer.appendChild(annotateBtn);
+                        itemContainer.appendChild(controlsDiv);
                         previewContainer.appendChild(itemContainer);
                     };
                     reader.readAsDataURL(file);
                 }
             } else {
-                fileNameSpan.textContent = 'Aucun fichier';
+                if (isSingle) {
+                    fileNameSpan.textContent = 'Aucun fichier';
+                }
             }
-            // Save after a short delay to allow file readers to complete
             setTimeout(saveFormData, 500);
         }
 
@@ -1480,7 +1492,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
 
         /**
          * MODIFIED FUNCTION for MULTIPLE photo uploads
-         * Saves form data, including a new structured format for dynamic photo previews.
          */
         function saveFormData() {
             try {
@@ -1489,13 +1500,11 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     if (field.id) data[field.id] = field.value;
                 });
                 
-                // New image saving logic
                 data.dynamic_photos = {};
-                document.querySelectorAll('.photo-input-wrapper').forEach(wrapper => {
-                    const previewContainer = wrapper.querySelector('.image-preview-container');
-                    if (previewContainer && previewContainer.id) {
+                document.querySelectorAll('.image-preview-container').forEach(container => {
+                    if (container.id) {
                         const imagesData = [];
-                        previewContainer.querySelectorAll('.image-preview').forEach(img => {
+                        container.querySelectorAll('.image-preview').forEach(img => {
                             if (img.src && img.src.startsWith('data:image')) {
                                 imagesData.push({
                                     id: img.id,
@@ -1506,7 +1515,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                             }
                         });
                         if (imagesData.length > 0) {
-                            data.dynamic_photos[previewContainer.id] = imagesData;
+                            data.dynamic_photos[container.id] = imagesData;
                         }
                     }
                 });
@@ -1550,7 +1559,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
 
         /**
          * MODIFIED FUNCTION for MULTIPLE photo uploads
-         * Loads form data, including dynamically recreating photo previews from the new structured format.
          */
         function loadFormData() {
             const dataString = localStorage.getItem('oiFormData');
@@ -1560,9 +1568,8 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             try {
                 const data = JSON.parse(dataString);
 
-                // New image loading logic
                 if (data.dynamic_photos) {
-                    Object.keys(data.dynamic_photos).forEach(containerId => {
+                    for (const containerId in data.dynamic_photos) {
                         const previewContainer = document.getElementById(containerId);
                         const fileData = data.dynamic_photos[containerId];
 
@@ -1585,20 +1592,35 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                                 previewImg.dataset.annotations = imgData.annotations;
                                 previewImg.style.display = 'block';
 
+                                const controlsDiv = document.createElement('div');
+                                controlsDiv.style.display = 'flex';
+                                controlsDiv.style.gap = '5px';
+                                controlsDiv.style.marginTop = '5px';
+
                                 const annotateBtn = document.createElement('button');
                                 annotateBtn.type = 'button';
                                 annotateBtn.className = 'add-btn';
-                                annotateBtn.style.marginTop = '5px';
                                 annotateBtn.style.backgroundColor = 'var(--accent-blue)';
-                                annotateBtn.textContent = 'Annoter';
+                                annotateBtn.innerHTML = `<span class="material-symbols-outlined" style="font-size: 1em;">edit</span>`;
                                 annotateBtn.onclick = () => openAnnotationModal(imgData.id);
+                                
+                                const removeBtn = document.createElement('button');
+                                removeBtn.type = 'button';
+                                removeBtn.className = 'remove-btn';
+                                removeBtn.innerHTML = `&times;`;
+                                removeBtn.onclick = () => {
+                                    itemContainer.remove();
+                                    setTimeout(saveFormData, 100);
+                                };
 
+                                controlsDiv.appendChild(annotateBtn);
+                                controlsDiv.appendChild(removeBtn);
                                 itemContainer.appendChild(previewImg);
-                                itemContainer.appendChild(annotateBtn);
+                                itemContainer.appendChild(controlsDiv);
                                 previewContainer.appendChild(itemContainer);
                             });
                         }
-                    });
+                    }
                 }
                 
                 Object.keys(data).forEach(key => {
@@ -2324,17 +2346,21 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
 
         document.addEventListener('DOMContentLoaded', async () => {
             
-            if (document.querySelectorAll('#adversary_photo_container .photo-input-wrapper').length === 0) {
-                 addPhotoInput('adversary_photo_container', true); 
-            }
+            // Initialize all photo containers
+            document.querySelectorAll('[id^="photo_container_"], [id$="_photo_container"]').forEach(container => {
+                const isSingle = container.id === 'adversary_photo_container';
+                if (container.children.length === 0) {
+                    addPhotoInput(container.id, isSingle);
+                }
+            });
             
             const isLocalDataLoaded = loadFormData();
             if (!isLocalDataLoaded) {
                  await loadDefaultConfig();
             }
             
-            initChipContainer('etat_esprit_container', isLocalDataLoaded ? JSON.parse(localStorage.getItem('oiFormData')).etat_esprit_list : []);
-            initChipContainer('volume_adversaire_container', isLocalDataLoaded ? JSON.parse(localStorage.getItem('oiFormData')).volume_list : []);
+            initChipContainer('etat_esprit_container', isLocalDataLoaded && JSON.parse(localStorage.getItem('oiFormData')).etat_esprit_list ? JSON.parse(localStorage.getItem('oiFormData')).etat_esprit_list : []);
+            initChipContainer('volume_adversaire_container', isLocalDataLoaded && JSON.parse(localStorage.getItem('oiFormData')).volume_list ? JSON.parse(localStorage.getItem('oiFormData')).volume_list : []);
 
             setupQuickEditPanel(); 
 
@@ -3110,7 +3136,8 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             };
             
             const drawImagesFromContainer = async (containerId, title) => {
-                const allImages = document.querySelectorAll(`#${containerId} .image-preview`);
+                const container = document.getElementById(containerId);
+                const allImages = container.querySelectorAll('.image-preview');
                 for (let i = 0; i < allImages.length; i++) {
                     const previewImg = allImages[i];
                     if (!previewImg || !previewImg.dataset.originalSrc) continue;
@@ -3461,7 +3488,9 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
 
             const drawImageHtml = async (id, title) => {
                 let imageHtml = '';
-                const allImages = document.querySelectorAll(`#${id} .image-preview`);
+                const container = document.getElementById(id);
+                if (!container) return '';
+                const allImages = container.querySelectorAll('.image-preview');
 
                 for (let i = 0; i < allImages.length; i++) {
                     const previewImg = allImages[i];
