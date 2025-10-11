@@ -969,6 +969,82 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
 
         const tempCanvas = document.createElement('canvas');
         const tempCtx = tempCanvas.getContext('2d');
+        
+        /**
+         * Gestionnaire IndexedDB pour le stockage des images.
+         */
+        const dbManager = {
+            db: null,
+            dbName: 'OI_GeneratorDB',
+            storeName: 'images',
+        
+            init() {
+                return new Promise((resolve, reject) => {
+                    if (this.db) {
+                        return resolve(this.db);
+                    }
+                    const request = indexedDB.open(this.dbName, 1);
+        
+                    request.onerror = (event) => {
+                        console.error("Erreur d'ouverture de la base de données IndexedDB", event);
+                        reject("Erreur IndexedDB.");
+                    };
+        
+                    request.onsuccess = (event) => {
+                        this.db = event.target.result;
+                        resolve(this.db);
+                    };
+        
+                    request.onupgradeneeded = (event) => {
+                        const db = event.target.result;
+                        if (!db.objectStoreNames.contains(this.storeName)) {
+                            db.createObjectStore(this.storeName);
+                        }
+                    };
+                });
+            },
+        
+            putImage(key, blob) {
+                return new Promise((resolve, reject) => {
+                    const transaction = this.db.transaction([this.storeName], 'readwrite');
+                    const store = transaction.objectStore(this.storeName);
+                    const request = store.put(blob, key);
+                    request.onsuccess = () => resolve();
+                    request.onerror = (event) => reject(event.target.error);
+                });
+            },
+        
+            getImage(key) {
+                return new Promise((resolve, reject) => {
+                    const transaction = this.db.transaction([this.storeName], 'readonly');
+                    const store = transaction.objectStore(this.storeName);
+                    const request = store.get(key);
+                    request.onsuccess = (event) => resolve(event.target.result);
+                    request.onerror = (event) => reject(event.target.error);
+                });
+            },
+            
+            deleteImage(key) {
+                return new Promise((resolve, reject) => {
+                    const transaction = this.db.transaction([this.storeName], 'readwrite');
+                    const store = transaction.objectStore(this.storeName);
+                    const request = store.delete(key);
+                    request.onsuccess = () => resolve();
+                    request.onerror = (event) => reject(event.target.error);
+                });
+            },
+            
+            clearAllImages() {
+                return new Promise((resolve, reject) => {
+                    const transaction = this.db.transaction([this.storeName], 'readwrite');
+                    const store = transaction.objectStore(this.storeName);
+                    const request = store.clear();
+                    request.onsuccess = () => resolve();
+                    request.onerror = (event) => reject(event.target.error);
+                });
+            }
+        };
+
 
         const displayMap = {
             'adversary_photo_preview_container': 'adversary_photo_display',
@@ -978,6 +1054,9 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             'photo_container_itineraire_interieur_preview_container': 'photo_container_itineraire_interieur_display',
             'photo_container_bapteme_terrain_preview_container': 'photo_container_bapteme_terrain_display',
             'photo_container_emplacement_ao_preview_container': 'photo_container_emplacement_ao_display',
+            'photo_container_transport_pr_preview_container': null,
+            'photo_container_transport_domicile_preview_container': null,
+            'photo_container_cellule_effraction_preview_container': null,
         };
 
         function showStep(n) {
@@ -1011,56 +1090,95 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
         prevBtn.addEventListener('click', () => changeStep(-1));
         nextBtn.addEventListener('click', () => changeStep(1));
         
-        function handleFileChange(input, previewContainerId, isSingle) {
+        async function handleFileChange(input, previewContainerId, isSingle) {
             const previewContainer = document.getElementById(previewContainerId);
-            const displayContainerId = displayMap[previewContainerId];
-            const displayContainer = displayContainerId ? document.getElementById(displayContainerId) : null;
             
             if (isSingle) {
+                // Supprimer les anciennes images de l'UI et de la DB
+                const existingImages = previewContainer.querySelectorAll('.image-preview');
+                for (const img of existingImages) {
+                    await dbManager.deleteImage(img.id);
+                }
                 previewContainer.innerHTML = '';
-                if(displayContainer) displayContainer.innerHTML = '';
             }
-
+        
             if (input.files.length > 0) {
-                Array.from(input.files).forEach(file => {
-                    const reader = new FileReader();
-                    reader.onload = e => {
-                        const previewImgId = `preview_img_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-
+                for (const file of Array.from(input.files)) {
+                    const previewImgId = `img_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+        
+                    try {
+                        // Stocker le blob dans IndexedDB
+                        await dbManager.putImage(previewImgId, file);
+        
+                        // Créer l'URL d'objet pour l'affichage immédiat
+                        const objectURL = URL.createObjectURL(file);
+        
                         const interactiveItem = document.createElement('div');
                         interactiveItem.className = 'image-preview-item';
                         interactiveItem.innerHTML = `
-                            <img id="${previewImgId}" class="image-preview" src="${e.target.result}" style="display:block;" data-original-src="${e.target.result}" data-annotations="[]">
+                            <img id="${previewImgId}" class="image-preview" src="${objectURL}" style="display:block;" data-annotations="[]">
                             <div style="display: flex; gap: 5px; margin-top: 5px;">
                                 <button type="button" class="add-btn" style="background-color: var(--accent-blue); padding: 4px 8px;" onclick="openAnnotationModal('${previewImgId}')"><span class="material-symbols-outlined" style="font-size: 1.2em;">edit</span></button>
-                                <button type="button" class="remove-btn" style="padding: 4px 8px;" onclick="this.closest('.image-preview-item').remove(); syncThumbnails(); saveFormData();">&times;</button>
+                                <button type="button" class="remove-btn" style="padding: 4px 8px;" onclick="removeImage('${previewImgId}', this)">&times;</button>
                             </div>`;
                         previewContainer.appendChild(interactiveItem);
-
-                        if (displayContainer) {
-                            const displayImg = document.createElement('img');
-                            displayImg.className = 'image-preview';
-                            displayImg.src = e.target.result;
-                            displayImg.dataset.refId = previewImgId;
-                            displayContainer.appendChild(displayImg);
-                        }
-                    };
-                    reader.readAsDataURL(file);
-                });
-            }
-            input.value = '';
-            setTimeout(saveFormData, 500);
-        }
-
-        function syncThumbnails() {
-            document.querySelectorAll('.photo-display-area').forEach(displayContainer => {
-                Array.from(displayContainer.children).forEach(displayImg => {
-                    if (!document.getElementById(displayImg.dataset.refId)) {
-                        displayImg.remove();
+        
+                    } catch (error) {
+                        console.error("Erreur lors du stockage de l'image:", error);
+                        alert("Une erreur est survenue lors de l'ajout de l'image.");
                     }
-                });
-            });
+                }
+            }
+            syncAllThumbnails();
+            input.value = '';
+            saveFormData();
         }
+        
+        async function removeImage(imgId, buttonElement) {
+            try {
+                // Supprimer de IndexedDB
+                await dbManager.deleteImage(imgId);
+        
+                // Supprimer de l'UI
+                buttonElement.closest('.image-preview-item').remove();
+        
+                // Mettre à jour les aperçus
+                syncAllThumbnails();
+        
+                // Sauvegarder les métadonnées
+                saveFormData();
+            } catch (error) {
+                console.error("Erreur lors de la suppression de l'image:", error);
+                alert("Impossible de supprimer l'image.");
+            }
+        }
+        
+        function syncAllThumbnails() {
+            // D'abord, on vide tous les conteneurs d'aperçu
+            document.querySelectorAll('.photo-display-area').forEach(container => {
+                container.innerHTML = '';
+            });
+        
+            // Ensuite, on les repeuple à partir des conteneurs de gestion
+            for (const previewId in displayMap) {
+                const displayId = displayMap[previewId];
+                if (!displayId) continue;
+        
+                const previewContainer = document.getElementById(previewId);
+                const displayContainer = document.getElementById(displayId);
+        
+                if (previewContainer && displayContainer) {
+                    previewContainer.querySelectorAll('.image-preview-item img').forEach(previewImg => {
+                        const displayImg = document.createElement('img');
+                        displayImg.className = 'image-preview';
+                        displayImg.src = previewImg.src; 
+                        displayImg.dataset.refId = previewImg.id;
+                        displayContainer.appendChild(displayImg);
+                    });
+                }
+            }
+        }
+
 
         function addDynamicField(containerId, value = '') {
             const container = document.getElementById(containerId);
@@ -1474,30 +1592,26 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             modal.showModal();
         }
 
+        /**
+         * Sauvegarde les métadonnées du formulaire dans localStorage.
+         * Les données d'image (blobs) sont déjà dans IndexedDB.
+         */
         function saveFormData() {
             try {
                 const data = {};
                 document.querySelectorAll('#oi-form input:not([type="file"]), #oi-form textarea, #oi-form select').forEach(field => {
                     if (field.id) data[field.id] = field.value;
                 });
-                
+        
                 data.dynamic_photos = {};
                 document.querySelectorAll('.image-preview-container').forEach(container => {
                     if (container.id) {
-                        const imagesData = Array.from(container.querySelectorAll('.image-preview')).map(img => {
-                            if (img.src && img.src.startsWith('data:image')) {
-                                return {
-                                    id: img.id,
-                                    src: img.src,
-                                    originalSrc: img.dataset.originalSrc,
-                                    annotations: img.dataset.annotations || '[]'
-                                };
-                            }
-                            return null;
-                        }).filter(Boolean);
-
-                        if (imagesData.length > 0) {
-                            data.dynamic_photos[container.id] = imagesData;
+                        const imagesMetadata = Array.from(container.querySelectorAll('.image-preview')).map(img => ({
+                            id: img.id,
+                            annotations: img.dataset.annotations || '[]'
+                        }));
+                        if (imagesMetadata.length > 0) {
+                            data.dynamic_photos[container.id] = imagesMetadata;
                         }
                     }
                 });
@@ -1517,77 +1631,64 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     description: item.querySelector('.time-description-input').value
                 }));
 
-                try {
-                    localStorage.setItem('oiFormData', JSON.stringify(data));
-                } catch (e) {
-                    if (e.name === 'QuotaExceededError' || e.name === 'DOMException') {
-                        
-                        if (localStorage.getItem('quotaAlertShown') !== 'true') {
-                            alert("Alerte: Espace de stockage (5Mo) atteint. Les données textuelles sont sauvegardées, mais les images ont été retirées de la sauvegarde locale pour éviter l'erreur. Veuillez exporter la session si vous souhaitez conserver les images pour la prochaine fois.");
-                            localStorage.setItem('quotaAlertShown', 'true');
-                        }
-                        delete data.dynamic_photos;
-                        localStorage.setItem('oiFormData', JSON.stringify(data));
-                    } else {
-                        throw e; 
-                    }
-                }
-                
+                localStorage.setItem('oiFormData', JSON.stringify(data));
                 updateArticulationDisplay();
+        
             } catch (e) { 
-                console.error("Save error:", e); 
+                console.error("Erreur de sauvegarde:", e); 
             }
         }
-
-        function loadFormData() {
+        
+        /**
+         * Charge les données du formulaire depuis localStorage et les images depuis IndexedDB.
+         */
+        async function loadFormData() {
             const dataString = localStorage.getItem('oiFormData');
-            if (!dataString) {
-                return false; 
-            }
+            if (!dataString) return false;
+        
             try {
                 const data = JSON.parse(dataString);
-                
+        
+                // Nettoyer l'UI
                 document.querySelectorAll('.image-preview-container, .photo-display-area').forEach(c => c.innerHTML = '');
-
+        
+                // Charger les métadonnées de base
+                Object.keys(data).forEach(key => {
+                     if (['dynamic_photos', 'patracdvr_rows', 'patracdvr_unassigned', 'time_events', 'me_list', 'etat_esprit_list', 'volume_list', 'vehicules_list'].includes(key)) return; 
+                     const el = document.getElementById(key);
+                     if (el) el.value = data[key];
+                });
+        
+                // Charger les photos depuis IndexedDB en utilisant les métadonnées
                 if (data.dynamic_photos) {
                     for (const previewId in data.dynamic_photos) {
                         const previewContainer = document.getElementById(previewId);
-                        const displayId = displayMap[previewId];
-                        const displayContainer = displayId ? document.getElementById(displayId) : null;
                         const fileDataArray = data.dynamic_photos[previewId];
-
+        
                         if (previewContainer && fileDataArray) {
-                            fileDataArray.forEach(imgData => {
-                                const interactiveItem = document.createElement('div');
-                                interactiveItem.className = 'image-preview-item';
-                                interactiveItem.innerHTML = `
-                                    <img id="${imgData.id}" class="image-preview" src="${imgData.src}" style="display:block;" data-original-src="${imgData.originalSrc}" data-annotations='${imgData.annotations}'>
-                                    <div style="display: flex; gap: 5px; margin-top: 5px;">
-                                        <button type="button" class="add-btn" style="background-color: var(--accent-blue); padding: 4px 8px;" onclick="openAnnotationModal('${imgData.id}')"><span class="material-symbols-outlined" style="font-size: 1.2em;">edit</span></button>
-                                        <button type="button" class="remove-btn" style="padding: 4px 8px;" onclick="this.closest('.image-preview-item').remove(); syncThumbnails(); saveFormData();">&times;</button>
-                                    </div>`;
-                                previewContainer.appendChild(interactiveItem);
-
-                                if (displayContainer) {
-                                    const displayImg = document.createElement('img');
-                                    displayImg.className = 'image-preview';
-                                    displayImg.src = imgData.originalSrc; // Use original src for previews
-                                    displayImg.dataset.refId = imgData.id;
-                                    displayContainer.appendChild(displayImg);
+                            for (const imgData of fileDataArray) {
+                                const imageBlob = await dbManager.getImage(imgData.id);
+                                if (imageBlob) {
+                                    const objectURL = URL.createObjectURL(imageBlob);
+                                    const interactiveItem = document.createElement('div');
+                                    interactiveItem.className = 'image-preview-item';
+                                    interactiveItem.innerHTML = `
+                                        <img id="${imgData.id}" class="image-preview" src="${objectURL}" style="display:block;" data-annotations='${imgData.annotations}'>
+                                        <div style="display: flex; gap: 5px; margin-top: 5px;">
+                                            <button type="button" class="add-btn" style="background-color: var(--accent-blue); padding: 4px 8px;" onclick="openAnnotationModal('${imgData.id}')"><span class="material-symbols-outlined" style="font-size: 1.2em;">edit</span></button>
+                                            <button type="button" class="remove-btn" style="padding: 4px 8px;" onclick="removeImage('${imgData.id}', this)">&times;</button>
+                                        </div>`;
+                                    previewContainer.appendChild(interactiveItem);
+                                } else {
+                                     console.warn(`Image avec ID ${imgData.id} non trouvée dans IndexedDB.`);
                                 }
-                            });
+                            }
                         }
                     }
                 }
+                syncAllThumbnails();
                 
-                Object.keys(data).forEach(key => {
-                    if (['dynamic_photos', 'patracdvr_rows', 'patracdvr_unassigned', 'time_events', 'me_list', 'etat_esprit_list', 'volume_list', 'vehicules_list'].includes(key)) return; 
-                    const el = document.getElementById(key);
-                    if (el && !Array.isArray(data[key]) && typeof data[key] !== 'object') {
-                        el.value = data[key];
-                    }
-                });
-                
+                // Charger les autres champs dynamiques
                 document.getElementById('me_container').innerHTML = '';
                 document.getElementById('vehicules_container').innerHTML = '';
                 document.getElementById('time_events_container').innerHTML = '';
@@ -1598,15 +1699,16 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 (data.vehicules_list || []).forEach(val => addDynamicField('vehicules_container', val));
                 (data.time_events || []).forEach(ev => addTimeEvent(ev.type, ev.hour, ev.description));
                 initializePatracdvr(data);
-
+        
                 updateArticulationDisplay();
-                return true; 
-            } catch (e) { 
-                console.error("Load error:", e); 
+                return true;
+        
+            } catch (e) {
+                console.error("Erreur de chargement:", e);
                 return false;
             }
         }
-
+        
         function initializePatracdvr(dataFromStorage) {
             unassignedContainer.innerHTML = '';
             patracdvrContainer.innerHTML = '';
@@ -1813,17 +1915,25 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
 
         function openAnnotationModal(previewImgId) {
             const previewImg = document.getElementById(previewImgId);
-            if (!previewImg || !previewImg.dataset.originalSrc) return;
+            if (!previewImg) return;
+        
             baseImage.onload = () => {
-                canvas.width = baseImage.width;
-                canvas.height = baseImage.height;
+                URL.revokeObjectURL(baseImage.src); // Libérer l'ancienne URL d'objet
+                canvas.width = baseImage.naturalWidth;
+                canvas.height = baseImage.naturalHeight;
                 annotations = JSON.parse(previewImg.dataset.annotations || '[]');
                 setActiveTool('move');
                 redrawCanvas();
                 annotationModal.dataset.targetPreviewId = previewImgId;
                 annotationModal.showModal();
             };
-            baseImage.src = previewImg.dataset.originalSrc; 
+        
+            baseImage.onerror = () => {
+                alert("Impossible de charger l'image pour l'annotation.");
+            };
+        
+            // Utiliser la src de l'image (qui est une URL d'objet)
+            baseImage.src = previewImg.src;
         }
 
         function redrawCanvas() {
@@ -2137,31 +2247,34 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             }
         }
         
-        function createAnnotatedImageBlob(originalSrc, annotationsData) {
+        async function createAnnotatedImageBlob(imageBlob, annotationsData) {
             return new Promise((resolve, reject) => {
                 const img = new Image();
-                img.crossOrigin = 'anonymous'; 
-                img.src = originalSrc;
-                
+                const objectURL = URL.createObjectURL(imageBlob);
+                img.src = objectURL;
+        
                 img.onload = () => {
-                    tempCanvas.width = img.width;
-                    tempCanvas.height = img.height;
+                    URL.revokeObjectURL(objectURL);
+                    tempCanvas.width = img.naturalWidth;
+                    tempCanvas.height = img.naturalHeight;
                     tempCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
                     tempCtx.drawImage(img, 0, 0);
-
-                    annotationsData.forEach(annotation => drawAnnotationOnContext(tempCtx, img.width, img.height, annotation));
-
+        
+                    annotationsData.forEach(annotation => drawAnnotationOnContext(tempCtx, img.naturalWidth, img.naturalHeight, annotation));
+        
                     tempCanvas.toBlob(blob => {
                         if (blob) {
-                            const reader = new FileReader();
-                            reader.onloadend = () => resolve(reader.result); 
-                            reader.readAsArrayBuffer(blob);
+                            resolve(blob);
                         } else {
-                            reject(new Error('La conversion de l\'image annotée en Blob a échoué.'));
+                            reject(new Error('La conversion du canevas en Blob a échoué.'));
                         }
                     }, 'image/jpeg', 0.9);
                 };
-                img.onerror = (e) => reject(new Error(`Impossible de charger l\'image de base pour l\'annotation: ${e.message}`));
+        
+                img.onerror = (e) => {
+                    URL.revokeObjectURL(objectURL);
+                    reject(new Error(`Impossible de charger l'image depuis le Blob : ${e.message}`));
+                };
             });
         }
         
@@ -2294,7 +2407,15 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
 
         document.addEventListener('DOMContentLoaded', async () => {
             
-            const isLocalDataLoaded = loadFormData();
+            try {
+                await dbManager.init();
+            } catch (e) {
+                alert("Votre navigateur ne supporte pas IndexedDB, ou son utilisation est bloquée. La gestion des photos ne fonctionnera pas.");
+                console.error(e);
+                return;
+            }
+            
+            const isLocalDataLoaded = await loadFormData();
             if (!isLocalDataLoaded) {
                  await loadDefaultConfig();
             }
@@ -2385,10 +2506,10 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     alert("Veuillez saisir une clé API.");
                 }
             });
-            document.getElementById('resetBtn').addEventListener('click', () => { 
-                if (confirm("Voulez-vous vraiment réinitialiser tout le formulaire?")) { 
+            document.getElementById('resetBtn').addEventListener('click', async () => { 
+                if (confirm("Voulez-vous vraiment réinitialiser tout le formulaire (y compris les photos) ?")) { 
                     localStorage.removeItem('oiFormData'); 
-                    localStorage.removeItem('quotaAlertShown'); 
+                    await dbManager.clearAllImages();
                     location.reload(); 
                 } 
             });
@@ -2567,16 +2688,19 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 link.click();
                 URL.revokeObjectURL(url);
             });
-            sessionFileInput.addEventListener('change', (event) => {
+            sessionFileInput.addEventListener('change', async (event) => {
                 const file = event.target.files[0];
                 if (!file) return;
                 const reader = new FileReader();
-                reader.onload = (e) => {
+                reader.onload = async (e) => {
                     try {
                         const jsonContent = e.target.result;
-                        JSON.parse(jsonContent);
+                        JSON.parse(jsonContent); 
+                        
+                        await dbManager.clearAllImages();
                         localStorage.setItem('oiFormData', jsonContent);
-                        alert("Session importée avec succès. Rechargement de la page.");
+                        
+                        alert("Session importée. Attention : les images ne sont pas incluses dans l'export/import de session. Vous devrez les rajouter manuellement.");
                         location.reload();
                     } catch (err) {
                         alert("Fichier invalide ou corrompu.");
@@ -2923,8 +3047,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 const firstImage = formData.dynamic_photos[mainPhotoContainerId][0];
                 if (firstImage) {
                     return {
-                        imageSource: firstImage.src,
-                        originalSrc: firstImage.originalSrc,
+                        id: firstImage.id,
                         annotationsJson: firstImage.annotations || '[]'
                     };
                 }
@@ -3010,37 +3133,19 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 drawRow(headers, true); rows.forEach(row => drawRow(row, false)); context.y = currentY - 20;
             };
             
-            const processImage = async (imageSrc, originalSrc, annotationsJson, maxWidth = 1280, quality = 0.85) => {
+            async function processImageForPdf(imgId, annotationsJson) {
+                const imageBlob = await dbManager.getImage(imgId);
+                if (!imageBlob) throw new Error(`Image Blob non trouvé pour l'ID: ${imgId}`);
+            
                 const annotations = JSON.parse(annotationsJson || '[]');
-                
-                if (annotations.length > 0 && originalSrc) {
-                    const buffer = await createAnnotatedImageBlob(originalSrc, annotations);
-                    return buffer;
-                } else {
-                    return new Promise((resolve, reject) => {
-                        const img = new Image();
-                        img.crossOrigin = 'anonymous'; 
-                        
-                        let srcToLoad = imageSrc || originalSrc; 
-                        if (!srcToLoad || !srcToLoad.startsWith('data:image')) {
-                             return reject(new Error('Source d\'image invalide ou manquante.'));
-                        }
-                        img.src = srcToLoad;
-
-                        img.onload = () => {
-                            const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d');
-                            let { width, height } = img;
-                            if (width > maxWidth) { height = (maxWidth / width) * height; width = maxWidth; }
-                            canvas.width = width; canvas.height = height; ctx.drawImage(img, 0, 0, width, height);
-                            canvas.toBlob(blob => {
-                                if (!blob) return reject(new Error('La conversion de l\'image a échoué.'));
-                                blob.arrayBuffer().then(resolve).catch(reject);
-                            }, 'image/jpeg', quality);
-                        };
-                        img.onerror = (err) => { reject(new Error(`Impossible de charger l'image: ${err.message}`)); };
-                    });
+                let finalBlob = imageBlob;
+            
+                if (annotations.length > 0) {
+                    finalBlob = await createAnnotatedImageBlob(imageBlob, annotations);
                 }
-            };
+            
+                return await finalBlob.arrayBuffer();
+            }
             
             const drawImagesFromCategory = async (previewContainerId, title) => {
                 const imagesData = (formData.dynamic_photos || {})[previewContainerId] || [];
@@ -3048,7 +3153,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     const imgData = imagesData[i];
                     addNewPage();
                     try {
-                        const imageBytes = await processImage(imgData.src, imgData.originalSrc, imgData.annotations);
+                        const imageBytes = await processImageForPdf(imgData.id, imgData.annotations);
                         const image = await pdfDoc.embedJpg(imageBytes);
                         
                         const { width, height } = context.currentPage.getSize();
@@ -3172,11 +3277,11 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 let tableBottomY = topY;
                 
                 if (isImagePresent) {
-                    const { imageSource, originalSrc, annotationsJson } = imageInfo;
+                    const { id, annotationsJson } = imageInfo;
                     const frameY = topY - photoBoxHeight; 
                     
                     try {
-                        const imageBytes = await processImage(imageSource, originalSrc, annotationsJson);
+                        const imageBytes = await processImageForPdf(id, annotationsJson);
                         const image = await pdfDoc.embedJpg(imageBytes);
                         
                         const scaled = image.scaleToFit(photoBoxWidth - 10, photoBoxHeight - 30);
@@ -3381,25 +3486,26 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
 
                 for (let i = 0; i < imagesData.length; i++) {
                     const imgData = imagesData[i];
-                    const originalSrc = imgData.originalSrc;
                     const annotations = JSON.parse(imgData.annotations || '[]');
-                    
-                    let dataSrcToDisplay = originalSrc;
+                    const imageBlob = await dbManager.getImage(imgData.id);
+            
+                    if (!imageBlob) continue;
+            
+                    let finalImageBlob = imageBlob;
                     if (annotations.length > 0) {
                         try {
-                            const arrayBuffer = await createAnnotatedImageBlob(originalSrc, annotations);
-                            const base64String = btoa(new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), ''));
-                            dataSrcToDisplay = `data:image/jpeg;base64,${base64String}`;
+                            finalImageBlob = await createAnnotatedImageBlob(imageBlob, annotations);
                         } catch (e) {
                             console.error(`Erreur de génération d'image annotée pour ${title} (index ${i}):`, e);
-                            dataSrcToDisplay = originalSrc; 
                         }
                     }
-
+                    
+                    const objectURL = URL.createObjectURL(finalImageBlob);
+            
                     const finalTitle = imagesData.length > 1 ? `${title} (${i+1})` : title;
                     imageHtml += `<div class="image-container" style="text-align: center; margin: 20px 0; border: 1px solid ${accentColor}; padding: 10px; background-color: ${isDarkMode ? '#1e1e1e' : '#ffffff'};">`;
                     imageHtml += `<h4 style="color: ${accentColor}; margin-bottom: 10px; font-size: 1.1em;">${finalTitle}</h4>`;
-                    imageHtml += `<img src="${dataSrcToDisplay}" alt="${finalTitle}" style="max-width: 100%; height: auto; border-radius: 4px; box-shadow: 0 4px 8px rgba(0,0,0,${isDarkMode ? 0.4 : 0.1});">`;
+                    imageHtml += `<img src="${objectURL}" alt="${finalTitle}" style="max-width: 100%; height: auto; border-radius: 4px; box-shadow: 0 4px 8px rgba(0,0,0,${isDarkMode ? 0.4 : 0.1});" onload="URL.revokeObjectURL(this.src)">`;
                     imageHtml += `</div>`;
                 }
                 return imageHtml;
