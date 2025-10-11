@@ -31,17 +31,16 @@
         h3 { font-size: 1.1em; color: var(--text-primary); margin-top: 15px; margin-bottom: 10px; }
         h4 { font-size: 1.0em; color: var(--text-secondary); margin-top: 10px; margin-bottom: 5px; }
         
-        /* --- PROGRESS BAR MODIFIÉ (10 étapes) --- */
         .wizard-progress { 
             display: flex; flex-wrap: wrap; gap: 5px; justify-content: center; 
             margin-bottom: 25px; list-style-type: none; padding: 0; 
         }
         .wizard-progress-step {
-            flex-grow: 1; padding: 8px 6px; text-align: center; font-size: 0.7em; /* Réduction de la taille de police */
+            flex-grow: 1; padding: 8px 6px; text-align: center; font-size: 0.7em;
             color: var(--text-secondary); background-color: var(--bg-interactive);
             border: 1px solid var(--border-color); border-radius: 6px; cursor: pointer;
             transition: background-color 0.2s, color 0.2s, border-color 0.2s;
-            min-width: 50px; /* Taille minimale pour mobile */
+            min-width: 50px;
         }
         @media (min-width: 600px) {
              .wizard-progress-step {
@@ -95,7 +94,6 @@
         button.add-btn { background-color: #27ae60; color: white; border: none; border-radius: 4px; padding: 8px 12px; margin-top: 5px; cursor: pointer; }
         button.remove-btn { background-color: var(--danger-red); color: white; border: none; border-radius: 4px; padding: 5px 10px; font-size: 14px; cursor: pointer; }
         
-        /* NOUVEAU: Style des boutons "Chip" pour la saisie rapide */
         .chip-container {
             display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 15px; padding: 5px 0;
             border-bottom: 1px dashed var(--border-color);
@@ -159,6 +157,13 @@
         .file-upload-label:hover { background-color: var(--accent-hover); }
         .file-name-display { color: var(--text-secondary); font-style: italic; margin-left: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 150px; }
         .image-preview { max-width: 150px; max-height: 100px; margin-top: 10px; border-radius: 4px; border: 1px solid var(--border-color); }
+        .image-preview-item {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
         .draggable { cursor: grab; user-select: none; }
         .draggable.dragging { opacity: 0.5; cursor: grabbing; }
         
@@ -368,10 +373,9 @@
         .modal-actions-pdf button { width: auto; }
         .modal-actions-pdf #downloadPdfBtn { flex: 1; max-width: 250px; background-color: var(--success-green); }
 
-        /* NOUVEAU: Style des alertes de cohérence */
         .coherence-alert {
-            background-color: #331f1f; /* Rouge sombre */
-            color: #c0392b; /* Texte rouge danger */
+            background-color: #331f1f;
+            color: #c0392b;
             border: 1px solid #c0392b;
             padding: 10px;
             border-radius: 4px;
@@ -941,11 +945,9 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             const isLastStep = n === (steps.length - 1);
             nextBtn.style.display = isLastStep ? "none" : "inline-block";
             
-            // Logique de l'étape de finalisation (Étape 9/10)
             if (n === 9) {
                 previewBtn.style.display = "inline-block";
                 retexReportBtn.style.display = "inline-block";
-                // Lancer la vérification de cohérence au passage à l'étape finale
                 checkCoherence(); 
             } else {
                 previewBtn.style.display = "none";
@@ -976,17 +978,14 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
         prevBtn.addEventListener('click', () => changeStep(-1));
         nextBtn.addEventListener('click', () => changeStep(1));
         
-        
         /**
-         * MODIFIED FUNCTION
-         * Adds photo input elements to a specified container and optionally triggers the file dialog immediately.
-         * @param {string} containerId - The ID of the container where the photo input will be added.
-         * @param {boolean} isSingle - If true, replaces existing content. If false, appends.
-         * @param {boolean} andTrigger - If true, programmatically clicks the label to open the file dialog.
+         * MODIFIED FUNCTION for MULTIPLE photo uploads
+         * Adds photo input elements to a specified container.
+         * The generated input will accept multiple files, and previews will be generated dynamically.
          */
         function addPhotoInput(containerId, isSingle = false, andTrigger = false) {
             const container = document.getElementById(containerId);
-            if (isSingle) container.innerHTML = ''; // Clear container if only one photo is allowed
+            if (isSingle) container.innerHTML = ''; // Clear container if only one photo "slot" is allowed
 
             const itemWrapper = document.createElement('div');
             itemWrapper.className = 'photo-input-wrapper';
@@ -995,17 +994,15 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
 
             itemWrapper.innerHTML = `
                 <div class="dynamic-list-item">
-                    <input type="file" id="${uniqueId}" class="photo-input" accept="image/png, image/jpeg" onchange="handleFileChange(this, 'span_${uniqueId}', '${previewId}')">
-                    <label for="${uniqueId}" class="file-upload-label">Choisir une photo</label>
+                    <input type="file" id="${uniqueId}" class="photo-input" accept="image/png, image/jpeg" multiple onchange="handleFileChange(this, 'span_${uniqueId}', '${previewId}')">
+                    <label for="${uniqueId}" class="file-upload-label">Choisir photo(s)</label>
                     <span id="span_${uniqueId}" class="file-name-display">Aucun fichier</span>
-                    <button type="button" class="add-btn annotate-btn" style="display:none; margin-left:5px; background-color: var(--accent-blue);" onclick="openAnnotationModal('${previewId}')">Annoter</button>
                     ${!isSingle ? '<button type="button" class="remove-btn" onclick="this.closest(\'.photo-input-wrapper\').remove(); saveFormData();">❌</button>' : ''}
                 </div>
-                <img id="${previewId}" class="image-preview" style="display:none;" alt="Aperçu"/>`;
+                <div id="${previewId}" class="image-preview-container" style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px;"></div>`;
             
             container.appendChild(itemWrapper);
 
-            // If triggered from the central photo tab, open the file dialog
             if (andTrigger) {
                 const label = itemWrapper.querySelector(`label[for="${uniqueId}"]`);
                 if (label) {
@@ -1014,33 +1011,55 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             }
         }
 
-        function handleFileChange(input, spanId, previewId) {
+        /**
+         * MODIFIED FUNCTION for MULTIPLE photo uploads
+         * Handles the file input change event, creating a preview for each selected file.
+         */
+        function handleFileChange(input, spanId, previewContainerId) {
             const fileNameSpan = document.getElementById(spanId);
-            const previewImg = document.getElementById(previewId);
-            const annotateBtn = input.parentElement.querySelector('.annotate-btn');
+            const previewContainer = document.getElementById(previewContainerId);
+            
+            previewContainer.innerHTML = ''; // Clear previous previews for this input slot
 
             if (input.files.length > 0) {
-                fileNameSpan.textContent = input.files[0].name;
-                const reader = new FileReader();
-                reader.onload = e => {
-                    previewImg.src = e.target.result;
-                    previewImg.dataset.originalSrc = e.target.result; 
-                    previewImg.dataset.annotations = '[]'; 
-                    previewImg.style.display = 'block';
-                    if (annotateBtn) annotateBtn.style.display = 'inline-block';
-                    saveFormData(); 
+                fileNameSpan.textContent = `${input.files.length} fichier(s) sélectionné(s)`;
+                
+                for (const file of input.files) {
+                    const reader = new FileReader();
+                    reader.onload = e => {
+                        const itemContainer = document.createElement('div');
+                        itemContainer.className = 'image-preview-item';
+
+                        const previewImgId = `preview_img_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+                        const previewImg = document.createElement('img');
+                        previewImg.id = previewImgId;
+                        previewImg.className = 'image-preview';
+                        previewImg.src = e.target.result;
+                        previewImg.dataset.originalSrc = e.target.result;
+                        previewImg.dataset.annotations = '[]';
+                        previewImg.style.display = 'block';
+
+                        const annotateBtn = document.createElement('button');
+                        annotateBtn.type = 'button';
+                        annotateBtn.className = 'add-btn';
+                        annotateBtn.style.marginTop = '5px';
+                        annotateBtn.style.backgroundColor = 'var(--accent-blue)';
+                        annotateBtn.textContent = 'Annoter';
+                        annotateBtn.onclick = () => openAnnotationModal(previewImgId);
+                        
+                        itemContainer.appendChild(previewImg);
+                        itemContainer.appendChild(annotateBtn);
+                        previewContainer.appendChild(itemContainer);
+                    };
+                    reader.readAsDataURL(file);
                 }
-                reader.readAsDataURL(input.files[0]);
             } else {
                 fileNameSpan.textContent = 'Aucun fichier';
-                previewImg.src = '';
-                previewImg.dataset.originalSrc = '';
-                previewImg.dataset.annotations = '[]';
-                previewImg.style.display = 'none';
-                if (annotateBtn) annotateBtn.style.display = 'none';
-                saveFormData(); 
             }
+            // Save after a short delay to allow file readers to complete
+            setTimeout(saveFormData, 500);
         }
+
         function addDynamicField(containerId, value = '') {
             const container = document.getElementById(containerId);
             const item = document.createElement('div');
@@ -1048,11 +1067,11 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             item.innerHTML = `<input type="text" class="dynamic-input" value="${value}" oninput="saveFormData()"><button type="button" class="remove-btn" onclick="this.parentElement.remove(); saveFormData();">❌</button>`;
             container.appendChild(item);
         }
-        // MODIFICATION: Suppression de addDynamicFieldWithSelect, remplacée par initChipContainer
+
         function initChipContainer(containerId, selectedValues = []) {
              const container = document.getElementById(containerId);
              const options = JSON.parse(container.dataset.options || '[]');
-             container.innerHTML = ''; // Nettoyer l'ancien contenu
+             container.innerHTML = ''; 
 
              options.forEach(option => {
                  const btn = document.createElement('button');
@@ -1070,7 +1089,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                  container.appendChild(btn);
              });
 
-             // Ajouter un input pour les valeurs personnalisées (optionnel, mais maintient la fonctionnalité)
              const customInput = document.createElement('input');
              customInput.type = 'text';
              customInput.placeholder = 'Ajouter personnalisé (entrée)';
@@ -1079,7 +1097,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                      event.preventDefault(); 
                      const customValue = this.value.trim();
                      if (!options.includes(customValue) && !getChipData(containerId).includes(customValue)) {
-                          // Simule l'ajout de l'élément en tant que sélectionné
                          const newBtn = document.createElement('button');
                          newBtn.type = 'button';
                          newBtn.className = 'chip-btn selected';
@@ -1087,7 +1104,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                          newBtn.addEventListener('click', btn.onclick);
                          container.insertBefore(newBtn, this);
                      }
-                     this.value = ''; // Réinitialiser le champ
+                     this.value = '';
                      updateChipData(containerId);
                      saveFormData();
                  }
@@ -1107,7 +1124,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
          }
 
          function updateChipData(containerId) {
-             // Fonction de mise à jour: La sauvegarde est faite dans saveFormData qui lit les données
          }
         
         function addMeField(value = '') {
@@ -1338,7 +1354,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             aoContainer.innerHTML = aoHtml || `<p><i>Aucun membre assigné aux cellules AO.</i></p>`;
         }
 
-
         const quickEditMapping = {
             'Cellule': { key: 'cellules', attribute: 'cellule' },
             'Fonction': { key: 'fonctions', attribute: 'fonction' },
@@ -1463,6 +1478,10 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             modal.showModal();
         }
 
+        /**
+         * MODIFIED FUNCTION for MULTIPLE photo uploads
+         * Saves form data, including a new structured format for dynamic photo previews.
+         */
         function saveFormData() {
             try {
                 const data = {};
@@ -1470,19 +1489,31 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     if (field.id) data[field.id] = field.value;
                 });
                 
-                document.querySelectorAll('.image-preview').forEach(img => {
-                    if(img.id && img.src.startsWith('data:image')) {
-                        data[img.id + '_src'] = img.src; 
-                        data[img.id + '_original_src'] = img.dataset.originalSrc; 
-                        data[img.id + '_annotations'] = img.dataset.annotations || '[]'; 
+                // New image saving logic
+                data.dynamic_photos = {};
+                document.querySelectorAll('.photo-input-wrapper').forEach(wrapper => {
+                    const previewContainer = wrapper.querySelector('.image-preview-container');
+                    if (previewContainer && previewContainer.id) {
+                        const imagesData = [];
+                        previewContainer.querySelectorAll('.image-preview').forEach(img => {
+                            if (img.src && img.src.startsWith('data:image')) {
+                                imagesData.push({
+                                    id: img.id,
+                                    src: img.src,
+                                    originalSrc: img.dataset.originalSrc,
+                                    annotations: img.dataset.annotations || '[]'
+                                });
+                            }
+                        });
+                        if (imagesData.length > 0) {
+                            data.dynamic_photos[previewContainer.id] = imagesData;
+                        }
                     }
                 });
                 
                 data.me_list = Array.from(document.querySelectorAll('#me_container .me-input')).map(i => i.value).filter(Boolean);
-                // MODIFICATION: Sauvegarde des chips sélectionnées
                 data.etat_esprit_list = getChipData('etat_esprit_container');
                 data.volume_list = getChipData('volume_adversaire_container');
-                // FIN MODIFICATION
                 data.vehicules_list = Array.from(document.querySelectorAll(`#vehicules_container .dynamic-input`)).map(i => i.value).filter(Boolean);
                 data.patracdvr_unassigned = Array.from(unassignedContainer.querySelectorAll('.patracdvr-member-btn')).map(btn => ({ ...btn.dataset }));
                 data.patracdvr_rows = Array.from(document.querySelectorAll('#patracdvr_container .patracdvr-vehicle-row')).map(row => ({
@@ -1504,15 +1535,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                             alert("Alerte: Espace de stockage (5Mo) atteint. Les données textuelles sont sauvegardées, mais les images ont été retirées de la sauvegarde locale pour éviter l'erreur. Veuillez exporter la session si vous souhaitez conserver les images pour la prochaine fois.");
                             localStorage.setItem('quotaAlertShown', 'true');
                         }
-
-                        Object.keys(data).forEach(key => {
-                            if (key.endsWith('_src')) {
-                                delete data[key];
-                                delete data[key.replace('_src', '') + '_original_src'];
-                                delete data[key.replace('_src', '') + '_annotations'];
-                            }
-                        });
-
+                        delete data.dynamic_photos;
                         localStorage.setItem('oiFormData', JSON.stringify(data));
                     } else {
                         throw e; 
@@ -1525,6 +1548,10 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             }
         }
 
+        /**
+         * MODIFIED FUNCTION for MULTIPLE photo uploads
+         * Loads form data, including dynamically recreating photo previews from the new structured format.
+         */
         function loadFormData() {
             const dataString = localStorage.getItem('oiFormData');
             if (!dataString) {
@@ -1532,30 +1559,50 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             }
             try {
                 const data = JSON.parse(dataString);
-                
-                document.querySelectorAll('.photo-input-wrapper').forEach(wrapper => {
-                    const previewImg = wrapper.querySelector('.image-preview');
-                    const input = wrapper.querySelector('.photo-input');
-                    const span = wrapper.querySelector('.file-name-display');
-                    const annotateBtn = wrapper.querySelector('.annotate-btn');
-                    
-                    const srcKey = previewImg.id + '_src';
-                    const originalSrcKey = previewImg.id + '_original_src';
-                    const annotationsKey = previewImg.id + '_annotations';
-                    
-                    if (data[srcKey]) {
-                        previewImg.src = data[srcKey];
-                        previewImg.dataset.originalSrc = data[originalSrcKey];
-                        previewImg.dataset.annotations = data[annotationsKey] || '[]';
-                        previewImg.style.display = 'block';
-                        if (annotateBtn) annotateBtn.style.display = 'inline-block';
-                        if (span) span.textContent = 'Image chargée'; 
-                    }
-                });
 
+                // New image loading logic
+                if (data.dynamic_photos) {
+                    Object.keys(data.dynamic_photos).forEach(containerId => {
+                        const previewContainer = document.getElementById(containerId);
+                        const fileData = data.dynamic_photos[containerId];
+
+                        if (previewContainer && fileData && fileData.length > 0) {
+                            const wrapper = previewContainer.closest('.photo-input-wrapper');
+                            const span = wrapper ? wrapper.querySelector('.file-name-display') : null;
+                            if (span) span.textContent = `${fileData.length} fichier(s) chargé(s)`;
+
+                            previewContainer.innerHTML = ''; 
+
+                            fileData.forEach(imgData => {
+                                const itemContainer = document.createElement('div');
+                                itemContainer.className = 'image-preview-item';
+
+                                const previewImg = document.createElement('img');
+                                previewImg.id = imgData.id;
+                                previewImg.className = 'image-preview';
+                                previewImg.src = imgData.src;
+                                previewImg.dataset.originalSrc = imgData.originalSrc;
+                                previewImg.dataset.annotations = imgData.annotations;
+                                previewImg.style.display = 'block';
+
+                                const annotateBtn = document.createElement('button');
+                                annotateBtn.type = 'button';
+                                annotateBtn.className = 'add-btn';
+                                annotateBtn.style.marginTop = '5px';
+                                annotateBtn.style.backgroundColor = 'var(--accent-blue)';
+                                annotateBtn.textContent = 'Annoter';
+                                annotateBtn.onclick = () => openAnnotationModal(imgData.id);
+
+                                itemContainer.appendChild(previewImg);
+                                itemContainer.appendChild(annotateBtn);
+                                previewContainer.appendChild(itemContainer);
+                            });
+                        }
+                    });
+                }
+                
                 Object.keys(data).forEach(key => {
-                    if (key.endsWith('_src') || key.endsWith('_original_src') || key.endsWith('_annotations')) return;
-                    if (['patracdvr_rows', 'patracdvr_unassigned', 'time_events', 'me_list', 'etat_esprit_list', 'volume_list', 'vehicules_list'].includes(key)) return; 
+                    if (['dynamic_photos', 'patracdvr_rows', 'patracdvr_unassigned', 'time_events', 'me_list', 'etat_esprit_list', 'volume_list', 'vehicules_list'].includes(key)) return; 
                     const el = document.getElementById(key);
                     if (el && !Array.isArray(data[key]) && typeof data[key] !== 'object') {
                         el.value = data[key];
@@ -1567,10 +1614,8 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 document.getElementById('time_events_container').innerHTML = '';
                 
                 (data.me_list || []).forEach(val => addMeField(val));
-                // MODIFICATION: Chargement des chips
                 initChipContainer('etat_esprit_container', data.etat_esprit_list || []);
                 initChipContainer('volume_adversaire_container', data.volume_list || []);
-                // FIN MODIFICATION
                 (data.vehicules_list || []).forEach(val => addDynamicField('vehicules_container', val));
                 (data.time_events || []).forEach(ev => addTimeEvent(ev.type, ev.hour, ev.description));
                 initializePatracdvr(data);
@@ -1582,6 +1627,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 return false;
             }
         }
+
         function initializePatracdvr(dataFromStorage) {
             unassignedContainer.innerHTML = '';
             patracdvrContainer.innerHTML = '';
@@ -2211,7 +2257,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             context.restore();
         }
 
-        // NOUVELLE FONCTION: Vérification de la cohérence de la saisie
         function checkCoherence() {
             const dataString = localStorage.getItem('oiFormData');
             const formData = JSON.parse(dataString || '{}');
@@ -2222,13 +2267,10 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             const aoMembers = members.filter(m => m.cellule && m.cellule.toLowerCase().startsWith('ao'));
             const allAssignedMembers = [...indiaMembers, ...aoMembers];
 
-            // Règle 1: Date de l'opération
             if (!getVal('date_op')) { alerts.push("La **Date de l'opération** est manquante."); }
 
-            // Règle 2: Adversaire
             if (!getVal('nom_adversaire')) { alerts.push("Le **Nom de l'adversaire** est manquant. (Onglet 2)"); }
             
-            // Règle 3: Membre sans armement/équipement si non 'Sans'
             allAssignedMembers.forEach(member => {
                 if (member.armement === 'Sans' && member.fonction !== 'Sans') {
                     alerts.push(`Membre **${member.trigramme}** est assigné mais n'a **AUCUN armement principal**. (Cellule: ${member.cellule})`);
@@ -2238,13 +2280,11 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 }
             });
 
-            // Règle 4: Check si le Chef Inter est bien India
             const chefInter = allAssignedMembers.find(m => m.fonction === 'Chef inter');
             if (chefInter && !chefInter.cellule.toLowerCase().startsWith('india')) {
                  alerts.push(`Le **Chef inter** (${chefInter.trigramme}) est assigné à la cellule **${chefInter.cellule}** au lieu d'India.`);
             }
 
-            // Règle 5: Chronologie
             if (!formData.time_events || formData.time_events.length < 3) {
                 alerts.push(`La **Chronologie** (T0, T1, T4...) est incomplète. Au moins 3 étapes sont recommandées. (Onglet 5)`);
             } else {
@@ -2252,13 +2292,11 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                  if (!t4) alerts.push("Le **TOP ACTION (T4)** n'est pas défini dans la chronologie.");
             }
 
-            // Règle 6: Membres non assignés
             const unassignedCount = (formData.patracdvr_unassigned || []).length;
             if (unassignedCount > 0) {
                  alerts.push(`**${unassignedCount} membres** ne sont **PAS assignés** à un véhicule/équipe.`);
             }
             
-            // Affichage des Alertes
             coherenceAlertsContainer.innerHTML = '';
             if (alerts.length > 0) {
                 alerts.forEach(alertText => {
@@ -2271,7 +2309,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 coherenceAlertsContainer.innerHTML = `<div class="coherence-alert" style="background-color: var(--success-green); color: white;"><span class="material-symbols-outlined">check_circle</span> Aucune incohérence majeure détectée. Prêt à générer.</div>`;
             }
 
-            // Affichage du Récapitulatif
             let recapHtml = '<h4>Synthèse des Éléments Clés :</h4><ul>';
             recapHtml += `<li>**Opération** du ${getVal('date_op') || 'N/A'} - H: ${getVal('heure_execution') || 'N/A'}</li>`;
             recapHtml += `<li>**Objectif** : ${getVal('nom_adversaire') || 'N/A'} (${getVal('domicile_adversaire').split('\n')[0] || 'N/A'})</li>`;
@@ -2296,10 +2333,8 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                  await loadDefaultConfig();
             }
             
-            // MODIFICATION: Initialisation des Chip Containers (même si les données sont chargées ou non)
             initChipContainer('etat_esprit_container', isLocalDataLoaded ? JSON.parse(localStorage.getItem('oiFormData')).etat_esprit_list : []);
             initChipContainer('volume_adversaire_container', isLocalDataLoaded ? JSON.parse(localStorage.getItem('oiFormData')).volume_list : []);
-            // FIN MODIFICATION
 
             setupQuickEditPanel(); 
 
@@ -2947,19 +2982,17 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             
         });
         
-        // --- PDF GENERATION (NON MODIFIÉ DANS SA STRUCTURE, MAIS MIS À JOUR AVEC LE NOUVEAU FLUX DE COHÉRENCE) ---
+        // --- PDF GENERATION LOGIC ---
 
         function getAdversaryImageInfo(formData) {
-            const mainPhotoWrapper = document.querySelector('#adversary_photo_container .photo-input-wrapper');
-            if (mainPhotoWrapper) {
-                const previewImg = mainPhotoWrapper.querySelector('.image-preview');
-                const previewId = previewImg ? previewImg.id : null;
-                
-                if (previewId && formData[previewId + '_original_src']) {
+            const mainPhotoContainerId = document.querySelector('#adversary_photo_container .image-preview-container')?.id;
+            if (mainPhotoContainerId && formData.dynamic_photos && formData.dynamic_photos[mainPhotoContainerId]) {
+                const firstImage = formData.dynamic_photos[mainPhotoContainerId][0];
+                if (firstImage) {
                     return {
-                        imageSource: formData[previewId + '_src'],
-                        originalSrc: formData[previewId + '_original_src'],
-                        annotationsJson: formData[previewId + '_annotations'] || '[]'
+                        imageSource: firstImage.src,
+                        originalSrc: firstImage.originalSrc,
+                        annotationsJson: firstImage.annotations || '[]'
                     };
                 }
             }
@@ -3075,12 +3108,11 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     });
                 }
             };
-
+            
             const drawImagesFromContainer = async (containerId, title) => {
-                const wrappers = document.querySelectorAll(`#${containerId} .photo-input-wrapper`);
-                for (let i = 0; i < wrappers.length; i++) {
-                    const wrapper = wrappers[i];
-                    const previewImg = wrapper.querySelector('.image-preview');
+                const allImages = document.querySelectorAll(`#${containerId} .image-preview`);
+                for (let i = 0; i < allImages.length; i++) {
+                    const previewImg = allImages[i];
                     if (!previewImg || !previewImg.dataset.originalSrc) continue;
 
                     addNewPage();
@@ -3097,7 +3129,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                         const scaled = image.scaleToFit(paddedW, paddedH);
                         const x = (width - scaled.width) / 2; const y = (height - scaled.height) / 2 + 15;
                         context.currentPage.drawImage(image, { x, y, width: scaled.width, height: scaled.height });
-                        const finalTitle = wrappers.length > 1 ? `${title} (${i+1})` : title;
+                        const finalTitle = allImages.length > 1 ? `${title} (${i+1})` : title;
                         const textWidth = helveticaBoldFont.widthOfTextAtSize(finalTitle, 14);
                         context.currentPage.drawText(finalTitle, { x: width / 2 - textWidth / 2, y: y - 20, font: helveticaBoldFont, size: 14, color: context.colors.text });
                     } catch (e) {
@@ -3379,7 +3411,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             return { pdfBytes, formData };
         }
         
-        // --- LOGIQUE DE PRÉSENTATION HTML (MISE À JOUR) ---
+        // --- PRESENTATION HTML LOGIC ---
         
         async function buildPresentationHtml() {
             saveFormData();
@@ -3429,11 +3461,10 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
 
             const drawImageHtml = async (id, title) => {
                 let imageHtml = '';
-                const wrappers = document.querySelectorAll(`#${id} .photo-input-wrapper`);
-                
-                for(let i = 0; i < wrappers.length; i++) {
-                    const wrapper = wrappers[i];
-                    const previewImg = wrapper.querySelector('.image-preview');
+                const allImages = document.querySelectorAll(`#${id} .image-preview`);
+
+                for (let i = 0; i < allImages.length; i++) {
+                    const previewImg = allImages[i];
                     if (!previewImg || !previewImg.dataset.originalSrc) continue;
 
                     const originalSrc = previewImg.dataset.originalSrc;
@@ -3452,7 +3483,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                         }
                     }
 
-                    const finalTitle = wrappers.length > 1 ? `${title} (${i+1})` : title;
+                    const finalTitle = allImages.length > 1 ? `${title} (${i+1})` : title;
                     imageHtml += `<div class="image-container" style="text-align: center; margin: 20px 0; border: 1px solid ${accentColor}; padding: 10px; background-color: ${isDarkMode ? '#1e1e1e' : '#ffffff'};">`;
                     imageHtml += `<h4 style="color: ${accentColor}; margin-bottom: 10px; font-size: 1.1em;">${finalTitle}</h4>`;
                     imageHtml += `<img src="${dataSrcToDisplay}" alt="${finalTitle}" style="max-width: 100%; height: auto; border-radius: 4px; box-shadow: 0 4px 8px rgba(0,0,0,${isDarkMode ? 0.4 : 0.1});">`;
