@@ -980,6 +980,76 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             'photo_container_emplacement_ao_preview_container': 'photo_container_emplacement_ao_display',
         };
 
+        const dbManager = (() => {
+            const DB_NAME = 'OI_Generator_DB';
+            const DB_VERSION = 1;
+            const STORE_NAME = 'images';
+            let db;
+
+            function init() {
+                return new Promise((resolve, reject) => {
+                    const request = indexedDB.open(DB_NAME, DB_VERSION);
+                    request.onerror = (event) => reject("Erreur d'ouverture de la base de données IndexedDB.");
+                    request.onsuccess = (event) => {
+                        db = event.target.result;
+                        resolve(db);
+                    };
+                    request.onupgradeneeded = (event) => {
+                        let db = event.target.result;
+                        db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+                    };
+                });
+            }
+
+            async function getDb() {
+                if (!db) await init();
+                return db;
+            }
+
+            return {
+                async saveImage(id, blob) {
+                    const db = await getDb();
+                    return new Promise((resolve, reject) => {
+                        const transaction = db.transaction(STORE_NAME, 'readwrite');
+                        const store = transaction.objectStore(STORE_NAME);
+                        const request = store.put({ id: id, blob: blob });
+                        request.onsuccess = () => resolve();
+                        request.onerror = () => reject(request.error);
+                    });
+                },
+                async getImage(id) {
+                    const db = await getDb();
+                    return new Promise((resolve, reject) => {
+                        const transaction = db.transaction(STORE_NAME, 'readonly');
+                        const store = transaction.objectStore(STORE_NAME);
+                        const request = store.get(id);
+                        request.onsuccess = () => resolve(request.result ? request.result.blob : null);
+                        request.onerror = () => reject(request.error);
+                    });
+                },
+                async deleteImage(id) {
+                    const db = await getDb();
+                    return new Promise((resolve, reject) => {
+                        const transaction = db.transaction(STORE_NAME, 'readwrite');
+                        const store = transaction.objectStore(STORE_NAME);
+                        const request = store.delete(id);
+                        request.onsuccess = () => resolve();
+                        request.onerror = () => reject(request.error);
+                    });
+                },
+                 async clearAllImages() {
+                    const db = await getDb();
+                    return new Promise((resolve, reject) => {
+                        const transaction = db.transaction(STORE_NAME, 'readwrite');
+                        const store = transaction.objectStore(STORE_NAME);
+                        const request = store.clear();
+                        request.onsuccess = () => resolve();
+                        request.onerror = () => reject(request.error);
+                    });
+                }
+            };
+        })();
+
         function showStep(n) {
             steps.forEach((step, index) => step.classList.toggle('active', index === n));
             progressSteps.forEach((pStep, index) => {
@@ -1011,45 +1081,56 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
         prevBtn.addEventListener('click', () => changeStep(-1));
         nextBtn.addEventListener('click', () => changeStep(1));
         
-        function handleFileChange(input, previewContainerId, isSingle) {
+        async function handleFileChange(input, previewContainerId, isSingle) {
             const previewContainer = document.getElementById(previewContainerId);
             const displayContainerId = displayMap[previewContainerId];
             const displayContainer = displayContainerId ? document.getElementById(displayContainerId) : null;
             
             if (isSingle) {
+                // Remove existing images from this single-upload slot
+                const existingImages = previewContainer.querySelectorAll('.image-preview-item .image-preview');
+                for(const img of existingImages) {
+                    await removeImage(img.id);
+                }
                 previewContainer.innerHTML = '';
                 if(displayContainer) displayContainer.innerHTML = '';
             }
 
             if (input.files.length > 0) {
-                Array.from(input.files).forEach(file => {
-                    const reader = new FileReader();
-                    reader.onload = e => {
-                        const previewImgId = `preview_img_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+                for (const file of input.files) {
+                    const previewImgId = `preview_img_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+                    await dbManager.saveImage(previewImgId, file);
+                    const objectURL = URL.createObjectURL(file);
 
-                        const interactiveItem = document.createElement('div');
-                        interactiveItem.className = 'image-preview-item';
-                        interactiveItem.innerHTML = `
-                            <img id="${previewImgId}" class="image-preview" src="${e.target.result}" style="display:block;" data-original-src="${e.target.result}" data-annotations="[]">
-                            <div style="display: flex; gap: 5px; margin-top: 5px;">
-                                <button type="button" class="add-btn" style="background-color: var(--accent-blue); padding: 4px 8px;" onclick="openAnnotationModal('${previewImgId}')"><span class="material-symbols-outlined" style="font-size: 1.2em;">edit</span></button>
-                                <button type="button" class="remove-btn" style="padding: 4px 8px;" onclick="this.closest('.image-preview-item').remove(); syncThumbnails(); saveFormData();">&times;</button>
-                            </div>`;
-                        previewContainer.appendChild(interactiveItem);
+                    const interactiveItem = document.createElement('div');
+                    interactiveItem.className = 'image-preview-item';
+                    interactiveItem.innerHTML = `
+                        <img id="${previewImgId}" class="image-preview" src="${objectURL}" style="display:block;" data-db-id="${previewImgId}" data-annotations="[]">
+                        <div style="display: flex; gap: 5px; margin-top: 5px;">
+                            <button type="button" class="add-btn" style="background-color: var(--accent-blue); padding: 4px 8px;" onclick="openAnnotationModal('${previewImgId}')"><span class="material-symbols-outlined" style="font-size: 1.2em;">edit</span></button>
+                            <button type="button" class="remove-btn" style="padding: 4px 8px;" onclick="removeImage('${previewImgId}')">&times;</button>
+                        </div>`;
+                    previewContainer.appendChild(interactiveItem);
 
-                        if (displayContainer) {
-                            const displayImg = document.createElement('img');
-                            displayImg.className = 'image-preview';
-                            displayImg.src = e.target.result;
-                            displayImg.dataset.refId = previewImgId;
-                            displayContainer.appendChild(displayImg);
-                        }
-                    };
-                    reader.readAsDataURL(file);
-                });
+                    if (displayContainer) {
+                        const displayImg = document.createElement('img');
+                        displayImg.className = 'image-preview';
+                        displayImg.src = objectURL;
+                        displayImg.dataset.refId = previewImgId;
+                        displayContainer.appendChild(displayImg);
+                    }
+                }
             }
             input.value = '';
-            setTimeout(saveFormData, 500);
+            setTimeout(saveFormData, 100);
+        }
+        
+        async function removeImage(imgId) {
+            const item = document.getElementById(imgId).closest('.image-preview-item');
+            if (item) item.remove();
+            await dbManager.deleteImage(imgId);
+            syncThumbnails();
+            saveFormData();
         }
 
         function syncThumbnails() {
@@ -1481,23 +1562,16 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     if (field.id) data[field.id] = field.value;
                 });
                 
-                data.dynamic_photos = {};
+                data.photos_metadata = {};
                 document.querySelectorAll('.image-preview-container').forEach(container => {
                     if (container.id) {
-                        const imagesData = Array.from(container.querySelectorAll('.image-preview')).map(img => {
-                            if (img.src && img.src.startsWith('data:image')) {
-                                return {
-                                    id: img.id,
-                                    src: img.src,
-                                    originalSrc: img.dataset.originalSrc,
-                                    annotations: img.dataset.annotations || '[]'
-                                };
-                            }
-                            return null;
-                        }).filter(Boolean);
+                        const imagesData = Array.from(container.querySelectorAll('.image-preview')).map(img => ({
+                            id: img.dataset.dbId,
+                            annotations: img.dataset.annotations || '[]'
+                        }));
 
                         if (imagesData.length > 0) {
-                            data.dynamic_photos[container.id] = imagesData;
+                            data.photos_metadata[container.id] = imagesData;
                         }
                     }
                 });
@@ -1517,29 +1591,14 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     description: item.querySelector('.time-description-input').value
                 }));
 
-                try {
-                    localStorage.setItem('oiFormData', JSON.stringify(data));
-                } catch (e) {
-                    if (e.name === 'QuotaExceededError' || e.name === 'DOMException') {
-                        
-                        if (localStorage.getItem('quotaAlertShown') !== 'true') {
-                            alert("Alerte: Espace de stockage (5Mo) atteint. Les données textuelles sont sauvegardées, mais les images ont été retirées de la sauvegarde locale pour éviter l'erreur. Veuillez exporter la session si vous souhaitez conserver les images pour la prochaine fois.");
-                            localStorage.setItem('quotaAlertShown', 'true');
-                        }
-                        delete data.dynamic_photos;
-                        localStorage.setItem('oiFormData', JSON.stringify(data));
-                    } else {
-                        throw e; 
-                    }
-                }
-                
+                localStorage.setItem('oiFormData', JSON.stringify(data));
                 updateArticulationDisplay();
             } catch (e) { 
                 console.error("Save error:", e); 
             }
         }
 
-        function loadFormData() {
+        async function loadFormData() {
             const dataString = localStorage.getItem('oiFormData');
             if (!dataString) {
                 return false; 
@@ -1549,39 +1608,43 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 
                 document.querySelectorAll('.image-preview-container, .photo-display-area').forEach(c => c.innerHTML = '');
 
-                if (data.dynamic_photos) {
-                    for (const previewId in data.dynamic_photos) {
+                if (data.photos_metadata) {
+                    for (const previewId in data.photos_metadata) {
                         const previewContainer = document.getElementById(previewId);
                         const displayId = displayMap[previewId];
                         const displayContainer = displayId ? document.getElementById(displayId) : null;
-                        const fileDataArray = data.dynamic_photos[previewId];
+                        const metadataArray = data.photos_metadata[previewId];
 
-                        if (previewContainer && fileDataArray) {
-                            fileDataArray.forEach(imgData => {
+                        if (previewContainer && metadataArray) {
+                            for(const meta of metadataArray) {
+                                const blob = await dbManager.getImage(meta.id);
+                                if (!blob) continue;
+                                const objectURL = URL.createObjectURL(blob);
+
                                 const interactiveItem = document.createElement('div');
                                 interactiveItem.className = 'image-preview-item';
                                 interactiveItem.innerHTML = `
-                                    <img id="${imgData.id}" class="image-preview" src="${imgData.src}" style="display:block;" data-original-src="${imgData.originalSrc}" data-annotations='${imgData.annotations}'>
+                                    <img id="${meta.id}" class="image-preview" src="${objectURL}" style="display:block;" data-db-id="${meta.id}" data-annotations='${meta.annotations}'>
                                     <div style="display: flex; gap: 5px; margin-top: 5px;">
-                                        <button type="button" class="add-btn" style="background-color: var(--accent-blue); padding: 4px 8px;" onclick="openAnnotationModal('${imgData.id}')"><span class="material-symbols-outlined" style="font-size: 1.2em;">edit</span></button>
-                                        <button type="button" class="remove-btn" style="padding: 4px 8px;" onclick="this.closest('.image-preview-item').remove(); syncThumbnails(); saveFormData();">&times;</button>
+                                        <button type="button" class="add-btn" style="background-color: var(--accent-blue); padding: 4px 8px;" onclick="openAnnotationModal('${meta.id}')"><span class="material-symbols-outlined" style="font-size: 1.2em;">edit</span></button>
+                                        <button type="button" class="remove-btn" style="padding: 4px 8px;" onclick="removeImage('${meta.id}')">&times;</button>
                                     </div>`;
                                 previewContainer.appendChild(interactiveItem);
 
                                 if (displayContainer) {
                                     const displayImg = document.createElement('img');
                                     displayImg.className = 'image-preview';
-                                    displayImg.src = imgData.originalSrc; // Use original src for previews
-                                    displayImg.dataset.refId = imgData.id;
+                                    displayImg.src = objectURL;
+                                    displayImg.dataset.refId = meta.id;
                                     displayContainer.appendChild(displayImg);
                                 }
-                            });
+                            }
                         }
                     }
                 }
                 
                 Object.keys(data).forEach(key => {
-                    if (['dynamic_photos', 'patracdvr_rows', 'patracdvr_unassigned', 'time_events', 'me_list', 'etat_esprit_list', 'volume_list', 'vehicules_list'].includes(key)) return; 
+                    if (['photos_metadata', 'patracdvr_rows', 'patracdvr_unassigned', 'time_events', 'me_list', 'etat_esprit_list', 'volume_list', 'vehicules_list'].includes(key)) return; 
                     const el = document.getElementById(key);
                     if (el && !Array.isArray(data[key]) && typeof data[key] !== 'object') {
                         el.value = data[key];
@@ -1811,9 +1874,13 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             setContextualTools(null);
         }
 
-        function openAnnotationModal(previewImgId) {
+        async function openAnnotationModal(previewImgId) {
             const previewImg = document.getElementById(previewImgId);
-            if (!previewImg || !previewImg.dataset.originalSrc) return;
+            if (!previewImg) return;
+            const blob = await dbManager.getImage(previewImg.dataset.dbId);
+            if (!blob) return;
+
+            const objectURL = URL.createObjectURL(blob);
             baseImage.onload = () => {
                 canvas.width = baseImage.width;
                 canvas.height = baseImage.height;
@@ -1822,8 +1889,9 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 redrawCanvas();
                 annotationModal.dataset.targetPreviewId = previewImgId;
                 annotationModal.showModal();
+                URL.revokeObjectURL(objectURL);
             };
-            baseImage.src = previewImg.dataset.originalSrc; 
+            baseImage.src = objectURL; 
         }
 
         function redrawCanvas() {
@@ -2137,13 +2205,17 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             }
         }
         
-        function createAnnotatedImageBlob(originalSrc, annotationsData) {
+        async function createAnnotatedImageBlob(imgId, annotationsData) {
+            const blob = await dbManager.getImage(imgId);
+            if (!blob) throw new Error(`Image with ID ${imgId} not found in DB.`);
+            
+            const objectURL = URL.createObjectURL(blob);
+            
             return new Promise((resolve, reject) => {
                 const img = new Image();
-                img.crossOrigin = 'anonymous'; 
-                img.src = originalSrc;
-                
+                img.crossOrigin = 'anonymous';
                 img.onload = () => {
+                    URL.revokeObjectURL(objectURL);
                     tempCanvas.width = img.width;
                     tempCanvas.height = img.height;
                     tempCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
@@ -2151,17 +2223,19 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
 
                     annotationsData.forEach(annotation => drawAnnotationOnContext(tempCtx, img.width, img.height, annotation));
 
-                    tempCanvas.toBlob(blob => {
-                        if (blob) {
-                            const reader = new FileReader();
-                            reader.onloadend = () => resolve(reader.result); 
-                            reader.readAsArrayBuffer(blob);
+                    tempCanvas.toBlob(annotatedBlob => {
+                        if (annotatedBlob) {
+                            annotatedBlob.arrayBuffer().then(resolve);
                         } else {
-                            reject(new Error('La conversion de l\'image annotée en Blob a échoué.'));
+                            reject(new Error('Canvas to Blob conversion failed.'));
                         }
                     }, 'image/jpeg', 0.9);
                 };
-                img.onerror = (e) => reject(new Error(`Impossible de charger l\'image de base pour l\'annotation: ${e.message}`));
+                img.onerror = () => {
+                    URL.revokeObjectURL(objectURL);
+                    reject(new Error('Failed to load image from Object URL for annotation.'));
+                };
+                img.src = objectURL;
             });
         }
         
@@ -2293,1268 +2367,436 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
 
 
         document.addEventListener('DOMContentLoaded', async () => {
-            
-            const isLocalDataLoaded = loadFormData();
-            if (!isLocalDataLoaded) {
-                 await loadDefaultConfig();
-            }
-            
-            initChipContainer('etat_esprit_container', isLocalDataLoaded && JSON.parse(localStorage.getItem('oiFormData')).etat_esprit_list ? JSON.parse(localStorage.getItem('oiFormData')).etat_esprit_list : []);
-            initChipContainer('volume_adversaire_container', isLocalDataLoaded && JSON.parse(localStorage.getItem('oiFormData')).volume_list ? JSON.parse(localStorage.getItem('oiFormData')).volume_list : []);
-
-            setupQuickEditPanel(); 
-
-            document.querySelector('.container').addEventListener('click', (event) => {
-                const header = event.target.closest('.collapsible-header');
-                if (header) { const container = header.parentElement; if (container && container.classList.contains('collapsible-container')) { container.classList.toggle('open'); } }
-            });
-            const modal = document.getElementById('editMemberModal'); const form = document.getElementById('editMemberForm');
-            document.getElementById('modal_saveBtn').addEventListener('click', () => {
-                const buttonId = form.dataset.editingButtonId; const button = document.getElementById(buttonId);
-                if (button) {
-                    button.dataset.trigramme = document.getElementById('modal_trigramme').value;
-                    
-                    for (const key in memberConfig) {
-                        const attrName = key.replace(/s$/, '');
-                        const selectId = 'modal_' + attrName;
-                        const select = document.getElementById(selectId);
-                        if (select) {
-                            button.dataset[attrName] = select.value;
-                        }
-                    }
-                    
-                    updateMemberButtonVisuals(button);
-                    populateQuickEditPanel(buttonId);
-                    saveFormData();
+            try {
+                await dbManager.init();
+                
+                const isLocalDataLoaded = await loadFormData();
+                if (!isLocalDataLoaded) {
+                     await loadDefaultConfig();
                 }
-                modal.close();
-            });
-            document.getElementById('modal_cancelBtn').addEventListener('click', () => modal.close());
-            
-            document.getElementById('modal_deleteBtn').addEventListener('click', () => {
-                const buttonId = form.dataset.editingButtonId; const button = document.getElementById(buttonId);
-                const isUnassigned = button.closest('#unassigned_members_container');
+                
+                initChipContainer('etat_esprit_container', isLocalDataLoaded && JSON.parse(localStorage.getItem('oiFormData')).etat_esprit_list ? JSON.parse(localStorage.getItem('oiFormData')).etat_esprit_list : []);
+                initChipContainer('volume_adversaire_container', isLocalDataLoaded && JSON.parse(localStorage.getItem('oiFormData')).volume_list ? JSON.parse(localStorage.getItem('oiFormData')).volume_list : []);
 
-                if (!button) return;
+                setupQuickEditPanel(); 
 
-                if (isUnassigned) {
-                    if(confirm(`Voulez-vous vraiment SUPPRIMER DÉFINITIVEMENT le membre ${button.dataset.trigramme || 'N/A'}? Cette action est irréversible.`)) {
-                        button.remove(); 
-                        saveFormData(); 
-                        modal.close(); 
-                        activeMemberId = null;
-                        document.getElementById('quickEditPanel').style.display = 'none';
-                    }
-                } else {
-                    if(confirm(`Voulez-vous renvoyer le membre ${button.dataset.trigramme || 'N/A'} dans la section "Personnel à attribuer"?`)) {
-                        button.dataset.cellule = 'Sans'; 
-                        button.dataset.fonction = 'Sans'; 
+                document.querySelector('.container').addEventListener('click', (event) => {
+                    const header = event.target.closest('.collapsible-header');
+                    if (header) { const container = header.parentElement; if (container && container.classList.contains('collapsible-container')) { container.classList.toggle('open'); } }
+                });
+                const modal = document.getElementById('editMemberModal'); const form = document.getElementById('editMemberForm');
+                document.getElementById('modal_saveBtn').addEventListener('click', () => {
+                    const buttonId = form.dataset.editingButtonId; const button = document.getElementById(buttonId);
+                    if (button) {
+                        button.dataset.trigramme = document.getElementById('modal_trigramme').value;
+                        for (const key in memberConfig) {
+                            const attrName = key.replace(/s$/, '');
+                            const selectId = 'modal_' + attrName;
+                            const select = document.getElementById(selectId);
+                            if (select) {
+                                button.dataset[attrName] = select.value;
+                            }
+                        }
                         updateMemberButtonVisuals(button);
-                        unassignedContainer.appendChild(button);
-                        saveFormData(); 
-                        modal.close(); 
-                        activeMemberId = null;
-                        document.getElementById('quickEditPanel').style.display = 'none';
+                        populateQuickEditPanel(buttonId);
+                        saveFormData();
                     }
-                }
-            });
-            
-            const dockMenu = document.getElementById('dockMenu'); const dockToggleBtn = document.getElementById('dockToggleBtn');
-            dockToggleBtn.addEventListener('click', (event) => { event.stopPropagation(); dockMenu.classList.toggle('collapsed'); localStorage.setItem('dockCollapsed', dockMenu.classList.contains('collapsed')); });
-            document.getElementById('darkModeToggle').addEventListener('click', () => {
-                document.body.classList.toggle('light-mode'); document.body.classList.toggle('dark-mode');
-                const isDarkMode = document.body.classList.contains('dark-mode');
-                localStorage.setItem('theme', isDarkMode ? 'dark' : 'light');
-                document.getElementById('darkModeIcon').textContent = isDarkMode ? 'nightlight' : 'clear_day';
-            });
-            document.getElementById('settingsBtn').addEventListener('click', () => {
-                const settingsModal = document.getElementById('settingsModal');
-                document.getElementById('geminiApiKey').value = localStorage.getItem('geminiApiKey') || '';
-                settingsModal.showModal();
-            });
-            document.getElementById('settings_closeBtn').addEventListener('click', () => {
-                document.getElementById('settingsModal').close();
-            });
-            document.getElementById('settings_saveBtn').addEventListener('click', () => {
-                const apiKey = document.getElementById('geminiApiKey').value;
-                if (apiKey) {
-                    localStorage.setItem('geminiApiKey', apiKey);
-                    alert("Clé API sauvegardée.");
-                    document.getElementById('settingsModal').close();
-                } else {
-                    alert("Veuillez saisir une clé API.");
-                }
-            });
-            document.getElementById('resetBtn').addEventListener('click', () => { 
-                if (confirm("Voulez-vous vraiment réinitialiser tout le formulaire?")) { 
-                    localStorage.removeItem('oiFormData'); 
-                    localStorage.removeItem('quotaAlertShown'); 
-                    location.reload(); 
-                } 
-            });
-            document.getElementById('tutorialBtn').addEventListener('click', startTutorial);
-            
-            importJsonConfigBtn.addEventListener('click', () => {
-                 jsonConfigInput.click();
-            });
-            
-            jsonConfigInput.addEventListener('change', (event) => {
-                const file = event.target.files[0];
-                if (!file) { return; }
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    try {
-                        const config = JSON.parse(e.target.result);
-                        if (config && (Array.isArray(config.members) || config.options)) {
-                            patracdvrContainer.innerHTML = ''; 
-                            loadConfigObject(config); 
+                    modal.close();
+                });
+                document.getElementById('modal_cancelBtn').addEventListener('click', () => modal.close());
+                
+                document.getElementById('modal_deleteBtn').addEventListener('click', () => {
+                    const buttonId = form.dataset.editingButtonId; const button = document.getElementById(buttonId);
+                    const isUnassigned = button.closest('#unassigned_members_container');
+                    if (!button) return;
+                    if (isUnassigned) {
+                        if(confirm(`Voulez-vous vraiment SUPPRIMER DÉFINITIVEMENT le membre ${button.dataset.trigramme || 'N/A'}? Cette action est irréversible.`)) {
+                            button.remove(); 
+                            saveFormData(); 
+                            modal.close(); 
+                            activeMemberId = null;
+                            document.getElementById('quickEditPanel').style.display = 'none';
                         }
-                        else { alert("Le fichier JSON est invalide ou ne contient pas de tableau 'members' ou d'objet 'options'."); }
-                    } catch (err) { alert("Erreur de lecture du JSON."); console.error(err); }
-                    location.reload(); 
-                };
-                reader.readAsText(file);
-                event.target.value = null; 
-            });
+                    } else {
+                        if(confirm(`Voulez-vous renvoyer le membre ${button.dataset.trigramme || 'N/A'} dans la section "Personnel à attribuer"?`)) {
+                            button.dataset.cellule = 'Sans'; 
+                            button.dataset.fonction = 'Sans'; 
+                            updateMemberButtonVisuals(button);
+                            unassignedContainer.appendChild(button);
+                            saveFormData(); 
+                            modal.close(); 
+                            activeMemberId = null;
+                            document.getElementById('quickEditPanel').style.display = 'none';
+                        }
+                    }
+                });
+                
+                const dockMenu = document.getElementById('dockMenu'); 
+                const dockToggleBtn = document.getElementById('dockToggleBtn');
+                dockToggleBtn.addEventListener('click', (event) => { event.stopPropagation(); dockMenu.classList.toggle('collapsed'); localStorage.setItem('dockCollapsed', dockMenu.classList.contains('collapsed')); });
+                document.getElementById('darkModeToggle').addEventListener('click', () => {
+                    document.body.classList.toggle('light-mode'); document.body.classList.toggle('dark-mode');
+                    const isDarkMode = document.body.classList.contains('dark-mode');
+                    localStorage.setItem('theme', isDarkMode ? 'dark' : 'light');
+                    document.getElementById('darkModeIcon').textContent = isDarkMode ? 'nightlight' : 'clear_day';
+                });
+                document.getElementById('settingsBtn').addEventListener('click', () => {
+                    const settingsModal = document.getElementById('settingsModal');
+                    document.getElementById('geminiApiKey').value = localStorage.getItem('geminiApiKey') || '';
+                    settingsModal.showModal();
+                });
+                document.getElementById('settings_closeBtn').addEventListener('click', () => document.getElementById('settingsModal').close());
+                document.getElementById('settings_saveBtn').addEventListener('click', () => {
+                    const apiKey = document.getElementById('geminiApiKey').value;
+                    if (apiKey) {
+                        localStorage.setItem('geminiApiKey', apiKey);
+                        alert("Clé API sauvegardée.");
+                        document.getElementById('settingsModal').close();
+                    } else {
+                        alert("Veuillez saisir une clé API.");
+                    }
+                });
+                document.getElementById('resetBtn').addEventListener('click', async () => { 
+                    if (confirm("Voulez-vous vraiment réinitialiser tout le formulaire et supprimer toutes les photos stockées ?")) { 
+                        localStorage.clear(); 
+                        await dbManager.clearAllImages();
+                        location.reload(); 
+                    } 
+                });
+                document.getElementById('tutorialBtn').addEventListener('click', startTutorial);
+                
+                importJsonConfigBtn.addEventListener('click', () => jsonConfigInput.click());
+                
+                jsonConfigInput.addEventListener('change', (event) => {
+                    const file = event.target.files[0];
+                    if (!file) { return; }
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        try {
+                            const config = JSON.parse(e.target.result);
+                            if (config && (Array.isArray(config.members) || config.options)) {
+                                patracdvrContainer.innerHTML = ''; 
+                                loadConfigObject(config); 
+                            }
+                            else { alert("Le fichier JSON est invalide ou ne contient pas de tableau 'members' ou d'objet 'options'."); }
+                        } catch (err) { alert("Erreur de lecture du JSON."); console.error(err); }
+                        location.reload(); 
+                    };
+                    reader.readAsText(file);
+                    event.target.value = null; 
+                });
 
-            importDefaultConfigBtn.addEventListener('click', () => {
-                if(confirm("Ceci va remplacer la configuration PATRACDVR et les options d'équipement actuelles. Continuer?")) {
-                    loadDefaultConfig();
-                }
-            });
-            
-            retexReportBtn.addEventListener('click', () => {
-                 const dateOp = document.getElementById('date_op').value;
-                 const nomAdversaire = document.getElementById('nom_adversaire').value;
-                 if (!dateOp || !nomAdversaire) {
-                    alert("Veuillez renseigner la date de l'opération et le nom de l'adversaire pour créer le lien RETEX.");
-                    return;
-                 }
-                 const safeAdversaireName = nomAdversaire.trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
-                 const oiId = `${dateOp}_${safeAdversaireName}`;
-                 const retexUrl = `${RETEX_BASE_URL}?oiId=${encodeURIComponent(oiId)}`;
-                 window.open(retexUrl, '_blank');
-            });
-            
-            resetPatracdvrBtn.addEventListener('click', () => { 
-                if (confirm("Voulez-vous vraiment effacer TOUS les véhicules et membres du PATRACDVR et vider la sauvegarde locale des membres ?")) { 
-                    patracdvrContainer.innerHTML = ''; 
-                    unassignedContainer.innerHTML = ''; 
-                    localStorage.removeItem('oiFormData'); 
-                    saveFormData(); 
-                    alert("PATRACDVR réinitialisé. La prochaine fois, une configuration par défaut sera chargée (si disponible).");
-                } 
-            });
-            
-            const vehicleCreationContainer = document.getElementById('vehicle_creation_buttons');
-            availableVehicles.forEach(vehicle => {
-                const btn = document.createElement('button');
-                btn.type = 'button';
-                btn.className = 'add-btn add-vehicle-btn';
-                btn.textContent = `➕ ${vehicle}`;
-                btn.addEventListener('click', () => addPatracdvrRow(vehicle));
-                vehicleCreationContainer.insertBefore(btn, document.getElementById('addManualVehicleBtn'));
-            });
+                importDefaultConfigBtn.addEventListener('click', () => {
+                    if(confirm("Ceci va remplacer la configuration PATRACDVR et les options d'équipement actuelles. Continuer?")) {
+                        loadDefaultConfig();
+                    }
+                });
+                
+                retexReportBtn.addEventListener('click', () => {
+                     const dateOp = document.getElementById('date_op').value;
+                     const nomAdversaire = document.getElementById('nom_adversaire').value;
+                     if (!dateOp || !nomAdversaire) {
+                        alert("Veuillez renseigner la date de l'opération et le nom de l'adversaire pour créer le lien RETEX.");
+                        return;
+                     }
+                     const safeAdversaireName = nomAdversaire.trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
+                     const oiId = `${dateOp}_${safeAdversaireName}`;
+                     const retexUrl = `${RETEX_BASE_URL}?oiId=${encodeURIComponent(oiId)}`;
+                     window.open(retexUrl, '_blank');
+                });
+                
+                resetPatracdvrBtn.addEventListener('click', () => { 
+                    if (confirm("Voulez-vous vraiment effacer TOUS les véhicules et membres du PATRACDVR et vider la sauvegarde locale des membres ?")) { 
+                        patracdvrContainer.innerHTML = ''; 
+                        unassignedContainer.innerHTML = ''; 
+                        const currentData = JSON.parse(localStorage.getItem('oiFormData') || '{}');
+                        delete currentData.patracdvr_rows;
+                        delete currentData.patracdvr_unassigned;
+                        localStorage.setItem('oiFormData', JSON.stringify(currentData));
+                        saveFormData(); 
+                        alert("PATRACDVR réinitialisé. La prochaine fois, une configuration par défaut sera chargée (si disponible).");
+                    } 
+                });
+                
+                const vehicleCreationContainer = document.getElementById('vehicle_creation_buttons');
+                availableVehicles.forEach(vehicle => {
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = 'add-btn add-vehicle-btn';
+                    btn.textContent = `➕ ${vehicle}`;
+                    btn.addEventListener('click', () => addPatracdvrRow(vehicle));
+                    vehicleCreationContainer.insertBefore(btn, document.getElementById('addManualVehicleBtn'));
+                });
 
-            document.getElementById('addManualVehicleBtn').addEventListener('click', addManualVehicle);
-            document.getElementById('addManualMemberBtn').addEventListener('click', addManualMember);
+                document.getElementById('addManualVehicleBtn').addEventListener('click', addManualVehicle);
+                document.getElementById('addManualMemberBtn').addEventListener('click', addManualMember);
 
-            document.querySelector('.wizard-step:has(#patracdvr_container)').addEventListener('click', handleMemberSelection);
+                document.querySelector('.wizard-step:has(#patracdvr_container)').addEventListener('click', handleMemberSelection);
 
-            document.getElementById('quickEditPanel').addEventListener('click', (event) => {
-                event.stopPropagation();
-                const target = event.target;
-                const quickEditButton = target.closest('.quick-edit-btn');
-                const fullEditButton = target.closest('#fullEditBtn');
+                document.getElementById('quickEditPanel').addEventListener('click', (event) => {
+                    event.stopPropagation();
+                    const target = event.target;
+                    const quickEditButton = target.closest('.quick-edit-btn');
+                    const fullEditButton = target.closest('#fullEditBtn');
 
-                if (quickEditButton && activeMemberId) {
+                    if (quickEditButton && activeMemberId) {
+                        const activeMember = document.getElementById(activeMemberId);
+                        if (!activeMember) return;
+                        const attribute = quickEditButton.dataset.attribute;
+                        const value = quickEditButton.dataset.value;
+                        activeMember.dataset[attribute] = value;
+                        
+                        if (attribute === 'cellule' && value === 'Sans') {
+                            activeMember.dataset.fonction = 'Sans';
+                        }
+                        if (attribute === 'fonction' && value !== 'Sans' && activeMember.dataset.cellule === 'Sans') {
+                            activeMember.dataset.cellule = 'India 1'; 
+                        }
+                        
+                        updateMemberButtonVisuals(activeMember);
+                        const group = quickEditButton.parentElement;
+                        group.querySelectorAll('.quick-edit-btn').forEach(btn => btn.classList.remove('selected'));
+                        quickEditButton.classList.add('selected');
+                        saveFormData();
+                    } else if (fullEditButton && activeMemberId) {
+                        openMemberModal(activeMemberId);
+                    }
+                });
+
+                const quickEditModal = document.getElementById('quickEditModal');
+                document.getElementById('quick_modal_closeBtn').addEventListener('click', () => quickEditModal.close());
+                quickEditModal.addEventListener('click', (event) => {
+                    const target = event.target.closest('.quick-edit-btn');
+                    if (!target || !activeMemberId) return;
+
                     const activeMember = document.getElementById(activeMemberId);
                     if (!activeMember) return;
-                    const attribute = quickEditButton.dataset.attribute;
-                    const value = quickEditButton.dataset.value;
+
+                    const attribute = target.dataset.attribute;
+                    const value = target.dataset.value;
+
                     activeMember.dataset[attribute] = value;
                     
                     if (attribute === 'cellule' && value === 'Sans') {
                         activeMember.dataset.fonction = 'Sans';
                     }
                     if (attribute === 'fonction' && value !== 'Sans' && activeMember.dataset.cellule === 'Sans') {
-                        activeMember.dataset.cellule = 'India 1'; 
+                        activeMember.dataset.cellule = 'India 1';
                     }
                     
                     updateMemberButtonVisuals(activeMember);
-                    const group = quickEditButton.parentElement;
-                    group.querySelectorAll('.quick-edit-btn').forEach(btn => btn.classList.remove('selected'));
-                    quickEditButton.classList.add('selected');
+                    
+                    const group = target.closest('.quick-edit-options');
+                    if(group) {
+                        group.querySelectorAll('.quick-edit-btn').forEach(btn => btn.classList.remove('selected'));
+                    }
+                    target.classList.add('selected');
+
                     saveFormData();
-                } else if (fullEditButton && activeMemberId) {
-                    openMemberModal(activeMemberId);
-                }
-            });
+                });
 
-            const quickEditModal = document.getElementById('quickEditModal');
-            document.getElementById('quick_modal_closeBtn').addEventListener('click', () => quickEditModal.close());
-            quickEditModal.addEventListener('click', (event) => {
-                const target = event.target.closest('.quick-edit-btn');
-                if (!target || !activeMemberId) return;
 
-                const activeMember = document.getElementById(activeMemberId);
-                if (!activeMember) return;
-
-                const attribute = target.dataset.attribute;
-                const value = target.dataset.value;
-
-                activeMember.dataset[attribute] = value;
+                canvas.addEventListener('mousedown', handleDrawStart); canvas.addEventListener('mousemove', handleDrawMove);
+                canvas.addEventListener('mouseup', handleDrawEnd); canvas.addEventListener('mouseout', handleDrawEnd);
+                canvas.addEventListener('touchstart', handleDrawStart, { passive: false }); 
+                canvas.addEventListener('touchmove', handleDrawMove, { passive: false });
+                canvas.addEventListener('touchend', handleDrawEnd);
                 
-                if (attribute === 'cellule' && value === 'Sans') {
-                    activeMember.dataset.fonction = 'Sans';
-                }
-                if (attribute === 'fonction' && value !== 'Sans' && activeMember.dataset.cellule === 'Sans') {
-                    activeMember.dataset.cellule = 'India 1';
-                }
-                
-                updateMemberButtonVisuals(activeMember);
-                
-                const group = target.closest('.quick-edit-options');
-                if(group) {
-                    group.querySelectorAll('.quick-edit-btn').forEach(btn => btn.classList.remove('selected'));
-                }
-                target.classList.add('selected');
-
-                saveFormData();
-            });
-
-
-            canvas.addEventListener('mousedown', handleDrawStart); canvas.addEventListener('mousemove', handleDrawMove);
-            canvas.addEventListener('mouseup', handleDrawEnd); canvas.addEventListener('mouseout', handleDrawEnd);
-            canvas.addEventListener('touchstart', handleDrawStart, { passive: false }); 
-            canvas.addEventListener('touchmove', handleDrawMove, { passive: false });
-            canvas.addEventListener('touchend', handleDrawEnd);
-            
-            document.querySelectorAll('.toolbar-main-tools .tool-btn').forEach(btn => {
-                btn.addEventListener('click', () => { const toolId = btn.id.split('_')[1]; if (['move', 'location', 'arrow', 'box'].includes(toolId)) setActiveTool(toolId); });
-            });
-            document.getElementById('tool_reset').addEventListener('click', () => { annotations = []; selectedAnnotation = null; setContextualTools(null); redrawCanvas();});
-            document.getElementById('annotation_cancel').addEventListener('click', () => annotationModal.close());
-            document.getElementById('annotation_save').addEventListener('click', () => {
-                const targetId = annotationModal.dataset.targetPreviewId; 
-                const previewImg = document.getElementById(targetId);
-                if(previewImg) {
-                    previewImg.dataset.annotations = JSON.stringify(annotations);
-                }
-                saveFormData(); 
-                annotationModal.close();
-            });
-            
-            rotationInput.addEventListener('change', updateAnnotationRotation);
-
-            document.getElementById('delete_btn').addEventListener('click', () => { if(selectedAnnotation){ annotations = annotations.filter(ann => ann !== selectedAnnotation); selectedAnnotation = null; setContextualTools(null); redrawCanvas(); } });
-            document.getElementById('edit_text_btn').addEventListener('click', () => { if(selectedAnnotation && selectedAnnotation.type === 'location'){ const newText = prompt('Modifier texte:', selectedAnnotation.text); if(newText !== null){ selectedAnnotation.text = newText; redrawCanvas(); } } });
-            
-            const importSessionBtn = document.getElementById('importSessionBtn');
-            const exportSessionBtn = document.getElementById('exportSessionBtn');
-            const sessionFileInput = document.getElementById('sessionFileInput');
-            importSessionBtn.addEventListener('click', () => sessionFileInput.click());
-            exportSessionBtn.addEventListener('click', () => {
-                saveFormData();
-                const dataString = localStorage.getItem('oiFormData');
-                if (!dataString) { alert("Aucune donnée à exporter."); return; }
-                const blob = new Blob([dataString], {type: 'application/json'});
-                const url = URL.createObjectURL(blob);
-                const link = document.createElement('a');
-                const date = new Date().toISOString().slice(0, 10);
-                link.download = `OI_Session_${date}.json`;
-                link.href = url;
-                link.click();
-                URL.revokeObjectURL(url);
-            });
-            sessionFileInput.addEventListener('change', (event) => {
-                const file = event.target.files[0];
-                if (!file) return;
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    try {
-                        const jsonContent = e.target.result;
-                        JSON.parse(jsonContent);
-                        localStorage.setItem('oiFormData', jsonContent);
-                        alert("Session importée avec succès. Rechargement de la page.");
-                        location.reload();
-                    } catch (err) {
-                        alert("Fichier invalide ou corrompu.");
+                document.querySelectorAll('.toolbar-main-tools .tool-btn').forEach(btn => {
+                    btn.addEventListener('click', () => { const toolId = btn.id.split('_')[1]; if (['move', 'location', 'arrow', 'box'].includes(toolId)) setActiveTool(toolId); });
+                });
+                document.getElementById('tool_reset').addEventListener('click', () => { annotations = []; selectedAnnotation = null; setContextualTools(null); redrawCanvas();});
+                document.getElementById('annotation_cancel').addEventListener('click', () => annotationModal.close());
+                document.getElementById('annotation_save').addEventListener('click', () => {
+                    const targetId = annotationModal.dataset.targetPreviewId; 
+                    const previewImg = document.getElementById(targetId);
+                    if(previewImg) {
+                        previewImg.dataset.annotations = JSON.stringify(annotations);
                     }
-                };
-                reader.readAsText(file);
-                event.target.value = null;
-            });
-
-            document.addEventListener('dragstart', e => { 
-                const target = e.target.closest('.patracdvr-member-btn, .time-item');
-                if (target && target.classList.contains('draggable')) { 
-                    draggedItem = target; 
-                    e.dataTransfer.setData('text/plain', target.id);
-                    setTimeout(() => target.classList.add('dragging'), 0); 
-                } 
-            });
-
-            document.addEventListener('dragend', () => { 
-                if (draggedItem) { 
-                    draggedItem.classList.remove('dragging'); 
-                    draggedItem = null; 
-                } 
-            });
-
-            const dropContainers = document.querySelectorAll('.patracdvr-members-container, #unassigned_members_container');
-            dropContainers.forEach(container => {
-                container.addEventListener('dragenter', handleDragEnter);
-                container.addEventListener('dragleave', handleDragLeave);
-                container.addEventListener('dragover', handleDragOver); 
-                container.addEventListener('drop', handleDrop);
-            });
-
-            document.addEventListener('dragover', e => {
-                e.preventDefault();
-                const targetContainer = e.target.closest('#time_events_container');
-                if (targetContainer && draggedItem && draggedItem.classList.contains('time-item')) {
-                    const afterElement = getDragAfterElement(targetContainer, e.clientY);
-                    if (afterElement == null) { targetContainer.appendChild(draggedItem); } 
-                    else { targetContainer.insertBefore(draggedItem, afterElement); }
-                }
-            });
-            
-            async function downloadOiPdf() {
-                if (typeof PDFLib === 'undefined') { alert("Erreur: La bibliothèque PDF n'est pas encore chargée."); return; }
-                const btn = downloadPdfBtn;
-                const originalText = btn.textContent;
-                btn.textContent = 'Génération en cours...'; btn.disabled = true;
+                    saveFormData(); 
+                    annotationModal.close();
+                });
                 
-                try {
-                    const result = await buildPdf();
-                    if (!result) { 
-                        alert("La génération a échoué. Vérifiez vos données.");
-                        return; 
-                    }
-                    const { pdfBytes, formData } = result;
-                    const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+                rotationInput.addEventListener('change', updateAnnotationRotation);
+
+                document.getElementById('delete_btn').addEventListener('click', () => { if(selectedAnnotation){ annotations = annotations.filter(ann => ann !== selectedAnnotation); selectedAnnotation = null; setContextualTools(null); redrawCanvas(); } });
+                document.getElementById('edit_text_btn').addEventListener('click', () => { if(selectedAnnotation && selectedAnnotation.type === 'location'){ const newText = prompt('Modifier texte:', selectedAnnotation.text); if(newText !== null){ selectedAnnotation.text = newText; redrawCanvas(); } } });
+                
+                const importSessionBtn = document.getElementById('importSessionBtn');
+                const exportSessionBtn = document.getElementById('exportSessionBtn');
+                const sessionFileInput = document.getElementById('sessionFileInput');
+                importSessionBtn.addEventListener('click', () => sessionFileInput.click());
+                exportSessionBtn.addEventListener('click', () => {
+                    saveFormData();
+                    const dataString = localStorage.getItem('oiFormData');
+                    if (!dataString) { alert("Aucune donnée à exporter."); return; }
+                    const blob = new Blob([dataString], {type: 'application/json'});
                     const url = URL.createObjectURL(blob);
-                    
-                    const getVal = (id) => formData[id] || 'RAS';
                     const link = document.createElement('a');
+                    const date = new Date().toISOString().slice(0, 10);
+                    link.download = `OI_Session_${date}.json`;
                     link.href = url;
-                    link.download = `OI_${getVal('date_op').replace(/[\/\\?%*:|"<>]/g, '-')}_${getVal('nom_adversaire').replace(/ /g, '_')}.pdf`;
-                    document.body.appendChild(link); 
-                    link.click(); 
-                    document.body.removeChild(link);
-                    
-                    alert("Le document PDF a été téléchargé.");
-                    
-                } catch (error) {
-                    console.error("Erreur critique lors de la génération du PDF:", error);
-                    alert("Une erreur critique est survenue lors de la génération du PDF. Consultez la console (F12).");
-                } finally {
-                    btn.textContent = originalText; btn.disabled = false;
-                }
-            }
-
-            function openPresentationMode() {
-                const presentationContent = document.getElementById('presentation-content');
-                
-                if (!presentationModal) {
-                    console.error("Modale 'presentationModal' non trouvée.");
-                    return;
-                }
-
-                if(!checkCoherence()) {
-                     alert("Attention: Des incohérences ont été détectées. Veuillez les vérifier dans la section Finalisation avant de générer.");
-                }
-
-                presentationContent.innerHTML = '<h2>Chargement de l\'aperçu...</h2><p style="text-align:center;">Veuillez patienter pendant la compilation des images annotées.</p>';
-
-                if(typeof presentationModal.showModal === 'function') {
-                    presentationModal.showModal();
-                } else {
-                    presentationModal.style.display = 'block';
-                }
-                
-                buildPresentationHtml().then(html => {
-                    presentationContent.innerHTML = html;
-                }).catch(err => {
-                    console.error("Erreur lors de la construction de l'aperçu HTML:", err);
-                    const dangerColor = document.body.classList.contains('dark-mode') ? '#c0392b' : '#c0392b';
-                    presentationContent.innerHTML = '<h2>Erreur d\'affichage</h2><p style="color:' + dangerColor + ';">Une erreur est survenue lors de la compilation des images annotées pour l\'aperçu. Réessayez ou vérifiez la console.</p>';
+                    link.click();
+                    URL.revokeObjectURL(url);
                 });
-            }
-
-            previewBtn.addEventListener('click', openPresentationMode);
-            downloadPdfBtn.addEventListener('click', downloadOiPdf);
-
-            if (document.getElementById('closePresentationModalBtn')) {
-                document.getElementById('closePresentationModalBtn').addEventListener('click', () => {
-                    if (presentationModal) {
-                         if(typeof presentationModal.close === 'function') {
-                            presentationModal.close();
-                        } else {
-                            presentationModal.style.display = 'none';
+                sessionFileInput.addEventListener('change', async (event) => {
+                    const file = event.target.files[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = async (e) => {
+                        try {
+                            const jsonContent = e.target.result;
+                            JSON.parse(jsonContent);
+                            await dbManager.clearAllImages();
+                            localStorage.setItem('oiFormData', jsonContent);
+                            alert("Session importée avec succès. Rechargement de la page.");
+                            location.reload();
+                        } catch (err) {
+                            alert("Fichier invalide ou corrompu.");
                         }
+                    };
+                    reader.readAsText(file);
+                    event.target.value = null;
+                });
+
+                document.addEventListener('dragstart', e => { 
+                    const target = e.target.closest('.patracdvr-member-btn, .time-item');
+                    if (target && target.classList.contains('draggable')) { 
+                        draggedItem = target; 
+                        e.dataTransfer.setData('text/plain', target.id);
+                        setTimeout(() => target.classList.add('dragging'), 0); 
+                    } 
+                });
+
+                document.addEventListener('dragend', () => { 
+                    if (draggedItem) { 
+                        draggedItem.classList.remove('dragging'); 
+                        draggedItem = null; 
+                    } 
+                });
+
+                const dropContainers = document.querySelectorAll('.patracdvr-members-container, #unassigned_members_container');
+                dropContainers.forEach(container => {
+                    container.addEventListener('dragenter', handleDragEnter);
+                    container.addEventListener('dragleave', handleDragLeave);
+                    container.addEventListener('dragover', handleDragOver); 
+                    container.addEventListener('drop', handleDrop);
+                });
+
+                document.addEventListener('dragover', e => {
+                    e.preventDefault();
+                    const targetContainer = e.target.closest('#time_events_container');
+                    if (targetContainer && draggedItem && draggedItem.classList.contains('time-item')) {
+                        const afterElement = getDragAfterElement(targetContainer, e.clientY);
+                        if (afterElement == null) { targetContainer.appendChild(draggedItem); } 
+                        else { targetContainer.insertBefore(draggedItem, afterElement); }
                     }
                 });
-            }
-
-
-            retexFileInput.addEventListener('change', (event) => {
-                const files = event.target.files;
-                let fileNames = [];
                 
-                if (files.length === 0) {
-                    retexFileNames.textContent = 'Aucun fichier sélectionné';
-                    retexStatus.textContent = '';
-                    generateRetexPdfBtn.style.display = 'none';
-                    return;
-                }
-                
-                fileNames = Array.from(files).map(f => f.name);
-                retexFileNames.textContent = fileNames.join(', ');
-                retexStatus.textContent = `${fileNames.length} fichier(s) sélectionné(s). Prêt pour l'analyse.`;
-                retexOutput.style.display = 'none';
-            });
+                previewBtn.addEventListener('click', openPresentationMode);
+                downloadPdfBtn.addEventListener('click', downloadOiPdf);
 
-            async function generateGeminiAnalysis(reports) {
-                const apiKey = localStorage.getItem('geminiApiKey');
-                if (!apiKey) {
-                    retexStatus.textContent = "Erreur: Clé API Gemini non configurée. Allez dans Paramètres.";
-                    return null;
-                }
-                
-                const formattedReports = reports.map(report => JSON.stringify(report, null, 2)).join('\n\n--- Rapport suivant ---\n\n');
-
-                const prompt = `
-                Tu es un analyste tactique de la Gendarmerie Française.
-                Ton rôle est de synthétiser des rapports de retour d'expérience (RETEX) suite à des opérations de police judiciaire.
-                L'objectif est de produire une analyse impartiale et objective, en te basant uniquement sur les faits rapportés, sans émettre de jugement personnel.
-
-                **Tâche:**
-                Prends en compte les comptes-rendus RETEX fournis ci-dessous.
-                Identifie les points clés et les enseignements à tirer de l'opération.
-                Classe et structure ta synthèse en trois sections principales, chacune avec des sous-sections claires:
-                1.  **Points Forts:** Ce qui a bien fonctionné.
-                    * Coordination:
-                    * Matériel/Équipement:
-                    * Tactique:
-                2.  **Points Faibles:** Ce qui a posé problème.
-                    * Communication:
-                    * Préparation:
-                    * Exécution:
-                3.  **Axe d'Amélioration:** Recommandations concrètes et concises pour de futures opérations.
-                    * Formation:
-                    * Procédure:
-                    * Équipement:
-
-                **Contenu des rapports RETEX:**
-                ${formattedReports}
-
-                **Format de la réponse:**
-                Utilise le format Markdown pour ta réponse. Respecte scrupuleusement les en-têtes et sous-en-têtes demandés.
-                Ne te base que sur les informations que je te donne et ne spécule pas sur des éléments extérieurs.
-                S'il n'y a pas d'informations pour une section, écris "RAS" (Rien À Signaler).
-                Reste professionnel et factuel. N'utilise pas de phrases trop longues.
-                Commence ta réponse par "### Rapport d'Analyse Opérationnelle".
-                `;
-
-                try {
-                    retexStatus.textContent = "Analyse en cours par l'IA...";
-                    const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
-                        method: 'POST',
-                        headers: { 
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-                    });
-
-                    if (!response.ok) {
-                        const errorData = await response.json();
-                        throw new Error(`Erreur API: ${response.status} - ${JSON.stringify(errorData)}`);
-                    }
-
-                    const data = await response.json();
-                    const textOutput = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-
-                    if (textOutput) {
-                        retexStatus.textContent = "Analyse terminée.";
-                        return marked.parse(textOutput);
-                    } else {
-                        retexStatus.textContent = "Analyse terminée, mais aucune réponse significative n'a été reçue.";
-                        return "<p>Aucune réponse significative de l'IA.</p>";
-                    }
-                } catch (error) {
-                    console.error("Erreur lors de la génération de l'analyse:", error);
-                    retexStatus.textContent = `Erreur: ${error.message}`;
-                    return null;
-                }
-            }
-
-            async function generateRetexPdf() {
-                if (typeof window.jspdf === 'undefined' || typeof window.html2canvas === 'undefined') {
-                    alert("Erreur: Les bibliothèques de génération PDF ne sont pas chargées.");
-                    return;
-                }
-                const btn = generateRetexPdfBtn;
-                const originalText = btn.textContent;
-                btn.textContent = 'Génération PDF en cours...'; 
-                btn.disabled = true;
-
-                try {
-                    const { jsPDF } = window.jspdf;
-                    const doc = new jsPDF('p', 'pt', 'a4', true);
-                    const content = document.getElementById('retex_output');
-                    
-                    const originalDisplay = content.style.display;
-                    content.style.display = 'block';
-
-                    const canvas = await html2canvas(content, {
-                        scale: 2, 
-                        logging: false,
-                        useCORS: true
-                    });
-
-                    content.style.display = originalDisplay; 
-
-                    const imgData = canvas.toDataURL('image/jpeg', 1.0);
-                    const imgWidth = 550; 
-                    const pageHeight = 842; 
-                    const imgHeight = canvas.height * imgWidth / canvas.width;
-                    let heightLeft = imgHeight;
-
-                    let position = 0; 
-                    const margin = 20;
-
-                    doc.addImage(imgData, 'JPEG', margin, margin, imgWidth, imgHeight);
-                    heightLeft -= pageHeight;
-
-                    while (heightLeft >= 0) {
-                        position = heightLeft - imgHeight;
-                        doc.addPage();
-                        doc.addImage(imgData, 'JPEG', margin, position + margin, imgWidth, imgHeight);
-                        heightLeft -= pageHeight;
-                    }
-
-                    doc.save('Rapport_Retex.pdf');
-                    retexStatus.textContent = 'Rapport PDF généré et téléchargé.';
-
-                } catch (error) {
-                    console.error("Erreur lors de la génération du PDF RETEX:", error);
-                    alert("Une erreur est survenue lors de la génération du PDF du rapport. Consultez la console (F12).");
-                } finally {
-                    btn.textContent = originalText;
-                    btn.disabled = false;
-                }
-            }
-
-            launchRetexAnalysisBtn.addEventListener('click', async (event) => {
-                event.preventDefault(); 
-                
-                const files = retexFileInput.files;
-                if (files.length === 0) {
-                    retexStatus.textContent = "Veuillez sélectionner au moins un fichier JSON.";
-                    return;
-                }
-                retexOutput.innerHTML = '';
-                retexOutput.style.display = 'none';
-                generateRetexPdfBtn.style.display = 'none';
-                retexStatus.textContent = 'Lecture et analyse des fichiers en cours...';
-
-                let allReports = [];
-                const promises = Array.from(files).map(file => {
-                    return new Promise((resolve) => {
-                        const reader = new FileReader();
-                        reader.onload = (e) => {
-                            try {
-                                const jsonData = JSON.parse(e.target.result);
-                                allReports.push(jsonData);
-                            } catch (error) {
-                                console.error(`Erreur de lecture du fichier ${file.name}:`, error);
+                if (document.getElementById('closePresentationModalBtn')) {
+                    document.getElementById('closePresentationModalBtn').addEventListener('click', () => {
+                        if (presentationModal) {
+                             if(typeof presentationModal.close === 'function') {
+                                presentationModal.close();
+                            } else {
+                                presentationModal.style.display = 'none';
                             }
-                            resolve();
-                        };
-                        reader.onerror = (e) => {
-                            console.error(`Erreur de lecture du fichier ${file.name}:`, e);
-                            resolve(); 
                         }
-                        reader.readAsText(file);
                     });
+                }
+
+
+                retexFileInput.addEventListener('change', (event) => {
+                    const files = event.target.files;
+                    let fileNames = [];
+                    
+                    if (files.length === 0) {
+                        retexFileNames.textContent = 'Aucun fichier sélectionné';
+                        retexStatus.textContent = '';
+                        generateRetexPdfBtn.style.display = 'none';
+                        return;
+                    }
+                    
+                    fileNames = Array.from(files).map(f => f.name);
+                    retexFileNames.textContent = fileNames.join(', ');
+                    retexStatus.textContent = `${fileNames.length} fichier(s) sélectionné(s). Prêt pour l'analyse.`;
+                    retexOutput.style.display = 'none';
                 });
 
-                try {
-                    await Promise.all(promises);
-
-                    if (allReports.length > 0) {
-                        const htmlOutput = await generateGeminiAnalysis(allReports);
-                        
-                        if (htmlOutput) {
-                            retexOutput.innerHTML = htmlOutput;
-                            retexOutput.style.display = 'block';
-                            generateRetexPdfBtn.style.display = 'inline-block';
-                            retexStatus.textContent = `Analyse terminée. ${allReports.length} rapport(s) traité(s).`;
-                        } else {
-                            retexOutput.innerHTML = "<p>Impossible de générer le rapport. Veuillez vérifier la console pour plus de détails.</p>";
-                        }
-                    } else {
-                        retexStatus.textContent = "Erreur: Aucun rapport JSON valide n'a pu être chargé.";
-                        retexOutput.innerHTML = '';
+                launchRetexAnalysisBtn.addEventListener('click', async (event) => {
+                    event.preventDefault(); 
+                    
+                    const files = retexFileInput.files;
+                    if (files.length === 0) {
+                        retexStatus.textContent = "Veuillez sélectionner au moins un fichier JSON.";
+                        return;
                     }
-                } catch (error) {
-                    retexStatus.textContent = `Erreur critique: ${error.message}`;
-                    console.error("Erreur générale lors du processus d'analyse:", error);
-                }
-            });
+                    retexOutput.innerHTML = '';
+                    retexOutput.style.display = 'none';
+                    generateRetexPdfBtn.style.display = 'none';
+                    retexStatus.textContent = 'Lecture et analyse des fichiers en cours...';
 
-            generateRetexPdfBtn.addEventListener('click', generateRetexPdf);
+                    let allReports = [];
+                    const promises = Array.from(files).map(file => {
+                        return new Promise((resolve) => {
+                            const reader = new FileReader();
+                            reader.onload = (e) => {
+                                try {
+                                    const jsonData = JSON.parse(e.target.result);
+                                    allReports.push(jsonData);
+                                } catch (error) {
+                                    console.error(`Erreur de lecture du fichier ${file.name}:`, error);
+                                }
+                                resolve();
+                            };
+                            reader.onerror = (e) => {
+                                console.error(`Erreur de lecture du fichier ${file.name}:`, e);
+                                resolve(); 
+                            }
+                            reader.readAsText(file);
+                        });
+                    });
+
+                    try {
+                        await Promise.all(promises);
+
+                        if (allReports.length > 0) {
+                            const htmlOutput = await generateGeminiAnalysis(allReports);
+                            
+                            if (htmlOutput) {
+                                retexOutput.innerHTML = htmlOutput;
+                                retexOutput.style.display = 'block';
+                                generateRetexPdfBtn.style.display = 'inline-block';
+                                retexStatus.textContent = `Analyse terminée. ${allReports.length} rapport(s) traité(s).`;
+                            } else {
+                                retexOutput.innerHTML = "<p>Impossible de générer le rapport. Veuillez vérifier la console pour plus de détails.</p>";
+                            }
+                        } else {
+                            retexStatus.textContent = "Erreur: Aucun rapport JSON valide n'a pu être chargé.";
+                            retexOutput.innerHTML = '';
+                        }
+                    } catch (error) {
+                        retexStatus.textContent = `Erreur critique: ${error.message}`;
+                        console.error("Erreur générale lors du processus d'analyse:", error);
+                    }
+                });
+
+                generateRetexPdfBtn.addEventListener('click', generateRetexPdf);
 
 
-            if (localStorage.getItem('theme') === 'light') { document.body.classList.replace('dark-mode', 'light-mode'); document.getElementById('darkModeIcon').textContent = 'clear_day'; }
-            if (localStorage.getItem('dockCollapsed') === 'true') { dockMenu.classList.add('collapsed'); }
-            
-            showStep(currentStep);
-            
+                if (localStorage.getItem('theme') === 'light') { document.body.classList.replace('dark-mode', 'light-mode'); document.getElementById('darkModeIcon').textContent = 'clear_day'; }
+                if (localStorage.getItem('dockCollapsed') === 'true') { dockMenu.classList.add('collapsed'); }
+                
+                showStep(currentStep);
+            } catch (e) {
+                console.error("Erreur fatale lors de l'initialisation de l'application:", e);
+                document.body.innerHTML = `<div style="padding: 20px; text-align: center; color: red;"><h1>Erreur Critique</h1><p>L'application n'a pas pu démarrer. Cela peut être dû à un problème avec votre navigateur ou ses paramètres de sécurité (IndexedDB). Veuillez vérifier la console (F12) pour plus de détails.</p></div>`;
+            }
         });
         
-        // --- PDF GENERATION LOGIC ---
-
-        function getAdversaryImageInfo(formData) {
-            const mainPhotoContainerId = 'adversary_photo_preview_container';
-            if (formData.dynamic_photos && formData.dynamic_photos[mainPhotoContainerId]) {
-                const firstImage = formData.dynamic_photos[mainPhotoContainerId][0];
-                if (firstImage) {
-                    return {
-                        imageSource: firstImage.src,
-                        originalSrc: firstImage.originalSrc,
-                        annotationsJson: firstImage.annotations || '[]'
-                    };
-                }
-            }
-            return null;
-        }
-
-        async function buildPdf() {
-            const { PDFDocument, StandardFonts, rgb, PageSizes } = PDFLib;
-            const pdfDoc = await PDFDocument.create();
-            let helveticaFont, helveticaBoldFont;
-            try {
-                helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
-                helveticaBoldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-            } catch (e) {
-                console.error("Erreur de chargement des polices PDF standard:", e);
-                helveticaFont = helveticaBoldFont = { widthOfTextAtSize: (text, size) => text.length * size / 2 };
-            }
-            
-            saveFormData();
-            const formDataString = localStorage.getItem('oiFormData');
-            if (!formDataString) { alert("Aucune donnée à générer."); return null; }
-            const formData = JSON.parse(formDataString);
-            const getVal = (id) => formData[id] || '';
-            const isDarkMode = document.body.classList.contains('dark-mode');
-            const context = {
-                pdfDoc, helveticaFont, helveticaBoldFont,
-                currentPage: null, y: 0, pageWidth: 0, pageHeight: 0, margin: 40,
-                colors: isDarkMode ? { background: rgb(30/255, 30/255, 30/255), text: rgb(1, 1, 1), accent: rgb(91/255, 155/255, 213/255), danger: rgb(192/255, 57/255, 43/255) } : { background: rgb(1, 1, 1), text: rgb(0, 0, 0), accent: rgb(0, 51/255, 160/255), danger: rgb(192/255, 57/255, 43/255) }
-            };
-            let backgroundImage = null;
-            try {
-                const bgImageUrl = 'Fd.png';
-                const bgImageBytes = await fetch(bgImageUrl).then(res => res.arrayBuffer());
-                backgroundImage = await pdfDoc.embedPng(bgImageBytes);
-            } catch (e) { console.warn("L'image de fond 'Fd.png' n'a pas pu être chargée.", e); }
-            
-            const addNewPage = () => {
-                context.currentPage = context.pdfDoc.addPage([PageSizes.A4[1], PageSizes.A4[0]]);
-                const { width, height } = context.currentPage.getSize();
-                context.pageWidth = width; context.pageHeight = height; context.y = height - context.margin;
-                context.currentPage.drawRectangle({ x: 0, y: 0, width, height, color: context.colors.background });
-            };
-            const checkY = (spaceNeeded) => { if (context.y - spaceNeeded < context.margin) { addNewPage(); return true; } return false; };
-            const drawTitle = (text) => { checkY(30); context.currentPage.drawText(text, { x: context.margin, y: context.y, font: helveticaBoldFont, size: 18, color: context.colors.accent }); context.y -= 30; };
-            const drawSubTitle = (text) => { if (checkY(25)) { context.y -= 10; } context.currentPage.drawText(text, { x: context.margin, y: context.y, font: helveticaBoldFont, size: 14, color: context.colors.accent }); context.y -= 25; };
-            const wrapText = (text, font, size, maxWidth) => {
-                const words = String(text || '').replace(/\n/g, ' \n ').split(' ');
-                let lines = []; let currentLine = '';
-                for (const word of words) {
-                    if (word === '\n') { lines.push(currentLine); currentLine = ''; continue; }
-                    const lineWithWord = currentLine === '' ? word : `${currentLine} ${word}`;
-                    if (font.widthOfTextAtSize(lineWithWord, size) > maxWidth && currentLine !== '') { lines.push(currentLine); currentLine = word; } 
-                    else { currentLine = lineWithWord; }
-                }
-                lines.push(currentLine); return lines;
-            };
-            const drawWrappedText = (text, options = {}) => {
-                const { font = helveticaFont, size = 12, color = context.colors.text, x = context.margin + 15 } = options;
-                const maxWidth = context.pageWidth - x - context.margin;
-                const lines = wrapText(text, font, size, maxWidth);
-                const totalHeight = lines.length * (size + 4);
-                if (checkY(totalHeight + 10)) { context.y -= (size + 4); }
-                lines.forEach((line, index) => { context.currentPage.drawText(line, { x, y: context.y - (index * (size + 4)), font, size, color }); });
-                context.y -= (totalHeight + 10);
-            };
-            const drawTable = (headers, rows, columnWidths, startX) => {
-                let currentY = context.y; const rowPadding = 5; const headerFontSize = 10; const contentFontSize = 10;
-                const drawRow = (rowData, isHeader) => {
-                    const font = isHeader ? helveticaBoldFont : helveticaFont; const size = isHeader ? headerFontSize : contentFontSize;
-                    const cellContents = rowData.map((text, i) => wrapText(text, font, size, columnWidths[i] - 2 * rowPadding));
-                    const maxLines = Math.max(...cellContents.map(lines => lines.length));
-                    const rowHeight = maxLines * (size + 2) + 2 * rowPadding;
-                    if (currentY - rowHeight < context.margin) { addNewPage(); currentY = context.y; drawRow(headers, true); }
-                    currentY -= rowHeight; let currentX = startX;
-                    rowData.forEach((_, i) => {
-                        context.currentPage.drawRectangle({ x: currentX, y: currentY, width: columnWidths[i], height: rowHeight, borderColor: context.colors.accent, borderWidth: 0.5 });
-                        const lines = cellContents[i];
-                        lines.forEach((line, lineIndex) => { context.currentPage.drawText(line, { x: currentX + rowPadding, y: currentY + rowHeight - rowPadding - (lineIndex + 1) * (size + 2) + 2, font, size, color: context.colors.text }); });
-                        currentX += columnWidths[i];
-                    });
-                };
-                drawRow(headers, true); rows.forEach(row => drawRow(row, false)); context.y = currentY - 20;
-            };
-            
-            const processImage = async (imageSrc, originalSrc, annotationsJson, maxWidth = 1280, quality = 0.85) => {
-                const annotations = JSON.parse(annotationsJson || '[]');
-                
-                if (annotations.length > 0 && originalSrc) {
-                    const buffer = await createAnnotatedImageBlob(originalSrc, annotations);
-                    return buffer;
-                } else {
-                    return new Promise((resolve, reject) => {
-                        const img = new Image();
-                        img.crossOrigin = 'anonymous'; 
-                        
-                        let srcToLoad = imageSrc || originalSrc; 
-                        if (!srcToLoad || !srcToLoad.startsWith('data:image')) {
-                             return reject(new Error('Source d\'image invalide ou manquante.'));
-                        }
-                        img.src = srcToLoad;
-
-                        img.onload = () => {
-                            const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d');
-                            let { width, height } = img;
-                            if (width > maxWidth) { height = (maxWidth / width) * height; width = maxWidth; }
-                            canvas.width = width; canvas.height = height; ctx.drawImage(img, 0, 0, width, height);
-                            canvas.toBlob(blob => {
-                                if (!blob) return reject(new Error('La conversion de l\'image a échoué.'));
-                                blob.arrayBuffer().then(resolve).catch(reject);
-                            }, 'image/jpeg', quality);
-                        };
-                        img.onerror = (err) => { reject(new Error(`Impossible de charger l'image: ${err.message}`)); };
-                    });
-                }
-            };
-            
-            const drawImagesFromCategory = async (previewContainerId, title) => {
-                const imagesData = (formData.dynamic_photos || {})[previewContainerId] || [];
-                for (let i = 0; i < imagesData.length; i++) {
-                    const imgData = imagesData[i];
-                    addNewPage();
-                    try {
-                        const imageBytes = await processImage(imgData.src, imgData.originalSrc, imgData.annotations);
-                        const image = await pdfDoc.embedJpg(imageBytes);
-                        
-                        const { width, height } = context.currentPage.getSize();
-                        const paddedW = width - context.margin * 2; const paddedH = height - context.margin * 2 - 30;
-                        const scaled = image.scaleToFit(paddedW, paddedH);
-                        const x = (width - scaled.width) / 2; const y = (height - scaled.height) / 2 + 15;
-                        context.currentPage.drawImage(image, { x, y, width: scaled.width, height: scaled.height });
-                        const finalTitle = imagesData.length > 1 ? `${title} (${i+1})` : title;
-                        const textWidth = helveticaBoldFont.widthOfTextAtSize(finalTitle, 14);
-                        context.currentPage.drawText(finalTitle, { x: width / 2 - textWidth / 2, y: y - 20, font: helveticaBoldFont, size: 14, color: context.colors.text });
-                    } catch (e) {
-                        console.error(`Erreur d'intégration de l'image pour: ${title}`, e);
-                        drawTitle("Erreur d'image"); drawWrappedText(`Impossible de charger une image.\n\nErreur: ${e.message}`);
-                    }
-                }
-            };
-            
-            const getCompositionData = (teamPrefix) => {
-                const membersByCell = {};
-                const allMembers = (formData.patracdvr_rows || []).flatMap(row => row.members);
-                
-                allMembers.forEach(member => {
-                    if (member.cellule && member.cellule.toLowerCase().startsWith(teamPrefix)) {
-                        if (!membersByCell[member.cellule]) membersByCell[member.cellule] = [];
-                        member.trigramme && membersByCell[member.cellule].push(member.trigramme);
-                    }
-                });
-
-                const naturalSort = (a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
-                const sortedKeys = Object.keys(membersByCell).sort(naturalSort);
-                
-                return sortedKeys.map(cell => ({ cell: cell, members: membersByCell[cell] }));
-            };
-
-            const drawCompositionList = (compositionData) => {
-                const fontSize = 12;
-                const lineHeight = fontSize + 4;
-                if (checkY(lineHeight)) { context.y -= 10; }
-
-                let currentX = context.margin + 15;
-                const cellStyle = { font: helveticaBoldFont, color: context.colors.danger, size: fontSize };
-                const trigrammeStyle = { font: helveticaBoldFont, color: context.colors.text, size: fontSize };
-                const separatorStyle = { font: helveticaFont, color: context.colors.text, size: fontSize };
-                
-                compositionData.forEach((group, groupIndex) => {
-                    const cellShortName = group.cell.toLowerCase().replace('india ', 'I').replace('ao', 'AO').toUpperCase();
-                    
-                    const groupParts = [{ text: cellShortName, style: cellStyle }, { text: ' : ', style: separatorStyle }];
-                    group.members.forEach((member, memberIndex) => {
-                        groupParts.push({ text: member, style: trigrammeStyle });
-                        if (memberIndex < group.members.length - 1) {
-                            groupParts.push({ text: ' - ', style: separatorStyle });
-                        }
-                    });
-                     if (groupIndex < compositionData.length - 1) {
-                        groupParts.push({ text: '    ', style: separatorStyle });
-                    }
-
-                    for(const part of groupParts) {
-                        const partWidth = part.style.font.widthOfTextAtSize(part.text, part.style.size);
-                        if (currentX + partWidth > context.pageWidth - context.margin) {
-                            context.y -= lineHeight;
-                            currentX = context.margin + 15;
-                            if (checkY(lineHeight)) { context.y -= 10; }
-                        }
-                        context.currentPage.drawText(part.text, { x: currentX, y: context.y, ...part.style });
-                        currentX += partWidth;
-                    }
-                });
-                context.y -= (lineHeight + 10);
-            };
-
-
-            const pdfCreationLogic = async () => {
-                addNewPage();
-                if (backgroundImage) { context.currentPage.drawImage(backgroundImage, { x: 0, y: 0, width: context.pageWidth, height: context.pageHeight }); }
-                const mainTitle = "OPÉRATION DE POLICE JUDICIAIRE";
-                const dateTitle = `DU ${getVal('date_op') || '(DATE)'}`;
-                const titleWidth = helveticaBoldFont.widthOfTextAtSize(mainTitle, 24);
-                const dateTitleWidth = helveticaBoldFont.widthOfTextAtSize(dateTitle, 18);
-                context.currentPage.drawText(mainTitle, { x: context.pageWidth / 2 - titleWidth / 2, y: context.pageHeight / 2 + 10, font: helveticaBoldFont, size: 24, color: context.colors.accent });
-                context.currentPage.drawText(dateTitle, { x: context.pageWidth / 2 - dateTitleWidth / 2, y: context.pageHeight / 2 - 20, font: helveticaBoldFont, size: 18, color: context.colors.text });
-
-                addNewPage();
-                drawTitle("1. SITUATION");
-                drawSubTitle("1.1 Situation Générale"); drawWrappedText(getVal('situation_generale'), { size: 14 });
-                drawSubTitle("1.2 Situation Particulière"); drawWrappedText(getVal('situation_particuliere'), { size: 14 });
-                
-                addNewPage();
-                drawTitle("2. ADVERSAIRE");
-      
-                const imageInfo = getAdversaryImageInfo(formData);
-                let isImagePresent = imageInfo !== null;
-                const photoBoxWidth = 200;
-                const photoBoxHeight = 220;
-                const photoBoxX = context.pageWidth - context.margin - photoBoxWidth;
-                const photoBoxMargin = 10;
-                const topY = context.y; 
-                
-                let tableStartX = context.margin;
-                let tableMaxWidth = context.pageWidth - context.margin * 2;
-                
-                if (isImagePresent) {
-                    tableMaxWidth = photoBoxX - tableStartX - photoBoxMargin;
-                }
-                
-                const adversaireHeaders = ["Information", "Détail"];
-                const meText = (formData.me_list || []).map((me, i) => `ME${i+1}: ${me}`).join(' | ');
-                const adversaireRows = [
-                    ['Nom/Prénom', getVal('nom_adversaire')], ['Domicile', getVal('domicile_adversaire')],
-                    ['Naissance', `${getVal('date_naissance')} à ${getVal('lieu_naissance')}`],
-                    ['Description', `${getVal('stature_adversaire')} / ${getVal('ethnie_adversaire')}`],
-                    ['Signes particuliers', getVal('signes_particuliers')], ['Profession', getVal('profession_adversaire')],
-                    ['Antécédents', getVal('antecedents_adversaire')], ['État d\'esprit', (formData.etat_esprit_list || []).join(', ')],
-                    ['Attitude', getVal('attitude_adversaire')], ['Volume (renfort)', (formData.volume_list || []).join(', ')],
-                    ['Substances', getVal('substances_adversaire')], ['Véhicules', (formData.vehicules_list || []).join(', ')],
-                    ['Armes', getVal('armes_connues')], ['Moyens Employés', meText],
-                ].filter(row => row[1] && String(row[1]).trim() !== 'à');
-                
-                let photoBottomY = topY;
-                let tableBottomY = topY;
-                
-                if (isImagePresent) {
-                    const { imageSource, originalSrc, annotationsJson } = imageInfo;
-                    const frameY = topY - photoBoxHeight; 
-                    
-                    try {
-                        const imageBytes = await processImage(imageSource, originalSrc, annotationsJson);
-                        const image = await pdfDoc.embedJpg(imageBytes);
-                        
-                        const scaled = image.scaleToFit(photoBoxWidth - 10, photoBoxHeight - 30);
-                        const imageY = frameY + (photoBoxHeight - scaled.height) / 2;
-
-                        if(frameY >= context.margin) {
-                            context.currentPage.drawRectangle({
-                                x: photoBoxX, y: frameY, width: photoBoxWidth, height: photoBoxHeight,
-                                borderColor: context.colors.accent, borderWidth: 1
-                            });
-                            context.currentPage.drawImage(image, {
-                                x: photoBoxX + (photoBoxWidth - scaled.width) / 2,
-                                y: imageY,
-                                width: scaled.width, height: scaled.height
-                            });
-                            const photoTitle = "Photo de l'objectif";
-                            const titleWidth = helveticaFont.widthOfTextAtSize(photoTitle, 10);
-                            context.currentPage.drawText(photoTitle, {
-                                x: photoBoxX + (photoBoxWidth - titleWidth) / 2,
-                                y: frameY + 5,
-                                font: helveticaFont, size: 10, color: context.colors.text
-                            });
-                            photoBottomY = frameY;
-                        } else {
-                            isImagePresent = false; 
-                        }
-                    } catch (e) {
-                         console.error("Échec du traitement de la photo de l'adversaire (annotée ou non):", e);
-                        isImagePresent = false; 
-                    }
-                }
-
-                if (adversaireRows.length > 0) {
-                    context.y = topY; 
-                    drawTable(adversaireHeaders, adversaireRows, [150, tableMaxWidth - 150], tableStartX);
-                    tableBottomY = context.y;
-                } else {
-                    tableBottomY = topY;
-                }
-                
-                context.y = Math.min(tableBottomY, photoBottomY) - 20;
-                
-                await drawImagesFromCategory('adversary_extra_photos_preview_container', 'Photo Supplémentaire - Adversaire');
-                await drawImagesFromCategory('renforts_photo_preview_container', 'Photo - Renfort Potentiel');
-
-                addNewPage();
-                drawTitle("3. ENVIRONNEMENT");
-                drawSubTitle("Ami(e)s (soutien)"); drawWrappedText(getVal('amies'), { size: 14 });
-                drawSubTitle("Terrain / Météo"); drawWrappedText(getVal('terrain_info'), { size: 14 });
-                drawSubTitle("Population"); drawWrappedText(getVal('population'), { size: 14 });
-                drawSubTitle("Cadre juridique"); drawWrappedText(getVal('cadre_juridique'), { size: 14 });
-                
-                addNewPage();
-                drawTitle("4. MISSION");
-                drawWrappedText(getVal('missions_psig'), { font: helveticaBoldFont, size: 30, color: context.colors.danger, x: context.margin });
-                
-                await drawImagesFromCategory('photo_container_transport_pr_preview_container', 'Transport PSIG vers PR');
-                await drawImagesFromCategory('photo_container_transport_domicile_preview_container', 'Transport PR vers Domicile');
-                await drawImagesFromCategory('photo_container_bapteme_terrain_preview_container', 'Baptême terrain');
-
-                addNewPage();
-                drawTitle("5. EXÉUTION");
-                const execText = `En vue d'appréhender le mis en cause et empêcher la déperdition des preuves,\nJe veux, le ${getVal('date_execution') || '(date)'} à partir de ${getVal('heure_execution') || '(heure)'}, pour une action ${getVal('type_action') || '(type d\'action)'} investir le domicile\nprésumé de ${getVal('nom_adversaire') || '(nom de l\'adversaire)'} après avoir bouclé celui-ci.`;
-                drawWrappedText(execText, { size: 16, x: context.margin });
-                drawSubTitle("Chronologie des temps");
-                const chronoHeaders = ["Type", "Heure", "Description"];
-                const chronoRows = (formData.time_events || []).map(e => [e.type || 'N/A', e.hour || 'N/A', e.description || 'N/A']);
-                drawTable(chronoHeaders, chronoRows, [80, 120, 550], context.margin);
-                drawSubTitle("Hypothèses");
-                const h1 = `H1: ${getVal('hypothese_h1')}`;
-                const h2 = `H2: ${getVal('hypothese_h2')}`;
-                const h3 = `H3: ${getVal('hypothese_h3')}`;
-                drawWrappedText(`${h1}\n${h2}\n${h3}`, { size: 14, font: helveticaBoldFont, color: context.colors.danger });
-
-                addNewPage();
-                drawTitle("6. ARTICULATION");
-                drawWrappedText(`Place du Chef (Générale): ${getVal('place_chef')}`, { size: 14, x: context.margin });
-                drawSubTitle("Équipe INDIA (INTER)"); 
-                drawSubTitle("Composition:"); drawCompositionList(getCompositionData('india'));
-                drawSubTitle("Mission:"); drawWrappedText(getVal('india_mission'));
-                drawSubTitle("Objectif:"); drawWrappedText(getVal('india_objectif')); drawSubTitle("Itinéraire:");
-                drawWrappedText(getVal('india_itineraire')); drawSubTitle("Points Particuliers:"); drawWrappedText(getVal('india_points_particuliers'));
-                drawSubTitle("Conduite à Tenir:"); drawWrappedText(getVal('india_cat'));
-                
-                await drawImagesFromCategory('photo_container_itineraire_exterieur_preview_container', 'Itinéraire Extérieur India');
-                await drawImagesFromCategory('photo_container_itineraire_interieur_preview_container', 'Itinéraire Intérieur India');
-                await drawImagesFromCategory('photo_container_cellule_effraction_preview_container', 'Cellule Effraction');
-                
-                addNewPage();
-                drawTitle("6. ARTICULATION (Suite)");
-                drawSubTitle("Équipe Appui/Observation (AO) - ZMSPCP"); 
-                drawSubTitle("Composition:"); drawCompositionList(getCompositionData('ao'));
-                drawSubTitle("Zone d'installation (Z):");
-                drawWrappedText(getVal('ao_zone_installation')); drawSubTitle("Mission (M):"); drawWrappedText(getVal('ao_mission'));
-                drawSubTitle("Secteur de surveillance (S):"); drawWrappedText(getVal('ao_secteur_surveillance'));
-                drawSubTitle("Points Particuliers (P):"); drawWrappedText(getVal('ao_points_particuliers'));
-                drawSubTitle("Place du Chef (P):"); drawWrappedText(getVal('ao_place_chef'));
-                drawSubTitle("Conduite à Tenir (C):"); drawWrappedText(getVal('ao_cat'));
-
-                await drawImagesFromCategory('photo_container_emplacement_ao_preview_container', 'Emplacement AO');
-                
-                addNewPage();
-                drawTitle("7. PATRACDVR");
-                const patracHeaders = ["Trigramme", "Fonction", "Cellule", "Armement", "Équip. 1", "Équip. 2", "Tenue", "GPB"];
-                for (const row of (formData.patracdvr_rows || [])) {
-                    if(row.vehicle && row.members && row.members.length > 0) {
-                        drawSubTitle(`Véhicule: ${row.vehicle}`);
-                        const patracRows = row.members.filter(m => m.trigramme).map(m => [m.trigramme, m.fonction, m.cellule, m.armement, m.equipement, m.equipement2, m.tenue, m.gpb]);
-                        if (patracRows.length > 0) { drawTable(patracHeaders, patracRows, [80, 90, 90, 90, 90, 90, 80, 80], context.margin); }
-                    }
-                }
-                
-                addNewPage();
-                drawTitle("9. Conduites à tenir");
-                drawSubTitle("Générales"); drawWrappedText(getVal('cat_generales'), {x: context.margin, font: helveticaBoldFont});
-                const noGoText = getVal('no_go');
-                if (noGoText) {
-                    drawSubTitle("NO GO");
-                    drawWrappedText(noGoText, { x: context.margin, font: helveticaBoldFont, size: 14.4, color: context.colors.danger });
-                }
-                drawSubTitle("Liaison"); drawWrappedText(getVal('cat_liaison'), {x: context.margin, font: helveticaBoldFont});
-
-                const dateOp = getVal('date_op');
-                const nomAdversaire = getVal('nom_adversaire');
-                if (dateOp && nomAdversaire) {
-                    const safeAdversaireName = nomAdversaire.trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
-                    const oiId = `${dateOp}_${safeAdversaireName}`;
-                    const retexUrl = `${RETEX_BASE_URL}?oiId=${encodeURIComponent(oiId)}`;
-
-                    addNewPage();
-                    const operationTitle = getVal('nom_adversaire') || 'OPERATION';
-                    drawTitle(`RETEX: ${operationTitle.toUpperCase()}`);
-                    drawWrappedText("Chaque membre ayant participé à l'opération est tenu de remplir le formulaire de Retour d'Expérience (Retex) en utilisant le lien ci-dessous.", { size: 14, x: context.margin });
-                    context.y -= 40;
-                    context.currentPage.drawText(retexUrl, { x: context.margin, y: context.y, font: helveticaBoldFont, size: 14, color: context.colors.accent, A: { URI: retexUrl } });
-                    context.y -= 20;
-                }
-                
-                addNewPage();
-                if (backgroundImage) { context.currentPage.drawImage(backgroundImage, { x: 0, y: 0, width: context.pageWidth, height: context.pageHeight }); }
-                const finalText = "Avez vous des questions?";
-                const finalTextWidth = helveticaBoldFont.widthOfTextAtSize(finalText, 48);
-                context.currentPage.drawText(finalText, { x: context.pageWidth / 2 - finalTextWidth / 2, y: context.pageHeight / 2, font: helveticaBoldFont, size: 48, color: context.colors.accent });
-            };
-
-            await pdfCreationLogic();
-            const pdfBytes = await pdfDoc.save();
-            return { pdfBytes, formData };
-        }
-        
-        // --- PRESENTATION HTML LOGIC ---
-        
-        async function buildPresentationHtml() {
-            saveFormData();
-            const formDataString = localStorage.getItem('oiFormData');
-            if (!formDataString) { return "<h2>Aucune donnée à présenter.</h2>"; }
-            const formData = JSON.parse(formDataString);
-            const getVal = (id) => formData[id] || '';
-            const isDarkMode = document.body.classList.contains('dark-mode');
-            
-            const accentColor = isDarkMode ? '#5b9bd5' : '#0033a0';
-            const primaryText = isDarkMode ? '#e0e0e0' : '#212529';
-            const secondaryText = isDarkMode ? '#95a5a6' : '#6c757d';
-            const dangerColor = '#c0392b';
-
-            let htmlContent = `<div style="font-family: 'Oswald', sans-serif; color: ${primaryText};">`;
-
-            const cleanText = (text) => String(text || '').replace(/\*\*(.*?)\*\*/g, '$1').trim();
-            
-            const wrapHtml = (text, tag = 'p', style = {}) => {
-                const styleString = Object.entries(style).map(([key, value]) => `${key}:${value}`).join(';');
-                const formattedText = String(text || '')
-                    .replace(/\*\*/g, '') 
-                    .replace(/\n/g, '<br>');
-                return `<${tag} style="${styleString}">${formattedText}</${tag}>`;
-            };
-
-            const drawTitleHtml = (text) => wrapHtml(cleanText(text), 'h2', { 'color': accentColor, 'font-size': '1.8em', 'margin-top': '20px', 'padding-bottom': '5px', 'border-bottom': `2px solid ${accentColor}` });
-            const drawSubTitleHtml = (text) => wrapHtml(cleanText(text), 'h3', { 'color': accentColor, 'font-size': '1.3em', 'margin-top': '15px', 'margin-bottom': '10px' });
-            const drawTextHtml = (text, bold = false, color = primaryText, size = '1.1em', indent = '15px') => wrapHtml(text, 'p', { 'font-weight': bold ? '500' : '400', 'color': color, 'font-size': size, 'margin-bottom': '8px', 'padding-left': indent, 'white-space': 'pre-wrap' });
-            
-            const drawTableHtml = (headers, rows) => {
-                let table = `<table style="width: 100%; border-collapse: collapse; margin-top: 15px; margin-bottom: 20px;">`;
-                table += `<thead style="background-color: ${accentColor}; color: white;"><tr>`;
-                headers.forEach(h => { table += `<th style="padding: 10px; border: 1px solid ${primaryText}; text-align: left;">${h}</th>`; });
-                table += `</tr></thead><tbody>`;
-                rows.forEach(row => {
-                    table += `<tr style="background-color: ${isDarkMode ? '#2a2a2a' : '#f8f9fa'};">`;
-                    row.forEach(cell => { 
-                        const cellContent = String(cell || '').replace(/\*\*/g, '').replace(/\n/g, '<br>');
-                        table += `<td style="padding: 10px; border: 1px solid ${secondaryText}; vertical-align: top;">${cellContent}</td>`; 
-                    });
-                    table += `</tr>`;
-                });
-                table += `</tbody></table>`;
-                return table;
-            };
-
-            const drawImagesHtmlFromCategory = async (previewContainerId, title) => {
-                let imageHtml = '';
-                const imagesData = (formData.dynamic_photos || {})[previewContainerId] || [];
-
-                for (let i = 0; i < imagesData.length; i++) {
-                    const imgData = imagesData[i];
-                    const originalSrc = imgData.originalSrc;
-                    const annotations = JSON.parse(imgData.annotations || '[]');
-                    
-                    let dataSrcToDisplay = originalSrc;
-                    if (annotations.length > 0) {
-                        try {
-                            const arrayBuffer = await createAnnotatedImageBlob(originalSrc, annotations);
-                            const base64String = btoa(new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), ''));
-                            dataSrcToDisplay = `data:image/jpeg;base64,${base64String}`;
-                        } catch (e) {
-                            console.error(`Erreur de génération d'image annotée pour ${title} (index ${i}):`, e);
-                            dataSrcToDisplay = originalSrc; 
-                        }
-                    }
-
-                    const finalTitle = imagesData.length > 1 ? `${title} (${i+1})` : title;
-                    imageHtml += `<div class="image-container" style="text-align: center; margin: 20px 0; border: 1px solid ${accentColor}; padding: 10px; background-color: ${isDarkMode ? '#1e1e1e' : '#ffffff'};">`;
-                    imageHtml += `<h4 style="color: ${accentColor}; margin-bottom: 10px; font-size: 1.1em;">${finalTitle}</h4>`;
-                    imageHtml += `<img src="${dataSrcToDisplay}" alt="${finalTitle}" style="max-width: 100%; height: auto; border-radius: 4px; box-shadow: 0 4px 8px rgba(0,0,0,${isDarkMode ? 0.4 : 0.1});">`;
-                    imageHtml += `</div>`;
-                }
-                return imageHtml;
-            };
-            
-            const getCompositionHtml = (teamPrefix) => {
-                const membersByCell = {};
-                const allMembers = (formData.patracdvr_rows || []).flatMap(row => row.members);
-                
-                allMembers.forEach(member => {
-                    if (member.cellule && member.cellule.toLowerCase().startsWith(teamPrefix)) {
-                        if (!membersByCell[member.cellule]) membersByCell[member.cellule] = [];
-                        member.trigramme && membersByCell[member.cellule].push(
-                            `<span style="color: ${primaryText};">${member.trigramme}</span>` + 
-                            (member.fonction && member.fonction !== 'Sans' ? ` (${member.fonction})` : '')
-                        );
-                    }
-                });
-
-                const naturalSort = (a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
-                const sortedKeys = Object.keys(membersByCell).sort(naturalSort);
-                
-                let compositionHtml = '<div style="padding-left: 15px; margin-bottom: 15px;">';
-                sortedKeys.forEach(cell => {
-                    compositionHtml += `<p style="margin-bottom: 5px;"><strong style="color: ${dangerColor}; font-size: 1.1em;">${cell.toUpperCase()}</strong> : ${membersByCell[cell].join(', ')}</p>`;
-                });
-                compositionHtml += '</div>';
-                return sortedKeys.length > 0 ? compositionHtml : drawTextHtml('Aucun membre assigné.', false, secondaryText);
-            };
-            
-            
-            htmlContent += drawTitleHtml(`Ordre Initial - ${getVal('nom_adversaire') || 'OPÉRATION'}`);
-            htmlContent += drawTextHtml(`Date de l'opération : ${getVal('date_op') || 'N/A'}`, true, primaryText, '1.2em', '0');
-            htmlContent += drawTitleHtml("1. SITUATION");
-            htmlContent += drawSubTitleHtml("1.1 Situation Générale"); htmlContent += drawTextHtml(getVal('situation_generale'));
-            htmlContent += drawSubTitleHtml("1.2 Situation Particulière"); htmlContent += drawTextHtml(getVal('situation_particuliere'));
-
-            htmlContent += drawTitleHtml("2. ADVERSAIRE");
-            htmlContent += await drawImagesHtmlFromCategory('adversary_photo_preview_container', "Photo de l'objectif"); 
-
-            const meText = (formData.me_list || []).map((me, i) => `ME${i+1}: ${me}`).join(' | ');
-            const adversaireRows = [
-                ['Nom/Prénom', getVal('nom_adversaire')], ['Domicile', getVal('domicile_adversaire')],
-                ['Naissance', `${getVal('date_naissance')} à ${getVal('lieu_naissance')}`],
-                ['Description', `${getVal('stature_adversaire')} / ${getVal('ethnie_adversaire')}`],
-                ['Signes particuliers', getVal('signes_particuliers')], ['Profession', getVal('profession_adversaire')],
-                ['Antécédents', getVal('antecedents_adversaire')], ['État d\'esprit', (formData.etat_esprit_list || []).join(', ')],
-                ['Attitude (connue)', getVal('attitude_adversaire')], ['Volume (renfort)', (formData.volume_list || []).join(', ')],
-                ['Substances', getVal('substances_adversaire')], ['Véhicules', (formData.vehicules_list || []).join(', ')],
-                ['Armes connues', getVal('armes_connues')], ['Moyens Employés', meText],
-            ].filter(row => row[1] && String(row[1]).trim() !== 'à');
-
-            if (adversaireRows.length > 0) {
-                htmlContent += drawTableHtml(["Information", "Détail"], adversaireRows);
-            } else {
-                 htmlContent += drawTextHtml("Aucune information détaillée sur l'adversaire.");
-            }
-
-            htmlContent += await drawImagesHtmlFromCategory('adversary_extra_photos_preview_container', 'Photo Supplémentaire - Adversaire');
-            htmlContent += await drawImagesHtmlFromCategory('renforts_photo_preview_container', 'Photo - Renfort Potentiel');
-
-            htmlContent += drawTitleHtml("3. ENVIRONNEMENT");
-            htmlContent += drawSubTitleHtml("Ami(e)s (soutien)"); htmlContent += drawTextHtml(getVal('amies'));
-            htmlContent += drawSubTitleHtml("Terrain / Météo"); htmlContent += drawTextHtml(getVal('terrain_info'));
-            htmlContent += drawSubTitleHtml("Population"); htmlContent += drawTextHtml(getVal('population'));
-            htmlContent += drawSubTitleHtml("Cadre juridique"); htmlContent += drawTextHtml(getVal('cadre_juridique'));
-
-            htmlContent += drawTitleHtml("4. MISSION DU PSIG");
-            htmlContent += drawTextHtml(getVal('missions_psig'), true, dangerColor, '1.6em', '0');
-            
-            htmlContent += drawTitleHtml("5. EXÉCUTION");
-            const execText = `En vue d'appréhender le mis en cause et empêcher la déperdition des preuves,<br>Je veux, le ${getVal('date_execution') || '(date)'} à partir de ${getVal('heure_execution') || '(heure)'}, pour une action ${getVal('type_action') || '(type d\'action)'} investir le domicile<br>présumé de ${getVal('nom_adversaire') || '(nom de l\'adversaire)'} après avoir bouclé celui-ci.`;
-            htmlContent += wrapHtml(execText, 'p', { 'font-size': '1.4em', 'margin-bottom': '15px', 'padding-left': '0' });
-
-            htmlContent += drawSubTitleHtml("Chronologie des temps");
-            const chronoHeaders = ["Type", "Heure", "Description"];
-            const chronoRows = (formData.time_events || []).map(e => [e.type || 'N/A', e.hour || 'N/A', e.description || 'N/A']);
-            htmlContent += drawTableHtml(chronoHeaders, chronoRows);
-
-            htmlContent += drawSubTitleHtml("Hypothèses");
-            htmlContent += drawTextHtml(`<span style="color: ${dangerColor}; font-weight: bold;">H1</span>: ${getVal('hypothese_h1')}<br><span style="color: ${dangerColor}; font-weight: bold;">H2</span>: ${getVal('hypothese_h2')}<br><span style="color: ${dangerColor}; font-weight: bold;">H3</span>: ${getVal('hypothese_h3')}`, true, primaryText, '1.2em');
-            
-            htmlContent += await drawImagesHtmlFromCategory('photo_container_transport_pr_preview_container', 'Transport PSIG vers PR');
-            htmlContent += await drawImagesHtmlFromCategory('photo_container_transport_domicile_preview_container', 'Transport PR vers Domicile');
-            htmlContent += await drawImagesHtmlFromCategory('photo_container_bapteme_terrain_preview_container', 'Baptême terrain');
-
-            htmlContent += drawTitleHtml("6. ARTICULATION (MOIPC/ZMSPCP)");
-            htmlContent += drawTextHtml(`Place du Chef (Générale): ${getVal('place_chef')}`, true, primaryText, '1.2em', '0');
-
-            htmlContent += drawSubTitleHtml(`<span style="color: ${accentColor}; font-weight: bold;">Équipe INDIA (INTER)</span>`);
-            htmlContent += wrapHtml('<strong style="color: ' + accentColor + ';">Composition:</strong>', 'h4', { 'padding-left': '15px', 'margin-top': '10px', 'font-size': '1.1em' });
-            htmlContent += getCompositionHtml('india');
-            const moipcText = `<p style="padding-left:15px; margin-bottom: 8px;">
-                <span style="color: ${dangerColor}; font-weight: bold;">M</span>ission : ${getVal('india_mission')}<br>
-                <span style="color: ${dangerColor}; font-weight: bold;">O</span>bjectif : ${getVal('india_objectif')}<br>
-                <span style="color: ${dangerColor}; font-weight: bold;">I</span>tinéraire : ${getVal('india_itineraire')}<br>
-                <span style="color: ${dangerColor}; font-weight: bold;">P</span>oints Particuliers : ${getVal('india_points_particuliers')}<br>
-                <span style="color: ${dangerColor}; font-weight: bold;">C</span>onduite à Tenir : ${getVal('india_cat')}
-            </p>`;
-            htmlContent += moipcText;
-            
-            htmlContent += await drawImagesHtmlFromCategory('photo_container_itineraire_exterieur_preview_container', 'Itinéraire Extérieur India');
-            htmlContent += await drawImagesHtmlFromCategory('photo_container_itineraire_interieur_preview_container', 'Itinéraire Intérieur India');
-            htmlContent += await drawImagesHtmlFromCategory('photo_container_cellule_effraction_preview_container', 'Cellule Effraction');
-
-            htmlContent += drawTitleHtml("6. ARTICULATION (Suite)");
-            htmlContent += drawSubTitleHtml(`<span style="color: ${accentColor}; font-weight: bold;">Équipe Appui/Observation (AO) - ZMSPCP</span>`);
-            htmlContent += wrapHtml('<strong style="color: ' + accentColor + ';">Composition:</strong>', 'h4', { 'padding-left': '15px', 'margin-top': '10px', 'font-size': '1.1em' });
-            htmlContent += getCompositionHtml('ao');
-            
-            const aoText = `<p style="padding-left:15px; margin-bottom: 8px;">
-                <span style="color: ${dangerColor}; font-weight: bold;">Z</span>one d'installation : ${getVal('ao_zone_installation')}<br>
-                <span style="color: ${dangerColor}; font-weight: bold;">M</span>ission : ${getVal('ao_mission')}<br>
-                <span style="color: ${dangerColor}; font-weight: bold;">S</span>ecteur de surveillance : ${getVal('ao_secteur_surveillance')}<br>
-                <span style="color: ${dangerColor}; font-weight: bold;">P</span>oints Particuliers : ${getVal('ao_points_particuliers')}<br>
-                <span style="color: ${dangerColor}; font-weight: bold;">C</span>onduite à Tenir : ${getVal('ao_cat')}<br>
-                <span style="color: ${dangerColor}; font-weight: bold;">P</span>lace du Chef : ${getVal('ao_place_chef')}
-            </p>`;
-            htmlContent += aoText;
-            
-            htmlContent += await drawImagesHtmlFromCategory('photo_container_emplacement_ao_preview_container', 'Emplacement AO');
-
-            htmlContent += drawTitleHtml("7. PATRACDVR (Détail de la Composition)");
-            const patracHeaders = ["Trigramme", "Fonction", "Cellule", "Armement", "Équip. 1", "Équip. 2", "Tenue", "GPB"];
-            for (const row of (formData.patracdvr_rows || [])) {
-                if(row.vehicle && row.members && row.members.length > 0) {
-                    htmlContent += drawSubTitleHtml(`Véhicule: ${row.vehicle}`);
-                    const patracRows = row.members.filter(m => m.trigramme).map(m => [m.trigramme, m.fonction, m.cellule, m.armement, m.equipement, m.equipement2, m.tenue, m.gpb]);
-                    if (patracRows.length > 0) { htmlContent += drawTableHtml(patracHeaders, patracRows); }
-                }
-            }
-            
-            htmlContent += drawTitleHtml("9. CONDUITES À TENIR");
-            htmlContent += drawSubTitleHtml("Générales"); htmlContent += drawTextHtml(getVal('cat_generales'), true);
-            const noGoText = getVal('no_go');
-            if (noGoText) {
-                htmlContent += drawSubTitleHtml("NO GO");
-                htmlContent += drawTextHtml(noGoText, true, dangerColor, '1.2em');
-            }
-            htmlContent += drawSubTitleHtml("Liaison"); htmlContent += drawTextHtml(getVal('cat_liaison'), true);
-            
-            const dateOp = getVal('date_op');
-            const nomAdversaire = getVal('nom_adversaire');
-            if (dateOp && nomAdversaire) {
-                const safeAdversaireName = nomAdversaire.trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
-                const oiId = `${dateOp}_${safeAdversaireName}`;
-                const retexUrl = `${RETEX_BASE_URL}?oiId=${encodeURIComponent(oiId)}`;
-                htmlContent += drawTitleHtml("LIEN RETEX");
-                htmlContent += drawTextHtml("Lien d'accès au formulaire de Retour d'Expérience:", false);
-                htmlContent += wrapHtml(`<a href="${retexUrl}" target="_blank" style="color: ${accentColor}; font-weight: bold; font-size: 1.1em; text-decoration: none;">${retexUrl}</a>`, 'p', { 'padding-left': '15px' });
-            }
-
-            htmlContent += `</div>`;
-            return htmlContent;
-        }
     </script>
 </body>
 </html>
