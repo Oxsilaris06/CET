@@ -988,6 +988,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
 
             function init() {
                 return new Promise((resolve, reject) => {
+                    if (db) return resolve(db);
                     const request = indexedDB.open(DB_NAME, DB_VERSION);
                     request.onerror = (event) => reject("Erreur d'ouverture de la base de données IndexedDB.");
                     request.onsuccess = (event) => {
@@ -1007,6 +1008,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             }
 
             return {
+                init,
                 async saveImage(id, blob) {
                     const db = await getDb();
                     return new Promise((resolve, reject) => {
@@ -1087,47 +1089,47 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             const displayContainer = displayContainerId ? document.getElementById(displayContainerId) : null;
             
             if (isSingle) {
-                // Remove existing images from this single-upload slot
-                const existingImages = previewContainer.querySelectorAll('.image-preview-item .image-preview');
+                const existingImages = previewContainer.querySelectorAll('.image-preview');
                 for(const img of existingImages) {
                     await removeImage(img.id);
                 }
-                previewContainer.innerHTML = '';
-                if(displayContainer) displayContainer.innerHTML = '';
             }
 
             if (input.files.length > 0) {
-                for (const file of input.files) {
+                Array.from(input.files).forEach(file => {
                     const previewImgId = `preview_img_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-                    await dbManager.saveImage(previewImgId, file);
-                    const objectURL = URL.createObjectURL(file);
+                    dbManager.saveImage(previewImgId, file).then(() => {
+                        const objectURL = URL.createObjectURL(file);
 
-                    const interactiveItem = document.createElement('div');
-                    interactiveItem.className = 'image-preview-item';
-                    interactiveItem.innerHTML = `
-                        <img id="${previewImgId}" class="image-preview" src="${objectURL}" style="display:block;" data-db-id="${previewImgId}" data-annotations="[]">
-                        <div style="display: flex; gap: 5px; margin-top: 5px;">
-                            <button type="button" class="add-btn" style="background-color: var(--accent-blue); padding: 4px 8px;" onclick="openAnnotationModal('${previewImgId}')"><span class="material-symbols-outlined" style="font-size: 1.2em;">edit</span></button>
-                            <button type="button" class="remove-btn" style="padding: 4px 8px;" onclick="removeImage('${previewImgId}')">&times;</button>
-                        </div>`;
-                    previewContainer.appendChild(interactiveItem);
+                        const interactiveItem = document.createElement('div');
+                        interactiveItem.className = 'image-preview-item';
+                        interactiveItem.innerHTML = `
+                            <img id="${previewImgId}" class="image-preview" src="${objectURL}" style="display:block;" data-db-id="${previewImgId}" data-annotations="[]">
+                            <div style="display: flex; gap: 5px; margin-top: 5px;">
+                                <button type="button" class="add-btn" style="background-color: var(--accent-blue); padding: 4px 8px;" onclick="openAnnotationModal('${previewImgId}')"><span class="material-symbols-outlined" style="font-size: 1.2em;">edit</span></button>
+                                <button type="button" class="remove-btn" style="padding: 4px 8px;" onclick="removeImage('${previewImgId}')">&times;</button>
+                            </div>`;
+                        previewContainer.appendChild(interactiveItem);
 
-                    if (displayContainer) {
-                        const displayImg = document.createElement('img');
-                        displayImg.className = 'image-preview';
-                        displayImg.src = objectURL;
-                        displayImg.dataset.refId = previewImgId;
-                        displayContainer.appendChild(displayImg);
-                    }
-                }
+                        if (displayContainer) {
+                            const displayImg = document.createElement('img');
+                            displayImg.className = 'image-preview';
+                            displayImg.src = objectURL;
+                            displayImg.dataset.refId = previewImgId;
+                            displayContainer.appendChild(displayImg);
+                        }
+                        saveFormData();
+                    });
+                });
             }
             input.value = '';
-            setTimeout(saveFormData, 100);
         }
         
         async function removeImage(imgId) {
             const item = document.getElementById(imgId).closest('.image-preview-item');
+            const objectURL = document.getElementById(imgId)?.src;
             if (item) item.remove();
+            if(objectURL) URL.revokeObjectURL(objectURL);
             await dbManager.deleteImage(imgId);
             syncThumbnails();
             saveFormData();
@@ -1137,6 +1139,8 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             document.querySelectorAll('.photo-display-area').forEach(displayContainer => {
                 Array.from(displayContainer.children).forEach(displayImg => {
                     if (!document.getElementById(displayImg.dataset.refId)) {
+                        const objectURL = displayImg.src;
+                        if(objectURL.startsWith('blob:')) URL.revokeObjectURL(objectURL);
                         displayImg.remove();
                     }
                 });
@@ -2221,7 +2225,9 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     tempCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
                     tempCtx.drawImage(img, 0, 0);
 
-                    annotationsData.forEach(annotation => drawAnnotationOnContext(tempCtx, img.width, img.height, annotation));
+                    if(annotationsData && annotationsData.length > 0) {
+                        annotationsData.forEach(annotation => drawAnnotationOnContext(tempCtx, img.width, img.height, annotation));
+                    }
 
                     tempCanvas.toBlob(annotatedBlob => {
                         if (annotatedBlob) {
