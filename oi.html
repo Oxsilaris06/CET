@@ -1913,12 +1913,12 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             setContextualTools(null);
         }
 
-        function openAnnotationModal(previewImgId) {
+        async function openAnnotationModal(previewImgId) {
             const previewImg = document.getElementById(previewImgId);
             if (!previewImg) return;
         
             baseImage.onload = () => {
-                URL.revokeObjectURL(baseImage.src); // Libérer l'ancienne URL d'objet
+                URL.revokeObjectURL(baseImage.src);
                 canvas.width = baseImage.naturalWidth;
                 canvas.height = baseImage.naturalHeight;
                 annotations = JSON.parse(previewImg.dataset.annotations || '[]');
@@ -1928,12 +1928,23 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 annotationModal.showModal();
             };
         
-            baseImage.onerror = () => {
+            baseImage.onerror = (e) => {
+                if(baseImage.src) URL.revokeObjectURL(baseImage.src);
                 alert("Impossible de charger l'image pour l'annotation.");
+                console.error("Erreur de chargement de l'image dans `baseImage`:", e);
             };
         
-            // Utiliser la src de l'image (qui est une URL d'objet)
-            baseImage.src = previewImg.src;
+            try {
+                const imageBlob = await dbManager.getImage(previewImgId);
+                if (imageBlob) {
+                    baseImage.src = URL.createObjectURL(imageBlob);
+                } else {
+                    throw new Error("Le blob de l'image est introuvable dans IndexedDB.");
+                }
+            } catch(err) {
+                console.error("Erreur lors de la récupération de l'image pour l'annotation:", err);
+                alert("Impossible de charger l'image pour l'annotation.");
+            }
         }
 
         function redrawCanvas() {
@@ -3079,6 +3090,11 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     }
                     canvas.width = width;
                     canvas.height = height;
+
+                    // **FIX**: Add a white background to handle transparency before JPEG conversion
+                    ctx.fillStyle = 'white';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    
                     ctx.drawImage(img, 0, 0, width, height);
         
                     canvas.toBlob(
@@ -3450,7 +3466,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 await drawImagesFromCategory('photo_container_bapteme_terrain_preview_container', 'Baptême terrain');
 
                 addNewPage();
-                drawTitle("5. EXÉCUTION");
+                drawTitle("5. EXÉUTION");
                 const execText = `En vue d'appréhender le mis en cause et empêcher la déperdition des preuves,\nJe veux, le ${getVal('date_execution') || '(date)'} à partir de ${getVal('heure_execution') || '(heure)'}, pour une action ${getVal('type_action') || '(type d\'action)'} investir le domicile\nprésumé de ${getVal('nom_adversaire') || '(nom de l\'adversaire)'} après avoir bouclé celui-ci.`;
                 drawWrappedText(execText, { size: 16, x: context.margin });
                 drawSubTitle("Chronologie des temps");
