@@ -4,9 +4,6 @@
     <meta charset="UTF--8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Générateur d'OI</title>
-	<link rel="icon" href="favicon.ico" sizes="any" type="image/png">
-    <link rel="icon" href="favicon.ico" type="image/svg+xml">
-    <link rel="apple-touch-icon" href="favicon.ico">
     <link rel="icon" href="favicon.ico" type="image/x-icon">
     <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Saira+Stencil+One&display=swap" rel="stylesheet">
@@ -1921,7 +1918,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             if (!previewImg) return;
         
             baseImage.onload = () => {
-                URL.revokeObjectURL(baseImage.src);
+                URL.revokeObjectURL(baseImage.src); // Libérer l'ancienne URL d'objet
                 canvas.width = baseImage.naturalWidth;
                 canvas.height = baseImage.naturalHeight;
                 annotations = JSON.parse(previewImg.dataset.annotations || '[]');
@@ -1931,24 +1928,12 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 annotationModal.showModal();
             };
         
-            baseImage.onerror = (e) => {
-                if(baseImage.src) URL.revokeObjectURL(baseImage.src);
+            baseImage.onerror = () => {
                 alert("Impossible de charger l'image pour l'annotation.");
-                console.error("Erreur de chargement de l'image dans `baseImage`:", e);
             };
         
-            dbManager.getImage(previewImgId)
-                .then(imageBlob => {
-                    if (imageBlob) {
-                        baseImage.src = URL.createObjectURL(imageBlob);
-                    } else {
-                        throw new Error("Le blob de l'image est introuvable dans IndexedDB.");
-                    }
-                })
-                .catch(err => {
-                    console.error("Erreur lors de la récupération de l'image pour l'annotation:", err);
-                    alert("Impossible de charger l'image pour l'annotation.");
-                });
+            // Utiliser la src de l'image (qui est une URL d'objet)
+            baseImage.src = previewImg.src;
         }
 
         function redrawCanvas() {
@@ -3068,6 +3053,51 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 }
             }
             return null;
+        }
+
+        async function compressImage(imageBlob, quality) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                const objectURL = URL.createObjectURL(imageBlob);
+                img.src = objectURL;
+        
+                img.onload = () => {
+                    URL.revokeObjectURL(objectURL);
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+        
+                    const MAX_DIMENSION = 1920;
+                    let { naturalWidth: width, naturalHeight: height } = img;
+                    if (width > MAX_DIMENSION || height > MAX_DIMENSION) {
+                        if (width > height) {
+                            height = (MAX_DIMENSION / width) * height;
+                            width = MAX_DIMENSION;
+                        } else {
+                            width = (MAX_DIMENSION / height) * width;
+                            height = MAX_DIMENSION;
+                        }
+                    }
+                    canvas.width = width;
+                    canvas.height = height;
+                    ctx.drawImage(img, 0, 0, width, height);
+        
+                    canvas.toBlob(
+                        (blob) => {
+                            if (blob) {
+                                resolve(blob.arrayBuffer());
+                            } else {
+                                reject(new Error('La conversion du canevas en Blob a échoué.'));
+                            }
+                        },
+                        'image/jpeg',
+                        quality
+                    );
+                };
+                img.onerror = () => {
+                    URL.revokeObjectURL(objectURL);
+                    reject(new Error("Échec du chargement du Blob de l'image dans l'élément Image."));
+                };
+            });
         }
 
         async function buildPdf() {
