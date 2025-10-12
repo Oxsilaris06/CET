@@ -4,10 +4,10 @@
     <meta charset="UTF--8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Générateur d'OI</title>
-    <link rel="icon" href="favicon.ico" sizes="any" type="image/png">
+	<link rel="icon" href="favicon.ico" sizes="any" type="image/png">
     <link rel="icon" href="favicon.ico" type="image/svg+xml">
     <link rel="apple-touch-icon" href="favicon.ico">
-    <link rel="manifest" href="site.webmanifest">
+    <link rel="icon" href="favicon.ico" type="image/x-icon">
     <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Saira+Stencil+One&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
@@ -925,17 +925,17 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
     <script src="https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js"></script>
     <script>
-        const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent";
+        const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent";
         const RETEX_BASE_URL = "https://oxsilaris06.github.io/Praxis/retex.html";
         const DEFAULT_CONFIG_FILE = 'members_config.json'; 
         
         let memberConfig = {
             fonctions: ['Chef inter', 'Chef dispo','Chef AO','Effrac', 'DE', 'Sans'],
             cellules: ['AO1','AO2','AO3','AO4','AO5','AO6','India 1','India 2','India 3','India 4','India 5', 'Sans'],
-            armements: ['PSA', 'UMP9', 'G36', 'PIE', 'LBD40', 'FAP'],
+            armements: ['Sans', 'UMP9', 'G36', 'PIE', 'LBD40', 'FAP'],
             equipements: ['Sans', 'BBAL', 'GENL', 'EFFRAC', 'MP7', 'IL'],
             equipements2: ['Sans', 'Échelle', 'Stop stick', 'Lacry', 'Cale'],
-            tenues: ['UBAS', '4S', 'Bleu', 'Treillis','Ghilie', 'Civil'],
+            tenues: ['UBAS', '4S', 'Bleu', 'Treillis', 'Civil'],
             gpbs: ['GPBL', 'GPBPD','Sans']
         };
         const availableVehicles = ['Sharan', 'Kodiaq', '5008', 'Scénic', 'BT'];
@@ -1921,7 +1921,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             if (!previewImg) return;
         
             baseImage.onload = () => {
-                URL.revokeObjectURL(baseImage.src); // Libérer l'ancienne URL d'objet
+                URL.revokeObjectURL(baseImage.src);
                 canvas.width = baseImage.naturalWidth;
                 canvas.height = baseImage.naturalHeight;
                 annotations = JSON.parse(previewImg.dataset.annotations || '[]');
@@ -1931,12 +1931,24 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 annotationModal.showModal();
             };
         
-            baseImage.onerror = () => {
+            baseImage.onerror = (e) => {
+                if(baseImage.src) URL.revokeObjectURL(baseImage.src);
                 alert("Impossible de charger l'image pour l'annotation.");
+                console.error("Erreur de chargement de l'image dans `baseImage`:", e);
             };
         
-            // Utiliser la src de l'image (qui est une URL d'objet)
-            baseImage.src = previewImg.src;
+            dbManager.getImage(previewImgId)
+                .then(imageBlob => {
+                    if (imageBlob) {
+                        baseImage.src = URL.createObjectURL(imageBlob);
+                    } else {
+                        throw new Error("Le blob de l'image est introuvable dans IndexedDB.");
+                    }
+                })
+                .catch(err => {
+                    console.error("Erreur lors de la récupération de l'image pour l'annotation:", err);
+                    alert("Impossible de charger l'image pour l'annotation.");
+                });
         }
 
         function redrawCanvas() {
@@ -3058,51 +3070,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             return null;
         }
 
-        async function compressImage(imageBlob, quality) {
-            return new Promise((resolve, reject) => {
-                const img = new Image();
-                const objectURL = URL.createObjectURL(imageBlob);
-                img.src = objectURL;
-        
-                img.onload = () => {
-                    URL.revokeObjectURL(objectURL);
-                    const canvas = document.createElement('canvas');
-                    const ctx = canvas.getContext('2d');
-        
-                    const MAX_DIMENSION = 1920;
-                    let { naturalWidth: width, naturalHeight: height } = img;
-                    if (width > MAX_DIMENSION || height > MAX_DIMENSION) {
-                        if (width > height) {
-                            height = (MAX_DIMENSION / width) * height;
-                            width = MAX_DIMENSION;
-                        } else {
-                            width = (MAX_DIMENSION / height) * width;
-                            height = MAX_DIMENSION;
-                        }
-                    }
-                    canvas.width = width;
-                    canvas.height = height;
-                    ctx.drawImage(img, 0, 0, width, height);
-        
-                    canvas.toBlob(
-                        (blob) => {
-                            if (blob) {
-                                resolve(blob.arrayBuffer());
-                            } else {
-                                reject(new Error('La conversion du canevas en Blob a échoué.'));
-                            }
-                        },
-                        'image/jpeg',
-                        quality
-                    );
-                };
-                img.onerror = () => {
-                    URL.revokeObjectURL(objectURL);
-                    reject(new Error("Échec du chargement du Blob de l'image dans l'élément Image."));
-                };
-            });
-        }
-
         async function buildPdf() {
             const { PDFDocument, StandardFonts, rgb, PageSizes } = PDFLib;
             const pdfDoc = await PDFDocument.create();
@@ -3453,7 +3420,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 await drawImagesFromCategory('photo_container_bapteme_terrain_preview_container', 'Baptême terrain');
 
                 addNewPage();
-                drawTitle("5. EXÉCUTION");
+                drawTitle("5. EXÉUTION");
                 const execText = `En vue d'appréhender le mis en cause et empêcher la déperdition des preuves,\nJe veux, le ${getVal('date_execution') || '(date)'} à partir de ${getVal('heure_execution') || '(heure)'}, pour une action ${getVal('type_action') || '(type d\'action)'} investir le domicile\nprésumé de ${getVal('nom_adversaire') || '(nom de l\'adversaire)'} après avoir bouclé celui-ci.`;
                 drawWrappedText(execText, { size: 16, x: context.margin });
                 drawSubTitle("Chronologie des temps");
