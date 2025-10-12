@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panneau de Configuration</title>
+    <link rel="icon" href="favicon.ico" sizes="any" type="image/png">
+    <link rel="icon" href="favicon.ico" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="favicon.ico">
+    <link rel="manifest" href="site.webmanifest">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500&family=Saira+Stencil+One&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
+    <style>
+        :root {
+            --bg-body: #121212; --bg-container: #1e1e1e; --bg-interactive: #2a2a2a;
+            --text-primary: #e0e0e0; --text-secondary: #95a5a6; --border-color: #444444;
+            --accent-blue: #5b9bd5; --accent-hover: #4a7aa5; --danger-red: #c0392b; --success-green: #27ae60;
+        }
+        body.light-mode {
+            --bg-body: #f0f2f5; --bg-container: #ffffff; --bg-interactive: #f8f9fa;
+            --text-primary: #212529; --text-secondary: #6c757d; --accent-blue: #0033a0;
+            --accent-hover: #0044b3; --border-color: #dee2e6;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Oswald', sans-serif; background-color: var(--bg-body); color: var(--text-primary); line-height: 1.6; padding: 15px; padding-bottom: 90px; }
+        .container { max-width: 900px; margin: auto; background: var(--bg-container); padding: 20px 30px; border-radius: 8px; border: 1px solid var(--border-color); }
+        h1 { text-align: center; font-family: 'Saira Stencil One', sans-serif; font-size: 2.2em; margin-bottom: 20px; color: var(--accent-blue); text-transform: uppercase; font-weight: normal; }
+        
+        .io-actions {
+            display: flex; flex-direction: column; gap: 15px;
+            padding: 20px; margin-bottom: 25px; border-radius: 6px;
+            border: 1px dashed var(--accent-blue); background-color: var(--bg-interactive);
+        }
+        .io-actions button, .io-actions label {
+            width: 100%; padding: 12px; font-family: 'Saira Stencil One', sans-serif; font-size: 1.1em;
+            color: white; border: none; border-radius: 4px; cursor: pointer; text-align: center;
+            transition: background-color 0.2s;
+        }
+        #uploadLabel { background-color: var(--accent-blue); }
+        #uploadLabel:hover { background-color: var(--accent-hover); }
+        #downloadConfig { background-color: var(--success-green); }
+        #downloadConfig:hover { background-color: #229954; }
+        #resetFormBtn { background-color: var(--danger-red); }
+        #resetFormBtn:hover { background-color: #a93226; }
+
+        .collapsible { background-color: var(--bg-interactive); border: 1px solid var(--border-color); border-radius: 5px; margin-bottom: 15px; overflow: hidden; }
+        .collapsible-header { cursor: pointer; padding: 15px; display: flex; justify-content: space-between; align-items: center; }
+        .collapsible-header h2 { font-family: 'Saira Stencil One', sans-serif; font-weight: 400; font-size: 1.4em; margin: 0; color: var(--text-primary); }
+        .collapsible-header .toggle-arrow { font-size: 1.5em; transition: transform 0.3s; }
+        .collapsible-content { padding: 0 15px; max-height: 0; overflow: hidden; transition: max-height 0.3s ease-out, padding 0.3s ease-out; }
+        .collapsible.open .collapsible-header .toggle-arrow { transform: rotate(180deg); }
+        .collapsible.open .collapsible-content { max-height: 5000px; padding-bottom: 15px; }
+
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; margin-bottom: 5px; font-weight: bold; color: var(--text-secondary); }
+        .form-group input, .form-group textarea, .form-group select {
+            width: 100%; padding: 12px; border: 1px solid var(--border-color); border-radius: 4px;
+            font-size: 1rem; background-color: var(--bg-body); color: var(--text-primary); font-family: 'Oswald', sans-serif;
+        }
+        .form-group textarea { min-height: 120px; resize: vertical; }
+        .form-group .help-text { font-size: 0.8em; color: var(--text-secondary); margin-top: 5px; }
+
+        h2 { font-family: 'Saira Stencil One', sans-serif; font-weight: 400; font-size: 1.4em; margin: 0; color: var(--text-primary); margin-top: 20px; }
+
+        #memberList { display: flex; flex-wrap: wrap; gap: 10px; padding: 10px 0; border: 1px dashed var(--border-color); border-radius: 5px; min-height: 70px; align-content: flex-start;}
+        .member-btn { 
+            background-color: var(--bg-body); border: 2px solid var(--border-color); color: var(--text-primary); 
+            padding: 8px 12px; border-radius: 5px; text-align: center; font-family: 'Oswald', sans-serif; 
+            cursor: pointer; transition: all 0.2s; min-height: 56px; display: flex; flex-direction: column; justify-content: center;
+        }
+        .member-btn:hover { border-color: var(--accent-hover); }
+        .member-btn.member-active { border-color: var(--accent-blue); box-shadow: 0 0 8px var(--accent-blue); }
+        .member-btn .trigramme { font-weight: bold; }
+        .member-btn .fonction { font-size: 0.8em; color: var(--text-secondary); display: block; }
+        
+        #addMemberBtn {
+            display: block; width: 100%; padding: 10px; margin-top: 10px; background-color: var(--accent-blue);
+            color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 1em;
+        }
+        
+        .remove-btn {
+            background-color: var(--danger-red); color: white; border: none; border-radius: 4px;
+            padding: 5px 10px; font-size: 0.8em; cursor: pointer;
+        }
+        
+        #notification {
+            text-align: center; padding: 10px; border-radius: 4px;
+            margin-bottom: 15px; display: none;
+            color: white; font-weight: bold;
+        }
+        #notification.success { background-color: var(--success-green); }
+        #notification.error { background-color: var(--danger-red); }
+
+        #quickEditPanel { display: none; padding: 15px; border: 1px solid var(--border-color); border-radius: 5px; margin-top: 20px; background-color: var(--bg-body); }
+        #quickEditPanel h4 { margin-top: 0; }
+        #quickEditPanel h4 #selectedMemberTrigramme { color: var(--accent-blue); }
+        .quick-edit-content .quick-edit-tab-panel { display: none; }
+        .quick-edit-options { display: flex; flex-wrap: wrap; gap: 8px; }
+        .quick-edit-btn { background-color: var(--bg-interactive); border: 1px solid var(--border-color); color: var(--text-secondary); padding: 6px 10px; border-radius: 4px; cursor: pointer; font-family: 'Oswald', sans-serif; font-size: 0.9em; transition: all 0.2s; }
+        .quick-edit-btn:hover { border-color: var(--accent-hover); color: var(--text-primary); }
+        .quick-edit-btn.selected { background-color: var(--accent-blue); color: white; border-color: var(--accent-blue); }
+        .quick-edit-category { margin-bottom: 20px; }
+        .quick-edit-category h5 { font-size: 1.1em; color: var(--text-secondary); margin-bottom: 10px; border-bottom: 1px solid var(--border-color); padding-bottom: 5px; }
+        .quick-edit-buttons { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
+        .quick-edit-buttons button { flex-grow: 1; }
+
+        /* Dock de navigation */
+        .dock-menu { position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; padding: 10px; z-index: 1000; background-color: rgba(30, 30, 30, 0.7); border: 1px solid var(--border-color); border-radius: 35px; backdrop-filter: blur(10px); transition: all 0.3s ease-in-out; }
+        .dock-menu-item { display: flex; align-items: center; justify-content: center; background-color: var(--bg-container); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 50%; width: 50px; height: 50px; font-size: 28px; cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.2); transition: all 0.2s; text-decoration: none; flex-shrink: 0; }
+        .dock-menu-item:hover { transform: scale(1.1); }
+        
+        @media (min-width: 768px) {
+            h1 { font-size: 2.8em; }
+            .io-actions { flex-direction: row; }
+            #memberList { min-height: 70px; align-content: flex-start;}
+            #memberList .member-btn { width: auto; }
+            #quickEditPanel { display: block; }
+        }
+    </style>
+</head>
+<body class="dark-mode">
+
+    <div class="container">
+        <h1>Panneau de Configuration</h1>
+        
+        <div id="notification"></div>
+
+        <div class="io-actions">
+            <input type="file" id="uploadConfig" accept=".json" style="display:none;">
+            <label for="uploadConfig" id="uploadLabel">Charger & Éditer</label>
+            <button id="downloadConfig">Télécharger</button>
+            <button id="resetFormBtn">Réinitialiser</button>
+        </div>
+
+        <form id="configForm">
+            <div class="collapsible open">
+                <div class="collapsible-header"><h2>Clé API Gemini</h2><span class="toggle-arrow">▼</span></div>
+                <div class="collapsible-content">
+                    <div class="form-group">
+                        <label for="geminiApiKey">Clé API :</label>
+                        <input type="password" id="geminiApiKey" placeholder="Saisissez votre clé d'API">
+                        <p class="help-text">La clé est enregistrée localement dans votre navigateur pour l'analyse des rapports RETEX.</p>
+                    </div>
+                </div>
+            </div>
+
+            <h2>Membres</h2>
+            <div id="memberList"></div>
+            <button type="button" id="addMemberBtn">➕ Ajouter un membre</button>
+
+            <div id="quickEditPanel" style="display:none;">
+                <div class="form-group">
+                    <label for="quick_edit_trigramme">Trigramme:</label>
+                    <input type="text" id="quick_edit_trigramme" oninput="updateMemberTrigramme()">
+                </div>
+                <h4>Options Rapides:</h4>
+                <div class="quick-edit-content"></div>
+                <button type="button" id="deleteMemberBtn" class="remove-btn">Supprimer le membre</button>
+            </div>
+
+            <div class="collapsible">
+                <div class="collapsible-header"><h2>Configuration Unité</h2><span class="toggle-arrow">▼</span></div>
+                <div class="collapsible-content">
+                    <div class="form-group"><label for="oiFonctions">Fonctions</label><textarea id="oiFonctions" placeholder="Chef inter, Chef dispo, DE, Sans"></textarea><p class="help-text">Séparez chaque valeur par une virgule.</p></div>
+                    <div class="form-group"><label for="oiCellules">Cellules</label><textarea id="oiCellules" placeholder="AO1, AO2, India 1, India 2"></textarea></div>
+                    <div class="form-group"><label for="oiArmements">Armements</label><textarea id="oiArmements" placeholder="Sans, UMP9, G36, PIE"></textarea></div>
+                    <div class="form-group"><label for="oiEquipements">Équipements 1</label><textarea id="oiEquipements" placeholder="Sans, BBAL, GENL, EFFRAC"></textarea></div>
+                    <div class="form-group"><label for="oiEquipements2">Équipements 2</label><textarea id="oiEquipements2" placeholder="Sans, Échelle, Stop stick"></textarea></div>
+                    <div class="form-group"><label for="oiTenues">Tenues</label><textarea id="oiTenues" placeholder="UBAS, 4S, Bleu, Treillis"></textarea></div>
+                    <div class="form-group"><label for="oiGpbs">GPB</label><textarea id="oiGpbs" placeholder="GPBL, GPBPD"></textarea></div>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <div class="dock-menu" id="dockMenu">
+        <a href="index.html" class="dock-menu-item" id="homeBtn" title="Accueil"><span class="material-symbols-outlined">home</span></a>
+        <div class="dock-menu-item" id="darkModeToggle" title="Changer le thème"><span class="material-symbols-outlined" id="darkModeIcon">nightlight</span></div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const uploadInput = document.getElementById('uploadConfig');
+            const downloadBtn = document.getElementById('downloadConfig');
+            const memberListDiv = document.getElementById('memberList');
+            const addMemberBtn = document.getElementById('addMemberBtn');
+            const notificationDiv = document.getElementById('notification');
+            const geminiApiKeyInput = document.getElementById('geminiApiKey');
+            const quickEditPanel = document.getElementById('quickEditPanel');
+            const resetFormBtn = document.getElementById('resetFormBtn');
+            const darkModeToggle = document.getElementById('darkModeToggle');
+            const darkModeIcon = document.getElementById('darkModeIcon');
+            let activeMemberId = null;
+
+            const memberConfig = {
+                fonctions: [],
+                cellules: [],
+                armements: [],
+                equipements: [],
+                equipements2: [],
+                tenues: [],
+                gpbs: []
+            };
+
+            const quickEditMapping = {
+                'Fonction': { key: 'fonctions', attribute: 'fonction' },
+                'Cellule': { key: 'cellules', attribute: 'cellule' },
+                'Armement': { key: 'armements', attribute: 'armement' },
+                'Équip. 1': { key: 'equipements', attribute: 'equipement' },
+                'Équip. 2': { key: 'equipements2', attribute: 'equipement2' },
+                'Tenue': { key: 'tenues', attribute: 'tenue' },
+                'GPB': { key: 'gpbs', attribute: 'gpb' }
+            };
+            
+            // --- UI LOGIC ---
+
+            function setupCollapsibles() {
+                document.querySelectorAll('.collapsible-header').forEach(header => {
+                    header.addEventListener('click', () => {
+                        header.parentElement.classList.toggle('open');
+                    });
+                });
+            }
+
+            function showNotification(message, type = 'success') {
+                notificationDiv.textContent = message;
+                notificationDiv.className = type;
+                notificationDiv.style.display = 'block';
+                setTimeout(() => { notificationDiv.style.display = 'none'; }, 4000);
+            }
+
+            function addMemberButton(memberData = { trigramme: 'N/A', fonction: 'Sans', cellule: 'India 1', armement: 'Sans', equipement: 'Sans', equipement2: 'Sans', tenue: 'UBAS', gpb: 'GPBL' }) {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'member-btn';
+                btn.id = `member_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+                Object.keys(memberData).forEach(key => btn.dataset[key] = memberData[key]);
+                updateMemberButtonVisuals(btn);
+                memberListDiv.appendChild(btn);
+                return btn;
+            }
+
+            function updateMemberButtonVisuals(btn) {
+                const trigramme = btn.dataset.trigramme || 'N/A';
+                const fonction = btn.dataset.fonction || '';
+                const cellule = btn.dataset.cellule || '';
+                btn.innerHTML = `<span class="trigramme">${trigramme}</span><span class="fonction">${cellule}${fonction !== 'Sans' ? ` / ${fonction}` : ''}</span>`;
+            }
+
+            function setupQuickEditPanel() {
+                const contentContainer = quickEditPanel.querySelector('.quick-edit-content');
+                contentContainer.innerHTML = '';
+                for (const [title, config] of Object.entries(quickEditMapping)) {
+                    const categoryDiv = document.createElement('div');
+                    categoryDiv.className = 'quick-edit-category';
+                    categoryDiv.innerHTML = `<h5>${title}</h5><div class="quick-edit-options"></div>`;
+                    const optionsContainer = categoryDiv.querySelector('.quick-edit-options');
+
+                    memberConfig[config.key].forEach(option => {
+                        const btn = document.createElement('button');
+                        btn.type = 'button';
+                        btn.className = 'quick-edit-btn';
+                        btn.textContent = option;
+                        btn.dataset.attribute = config.attribute;
+                        btn.dataset.value = option;
+                        optionsContainer.appendChild(btn);
+                    });
+                    contentContainer.appendChild(categoryDiv);
+                }
+            }
+
+            function handleMemberSelection(event) {
+                const clickedButton = event.target.closest('.member-btn');
+                if (!clickedButton) return;
+
+                if (activeMemberId === clickedButton.id) {
+                    clickedButton.classList.remove('member-active');
+                    activeMemberId = null;
+                    quickEditPanel.style.display = 'none';
+                    return;
+                }
+
+                if (activeMemberId) {
+                    const oldActive = document.getElementById(activeMemberId);
+                    if (oldActive) oldActive.classList.remove('member-active');
+                }
+                
+                activeMemberId = clickedButton.id;
+                clickedButton.classList.add('member-active');
+                
+                populateQuickEditPanel(activeMemberId);
+                quickEditPanel.style.display = 'block';
+            }
+
+            function populateQuickEditPanel(memberId) {
+                const member = document.getElementById(memberId);
+                if (!member) return;
+                document.getElementById('quick_edit_trigramme').value = member.dataset.trigramme || '';
+                document.querySelectorAll('#quickEditPanel .quick-edit-btn').forEach(btn => {
+                    const attribute = btn.dataset.attribute;
+                    const value = btn.dataset.value;
+                    btn.classList.toggle('selected', member.dataset[attribute] === value);
+                });
+            }
+
+            function updateMemberTrigramme() {
+                const member = document.getElementById(activeMemberId);
+                if (!member) return;
+                const newTrigramme = document.getElementById('quick_edit_trigramme').value;
+                member.dataset.trigramme = newTrigramme;
+                updateMemberButtonVisuals(member);
+            }
+
+            // --- DATA HANDLING ---
+
+            uploadInput.addEventListener('change', (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const data = JSON.parse(e.target.result);
+                        populateForm(data);
+                        showNotification('Configuration chargée avec succès !', 'success');
+                    } catch (error) {
+                        showNotification('Erreur: Le fichier JSON est invalide.', 'error');
+                        console.error("JSON Parse Error:", error);
+                    }
+                };
+                reader.onerror = () => {
+                    showNotification('Erreur de lecture du fichier.', 'error');
+                };
+                reader.readAsText(file);
+            });
+
+            function populateForm(data) {
+                geminiApiKeyInput.value = data.geminiApiKey || '';
+                
+                memberListDiv.innerHTML = '';
+                (data.members || []).forEach(addMemberButton);
+
+                const getArrayFromTextarea = (id) => (data.options?.[id] || []).join(', ');
+                document.getElementById('oiFonctions').value = getArrayFromTextarea('fonctions');
+                document.getElementById('oiCellules').value = getArrayFromTextarea('cellules');
+                document.getElementById('oiArmements').value = getArrayFromTextarea('armements');
+                document.getElementById('oiEquipements').value = getArrayFromTextarea('equipements');
+                document.getElementById('oiEquipements2').value = getArrayFromTextarea('equipements2');
+                document.getElementById('oiTenues').value = getArrayFromTextarea('tenues');
+                document.getElementById('oiGpbs').value = getArrayFromTextarea('gpbs');
+
+                updateMemberConfig();
+            }
+            
+            downloadBtn.addEventListener('click', () => {
+                try {
+                    const config = gatherFormData();
+                    const configString = JSON.stringify(config, null, 2);
+                    const blob = new Blob([configString], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'config.json';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                    showNotification('Fichier de configuration généré !', 'success');
+                } catch (error) {
+                    showNotification(`Erreur lors de la génération: ${error.message}`, 'error');
+                    console.error("Generation Error:", error);
+                }
+            });
+
+            function gatherFormData() {
+                const getArrayFromTextarea = (id) => document.getElementById(id).value.split(',').map(item => item.trim()).filter(Boolean);
+
+                const members = Array.from(memberListDiv.querySelectorAll('.member-btn')).map(btn => ({
+                    trigramme: btn.dataset.trigramme,
+                    fonction: btn.dataset.fonction,
+                    cellule: btn.dataset.cellule,
+                    armement: btn.dataset.armement,
+                    equipement: btn.dataset.equipement,
+                    equipement2: btn.dataset.equipement2,
+                    tenue: btn.dataset.tenue,
+                    gpb: btn.dataset.gpb
+                }));
+
+                return {
+                    geminiApiKey: geminiApiKeyInput.value,
+                    members: members,
+                    options: {
+                        fonctions: getArrayFromTextarea('oiFonctions'),
+                        cellules: getArrayFromTextarea('oiCellules'),
+                        armements: getArrayFromTextarea('oiArmements'),
+                        equipements: getArrayFromTextarea('oiEquipements'),
+                        equipements2: getArrayFromTextarea('oiEquipements2'),
+                        tenues: getArrayFromTextarea('oiTenues'),
+                        gpbs: getArrayFromTextarea('oiGpbs'),
+                    }
+                };
+            }
+
+            function updateMemberConfig() {
+                const getArrayFromTextarea = (id) => document.getElementById(id).value.split(',').map(item => item.trim()).filter(Boolean);
+                memberConfig.fonctions = getArrayFromTextarea('oiFonctions');
+                memberConfig.cellules = getArrayFromTextarea('oiCellules');
+                memberConfig.armements = getArrayFromTextarea('oiArmements');
+                memberConfig.equipements = getArrayFromTextarea('oiEquipements');
+                memberConfig.equipements2 = getArrayFromTextarea('oiEquipements2');
+                memberConfig.tenues = getArrayFromTextarea('oiTenues');
+                memberConfig.gpbs = getArrayFromTextarea('oiGpbs');
+                setupQuickEditPanel();
+            }
+            
+            function toggleTheme() {
+                const body = document.body;
+                body.classList.toggle('light-mode');
+                const isLightMode = body.classList.contains('light-mode');
+                const newTheme = isLightMode ? 'light' : 'dark';
+                localStorage.setItem('theme', newTheme);
+                darkModeIcon.textContent = isLightMode ? 'clear_day' : 'nightlight';
+            }
+
+            function initTheme() {
+                const savedTheme = localStorage.getItem('theme') || 'dark';
+                const body = document.body;
+                if (savedTheme === 'light') {
+                    body.classList.add('light-mode');
+                    darkModeIcon.textContent = 'clear_day';
+                } else {
+                    body.classList.add('dark-mode');
+                    darkModeIcon.textContent = 'nightlight';
+                }
+            }
+
+
+            // Init
+            setupCollapsibles();
+            memberListDiv.addEventListener('click', handleMemberSelection);
+            
+            addMemberBtn.addEventListener('click', () => {
+                const newMemberBtn = addMemberButton();
+                handleMemberSelection({ target: newMemberBtn });
+            });
+            
+            resetFormBtn.addEventListener('click', () => {
+                if(confirm("Voulez-vous vraiment réinitialiser le formulaire ? Toutes les données non sauvegardées seront perdues.")) {
+                    populateForm({});
+                    showNotification('Formulaire réinitialisé avec succès.', 'success');
+                }
+            });
+
+            document.getElementById('deleteMemberBtn').addEventListener('click', () => {
+                const button = document.getElementById(activeMemberId);
+                if (button && confirm(`Supprimer le membre ${button.dataset.trigramme} ?`)) {
+                    button.remove();
+                    quickEditPanel.style.display = "none";
+                    activeMemberId = null;
+                }
+            });
+
+            quickEditPanel.addEventListener('click', (event) => {
+                const target = event.target.closest('.quick-edit-btn');
+                if (!target || !activeMemberId) return;
+
+                const activeMember = document.getElementById(activeMemberId);
+                if (!activeMember) return;
+                const attribute = target.dataset.attribute;
+                const value = target.dataset.value;
+                activeMember.dataset[attribute] = value;
+                updateMemberButtonVisuals(activeMember);
+                populateQuickEditPanel(activeMemberId);
+            });
+            
+            document.getElementById('quick_edit_trigramme').addEventListener('input', updateMemberTrigramme);
+
+
+            // Re-setup quick edit panel on textarea changes
+            document.querySelectorAll('textarea').forEach(textarea => {
+                textarea.addEventListener('change', updateMemberConfig);
+            });
+
+            darkModeToggle.addEventListener('click', toggleTheme);
+
+            // Initial load to set up the form
+            populateForm({
+                geminiApiKey: '',
+                members: [],
+                options: {
+                    fonctions: ["Chef inter", "Chef dispo", "Chef Oscar", "DE", "Cyno", "Inter", "AO", "Sans"],
+                    cellules: ["AO1", "AO2", "AO3", "AO4", "AO5", "AO6", "AO7", "India 1", "India 2", "India 3", "India 4", "India 5", "Effrac", "Sans"],
+                    armements: ["PSA", "UMP9", "G36", "PIE", "LBD", "FAP", "Sans"],
+                    equipements: ["Sans", "BBAL", "GENL", "EFFRAC", "MP7", "IL", "Lot 5.11"],
+                    equipements2: ["Sans", "Échelle", "Stop stick", "Lacry", "Cale", "IL", "Pass"],
+                    tenues: ["UBAS", "4S", "Bleu", "Civil", "Ghillie", "Treillis"],
+                    gpbs: ["GPBL", "GPBPD", "Sans"]
+                }
+            });
+
+            initTheme();
+        });
+    </script>
+</body>
+</html>
