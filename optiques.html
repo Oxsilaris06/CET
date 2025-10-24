@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Optiques de vision nocturne compagnie de Puget-Theniers</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+        .nav-item {
+            transition: all 0.3s ease;
+        }
+        .nav-item.active {
+            background-color: #1d4ed8;
+            color: white;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1rfpm rgba(0, 0, 0, 0.06);
+        }
+        .content-section {
+            display: none;
+            animation: fadeIn 0.5s ease;
+        }
+        .content-section.active {
+            display: block;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 900px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 400px;
+            max-height: 500px;
+        }
+        @media (min-width: 768px) {
+            .chart-container {
+                height: 500px;
+            }
+        }
+        table thead th {
+            background-color: #f9fafb;
+            color: #374151;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .video-wrapper {
+            position: relative;
+            padding-bottom: 56.25%; /* 16:9 ratio */
+            height: 0;
+            overflow: hidden;
+            max-width: 100%;
+            background: #000;
+            border-radius: 0.5rem;
+        }
+
+        .video-wrapper iframe,
+        .video-wrapper button {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border: 0;
+        }
+        .play-button {
+            background: rgba(0, 0, 0, 0.6);
+            color: white;
+            font-size: 1.5rem;
+            cursor: pointer;
+            transition: background 0.3s;
+            z-index: 10;
+        }
+        .play-button:hover {
+            background: rgba(29, 78, 216, 0.8);
+        }
+    </style>
+</head>
+<body class="text-gray-800">
+
+    <!-- Chosen Palette: "Bleu Militaire et Neutres" (Fond gris clair, cartes blanches, texte gris foncé, et un bleu de France (#1d4ed8) pour les éléments actifs/titres) -->
+    <!-- Application Structure Plan: Une SPA (Single Page Application) avec une navigation par onglets en haut. Les quatre onglets ('Synthèse', 'Comparaison Directe', 'Analyse Détaillée', 'Doctrine d'Emploi') permettent à l'utilisateur de naviguer de manière non linéaire. Cette structure est supérieure à un diaporama linéaire car elle permet aux décideurs d'accéder directement à la matrice de comparaison ou aux recommandations. Cliquer sur un onglet masque les autres sections et affiche celle qui est pertinente, offrant ainsi une expérience utilisateur fluide. Ajout d'une section vidéo pour la visualisation. -->
+    <!-- Visualization & Content Choices: 
+        1. Diapositive 5 (Comparaison): Info -> Tableau comparatif qualitatif. Objectif -> Quantifier et visualiser la comparaison pour une évaluation rapide. Vizu -> Graphique à barres horizontales (Chart.js) + Tableau HTML. Interaction -> N/A (graphique statique). Justification -> Un graphique offre une compréhension "en un coup d'œil" des points forts, complétant le tableau de texte détaillé.
+        2. Diapositives 3, 4 (Détails): Info -> Tableaux de spécifications. Objectif -> Présenter les détails techniques. Vizu -> Tableaux HTML stylisés dans une mise en page à 2 colonnes. Justification -> Les tableaux sont le format correct pour ces données.
+        3. Diapositive 6 (Doctrine): Info -> Listes à puces. Objectif -> Présenter clairement les recommandations. Vizu -> Listes HTML stylisées dans une mise en page à 2 colonnes. Justification -> Des listes claires et faciles à lire sont optimales.
+        4. Photos: Info -> Apparence physique. Objectif -> Permettre la reconnaissance des appareils. Vizu -> Grille d'images. Justification -> Ajoute un contexte visuel direct.
+        5. Vidéos: Info -> Démonstration visuelle. Objectif -> Permettre la visualisation via IFRAME direct (méthode demandée). Vizu -> Bouton remplacé dynamiquement par un IFRAME. Justification -> Fournit une visualisation intégrée comme demandé.
+    -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+
+    <div class="container mx-auto p-4 sm:p-6 lg:p-8 max-w-7xl">
+        
+        <header class="text-center mb-8">
+            <h1 class="text-3xl md:text-4xl font-bold text-blue-900 mb-2">Optiques de vision nocturne compagnie de Puget-Theniers</h1>
+            <p class="text-lg text-gray-600">HIKMICRO HABROK 4K vs. LEVENHUK HALO 13x PLUS</p>
+            <p class="text-md text-gray-500">Application interactive d'aide à la décision pour le cadre Militaire et Gendarmerie.</p>
+        </header>
+
+        <nav class="flex flex-wrap justify-center gap-2 sm:gap-4 mb-8" aria-label="Navigation principale">
+            <button id="nav-synthese" class="nav-item active py-2 px-4 rounded-lg font-medium bg-white shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                Synthèse
+            </button>
+            <button id="nav-comparaison" class="nav-item py-2 px-4 rounded-lg font-medium bg-white shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                Comparaison
+            </button>
+            <button id="nav-details" class="nav-item py-2 px-4 rounded-lg font-medium bg-white shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                Analyse Détaillée
+            </button>
+            <button id="nav-doctrine" class="nav-item py-2 px-4 rounded-lg font-medium bg-white shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                Doctrine d'Emploi
+            </button>
+            <button id="nav-photos" class="nav-item py-2 px-4 rounded-lg font-medium bg-white shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                Galerie Photos
+            </button>
+            <button id="nav-videos" class="nav-item py-2 px-4 rounded-lg font-medium bg-white shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                Vidéos
+            </button>
+        </nav>
+
+        <main>
+            <!-- Section Synthèse -->
+            <section id="content-synthese" class="content-section active bg-white rounded-lg shadow-xl p-6">
+                <h2 class="text-2xl font-bold text-blue-800 mb-4">Deux Voies d'Acquisition de Renseignement</h2>
+                <p class="mb-6 text-gray-600">Cette analyse compare deux technologies distinctes pour l'observation nocturne. Comprendre leur fonctionnement fondamental est essentiel pour déterminer leur cadre d'emploi.</p>
+                
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8 items-start">
+                    <!-- HIKMICRO HABROK 4K -->
+                    <div class="border border-gray-200 rounded-lg p-4 flex flex-col items-center">
+                        <img src="https://www.optique-pro.fr/Produktbilder/zoom/83367_3/Vision-nocturne-HIKMICRO-Habrok-4K-HE25L.jpg" alt="Photo des jumelles Hikmicro Habrok 4K" class="w-32 h-32 object-contain mb-3 rounded-md">
+                        <h3 class="text-xl font-semibold text-gray-900 mb-2">1. HIKMICRO HABROK 4K : Fusion Thermique & Numérique</h3>
+                        <p class="mb-3 text-sm">Module Thermique (LWIR) : Détection de la signature de chaleur (NETD inférieur à 35 mK). Focalisé sur la détection (Localisation de la cible).</p>
+                        <p class="text-sm">Canal Numérique (4K Jour/Nuit) : Capteur CMOS Ultra HD (3840x2160). Permet la reconnaissance et l'identification visuelle (avec l'aide de l'Illuminateur IR).</p>
+                        <p class="mt-3 text-blue-700 font-medium text-sm">Objectif Opérationnel : Détection rapide et Identification précise.</p>
+                    </div>
+                    <!-- LEVENHUK HALO 13x PLUS -->
+                    <div class="border border-gray-200 rounded-lg p-4 flex flex-col items-center">
+                        <img src="https://m.media-amazon.com/images/I/616SucijNeL.jpg" alt="Photo des jumelles numériques Levenhuk Halo 13x Plus" class="w-32 h-32 object-contain mb-3 rounded-md">
+                        <h3 class="text-xl font-semibold text-gray-900 mb-2">2. LEVENHUK HALO 13x PLUS : Vision Nocturne Numérique (VNN)</h3>
+                        <p class="mb-3 text-sm">Définition : Utilise un capteur CMOS classique pour capter et amplifier la lumière résiduelle (Jour ou Nuit).</p>
+                        <p class="text-sm">Devient actif en l'absence totale de lumière grâce à l'Illuminateur IR (850 nm).</p>
+                        <p class="mt-3 text-red-700 font-medium text-sm">Limitation : Ne détecte pas la chaleur.</p>
+                    </div>
+                    <!-- AGM MUM-14 (Dotation) -->
+                    <div class="border border-gray-200 rounded-lg p-4 flex flex-col items-center bg-gray-50">
+                        <img src="https://www.optique-pro.fr/Produktbilder/zoom/63900_1/Vision-nocturne-AGM-MUM-14A-NL3i-Gen-2-Level-3.jpg" alt="Photo du monoculaire AGM MUM-14" class="w-32 h-32 object-contain mb-3 rounded-md">
+                        <h3 class="text-xl font-semibold text-gray-900 mb-2">3. AGM MUM-14 : Intensificateur de Lumière (IL)</h3>
+                        <p class="mb-3 text-sm">Technologie : Intensification de lumière analogique (IL Gen 2/3). Utilisé en dotation pour les unités spécialisées.</p>
+                        <p class="text-sm">Atout majeur : Furtivité passive maximale (n'a pas besoin d'émettre d'IR si la lumière ambiante est suffisante). Mono-oculaire.</p>
+                        <p class="mt-3 text-yellow-700 font-medium text-sm">Exclu du plan d'acquisition pour des raisons de coût élevé.</p>
+                    </div>
+                </div>
+
+                <h3 class="text-xl font-bold text-blue-800 mb-4">Synthèse des Points Clés</h3>
+                <ul class="list-disc list-inside space-y-2 text-gray-700">
+                    <li>Le Thermique (HABROK) est un atout tactique qui augmente significativement le taux de succès de détection dans des conditions difficiles.</li>
+                    <li>La 4K (HABROK) fournit l'identification de haute qualité.</li>
+                    <li>Le LEVENHUK est une solution de volume et d'entraînement, avec une bonne performance en vision nocturne numérique de base.</li>
+                    <li>Le compromis se situe entre la performance multispectrale (HABROK) et le coût/simplicité logistique (LEVENHUK).</li>
+                </ul>
+            </section>
+
+            <!-- Section Comparaison (Renommée) -->
+            <section id="content-comparaison" class="content-section bg-white rounded-lg shadow-xl p-6">
+                <h2 class="text-2xl font-bold text-blue-800 mb-4">Comparaison des Capacités</h2>
+                <p class="mb-6 text-gray-600">Ce graphique évalue les performances relatives des systèmes d'acquisition (HABROK 4K, HALO 13x PLUS) par rapport à l'équipement de dotation (MUM-14), basé sur leurs spécifications techniques et leur impact tactique. Le tableau ci-dessous détaille ces points.</p>
+
+                <div class="p-3 mb-6 border-l-4 border-red-500 bg-red-50 rounded-r-lg">
+                    <p class="text-sm text-red-700">
+                        ATTENTION : Le modèle MUM-14 (Intensificateur de Lumière Analogique) est l'optique de référence en DOTATION pour les unités spécialisées. Bien qu'il offre la meilleure furtivité passive, il est exclu de ce plan d'ACQUISITION de volume en raison de son coût unitaire très élevé (plusieurs milliers d'euros). Il sert ici de référence de performance.
+                    </p>
+                </div>
+                
+                <div class="chart-container mb-8">
+                    <canvas id="compareChart"></canvas>
+                </div>
+
+                <h3 class="text-xl font-bold text-blue-800 mb-4">Matrice de Décision Opérationnelle</h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr>
+                                <th class="p-3 border-b-2 border-gray-200">Caractéristique</th>
+                                <th class="p-3 border-b-2 border-gray-200">HIKMICRO HABROK 4K HE25LN</th>
+                                <th class="p-3 border-b-2 border-gray-200">LEVENHUK HALO 13x PLUS</th>
+                                <th class="p-3 border-b-2 border-gray-200 text-gray-500">AGM MUM-14 (Référence Dotation)</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-100">
+                            <!-- Ligne Images -->
+                            <tr>
+                                <td class="p-3 font-medium">Aperçu Visuel</td>
+                                <td class="p-3">
+                                    <img src="https://www.optique-pro.fr/Produktbilder/zoom/83367_3/Vision-nocturne-HIKMICRO-Habrok-4K-HE25L.jpg" alt="Habrok 4K" class="w-20 h-10 object-contain mx-auto">
+                                </td>
+                                <td class="p-3">
+                                    <img src="https://m.media-amazon.com/images/I/616SucijNeL.jpg" alt="Levenhuk Halo" class="w-20 h-10 object-contain mx-auto">
+                                </td>
+                                <td class="p-3">
+                                    <img src="https://www.optique-pro.fr/Produktbilder/zoom/63900_1/Vision-nocturne-AGM-MUM-14A-NL3i-Gen-2-Level-3.jpg" alt="MUM-14" class="w-20 h-10 object-contain mx-auto">
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="p-3 font-medium">Avantage Principal</td>
+                                <td class="p-3">Détection Thermique + Identification 4K</td>
+                                <td class="p-3">Coût / Grossissement Optique Élevé</td>
+                                <td class="p-3 text-gray-500">Furtivité Passive (Meilleur SNR)</td>
+                            </tr>
+                            <tr>
+                                <td class="p-3 font-medium">Mode Furtif</td>
+                                <td class="p-3 text-green-700 font-medium">Élevé (IR 940 nm, discret)</td>
+                                <td class="p-3 text-red-700 font-medium">Faible (IR 850 nm, visible)</td>
+                                <td class="p-3 text-green-700 font-medium">Extrême (Passif, pas d'émission IR nécessaire)</td>
+                            </tr>
+                            <tr>
+                                <td class="p-3 font-medium">Performance Intempéries</td>
+                                <td class="p-3 text-green-700 font-medium">Excellente (Thermique non affecté)</td>
+                                <td class="p-3 text-red-700 font-medium">Limité (Affecté par la brume/pluie)</td>
+                                <td class="p-3 text-yellow-600 font-medium">Bonne (Moins sensible à la brume que le VNN)</td>
+                            </tr>
+                            <tr>
+                                <td class="p-3 font-medium">Résolution d'Identification</td>
+                                <td class="p-3">Supérieure (4K)</td>
+                                <td class="p-3">Modérée (Numérique standard)</td>
+                                <td class="p-3 text-yellow-600 font-medium">Bonne (Analogique, mais mono-oculaire)</td>
+                            </tr>
+                            <tr>
+                                <td class="p-3 font-medium">Évaluation de Distance</td>
+                                <td class="p-3">Oui (Télémètre Laser 1000 m (+-1m))</td>
+                                <td class="p-3">Non (Estimation manuelle requise)</td>
+                                <td class="p-3 text-red-700 font-medium">Non</td>
+                            </tr>
+                            <tr>
+                                <td class="p-3 font-medium">Robustesse (IP)</td>
+                                <td class="p-3">Élevée (IP67 - Entièrement étanche)</td>
+                                <td class="p-3">Modérée (IP54 - Protégé éclaboussures)</td>
+                                <td class="p-3 text-yellow-600 font-medium">Très Élevée (Standard militaire)</td>
+                            </tr>
+                            <tr>
+                                <td class="p-3 font-medium">Coût Unitaire (Estimation)</td>
+                                <td class="p-3 text-blue-700 font-medium">Moyen (Réduit par volume)</td>
+                                <td class="p-3 text-green-700 font-medium">Très Faible (Acquisition de masse)</td>
+                                <td class="p-3 text-red-700 font-medium">Très Élevé (> 3 000 €)</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Section Analyse Détaillée -->
+            <section id="content-details" class="content-section">
+                <div class_="text-center mb-6">
+                    <h2 class="text-2xl font-bold text-blue-800 mb-2">Analyse Détaillée des Systèmes</h2>
+                    <p class="text-gray-600">Explorez les spécifications techniques et les avantages opérationnels de chaque appareil.</p>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <!-- HIKMICRO Card (PSIG) -->
+                    <div class="bg-white rounded-lg shadow-xl p-6">
+                        <h3 class="text-xl font-bold text-gray-900 mb-4">HIKMICRO HABROK 4K (PSIG)</h3>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-sm">
+                                <thead>
+                                    <tr>
+                                        <th class="p-2 border-b">Caractéristique</th>
+                                        <th class="p-2 border-b">Avantage Opérationnel</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td class="p-2 border-b"><span class="text-gray-700">Imagerie Thermique (256x192)</span><br>Portée 1200 m</td>
+                                        <td class="p-2 border-b">Supériorité de Détection. Indispensable pour la Recherche de Personnes (SAR) ou l'interception de nuit (traverse le camouflage, la brume).</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="p-2 border-b"><span class="text-gray-700">Imagerie Numérique 4K</span><br>Jour/Nuit</td>
+                                        <td class="p-2 border-b">Preuve et Identification. Qualité judiciaire pour identification faciale ou de plaques d'immatriculation.</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="p-2 border-b"><span class="text-gray-700">Télémètre Laser (LRF)</span><br>1000 m (+-1m)</td>
+                                        <td class="p-2 border-b">Précision Tactique. Évaluation des distances pour l'appui-feu et le positionnement d'unités.</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="p-2 border-b"><span class="text-gray-700">IR 940 nm</span><br>Illuminateur très discret</td>
+                                        <td class="p-2 border-b">Furtivité (Stealth). Réduit le risque d'être repéré par des VNN adverses équipés.</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="p-2 border-b"><span class="text-gray-700">Indice de Protection IP67</span></td>
+                                        <td class="p-2 border-b">Résistance Totale. Entièrement étanche et protégé contre la poussière (milieux montagneux difficiles).</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- LEVENHUK Card (Brigades) -->
+                    <div class="bg-white rounded-lg shadow-xl p-6">
+                        <h3 class="text-xl font-bold text-gray-900 mb-4">LEVENHUK HALO 13x PLUS (Brigades)</h3>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-sm">
+                                <thead>
+                                    <tr>
+                                        <th class="p-2 border-b">Caractéristique</th>
+                                        <th class="p-2 border-b">Avantage Opérationnel</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td class="p-2 border-b"><span class="text-gray-700">Vision Nocturne Numérique</span><br>Amplification de lumière</td>
+                                        <td class="p-2 border-b">Observation de Proximité. Facilite les progressions, contrôles et fouilles à courte/moyenne portée.</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="p-2 border-b"><span class="text-gray-700">Grossissement 13x Fixe</span><br>Optique</td>
+                                        <td class="p-2 border-b">Portée Visuelle. Bon grossissement pour l'observation de scènes éloignées sans dégradation numérique excessive.</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="p-2 border-b"><span class="text-gray-700">Illuminateur IR 850 nm</span><br>Visible</td>
+                                        <td class="p-2 border-b">Puissance d'Éclairage. Efficace en obscurité totale. Limite : compromet la furtivité face à des adversaires équipés.</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="p-2 border-b"><span class="text-gray-700">Alimentation Piles AA</span><br>Jusqu'à 18h</td>
+                                        <td class="p-2 border-b">Logistique Simple et Longue Autonomie. Piles standards faciles à trouver, idéales pour de longues heures de poste statique.</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="p-2 border-b"><span class="text-gray-700">Coût Maîtrisé</span></td>
+                                        <td class="p-2 border-b">Solution de Volume. Permet d'équiper plusieurs Brigades Départementales pour un coût global réduit.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                
+                
+            </section>
+            
+            <!-- Section Doctrine d'Emploi (Déplacé ici pour clarté, mais l'ID était sur le div) -->
+            <section id="content-doctrine" class="content-section bg-white rounded-lg shadow-xl p-6">
+                <div class="text-center mb-6">
+                    <h2 class="text-2xl font-bold text-blue-800 mb-2">Doctrine d'Emploi Recommandée</h2>
+                    <p class="text-gray-600">Le couplage des deux optiques optimise l'efficacité opérationnelle tout en maîtrisant les coûts, comme préconisé par la compagnie de Puget-Théniers.</p>
+                </div>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div class="bg-white rounded-lg shadow-xl p-6">
+                        <h3 class="text-xl font-bold text-blue-900 mb-4">HIKMICRO HABROK 4K - PSIG</h3>
+                        <p class="font-semibold text-gray-700 mb-3">Outil de Niveau Tactique / Renseignement</p>
+                        <ul class="list-disc list-inside space-y-2 text-gray-700">
+                            <li>Missions de Surveillance Discrète et d'observation lointaine.</li>
+                            <li>Recherche et Sauvetage (SAR) ou recherche de mis en cause dissimulés (efficacité par temps de brume ou sous couvert végétal).</li>
+                            <li>Intervention Forcené / Retranchement : détection et identification à distance pour garantir l'effet de surprise et la sécurité du personnel.</li>
+                            <li>Précision Tactique (utilisation du télémètre laser) dans les zones de relief montagneux.</li>
+                        </ul>
+                    </div>
+                    <div class="bg-white rounded-lg shadow-xl p-6">
+                        <h3 class="text-xl font-bold text-gray-800 mb-4">LEVENHUK HALO 13x PLUS - Brigades Départementales</h3>
+                        <p class="font-semibold text-gray-700 mb-3">Outil de Proximité / Logistique</p>
+                        <ul class="list-disc list-inside space-y-2 text-gray-700">
+                            <li>Patrouilles de Nuit et Postes Statiques : sécurisation des manœuvres et lecture du terrain en obscurité totale.</li>
+                            <li>Contrôles et Fouilles à courte et moyenne portée (jusqu'à 300 m), où l'émission IR reste un risque acceptable.</li>
+                            <li>Formation Initiale et familiarisation du personnel avec la Vision Nocturne Numérique.</li>
+                            <li>Logistique simple : piles AA.</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- Nouvelle Section PHOTOS -->
+            <section id="content-photos" class="content-section bg-white rounded-lg shadow-xl p-6">
+                <h2 class="text-2xl font-bold text-blue-800 mb-4">Galerie Photos des Optiques</h2>
+                <p class="text-gray-600 mb-6">Aperçu visuel des équipements pour faciliter l'identification (Dotation, Thermique/Fusion, Numérique).</p>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+                    <!-- MUM-14 (Dotation) -->
+                    <div class="bg-gray-50 rounded-lg shadow-md overflow-hidden">
+                        <h4 class="text-center py-2 font-semibold text-gray-700 bg-gray-200">AGM MUM-14 (Dotation)</h4>
+                        <a href="https://www.optique-pro.fr/Produktbilder/zoom/63900_1/Vision-nocturne-AGM-MUM-14A-NL3i-Gen-2-Level-3.jpg" target="_blank">
+                            <img src="https://www.optique-pro.fr/Produktbilder/zoom/63900_1/Vision-nocturne-AGM-MUM-14A-NL3i-Gen-2-Level-3.jpg" alt="Photo du monoculaire AGM MUM-14 (Intensificateur de Lumière)" class="w-full h-48 object-contain p-2">
+                        </a>
+                        <p class="text-center text-xs text-gray-500 p-2">Monoculaire Analogique (Gen 2/3)</p>
+                    </div>
+
+                    <!-- HIKMICRO HABROK 4K -->
+                    <div class="bg-blue-50 rounded-lg shadow-md overflow-hidden">
+                        <h4 class="text-center py-2 font-semibold text-gray-700 bg-blue-200">HIKMICRO HABROK 4K (Fusion)</h4>
+                        <a href="https://www.optique-pro.fr/Produktbilder/zoom/83367_3/Vision-nocturne-HIKMICRO-Habrok-4K-HE25L.jpg" target="_blank">
+                            <img src="https://www.optique-pro.fr/Produktbilder/zoom/83367_3/Vision-nocturne-HIKMICRO-Habrok-4K-HE25L.jpg" alt="Photo des jumelles Hikmicro Habrok 4K vue de face" class="w-full h-48 object-contain p-2">
+                        </a>
+                        <p class="text-center text-xs text-gray-500 p-2">Jumelles Thermique + Numérique</p>
+                    </div>
+                    
+                    <!-- LEVENHUK HALO 13x PLUS -->
+                    <div class="bg-green-50 rounded-lg shadow-md overflow-hidden">
+                        <h4 class="text-center py-2 font-semibold text-gray-700 bg-green-200">LEVENHUK HALO 13x PLUS (Numérique)</h4>
+                        <a href="https://m.media-amazon.com/images/I/616SucijNeL.jpg" target="_blank">
+                            <img src="https://m.media-amazon.com/images/I/616SucijNeL.jpg" alt="Photo des jumelles numériques Levenhuk Halo 13x Plus" class="w-full h-48 object-contain p-2">
+                        </a>
+                        <p class="text-center text-xs text-gray-500 p-2">Jumelles Numériques (VNN)</p>
+                    </div>
+                </div>
+                <!-- Grille secondaire pour des vues complémentaires -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-6">
+                    <div class="bg-blue-50 rounded-lg shadow-md overflow-hidden">
+                         <h4 class="text-center py-2 font-semibold text-gray-700 bg-blue-200">HIKMICRO HABROK 4K (Vue arrière)</h4>
+                         <img src="https://www.optique-pro.fr/Produktbilder/zoom/83367_6/Vision-nocturne-HIKMICRO-Habrok-4K-HE25L.jpg" alt="Photo des jumelles Hikmicro Habrok 4K vue de dos" class="w-full h-48 object-contain p-2">
+                    </div>
+                    <div class="bg-green-50 rounded-lg shadow-md overflow-hidden">
+                         <h4 class="text-center py-2 font-semibold text-gray-700 bg-green-200">LEVENHUK HALO 13x PLUS (Vue latérale)</h4>
+                         <img src="https://medias4.ubaldi.com/visuels/6316764/MA17CA202JUMEZ49TU-1294878fb6-43.jpg" alt="Photo des jumelles numériques Levenhuk Halo 13x Plus vue latérale" class="w-full h-48 object-contain p-2">
+                    </div>
+                </div>
+            </section>
+
+            <!-- Section Vidéos (Positionnée après Photos) -->
+            <section id="content-videos" class="content-section bg-white rounded-lg shadow-xl p-6">
+                <h2 class="text-2xl font-bold text-blue-800 mb-4">Démonstrations Vidéo</h2>
+                <p class="text-gray-600 mb-6">Cliquez sur les vignettes pour lancer les démonstrations vidéo directement dans le site.</p>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- Vidéo HIKMICRO HABROK 4K -->
+                    <div class="bg-white rounded-lg shadow-xl p-4">
+                        <h4 class="text-lg font-semibold text-gray-900 mb-3">HIKMICRO HABROK 4K</h4>
+                        <div id="video-habrok" class="video-wrapper">
+                            <button onclick="playVideo('video-habrok', '8XHJMoaq_8o')" class="play-button flex items-center justify-center">
+                                ▶️ Lancer la Vidéo
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Vidéo LEVENHUK HALO 13x PLUS -->
+                    <div class="bg-white rounded-lg shadow-xl p-4">
+                        <h4 class="text-lg font-semibold text-gray-900 mb-3">LEVENHUK HALO 13x PLUS</h4>
+                        <div id="video-levenhuk" class="video-wrapper">
+                            <button onclick="playVideo('video-levenhuk', 'WLhc-9Bbajc')" class="play-button flex items-center justify-center">
+                                ▶️ Lancer la Vidéo
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+    
+    <!-- Pied de page ajouté ici -->
+    <footer class="text-center mt-8 p-4 text-gray-500 text-xs border-t border-gray-200">
+        Réalisation : Compagnie de Puget-Theniers - PSIG Gilette - G/ Maheux
+    </footer>
+
+    <script>
+        // Data for Chart.js
+        const chartData = {
+            labels: ['Furtivité (IR)', 'Perf. Intempéries', 'Résolution d\'Identification', 'Robustesse (IP)', 'Logistique (Batterie)', 'Fonctionnalité (LRF)'],
+            datasets: [
+                {
+                    label: 'HIKMICRO HABROK 4K',
+                    data: [9, 9, 10, 9, 7, 10],
+                    backgroundColor: 'rgba(29, 78, 216, 0.7)',
+                    borderColor: 'rgba(29, 78, 216, 1)',
+                    borderWidth: 1
+                },
+                {
+                    label: 'LEVENHUK HALO 13x PLUS',
+                    data: [3, 4, 5, 6, 10, 0],
+                    backgroundColor: 'rgba(107, 114, 128, 0.7)',
+                    borderColor: 'rgba(107, 114, 128, 1)',
+                    borderWidth: 1
+                },
+                {
+                    label: 'AGM MUM-14 (Dotation)',
+                    data: [10, 8, 8, 10, 7, 0],
+                    backgroundColor: 'rgba(255, 165, 0, 0.7)',
+                    borderColor: 'rgba(255, 165, 0, 1)',
+                    borderWidth: 1
+                }
+            ]
+        };
+
+        // Fonction pour injecter l'iframe YouTube directement dans le conteneur
+        function playVideo(containerId, videoId) {
+            const container = document.getElementById(containerId);
+            if (!container) return;
+
+            // Construction de l'iframe YouTube embarqué
+            const iframe = document.createElement('iframe');
+            iframe.setAttribute('src', `https://www.youtube.com/embed/${videoId}?autoplay=1`);
+            iframe.setAttribute('frameborder', '0');
+            iframe.setAttribute('allow', 'autoplay; encrypted-media');
+            iframe.setAttribute('allowfullscreen', 'true');
+            iframe.style.position = 'absolute';
+            iframe.style.top = '0';
+            iframe.style.left = '0';
+            iframe.style.width = '100%';
+            iframe.style.height = '100%';
+
+            // Supprimer le bouton 'Lancer la Vidéo' et injecter l'iframe
+            while (container.firstChild) {
+                container.removeChild(container.firstChild);
+            }
+            container.appendChild(iframe);
+        }
+
+        function showSection(sectionId) {
+            const contentSections = document.querySelectorAll('.content-section');
+            const navItems = document.querySelectorAll('.nav-item');
+
+            const contentElement = document.getElementById(`content-${sectionId}`);
+            const navElement = document.getElementById(`nav-${sectionId}`);
+            
+            // Logique de vérification pour éviter l'erreur "null"
+            if (!contentElement || !navElement) {
+                console.error(`Erreur: Élément non trouvé pour la section/navigation ID: ${sectionId}`);
+                return; // Arrêter si l'un des éléments n'est pas trouvé
+            }
+
+            contentSections.forEach(section => {
+                section.classList.remove('active');
+            });
+            navItems.forEach(nav => {
+                nav.classList.remove('active');
+            });
+
+            contentElement.classList.add('active');
+            navElement.classList.add('active');
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const navItems = document.querySelectorAll('.nav-item');
+            
+            navItems.forEach(nav => {
+                nav.addEventListener('click', () => {
+                    const sectionId = nav.id.split('-')[1];
+                    showSection(sectionId);
+                });
+            });
+
+            // Initialiser la première section
+            showSection('synthese');
+
+            // Initialiser le graphique
+            const ctx = document.getElementById('compareChart');
+            if (ctx) {
+                new Chart(ctx, {
+                    type: 'bar',
+                    data: chartData,
+                    options: {
+                        indexAxis: 'y',
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            title: {
+                                display: true,
+                                text: 'Évaluation des Capacités Opérationnelles (Score sur 10)',
+                                font: {
+                                    size: 16
+                                },
+                                padding: {
+                                    bottom: 20
+                                }
+                            },
+                            tooltip: {
+                                mode: 'index',
+                                intersect: false
+                            },
+                            legend: {
+                                position: 'bottom'
+                            }
+                        },
+                        scales: {
+                            x: {
+                                beginAtZero: true,
+                                max: 10,
+                                ticks: {
+                                    stepSize: 1
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+        });
+    </script>
+</body>
+</html>
