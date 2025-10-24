@@ -197,17 +197,54 @@
             opacity: 1;
         }
         
-        .button-configurateur { background-color: rgba(0, 0, 0, 0.25); }
-        .button-configurateur:hover { background-color: #36454F; }
-        
+        /* Styles des boutons initiaux */
         .button-popote { background-color: rgba(0, 0, 0, 0.25); }
-        .button-popote:hover { background-color: #8B4513; }
+        .button-popote:hover { background-color: #36454F; } /* Couleur #36454F pour Popote pour garder une cohérence de couleur foncée */
+        
+        .button-configurateur { background-color: rgba(0, 0, 0, 0.25); }
+        .button-configurateur:hover { background-color: #8B4513; } /* Couleur #8B4513 pour Configurateur pour garder une cohérence de couleur marron */
         
         .button-merch { background-color: rgba(0, 0, 0, 0.25); }
         .button-merch:hover { background-color: #FF5722; }
         
         .button-oi { background-color: rgba(0, 0, 0, 0.25); }
         .button-oi:hover { background-color: #008080; }
+
+        /* Style pour le nouveau bouton Tutos */
+        .button-tutos { 
+            background-color: rgba(0, 0, 0, 0.25); 
+            /* Utilisation d'une couleur d'accent différente pour le nouveau bouton Tutos */
+            background-color: var(--accent-blue);
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+        }
+        .button-tutos:hover { 
+            background-color: var(--accent-hover); 
+        }
+
+        /* Styles pour les sous-boutons (Airsoft, Optiques) */
+        .button-airsoft { background-color: rgba(0, 0, 0, 0.25); }
+        .button-airsoft:hover { background-color: #708090; } /* Gris ardoise */
+
+        .button-optiques { background-color: rgba(0, 0, 0, 0.25); }
+        .button-optiques:hover { background-color: #A9A9A9; } /* Gris foncé */
+        
+        /* Style pour le bouton Retour */
+        .button-retour { 
+            background-color: rgba(0, 0, 0, 0.5); /* Plus sombre */
+            color: #ccc;
+            font-size: 1.5em; /* Plus petit */
+            padding: 15px 10px; /* Plus petit */
+        }
+        .button-retour:hover { 
+            background-color: rgba(0, 0, 0, 0.7); 
+            color: white;
+        }
+        .button-retour .material-icons {
+            font-size: 24px;
+            vertical-align: middle;
+            margin-right: 5px;
+        }
+
 
         .login-modal {
             position: fixed;
@@ -326,6 +363,10 @@
                 width: 300px;
                 margin-bottom: 20px;
             }
+            /* Règle PC: Largeur différente pour le bouton "Retour" */
+            .tool-button.button-retour {
+                width: 300px; /* Aligné avec les autres boutons sur PC */
+            }
             /* La règle par défaut pour #background-video s'applique ici (cover) */
             .refresh-icon {
                 font-size: 14px; /* Réduit de 30% pour les écrans plus grands */
@@ -380,6 +421,10 @@
                 padding: 15px 10px; 
                 font-size: 1.4em; 
                 margin-bottom: 0;
+            }
+            /* Règle Mobile: Largeur 100% pour le bouton "Retour" */
+            .tool-button.button-retour {
+                width: 100%;
             }
 
             /* Règle Mobile : Mode CONTAIN avec Décalage +3% */
@@ -445,12 +490,9 @@
             <span class="material-icons refresh-icon" onclick="fetchAnnonce()">refresh</span>
             <p id="annonceContent">Chargement de l'annonce...</p>
         </div>
-        <div class="tools-grid">
-            <a href="popote.html" class="tool-button button-popote">Popote ☕</a>
-            <a href="configurateur.html" class="tool-button button-configurateur">Matos ⚒️</a>
-            <a href="merch.html" class="tool-button button-merch">Merch 👕</a>
-            <a href="oi.html" class="tool-button button-oi">OI 🧠</a>
-        </div>
+        
+        <div class="tools-grid" id="toolsGrid">
+            </div>
 
         
 <div class="bottom-icons">
@@ -513,11 +555,62 @@
 
 
         let siteConfig;
+        const toolsGrid = document.getElementById('toolsGrid');
+
+        // Définition des boutons initiaux
+        const initialButtonsHTML = `
+            <a href="popote.html" class="tool-button button-popote">Popote ☕</a>
+            <a href="configurateur.html" class="tool-button button-configurateur">Matos ⚒️</a>
+            <a onclick="showTutosButtons()" class="tool-button button-tutos" style="cursor: pointer;">Tutos 📚</a>
+            <a href="merch.html" class="tool-button button-merch">Merch 👕</a>
+            <a href="oi.html" class="tool-button button-oi">OI 🧠</a>
+        `;
+
+        // Définition des boutons Tutos
+        const tutosButtonsHTML = `
+            <a href="airsoft.html" class="tool-button button-airsoft">Airsoft 🔫</a>
+            <a href="optiques.html" class="tool-button button-optiques">Optiques 🔭</a>
+            <a onclick="showInitialButtons()" class="tool-button button-retour" style="cursor: pointer;">
+                <span class="material-icons">arrow_back</span> Retour
+            </a>
+        `;
+        
+        // Fonction pour afficher les boutons initiaux
+        window.showInitialButtons = function() {
+            toolsGrid.innerHTML = initialButtonsHTML;
+            // On s'assure que le bouton "Tutos" prenne la place de l'un des 5 boutons
+            if (window.innerWidth > MOBILE_BREAKPOINT) {
+                 // Sur PC, on va forcer l'alignement pour 5 boutons (3 boutons sur la première ligne, 2 sur la seconde + Tutos)
+                 // Or, on a 5 boutons initiaux (Popote, Matos, Tutos, Merch, OI). 
+                 // Le CSS mobile-first force une largeur de 50% sur PC/Tablet, on va ajuster l'affichage pour 5 boutons.
+                 // Le 5ème bouton (OI) doit être sur la 3ème ligne s'il n'y a pas de bouton "Tutos", ou sur la 2ème ligne avec Merch.
+                 // Ici, on a 5 boutons, donc on va laisser le CSS par défaut avec width: calc(50% - 10px) pour 4 d'entre eux et forcer le 5ème.
+                 // Pour simplifier et garantir un affichage cohérent, on va modifier la largeur des boutons.
+
+                // Le CSS par défaut (width: calc(50% - 10px) sur mobile, et width: 300px sur PC/Tablet) est adapté.
+                // Pour 5 boutons, sur PC, ils se placeront sur 3 lignes (2, 2, 1).
+                // On garde l'injection simple.
+            }
+        }
+
+        // Fonction pour afficher les boutons Tutos
+        window.showTutosButtons = function() {
+            toolsGrid.innerHTML = tutosButtonsHTML;
+            // Sur mobile, ils s'empilent, pas besoin de CSS spécifique.
+            if (window.innerWidth > MOBILE_BREAKPOINT) {
+                // Sur PC, on s'assure que les boutons Airsoft et Optiques ont la largeur par défaut (300px)
+                // et que le bouton Retour est aussi à 300px.
+            }
+        }
+
 
         document.addEventListener('DOMContentLoaded', async () => {
             // Définition initiale de la source vidéo au chargement
             setVideoSource();
             window.addEventListener('resize', setVideoSource);
+
+            // Affichage des boutons initiaux au chargement
+            showInitialButtons();
 
             try {
                 const response = await fetch('all.json');
