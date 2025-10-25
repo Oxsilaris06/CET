@@ -108,7 +108,7 @@
         </nav>
 
         <main id="main-content">
-            <p class="text-center p-10 text-xl text-gray-500">Chargement des données...</p>
+            <p class="text-center p-10 text-xl text-gray-500" id="loading-message">Chargement des données...</p>
             
             <section id="content-sit_adv" class="content-section rounded-lg shadow-xl p-6"></section>
             <section id="content-env_miss" class="content-section rounded-lg shadow-xl p-6"></section>
@@ -127,18 +127,15 @@
         const tempCtx = tempCanvas.getContext('2d');
         let formData = null;
 
-        // --- Fonctions d'Utilitaires (Extraites de oi.html) ---
+        // --- Fonctions d'Utilitaires et IndexedDB ---
 
-        /**
-         * Gestionnaire IndexedDB pour le stockage des images.
-         */
         const dbManager = {
             db: null, dbName: 'OI_GeneratorDB', storeName: 'images',
             init() {
                 return new Promise((resolve, reject) => {
                     if (this.db) { return resolve(this.db); }
                     const request = indexedDB.open(this.dbName, 1);
-                    request.onerror = (event) => { console.error("Erreur d'ouverture de la base de données IndexedDB", event); reject("Erreur IndexedDB."); };
+                    request.onerror = (event) => reject("Erreur IndexedDB.");
                     request.onsuccess = (event) => { this.db = event.target.result; resolve(this.db); };
                     request.onupgradeneeded = (event) => {
                         const db = event.target.result;
@@ -148,9 +145,7 @@
             },
             getImage(key) {
                 return new Promise((resolve, reject) => {
-                    if (!this.db) {
-                        return reject(new Error("IndexedDB non initialisé."));
-                    }
+                    if (!this.db) { return reject(new Error("IndexedDB non initialisé.")); }
                     const transaction = this.db.transaction([this.storeName], 'readonly');
                     const store = transaction.objectStore(this.storeName);
                     const request = store.get(key);
@@ -245,7 +240,7 @@
             });
         }
         
-        // --- Fonctions de Génération HTML (Réponses textuelles) ---
+        // --- Fonctions de style et de rendu HTML ---
         
         const getStyle = () => {
             const isDarkMode = document.body.classList.contains('dark-mode');
@@ -257,14 +252,10 @@
                     return defaultVal;
                 }
             };
-
             return {
-                accent: getVar('--accent-blue', '#1d4ed8'),
-                primary: getVar('--text-primary', '#1f2937'),
-                danger: getVar('--danger-red', '#dc2626'),
-                bgBody: getVar('--bg-body', '#f3f4f6'),
-                borderColor: getVar('--border-color', '#e5e7eb'),
-                isDarkMode: isDarkMode
+                accent: getVar('--accent-blue', '#1d4ed8'), primary: getVar('--text-primary', '#1f2937'),
+                danger: getVar('--danger-red', '#dc2626'), bgBody: getVar('--bg-body', '#f3f4f6'),
+                borderColor: getVar('--border-color', '#e5e7eb'), isDarkMode: isDarkMode
             };
         }
         
@@ -325,7 +316,6 @@
             return sortedKeys.length > 0 ? compositionHtml : drawTextHtml(null, 'Aucun membre assigné.', false);
         };
         
-        // --- Fonctions de chargement des images (Robuste aux erreurs) ---
         async function drawImagesHtmlFromCategory(previewContainerId, title) {
             let imageHtml = '';
             const imagesData = (formData.dynamic_photos || {})[previewContainerId] || [];
@@ -339,24 +329,18 @@
                     const annotations = JSON.parse(imgData.annotations || '[]');
                     const imageBlob = await dbManager.getImage(imgData.id);
             
-                    if (!imageBlob) {
-                        throw new Error("Blob non trouvé dans IndexedDB.");
-                    }
+                    if (!imageBlob) { throw new Error("Blob non trouvé dans IndexedDB."); }
             
                     let finalImageBlob = imageBlob;
                     if (annotations.length > 0) {
                         try {
                             finalImageBlob = await createAnnotatedImageBlob(imageBlob, annotations);
                         } catch (e) {
-                            console.error(`Erreur de génération d'image annotée pour ${title} (ID: ${imgData.id}):`, e);
-                            // Continuer avec l'image non annotée en cas d'échec de l'annotation
-                            finalImageBlob = imageBlob;
+                            finalImageBlob = imageBlob; // Utiliser l'original en cas d'échec de l'annotation
                         }
                     }
                     
-                    // Créer l'URL d'objet pour l'affichage
                     const objectURL = URL.createObjectURL(finalImageBlob);
-                    
                     return { objectURL, id: imgData.id, hasError: false };
 
                 } catch (e) {
@@ -365,7 +349,6 @@
                 }
             });
 
-            // Utiliser Promise.allSettled pour ne pas bloquer si une image échoue
             const results = await Promise.allSettled(imagePromises);
 
             results.forEach((result, i) => {
@@ -388,7 +371,7 @@
             return imageHtml;
         }
 
-        // --- Fonctions de Section (unchanged, as they generate static HTML) ---
+        // --- Fonctions de Section (Générateurs Synchrones) ---
         
         const section_situation = (data) => {
             let html = drawTitleHtml("1. SITUATION");
@@ -512,60 +495,88 @@
             return html;
         };
 
-        const section_photos = async (data) => {
-            let html = drawTitleHtml("8. PHOTOS TACTIQUES ET LOGISTIQUES");
-            html += await drawImagesHtmlFromCategory('adversary_photo_preview_container', "Photo Principale de l'Objectif"); 
-            html += await drawImagesHtmlFromCategory('adversary_extra_photos_preview_container', 'Photos Supplémentaires - Adversaire');
-            html += await drawImagesHtmlFromCategory('renforts_photo_preview_container', 'Photos - Renfort Potentiel');
-            html += await drawImagesHtmlFromCategory('photo_container_itineraire_exterieur_preview_container', 'Itinéraire Extérieur INDIA');
-            html += await drawImagesHtmlFromCategory('photo_container_itineraire_interieur_preview_container', 'Itinéraire Intérieur INDIA');
-            html += await drawImagesHtmlFromCategory('photo_container_bapteme_terrain_preview_container', 'Baptême Terrain AO');
-            html += await drawImagesHtmlFromCategory('photo_container_emplacement_ao_preview_container', 'Emplacement AO');
-            html += await drawImagesHtmlFromCategory('photo_container_transport_pr_preview_container', 'Transport PSIG vers PR');
-            html += await drawImagesHtmlFromCategory('photo_container_transport_domicile_preview_container', 'Transport PR vers Domicile');
-            html += await drawImagesHtmlFromCategory('photo_container_cellule_effraction_preview_container', 'Cellule Effraction');
+        // --- Logique d'Affichage Dynamique et de Navigation (Clé de la correction) ---
 
-            if (html === drawTitleHtml("8. PHOTOS TACTIQUES ET LOGISTIQUES")) {
-                html += drawTextHtml(null, "Aucune photo disponible pour cette Ordre Initial.");
-            }
-
-            return html;
+        // Mappage des sections vers leurs générateurs de contenu
+        const sectionContentMap = {
+            'sit_adv': { generator: section_situation, loaded: false, async: false },
+            'env_miss': { generator: section_environnement, loaded: false, async: false },
+            'execution': { generator: section_execution, loaded: false, async: false },
+            'india': { generator: section_articulation_india, loaded: false, async: false },
+            'ao': { generator: section_articulation_ao, loaded: false, async: false },
+            'patrac_cat': { generator: section_patrac_cat, loaded: false, async: false },
+            'photos': { generator: section_photos, loaded: false, async: true }
         };
 
-        // --- Logique d'Affichage et d'Initialisation (Corrigée) ---
+        async function loadContentDynamically(sectionId, contentElement) {
+            const mapEntry = sectionContentMap[sectionId];
+            if (!mapEntry || mapEntry.loading) return; 
+
+            mapEntry.loading = true;
+            
+            // Afficher un message de chargement
+            contentElement.innerHTML = `<div class="text-center p-10 text-xl text-gray-500">Chargement de la section "${sectionId}" en cours...</div>`;
+
+            try {
+                let content;
+                // Le générateur reçoit les formData si non fourni précédemment
+                const generatorFunction = mapEntry.generator;
+                
+                if (mapEntry.async) {
+                    content = await generatorFunction(formData);
+                } else {
+                    content = generatorFunction(formData);
+                }
+
+                contentElement.innerHTML = content;
+                mapEntry.loaded = true;
+            } catch (error) {
+                console.error(`Erreur de génération de contenu pour ${sectionId}:`, error);
+                contentElement.innerHTML = `<div class="p-4 bg-red-100 text-red-700 rounded-lg">Erreur lors du chargement des données. Consultez la console.</div>`;
+            } finally {
+                mapEntry.loading = false;
+            }
+        }
         
-        function showSection(sectionId) {
+        async function showSection(sectionId) {
             const contentSections = document.querySelectorAll('.content-section');
             const navItems = document.querySelectorAll('.nav-item');
 
             const contentElement = document.getElementById(`content-${sectionId}`);
             const navElement = document.getElementById(`nav-${sectionId}`);
             
+            // 1. Masquer toutes les sections / Désactiver tous les boutons
             contentSections.forEach(section => { section.classList.remove('active'); });
             navItems.forEach(nav => { nav.classList.remove('active'); });
 
             if (contentElement && navElement) {
+                 // 2. Tenter de charger le contenu si non déjà chargé
+                 if (!sectionContentMap[sectionId].loaded) {
+                     await loadContentDynamically(sectionId, contentElement);
+                 }
+                
+                 // 3. Afficher la section / Activer le bouton
                  contentElement.classList.add('active');
                  navElement.classList.add('active');
-                 // Scroll to top of the content area
                  document.getElementById('main-content').scrollIntoView({ behavior: 'smooth', block: 'start' });
             }
         }
 
         async function initializePage() {
             const contentArea = document.getElementById('main-content');
+            const loadingMessage = document.getElementById('loading-message');
             
             // 1. Charger les données du localStorage
             const formDataString = localStorage.getItem('oiFormData');
             if (!formDataString) {
-                contentArea.innerHTML = "<p class='text-center p-10 text-2xl text-red-500 font-bold'>Aucune donnée d'Ordre Initial trouvée.</p><p class='text-center text-lg'>Veuillez générer ou sauvegarder un OI via l'application principale (oi.html).</p>";
-                return; // Arrêt précoce
+                loadingMessage.innerHTML = "<p class='text-center p-10 text-2xl text-red-500 font-bold'>Aucune donnée d'Ordre Initial trouvée.</p><p class='text-center text-lg'>Veuillez générer ou sauvegarder un OI via l'application principale (oi.html).</p>";
+                return; 
             }
             
             try {
                 formData = JSON.parse(formDataString);
             } catch (e) {
-                contentArea.innerHTML = "<p class='text-center p-10 text-2xl text-red-500 font-bold'>Erreur de lecture des données OI.</p><p class='text-center text-lg'>Le fichier de sauvegarde est corrompu.</p>";
+                loadingMessage.innerHTML = "<p class='text-center p-10 text-2xl text-red-500 font-bold'>Erreur de lecture des données OI.</p>";
                 return;
             }
             
@@ -573,26 +584,14 @@
             try {
                 await dbManager.init();
             } catch (e) {
-                console.error("Erreur critique lors de l'initialisation d'IndexedDB:", e);
-                // On continue même en cas d'échec pour la partie texte, mais les images échoueront.
+                console.warn("L'initialisation d'IndexedDB a échoué. Les photos annotées ne pourront pas être affichées.", e);
             }
 
             // 3. Mettre à jour le header
             document.getElementById('main-title').textContent = `Ordre Initial pour: ${formData.nom_adversaire || 'Opération'}`;
             document.getElementById('op-date').textContent = `Date de l'opération: ${formData.date_op || 'N/A'}`;
-            contentArea.innerHTML = ''; // Nettoyer le message de chargement
-
-            // 4. Générer et injecter le contenu de chaque section
-            // Utiliser des assignations directes pour les sections statiques
-            document.getElementById('content-sit_adv').innerHTML = section_situation(formData) + section_adversaire(formData);
-            document.getElementById('content-env_miss').innerHTML = section_environnement(formData) + section_mission(formData);
-            document.getElementById('content-execution').innerHTML = section_execution(formData);
-            document.getElementById('content-india').innerHTML = section_articulation_india(formData);
-            document.getElementById('content-ao').innerHTML = section_articulation_ao(formData);
-            document.getElementById('content-patrac_cat').innerHTML = section_patrac_cat(formData);
             
-            // Gérer la section photo de manière asynchrone et attendre
-            document.getElementById('content-photos').innerHTML = await section_photos(formData);
+            loadingMessage.style.display = 'none'; // Cacher le message de chargement initial
         }
 
         document.addEventListener('DOMContentLoaded', () => {
@@ -613,9 +612,9 @@
                 document.getElementById('darkModeIcon').textContent = isDarkMode ? 'nightlight' : 'clear_day';
             });
             
-            // Lancer l'initialisation du contenu de manière asynchrone
+            // Lancer l'initialisation du contenu
             initializePage().finally(() => {
-                // 5. Initialisation de la navigation (S'exécute TOUJOURS après le chargement/l'échec de initializePage)
+                // 4. Attacher la logique de navigation
                 const navItems = document.querySelectorAll('.nav-item');
                 navItems.forEach(nav => {
                     nav.addEventListener('click', () => {
@@ -624,7 +623,7 @@
                     });
                 });
 
-                // Afficher la première section par défaut
+                // Afficher la première section par défaut, déclenchant le chargement dynamique
                 showSection('sit_adv');
             });
         });
