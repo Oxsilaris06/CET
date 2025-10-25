@@ -27,7 +27,7 @@
         
         /* Styles de structure et de typographie */
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        html { font-size: 18px; /* Taille de base augmentée pour TV/Grand écran */ }
+        html { font-size: 18px; /* Optimisé pour grand écran */ }
         body {
             font-family: 'Oswald', sans-serif;
             background-color: var(--bg-body);
@@ -38,9 +38,18 @@
         }
         .container { 
             width: 100%; max-width: 1400px; margin: 20px auto; 
-            background: var(--bg-container); padding: 40px; /* Padding augmenté */
+            background: var(--bg-container); padding: 40px; 
             border-radius: 8px; border: 1px solid var(--border-color); 
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+        
+        /* --- CORRECTION 1: Titre H1 --- */
+        h1 { 
+            font-size: 2.5em; margin-bottom: 25px; 
+            color: var(--accent-blue); 
+            font-family: 'Saira Stencil One', sans-serif; 
+            text-align: center; letter-spacing: 2px; font-weight: 400; 
+            border-bottom: 3px solid var(--accent-blue); padding-bottom: 10px; 
         }
         
         /* Navigation */
@@ -63,26 +72,36 @@
         /* Sections de Contenu */
         .content-section {
             display: none;
-            animation: fadeIn 0.5s ease;
             min-height: 200px;
             padding: 30px; 
             margin-top: 20px;
             border: 1px solid var(--border-color);
             border-radius: 8px;
             background-color: var(--bg-container);
+            /* Optimisation de la hauteur des sections */
+            overflow-y: auto; 
+            max-height: calc(100vh - 220px); /* Pour réduire le défilement général */
         }
         .content-section.active { display: block; }
 
-        /* Titres */
-        h1 { font-size: 3em; letter-spacing: 3px; }
-        h2 { font-size: 2.2em; border-bottom: 3px solid var(--accent-blue); }
-        h3 { font-size: 1.5em; margin-top: 20px; }
+        /* Titres internes */
+        h2 { 
+            color: var(--accent-blue); font-size: 2.2em; 
+            border-bottom: 3px solid var(--accent-blue); padding-bottom: 5px; 
+            margin-top: 30px; 
+        }
+        h3 { color: var(--accent-blue); font-size: 1.5em; margin-top: 20px; }
         
         /* Typographie et Données */
         p { font-size: 1.2em; padding-left: 20px; }
         .mission-text { font-size: 2em; }
         
-        /* --- NOUVELLE MISE EN PAGE ADVERSAIRE --- */
+        /* Tables */
+        .chronology-table { width: 100%; border-collapse: collapse; margin-top: 15px; margin-bottom: 20px; }
+        .chronology-table th { background-color: var(--accent-dark); color: white; padding: 10px; border: 1px solid var(--border-color); text-align: left; }
+        .chronology-table td { padding: 10px; border: 1px solid var(--border-color); vertical-align: top; background-color: var(--bg-body); font-size: 1.0em; }
+        
+        /* --- MISE EN PAGE ADVERSAIRE (Grille) --- */
         .adversaire-grid {
             display: grid;
             grid-template-columns: 1fr;
@@ -96,6 +115,10 @@
             border: 2px solid var(--accent-blue);
             max-height: 550px;
             overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
         }
         .adversaire-photo-box img {
             max-height: 100%;
@@ -103,14 +126,10 @@
         }
         @media (min-width: 1024px) {
             .adversaire-grid {
-                grid-template-columns: 350px 1fr; /* Photo fixe à gauche, tableau à droite */
+                grid-template-columns: 350px 1fr; 
                 min-height: 600px;
             }
         }
-        
-        /* Tables (Adaptation de la taille de police) */
-        .chronology-table th { font-size: 1.1em; }
-        .chronology-table td { font-size: 1.0em; }
     </style>
 </head>
 <body class="dark-mode">
@@ -412,7 +431,6 @@
             return imageHtml;
         }
 
-        // Nouvelle fonction pour générer UNIQUEMENT la photo principale (pour le layout grid)
         async function drawMainAdversaryPhoto() {
             const previewContainerId = 'adversary_photo_preview_container';
             const imagesData = (formData.dynamic_photos || {})[previewContainerId] || [];
@@ -445,7 +463,6 @@
             }
         }
         
-        // Nouvelle fonction pour générer UNIQUEMENT le tableau de l'adversaire
         function generateAdversaireTable(data) {
             let html = `<div>`;
             
@@ -592,31 +609,38 @@
         };
         
         const section_patrac_cat = (data) => {
-            let html = drawTitleHtml("7. PATRACDVR - Détail de la Composition");
-            const patracHeaders = ["Trigramme", "Fonction", "Cellule", "Armement", "Équip. 1", "Équip. 2", "Tenue", "GPB"];
-            
-            for (const row of (data.patracdvr_rows || [])) {
-                if(row.vehicle && row.members && row.members.length > 0) {
-                    html += drawSubTitleHtml(`Véhicule: ${row.vehicle}`);
-                    const patracRows = row.members.filter(m => m.trigramme).map(m => [m.trigramme, m.fonction, m.cellule, m.armement, m.equipement, m.equipement2, m.tenue, m.gpb]);
-                    if (patracRows.length > 0) { html += drawTableHtml(patracHeaders, patracRows); }
+            try {
+                let html = drawTitleHtml("7. PATRACDVR - Détail de la Composition");
+                const patracHeaders = ["Trigramme", "Fonction", "Cellule", "Armement", "Équip. 1", "Équip. 2", "Tenue", "GPB"];
+                
+                for (const row of (data.patracdvr_rows || [])) {
+                    if(row.vehicle && row.members && row.members.length > 0) {
+                        html += drawSubTitleHtml(`Véhicule: ${row.vehicle}`);
+                        const patracRows = row.members.filter(m => m.trigramme).map(m => [m.trigramme, m.fonction, m.cellule, m.armement, m.equipement, m.equipement2, m.tenue, m.gpb]);
+                        if (patracRows.length > 0) { html += drawTableHtml(patracHeaders, patracRows); }
+                    }
                 }
+                
+                html += drawTitleHtml("9. CONDUITES À TENIR (CAT)");
+                html += drawSubTitleHtml("Générales"); html += drawTextHtml(null, data.cat_generales, true);
+                html += drawSubTitleHtml("NO GO"); html += drawTextHtml(null, data.no_go || 'RAS', true);
+                html += drawSubTitleHtml("Liaison"); html += drawTextHtml(null, data.cat_liaison, true);
+                
+                const dateOp = data.date_op; const nomAdversaire = data.nom_adversaire;
+                if (dateOp && nomAdversaire) {
+                    const safeAdversaireName = nomAdversaire.trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
+                    const oiId = `${dateOp}_${safeAdversaireName}`;
+                    const retexUrl = `${RETEX_BASE_URL}?oiId=${encodeURIComponent(oiId)}`;
+                    html += drawSubTitleHtml("Lien RETEX");
+                    html += wrapHtml(`<a href="${retexUrl}" target="_blank" style="color: var(--accent-blue); font-weight: bold; font-size: 1.1em; text-decoration: none;">${retexUrl}</a>`, 'p', { 'padding-left': '15px' });
+                }
+                return html;
+            } catch (e) {
+                console.error("ERREUR DANS LA GÉNÉRATION DE PATRACDVR/CAT:", e);
+                return `<div style="padding:15px; background-color:var(--danger-red); color:white; text-align:center;">
+                            ERREUR CRITIQUE DE CHARGEMENT DANS LA SECTION 7/9. Consultez la console.
+                        </div>`;
             }
-            
-            html += drawTitleHtml("9. CONDUITES À TENIR (CAT)");
-            html += drawSubTitleHtml("Générales"); html += drawTextHtml(null, data.cat_generales, true);
-            html += drawSubTitleHtml("NO GO"); html += drawTextHtml(null, data.no_go || 'RAS', true);
-            html += drawSubTitleHtml("Liaison"); html += drawTextHtml(null, data.cat_liaison, true);
-            
-            const dateOp = data.date_op; const nomAdversaire = data.nom_adversaire;
-            if (dateOp && nomAdversaire) {
-                const safeAdversaireName = nomAdversaire.trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
-                const oiId = `${dateOp}_${safeAdversaireName}`;
-                const retexUrl = `${RETEX_BASE_URL}?oiId=${encodeURIComponent(oiId)}`;
-                html += drawSubTitleHtml("Lien RETEX");
-                html += wrapHtml(`<a href="${retexUrl}" target="_blank" style="color: var(--accent-blue); font-weight: bold; font-size: 1.1em; text-decoration: none;">${retexUrl}</a>`, 'p', { 'padding-left': '15px' });
-            }
-            return html;
         };
 
         // Mappage des sections vers leurs générateurs de contenu
@@ -660,11 +684,22 @@
             document.getElementById('op-date').textContent = `Date: ${formData.date_op || 'N/A'}`;
             
             // 4. Générer TOUT le contenu et attendre
-            const allContentPromises = Object.keys(sectionContentMap).map(id => 
-                sectionContentMap[id](formData).then(html => {
+            const allContentPromises = Object.keys(sectionContentMap).map(id => {
+                const generator = sectionContentMap[id];
+                // S'assurer que le PATRACDVR est synchrone pour éviter l'erreur, même si le générateur retourne une promesse.
+                const isAsync = id !== 'patrac_cat'; 
+
+                if (isAsync) {
+                    return generator(formData).then(html => {
+                        document.getElementById(`content-${id}`).innerHTML = html;
+                    });
+                } else {
+                    // Exécution synchrone (PATRACDVR)
+                    const html = generator(formData);
                     document.getElementById(`content-${id}`).innerHTML = html;
-                })
-            );
+                    return Promise.resolve();
+                }
+            });
 
             await Promise.allSettled(allContentPromises);
             
