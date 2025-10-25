@@ -495,21 +495,29 @@
             return html;
         };
 
-        // --- Logique d'Affichage Statique (Corrigée pour la fiabilité) ---
+        const section_photos = async (data) => {
+            let html = drawTitleHtml("8. PHOTOS TACTIQUES ET LOGISTIQUES");
+            html += await drawImagesHtmlFromCategory('adversary_photo_preview_container', "Photo Principale de l'Objectif"); 
+            html += await drawImagesHtmlFromCategory('adversary_extra_photos_preview_container', 'Photos Supplémentaires - Adversaire');
+            html += await drawImagesHtmlFromCategory('renforts_photo_preview_container', 'Photos - Renfort Potentiel');
+            html += await drawImagesHtmlFromCategory('photo_container_itineraire_exterieur_preview_container', 'Itinéraire Extérieur INDIA');
+            html += await drawImagesHtmlFromCategory('photo_container_itineraire_interieur_preview_container', 'Itinéraire Intérieur INDIA');
+            html += await drawImagesHtmlFromCategory('photo_container_bapteme_terrain_preview_container', 'Baptême Terrain AO');
+            html += await drawImagesHtmlFromCategory('photo_container_emplacement_ao_preview_container', 'Emplacement AO');
+            html += await drawImagesHtmlFromCategory('photo_container_transport_pr_preview_container', 'Transport PSIG vers PR');
+            html += await drawImagesHtmlFromCategory('photo_container_transport_domicile_preview_container', 'Transport PR vers Domicile');
+            html += await drawImagesHtmlFromCategory('photo_container_cellule_effraction_preview_container', 'Cellule Effraction');
 
-        // Mappage des sections vers leurs générateurs de contenu
-        const sectionContentMap = {
-            'sit_adv': { generator: section_situation },
-            'env_miss': { generator: section_environnement },
-            'execution': { generator: section_execution },
-            'india': { generator: section_articulation_india },
-            'ao': { generator: section_articulation_ao },
-            'patrac_cat': { generator: section_patrac_cat },
-            'photos': { generator: drawImagesHtmlFromCategory } // Le seul générateur asynchrone
+            if (html === drawTitleHtml("8. PHOTOS TACTIQUES ET LOGISTIQUES")) {
+                html += drawTextHtml(null, "Aucune photo disponible pour cette Ordre Initial.");
+            }
+
+            return html;
         };
 
+        // --- Logique d'Affichage Statique (Corrigée pour la fiabilité) ---
+
         async function initializePage() {
-            const contentArea = document.getElementById('main-content');
             const loadingMessage = document.getElementById('loading-message');
             
             // 1. Charger les données du localStorage
@@ -537,27 +545,32 @@
             document.getElementById('main-title').textContent = `Ordre Initial pour: ${formData.nom_adversaire || 'Opération'}`;
             document.getElementById('op-date').textContent = `Date de l'opération: ${formData.date_op || 'N/A'}`;
             
-            // 4. Générer et injecter TOUT le contenu statiquement (y compris la section photos asynchrone)
-            // Cela imite le comportement de la "première itération" que vous avez trouvée fonctionnelle.
-            const allContentPromises = [
-                // Sections synchrones
-                Promise.resolve(document.getElementById('content-sit_adv').innerHTML = sectionContentMap['sit_adv'].generator(formData) + section_adversaire(formData)),
-                Promise.resolve(document.getElementById('content-env_miss').innerHTML = sectionContentMap['env_miss'].generator(formData) + section_mission(formData)),
-                Promise.resolve(document.getElementById('content-execution').innerHTML = sectionContentMap['execution'].generator(formData)),
-                Promise.resolve(document.getElementById('content-india').innerHTML = sectionContentMap['india'].generator(formData)),
-                Promise.resolve(document.getElementById('content-ao').innerHTML = sectionContentMap['ao'].generator(formData)),
-                Promise.resolve(document.getElementById('content-patrac_cat').innerHTML = sectionContentMap['patrac_cat'].generator(formData)),
-                
-                // Section asynchrone (Photos) - On attend qu'elle soit rendue
-                sectionContentMap['photos'].generator(formData).then(html => {
-                    document.getElementById('content-photos').innerHTML = html;
-                })
-            ];
+            // 4. Générer TOUT le contenu et attendre
+            const contentInjection = {
+                'sit_adv': section_situation(formData) + section_adversaire(formData),
+                'env_miss': section_environnement(formData) + section_mission(formData),
+                'execution': section_execution(formData),
+                'india': section_articulation_india(formData),
+                'ao': section_articulation_ao(formData),
+                'patrac_cat': section_patrac_cat(formData),
+            };
 
-            // Attendre la résolution de TOUS les chargements (y compris les images)
-            await Promise.allSettled(allContentPromises);
+            // La promesse de la section photos
+            const photosPromise = section_photos(formData);
 
-            loadingMessage.style.display = 'none'; // Cacher le message de chargement initial
+            // Attendre les photos pour finaliser l'injection
+            contentInjection['photos'] = await photosPromise;
+            
+            // 5. Injecter le contenu dans les sections DOM après que tout est prêt
+            document.getElementById('content-sit_adv').innerHTML = contentInjection['sit_adv'];
+            document.getElementById('content-env_miss').innerHTML = contentInjection['env_miss'];
+            document.getElementById('content-execution').innerHTML = contentInjection['execution'];
+            document.getElementById('content-india').innerHTML = contentInjection['india'];
+            document.getElementById('content-ao').innerHTML = contentInjection['ao'];
+            document.getElementById('content-patrac_cat').innerHTML = contentInjection['patrac_cat'];
+            document.getElementById('content-photos').innerHTML = contentInjection['photos'];
+
+            loadingMessage.style.display = 'none'; // Cacher le message de chargement
         }
 
         document.addEventListener('DOMContentLoaded', () => {
@@ -585,7 +598,7 @@
                 navItems.forEach(nav => {
                     nav.addEventListener('click', () => {
                         const sectionId = nav.id.split('-')[1];
-                        // La fonction showSection est maintenant simple : elle montre le contenu pré-généré
+                        // La fonction showSection est simple : elle montre le contenu pré-généré
                         showSection(sectionId);
                     });
                 });
