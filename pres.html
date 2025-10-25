@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Présentation Détaillée de l'Ordre Initial</title>
+    <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Saira+Stencil+One&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
+    <style>
+        :root {
+            --bg-body: #121212; --bg-container: #1e1e1e;
+            --text-primary: #e0e0e0; --text-secondary: #95a5a6;
+            --accent-blue: #5b9bd5; --danger-red: #c0392b;
+            --border-color: #444444;
+        }
+        body.light-mode {
+            --bg-body: #f0f2f5; --bg-container: #ffffff;
+            --text-primary: #212529; --text-secondary: #6c757d;
+            --accent-blue: #0033a0;
+            --border-color: #dee2e6;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        html { font-size: 16px; }
+        body { font-family: 'Oswald', sans-serif; background-color: var(--bg-body); color: var(--text-primary); line-height: 1.6; padding: 15px; transition: background-color 0.3s, color 0.3s; }
+        .container { width: 100%; max-width: 1000px; margin: 20px auto; background: var(--bg-container); padding: 30px; border-radius: 8px; border: 1px solid var(--border-color); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2); }
+        h1 { font-size: 2.5em; margin-bottom: 25px; color: var(--accent-blue); font-family: 'Saira Stencil One', sans-serif; text-align: center; letter-spacing: 2px; font-weight: 400; border-bottom: 3px solid var(--accent-blue); padding-bottom: 10px; }
+        h2 { color: var(--accent-blue); font-size: 1.8em; border-bottom: 2px solid var(--accent-blue); padding-bottom: 5px; margin-top: 30px; }
+        h3 { color: var(--accent-blue); font-size: 1.3em; margin-top: 15px; margin-bottom: 10px; }
+        p { margin-bottom: 8px; padding-left: 15px; font-size: 1.1em; }
+        strong { color: var(--danger-red); }
+        .mission-text { font-size: 1.6em; font-weight: 500; color: var(--danger-red); padding-left: 0; text-align: center; white-space: pre-wrap; margin: 20px 0; }
+        .chronology-table { width: 100%; border-collapse: collapse; margin-top: 15px; margin-bottom: 20px; }
+        .chronology-table th { background-color: var(--accent-blue); color: white; padding: 10px; border: 1px solid var(--text-primary); text-align: left; }
+        .chronology-table td { padding: 10px; border: 1px solid var(--border-color); vertical-align: top; background-color: var(--bg-interactive, #2a2a2a); }
+        .image-container { text-align: center; margin: 25px 0; border: 1px solid var(--accent-blue); padding: 15px; border-radius: 5px; background-color: var(--bg-container); }
+        .image-container img { max-width: 100%; height: auto; border-radius: 4px; box-shadow: 0 4px 8px rgba(0,0,0,0.4); border: 1px solid var(--border-color); }
+        .dock-menu { position: fixed; top: 10px; right: 10px; z-index: 1000; }
+        .dock-menu-item { background-color: var(--accent-blue); color: white; border: none; border-radius: 50%; width: 45px; height: 45px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: transform 0.2s; }
+        .dock-menu-item:hover { transform: scale(1.1); }
+    </style>
+</head>
+<body class="dark-mode">
+
+    <div class="dock-menu">
+        <div class="dock-menu-item" id="darkModeToggle" title="Changer le thème">
+            <span class="material-symbols-outlined" id="darkModeIcon">nightlight</span>
+        </div>
+    </div>
+
+    <div class="container">
+        <h1>Ordre Initial d'Opération</h1>
+        <div id="content-area">
+            <p style="text-align:center;">Chargement des données...</p>
+        </div>
+    </div>
+
+    <script>
+        // --- Constantes et Variables ---
+        const RETEX_BASE_URL = "https://oxsilaris06.github.io/Praxis/retex.html"; // URL de base Retex
+        const tempCanvas = document.createElement('canvas');
+        const tempCtx = tempCanvas.getContext('2d');
+
+        // --- Fonctions d'Utilitaires (Extraites de oi.html) ---
+
+        /**
+         * Gestionnaire IndexedDB pour le stockage des images.
+         * Simplifié pour cette page en mode lecture seule.
+         */
+        const dbManager = {
+            db: null,
+            dbName: 'OI_GeneratorDB',
+            storeName: 'images',
+
+            init() {
+                return new Promise((resolve, reject) => {
+                    if (this.db) { return resolve(this.db); }
+                    const request = indexedDB.open(this.dbName, 1);
+                    request.onerror = (event) => { console.error("Erreur d'ouverture de la base de données IndexedDB", event); reject("Erreur IndexedDB."); };
+                    request.onsuccess = (event) => { this.db = event.target.result; resolve(this.db); };
+                    request.onupgradeneeded = (event) => {
+                         // Ne devrait pas arriver, mais nécessaire pour la promesse.
+                        const db = event.target.result;
+                        if (!db.objectStoreNames.contains(this.storeName)) {
+                            db.createObjectStore(this.storeName);
+                        }
+                    };
+                });
+            },
+
+            getImage(key) {
+                return new Promise((resolve, reject) => {
+                    const transaction = this.db.transaction([this.storeName], 'readonly');
+                    const store = transaction.objectStore(this.storeName);
+                    const request = store.get(key);
+                    request.onsuccess = (event) => resolve(event.target.result);
+                    request.onerror = (event) => reject(event.target.error);
+                });
+            },
+        };
+
+        function drawAnnotationOnContext(context, annotation) {
+            context.save();
+            let centerX, centerY;
+            if (annotation.type === 'location') { centerX = annotation.x; centerY = annotation.y; }
+            else if (annotation.type === 'box') { centerX = annotation.x + annotation.width / 2; centerY = annotation.y + annotation.height / 2; }
+            else if (annotation.type === 'arrow') { centerX = (annotation.startX + annotation.endX) / 2; centerY = (annotation.startY + annotation.endY) / 2; }
+
+            if (annotation.rotation) {
+                context.translate(centerX, centerY);
+                context.rotate(annotation.rotation);
+                context.translate(-centerX, -centerY);
+            }
+
+            switch (annotation.type) {
+                case 'location': {
+                    const radius = annotation.radius || 0;
+                    if (radius < 2) { context.restore(); return; }
+                    context.beginPath(); context.arc(annotation.x, annotation.y, radius, 0, 2 * Math.PI);
+                    context.fillStyle = `rgba(91, 155, 213, ${annotation.opacity || 0.5})`; context.fill();
+                    context.strokeStyle = '#5b9bd5'; context.lineWidth = 2; context.stroke();
+                    if (annotation.text) {
+                        context.fillStyle = 'black'; context.font = `bold ${Math.max(12, radius / 2)}px Oswald`;
+                        context.textAlign = 'center'; context.textBaseline = 'middle';
+                        context.fillText(annotation.text, annotation.x, annotation.y);
+                    }
+                    break;
+                }
+                case 'arrow': {
+                    const drawArrowLocal = (fromx, fromy, tox, toy, lineWidth) => {
+                         if (fromx === tox && fromy === toy) return;
+                         context.strokeStyle = '#c0392b'; context.fillStyle = '#c0392b'; context.lineWidth = lineWidth;
+                         const headlen = Math.max(lineWidth * 3, 10);
+                         const dx = tox - fromx; const dy = toy - fromy;
+                         const angle = Math.atan2(dy, dx);
+                         const lineToX = tox - (headlen * 0.7) * Math.cos(angle);
+                         const lineToY = toy - (headlen * 0.7) * Math.sin(angle);
+                         context.beginPath(); context.moveTo(fromx, fromy); context.lineTo(lineToX, lineToY); context.stroke();
+                         context.beginPath(); context.moveTo(tox, toy);
+                         context.lineTo(tox - headlen * Math.cos(angle - Math.PI / 7), toy - headlen * Math.sin(angle - Math.PI / 7));
+                         context.lineTo(tox - headlen * Math.cos(angle + Math.PI / 7), toy - headlen * Math.sin(angle + Math.PI / 7));
+                         context.closePath(); context.fill();
+                    };
+                    drawArrowLocal(annotation.startX, annotation.startY, annotation.endX, annotation.endY, annotation.thickness || 5);
+                    break;
+                }
+                case 'box': {
+                    context.strokeStyle = '#c0392b'; context.lineWidth = annotation.thickness || 5;
+                    context.strokeRect(annotation.x, annotation.y, annotation.width, annotation.height);
+                    break;
+                }
+            }
+            context.restore();
+        }
+
+        async function createAnnotatedImageBlob(imageBlob, annotationsData) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                const objectURL = URL.createObjectURL(imageBlob);
+                img.src = objectURL;
+
+                img.onload = () => {
+                    URL.revokeObjectURL(objectURL);
+                    tempCanvas.width = img.naturalWidth;
+                    tempCanvas.height = img.naturalHeight;
+                    tempCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
+                    tempCtx.drawImage(img, 0, 0);
+
+                    annotationsData.forEach(annotation => drawAnnotationOnContext(tempCtx, annotation));
+
+                    tempCanvas.toBlob(blob => {
+                        if (blob) {
+                            resolve(blob);
+                        } else {
+                            reject(new Error('La conversion du canevas en Blob a échoué.'));
+                        }
+                    }, 'image/png');
+                };
+
+                img.onerror = (e) => {
+                    URL.revokeObjectURL(objectURL);
+                    reject(new Error(`Impossible de charger l'image depuis le Blob : ${e.message}`));
+                };
+            });
+        }
+        
+        // --- Fonctions de Génération de Contenu (Adaptées de oi.html) ---
+
+        /**
+         * Génère le HTML de présentation à partir des données locales.
+         */
+        async function buildPresentationHtml() {
+            const formDataString = localStorage.getItem('oiFormData');
+            if (!formDataString) { return "<h2>Aucune donnée d'Ordre Initial trouvée.</h2><p style='padding-left:0; text-align:center;'>Veuillez d'abord générer un Ordre Initial via l'application principale.</p>"; }
+            const formData = JSON.parse(formDataString);
+            const getVal = (id) => formData[id] || '';
+            
+            const isDarkMode = document.body.classList.contains('dark-mode');
+            const accentColor = isDarkMode ? '#5b9bd5' : '#0033a0';
+            const primaryText = isDarkMode ? '#e0e0e0' : '#212529';
+            const secondaryText = isDarkMode ? '#95a5a6' : '#6c757d';
+            const dangerColor = '#c0392b';
+
+            let htmlContent = `<div style="font-family: 'Oswald', sans-serif; color: ${primaryText};">`;
+
+            const cleanText = (text) => String(text || '').replace(/\*\*(.*?)\*\*/g, '$1').trim();
+            
+            const wrapHtml = (text, tag = 'p', style = {}) => {
+                const styleString = Object.entries(style).map(([key, value]) => `${key}:${value}`).join(';');
+                const formattedText = String(text || '')
+                    .replace(/\*\*/g, '') 
+                    .replace(/\n/g, '<br>');
+                return `<${tag} style="${styleString}">${formattedText}</${tag}>`;
+            };
+
+            const drawTitleHtml = (text) => wrapHtml(cleanText(text), 'h2', { 'color': accentColor, 'font-size': '1.8em', 'margin-top': '30px', 'padding-bottom': '5px', 'border-bottom': `2px solid ${accentColor}` });
+            const drawSubTitleHtml = (text) => wrapHtml(cleanText(text), 'h3', { 'color': accentColor, 'font-size': '1.3em', 'margin-top': '15px', 'margin-bottom': '10px', 'padding-left': '15px' });
+            const drawTextHtml = (text, bold = false, color = primaryText, size = '1.1em', indent = '15px') => wrapHtml(text, 'p', { 'font-weight': bold ? '500' : '400', 'color': color, 'font-size': size, 'margin-bottom': '8px', 'padding-left': indent, 'white-space': 'pre-wrap' });
+            
+            const drawTableHtml = (headers, rows) => {
+                let table = `<table class="chronology-table" style="background-color: transparent;">`;
+                table += `<thead style="background-color: ${accentColor}; color: white;"><tr>`;
+                headers.forEach(h => { table += `<th style="padding: 10px; border: 1px solid ${primaryText}; text-align: left;">${h}</th>`; });
+                table += `</tr></thead><tbody>`;
+                rows.forEach(row => {
+                    table += `<tr style="background-color: ${isDarkMode ? '#2a2a2a' : '#f8f9fa'};">`;
+                    row.forEach(cell => { 
+                        const cellContent = String(cell || '').replace(/\*\*/g, '').replace(/\n/g, '<br>');
+                        table += `<td style="padding: 10px; border: 1px solid var(--border-color); vertical-align: top;">${cellContent}</td>`; 
+                    });
+                    table += `</tr>`;
+                });
+                table += `</tbody></table>`;
+                return table;
+            };
+
+            const drawImagesHtmlFromCategory = async (previewContainerId, title) => {
+                let imageHtml = '';
+                const imagesData = (formData.dynamic_photos || {})[previewContainerId] || [];
+
+                for (let i = 0; i < imagesData.length; i++) {
+                    const imgData = imagesData[i];
+                    const annotations = JSON.parse(imgData.annotations || '[]');
+                    const imageBlob = await dbManager.getImage(imgData.id);
+            
+                    if (!imageBlob) continue;
+            
+                    let finalImageBlob = imageBlob;
+                    if (annotations.length > 0) {
+                        try {
+                            finalImageBlob = await createAnnotatedImageBlob(imageBlob, annotations);
+                        } catch (e) {
+                            console.error(`Erreur de génération d'image annotée pour ${title} (index ${i}):`, e);
+                        }
+                    }
+                    
+                    const objectURL = URL.createObjectURL(finalImageBlob);
+            
+                    const finalTitle = imagesData.length > 1 ? `${title} (${i+1})` : title;
+                    imageHtml += `<div class="image-container">`;
+                    imageHtml += `<h4 style="color: ${accentColor}; margin-bottom: 10px; font-size: 1.1em; padding-left:0;">${finalTitle}</h4>`;
+                    imageHtml += `<img src="${objectURL}" alt="${finalTitle}" onload="URL.revokeObjectURL(this.src)">`;
+                    imageHtml += `</div>`;
+                }
+                return imageHtml;
+            };
+            
+            const getCompositionHtml = (teamPrefix) => {
+                const membersByCell = {};
+                const allMembers = (formData.patracdvr_rows || []).flatMap(row => row.members);
+                
+                allMembers.forEach(member => {
+                    if (member.cellule && member.cellule.toLowerCase().startsWith(teamPrefix)) {
+                        if (!membersByCell[member.cellule]) membersByCell[member.cellule] = [];
+                        member.trigramme && membersByCell[member.cellule].push(
+                            `<span style="color: ${primaryText};">${member.trigramme}</span>` + 
+                            (member.fonction && member.fonction !== 'Sans' ? ` (${member.fonction})` : '')
+                        );
+                    }
+                });
+
+                const naturalSort = (a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+                const sortedKeys = Object.keys(membersByCell).sort(naturalSort);
+                
+                let compositionHtml = '<div style="padding-left: 15px; margin-bottom: 15px;">';
+                sortedKeys.forEach(cell => {
+                    compositionHtml += `<p style="margin-bottom: 5px; padding-left:0;"><strong style="color: ${dangerColor}; font-size: 1.1em;">${cell.toUpperCase()}</strong> : ${membersByCell[cell].join(' • ')}</p>`;
+                });
+                compositionHtml += '</div>';
+                return sortedKeys.length > 0 ? compositionHtml : drawTextHtml('Aucun membre assigné.', false, secondaryText);
+            };
+            
+            
+            htmlContent += `<h1>OI - ${getVal('nom_adversaire') || 'OPÉRATION DE POLICE JUDICIAIRE'}</h1>`;
+            htmlContent += drawTextHtml(`Date de l'opération : <span style="color: ${accentColor}; font-weight: bold;">${getVal('date_op') || 'N/A'}</span>`, true, primaryText, '1.2em', '0');
+
+            // --- 1. SITUATION ---
+            htmlContent += drawTitleHtml("1. SITUATION");
+            htmlContent += drawSubTitleHtml("1.1 Situation Générale"); htmlContent += drawTextHtml(getVal('situation_generale'));
+            htmlContent += drawSubTitleHtml("1.2 Situation Particulière"); htmlContent += drawTextHtml(getVal('situation_particuliere'));
+
+            // --- 2. ADVERSAIRE ---
+            htmlContent += drawTitleHtml("2. ADVERSAIRE");
+            htmlContent += await drawImagesHtmlFromCategory('adversary_photo_preview_container', "Photo de l'objectif"); 
+
+            const meText = (formData.me_list || []).map((me, i) => `ME${i+1}: ${me}`).join(' | ');
+            const adversaireRows = [
+                ['Nom/Prénom', getVal('nom_adversaire')], ['Domicile', getVal('domicile_adversaire')],
+                ['Naissance', `${getVal('date_naissance')} à ${getVal('lieu_naissance')}`],
+                ['Description', `${getVal('stature_adversaire')} / ${getVal('ethnie_adversaire')}`],
+                ['Signes particuliers', getVal('signes_particuliers')], ['Profession', getVal('profession_adversaire')],
+                ['Antécédents', getVal('antecedents_adversaire')], ['État d\'esprit', (formData.etat_esprit_list || []).join(', ')],
+                ['Attitude (connue)', getVal('attitude_adversaire')], ['Volume (renfort)', (formData.volume_list || []).join(', ')],
+                ['Substances', getVal('substances_adversaire')], ['Véhicules', (formData.vehicules_list || []).join(', ')],
+                ['Armes connues', getVal('armes_connues')], ['Moyens Employés', meText],
+            ].filter(row => row[1] && String(row[1]).trim() !== 'à');
+
+            if (adversaireRows.length > 0) {
+                htmlContent += drawTableHtml(["Information", "Détail"], adversaireRows);
+            } else {
+                 htmlContent += drawTextHtml("Aucune information détaillée sur l'adversaire.");
+            }
+
+            htmlContent += await drawImagesHtmlFromCategory('adversary_extra_photos_preview_container', 'Photos Supplémentaires - Adversaire');
+            htmlContent += await drawImagesHtmlFromCategory('renforts_photo_preview_container', 'Photos - Renfort Potentiel');
+
+            // --- 3. ENVIRONNEMENT ---
+            htmlContent += drawTitleHtml("3. ENVIRONNEMENT");
+            htmlContent += drawSubTitleHtml("Ami(e)s (soutien)"); htmlContent += drawTextHtml(getVal('amies'));
+            htmlContent += drawSubTitleHtml("Terrain / Météo"); htmlContent += drawTextHtml(getVal('terrain_info'));
+            htmlContent += drawSubTitleHtml("Population"); htmlContent += drawTextHtml(getVal('population'));
+            htmlContent += drawSubTitleHtml("Cadre juridique"); htmlContent += drawTextHtml(getVal('cadre_juridique'));
+
+            // --- 4. MISSION ---
+            htmlContent += drawTitleHtml("4. MISSION DU PSIG");
+            htmlContent += wrapHtml(getVal('missions_psig'), 'p', { 'font-size': '1.6em', 'font-weight': '500', 'color': dangerColor, 'padding-left': '0', 'text-align': 'center', 'white-space': 'pre-wrap', 'margin': '20px 0' });
+            
+            // --- 5. EXÉCUTION ---
+            htmlContent += drawTitleHtml("5. EXÉCUTION");
+            const execText = `En vue d'appréhender le mis en cause et empêcher la déperdition des preuves,\nJe veux, le ${getVal('date_execution') || '(date)'} à partir de ${getVal('heure_execution') || '(heure)'}, pour une action ${getVal('type_action') || '(type d\'action)'} investir le domicile\nprésumé de ${getVal('nom_adversaire') || '(nom de l\'adversaire)'} après avoir bouclé celui-ci.`;
+            htmlContent += wrapHtml(execText, 'p', { 'font-size': '1.4em', 'margin-bottom': '15px', 'padding-left': '0', 'white-space': 'pre-wrap' });
+
+            htmlContent += drawSubTitleHtml("Chronologie des temps");
+            const chronoHeaders = ["Type", "Heure", "Description"];
+            const chronoRows = (formData.time_events || []).map(e => [e.type || 'N/A', e.hour || 'N/A', e.description || 'N/A']);
+            htmlContent += drawTableHtml(chronoHeaders, chronoRows);
+
+            htmlContent += drawSubTitleHtml("Hypothèses");
+            htmlContent += drawTextHtml(`<span style="color: ${dangerColor}; font-weight: bold;">H1</span>: ${getVal('hypothese_h1')}<br><span style="color: ${dangerColor}; font-weight: bold;">H2</span>: ${getVal('hypothese_h2')}<br><span style="color: ${dangerColor}; font-weight: bold;">H3</span>: ${getVal('hypothese_h3')}`, true, primaryText, '1.2em');
+            
+            htmlContent += await drawImagesHtmlFromCategory('photo_container_transport_pr_preview_container', 'Transport PSIG vers PR');
+            htmlContent += await drawImagesHtmlFromCategory('photo_container_transport_domicile_preview_container', 'Transport PR vers Domicile');
+            htmlContent += await drawImagesHtmlFromCategory('photo_container_bapteme_terrain_preview_container', 'Baptême terrain');
+
+            // --- 6. ARTICULATION ---
+            htmlContent += drawTitleHtml("6. ARTICULATION (MOIPC/ZMSPCP)");
+            htmlContent += drawTextHtml(`Place du Chef (Générale): ${getVal('place_chef')}`, true, primaryText, '1.2em', '0');
+
+            htmlContent += drawSubTitleHtml("Équipe INDIA (INTER)");
+            htmlContent += wrapHtml('<strong>Composition:</strong>', 'h4', { 'padding-left': '15px', 'margin-top': '10px', 'font-size': '1.1em', 'color': accentColor });
+            htmlContent += getCompositionHtml('india');
+            const moipcText = `<p style="padding-left:15px; margin-bottom: 8px; white-space: pre-wrap;">
+                <span style="color: ${dangerColor}; font-weight: bold;">M</span>ission : ${getVal('india_mission')}<br>
+                <span style="color: ${dangerColor}; font-weight: bold;">O</span>bjectif : ${getVal('india_objectif')}<br>
+                <span style="color: ${dangerColor}; font-weight: bold;">I</span>tinéraire : ${getVal('india_itineraire')}<br>
+                <span style="color: ${dangerColor}; font-weight: bold;">P</span>oints Particuliers : ${getVal('india_points_particuliers')}<br>
+                <span style="color: ${dangerColor}; font-weight: bold;">C</span>onduite à Tenir : ${getVal('india_cat')}
+            </p>`;
+            htmlContent += moipcText;
+            
+            htmlContent += await drawImagesHtmlFromCategory('photo_container_itineraire_exterieur_preview_container', 'Itinéraire Extérieur India');
+            htmlContent += await drawImagesHtmlFromCategory('photo_container_itineraire_interieur_preview_container', 'Itinéraire Intérieur India');
+            htmlContent += await drawImagesHtmlFromCategory('photo_container_cellule_effraction_preview_container', 'Cellule Effraction');
+
+            htmlContent += drawSubTitleHtml("Équipe Appui/Observation (AO) - ZMSPCP");
+            htmlContent += wrapHtml('<strong>Composition:</strong>', 'h4', { 'padding-left': '15px', 'margin-top': '10px', 'font-size': '1.1em', 'color': accentColor });
+            htmlContent += getCompositionHtml('ao');
+            
+            const aoText = `<p style="padding-left:15px; margin-bottom: 8px; white-space: pre-wrap;">
+                <span style="color: ${dangerColor}; font-weight: bold;">Z</span>one d'installation : ${getVal('ao_zone_installation')}<br>
+                <span style="color: ${dangerColor}; font-weight: bold;">M</span>ission : ${getVal('ao_mission')}<br>
+                <span style="color: ${dangerColor}; font-weight: bold;">S</span>ecteur de surveillance : ${getVal('ao_secteur_surveillance')}<br>
+                <span style="color: ${dangerColor}; font-weight: bold;">P</span>oints Particuliers : ${getVal('ao_points_particuliers')}<br>
+                <span style="color: ${dangerColor}; font-weight: bold;">C</span>onduite à Tenir : ${getVal('ao_cat')}<br>
+                <span style="color: ${dangerColor}; font-weight: bold;">P</span>lace du Chef : ${getVal('ao_place_chef')}
+            </p>`;
+            htmlContent += aoText;
+            
+            htmlContent += await drawImagesHtmlFromCategory('photo_container_emplacement_ao_preview_container', 'Emplacement AO');
+
+            // --- 7. PATRACDVR ---
+            htmlContent += drawTitleHtml("7. PATRACDVR (Détail de la Composition)");
+            const patracHeaders = ["Trigramme", "Fonction", "Cellule", "Armement", "Équip. 1", "Équip. 2", "Tenue", "GPB"];
+            for (const row of (formData.patracdvr_rows || [])) {
+                if(row.vehicle && row.members && row.members.length > 0) {
+                    htmlContent += drawSubTitleHtml(`Véhicule: ${row.vehicle}`);
+                    const patracRows = row.members.filter(m => m.trigramme).map(m => [m.trigramme, m.fonction, m.cellule, m.armement, m.equipement, m.equipement2, m.tenue, m.gpb]);
+                    if (patracRows.length > 0) { htmlContent += drawTableHtml(patracHeaders, patracRows); }
+                }
+            }
+            
+            // --- 9. CAT ---
+            htmlContent += drawTitleHtml("9. CONDUITES À TENIR");
+            htmlContent += drawSubTitleHtml("Générales"); htmlContent += drawTextHtml(getVal('cat_generales'), true);
+            const noGoText = getVal('no_go');
+            if (noGoText) {
+                htmlContent += drawSubTitleHtml("NO GO");
+                htmlContent += drawTextHtml(noGoText, true, dangerColor, '1.2em');
+            }
+            htmlContent += drawSubTitleHtml("Liaison"); htmlContent += drawTextHtml(getVal('cat_liaison'), true);
+            
+            const dateOp = getVal('date_op');
+            const nomAdversaire = getVal('nom_adversaire');
+            if (dateOp && nomAdversaire) {
+                const safeAdversaireName = nomAdversaire.trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
+                const oiId = `${dateOp}_${safeAdversaireName}`;
+                const retexUrl = `${RETEX_BASE_URL}?oiId=${encodeURIComponent(oiId)}`;
+                htmlContent += drawTitleHtml("LIEN RETEX");
+                htmlContent += drawTextHtml("Lien d'accès au formulaire de Retour d'Expérience:", false);
+                htmlContent += wrapHtml(`<a href="${retexUrl}" target="_blank" style="color: ${accentColor}; font-weight: bold; font-size: 1.1em; text-decoration: none;">${retexUrl}</a>`, 'p', { 'padding-left': '15px' });
+            }
+
+            htmlContent += `</div>`;
+            return htmlContent;
+        }
+
+
+        // --- Initialisation ---
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            const contentArea = document.getElementById('content-area');
+            const theme = localStorage.getItem('theme');
+            if (theme === 'light') { document.body.classList.replace('dark-mode', 'light-mode'); document.getElementById('darkModeIcon').textContent = 'clear_day'; }
+            
+            try {
+                await dbManager.init();
+                const html = await buildPresentationHtml();
+                contentArea.innerHTML = html;
+            } catch (e) {
+                console.error("Erreur critique lors du chargement des données:", e);
+                contentArea.innerHTML = "<h2>Erreur de Chargement</h2><p style='padding-left:0; text-align:center;'>Impossible de se connecter à la base de données locale ou de charger les données OI. Assurez-vous d'avoir utilisé l'application principale récemment.</p>";
+            }
+            
+            document.getElementById('darkModeToggle').addEventListener('click', () => {
+                document.body.classList.toggle('light-mode'); 
+                document.body.classList.toggle('dark-mode');
+                const isDarkMode = document.body.classList.contains('dark-mode');
+                localStorage.setItem('theme', isDarkMode ? 'dark' : 'light');
+                document.getElementById('darkModeIcon').textContent = isDarkMode ? 'nightlight' : 'clear_day';
+                
+                // For a dynamic presentation page, we should re-render or at least update colors
+                location.reload(); 
+            });
+        });
+    </script>
+</body>
+</html>
