@@ -919,7 +919,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
         </div>
     </div>
 
-    <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
+   <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked@4.0.10/marked.min.js"></script>
     <script src="https://unpkg.com/jspdf@latest/dist/jspdf.umd.min.js"></script>
     <script src="https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
@@ -1395,6 +1395,37 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             }
         }
 
+        // Mapping des attributs de données aux clés de memberConfig et ID de la modale.
+        const modalFieldMapping = {
+            'modal_trigramme': { configKey: null, attribute: 'trigramme', selectId: 'modal_trigramme' },
+            'modal_fonction': { configKey: 'fonctions', attribute: 'fonction', selectId: 'modal_fonction' },
+            'modal_cellule': { configKey: 'cellules', attribute: 'cellule', selectId: 'modal_cellule' },
+            'modal_armement': { configKey: 'principales', attribute: 'armement', selectId: 'modal_armement' }, // Armement Principal (UMP9, G36, FAP...)
+            'modal_equipement': { configKey: 'equipements', attribute: 'equipement', selectId: 'modal_equipement' }, // Equipement 1 (BBAL, Bélier...)
+            'modal_equipement2': { configKey: 'equipements2', attribute: 'equipement2', selectId: 'modal_equipement2' }, // Equipement 2 (Échelle, Stop stick...)
+            'modal_tenue': { configKey: 'tenues', attribute: 'tenue', selectId: 'modal_tenue' },
+            'modal_gpb': { configKey: 'gpbs', attribute: 'gpb', selectId: 'modal_gpb' },
+            // Les autres catégories comme 'afis', 'secondaires', 'grenades' peuvent être ajoutées au quick edit ou à la modale si nécessaire, mais en l'état elles ne sont pas dans le HTML de la modale complète. 
+            // On s'assure que les attributs data- existants sont gérés par les catégories les plus pertinentes.
+            'modal_afis': { configKey: 'afis', attribute: 'afis', selectId: 'modal_afis' }, // Nouvelle entrée
+            'modal_secondaire': { configKey: 'secondaires', attribute: 'secondaire', selectId: 'modal_secondaire' }, // Nouvelle entrée
+            'modal_grenade': { configKey: 'grenades', attribute: 'grenade', selectId: 'modal_grenade' } // Nouvelle entrée
+        };
+        
+        function createSelectOption(key, memberData) {
+             const select = document.getElementById(modalFieldMapping[key].selectId);
+             const configKey = modalFieldMapping[key].configKey;
+             const attribute = modalFieldMapping[key].attribute;
+             
+             if (!select || !configKey) return;
+             
+             select.innerHTML = (memberConfig[configKey] || []).map(option => {
+                 const selected = (memberData[attribute] === option) ? 'selected' : '';
+                 return `<option value="${option}" ${selected}>${option}</option>`;
+             }).join('');
+             select.value = memberData[attribute];
+        }
+
         function openMemberModal(buttonId) {
             const modal = document.getElementById('editMemberModal');
             const form = document.getElementById('editMemberForm');
@@ -1414,20 +1445,48 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 deleteBtn.style.backgroundColor = 'var(--danger-red)'; 
             }
             
-            document.getElementById('modal_trigramme').value = button.dataset.trigramme;
+            // Collecte des données du membre
+            const memberData = { ...button.dataset };
+
+            // Trigramme
+            document.getElementById('modal_trigramme').value = memberData.trigramme;
             
-            for (const key in memberConfig) {
-                const attrName = key.replace(/s$/, ''); 
-                const selectId = 'modal_' + attrName;
-                const select = document.getElementById(selectId);
-                if (select) {
-                    select.innerHTML = memberConfig[key].map(option => {
-                        const selected = (button.dataset[attrName] === option) ? 'selected' : '';
-                        return `<option value="${option}" ${option === button.dataset[attrName] ? 'selected':''}>${option}</option>`;
-                    }).join('');
-                    select.value = button.dataset[attrName];
-                }
+            // Mise à jour des sélecteurs existants dans le HTML (basés sur le code original)
+            createSelectOption('modal_fonction', memberData);
+            createSelectOption('modal_cellule', memberData);
+            
+            // NOTE: Le HTML de la modale complète utilise:
+            // #modal_armement (doit être l'Armement Principal) -> data-armement
+            // #modal_equipement (doit être Équipement 1) -> data-equipement
+            // #modal_equipement2 (doit être Équipement 2) -> data-equipement2
+            // #modal_tenue -> data-tenue
+            // #modal_gpb -> data-gpb
+            
+            // Correction pour utiliser les bonnes listes et attributs de données
+            // Remplacer l'initialisation de #modal_armement par 'principales'
+            const armementSelect = document.getElementById('modal_armement');
+            const armementConfigKey = modalFieldMapping['modal_armement'].configKey;
+            const armementAttribute = modalFieldMapping['modal_armement'].attribute;
+
+            if (armementSelect && armementConfigKey) {
+                 armementSelect.innerHTML = (memberConfig[armementConfigKey] || []).map(option => {
+                    const selected = (memberData[armementAttribute] === option) ? 'selected' : '';
+                    return `<option value="${option}" ${selected}>${option}</option>`;
+                 }).join('');
+                 armementSelect.value = memberData[armementAttribute] || 'Sans';
             }
+
+            // Remplacer l'initialisation de #modal_equipement par 'equipements' (l'ancien equipement 1)
+            createSelectOption('modal_equipement', memberData);
+
+            // Remplacer l'initialisation de #modal_equipement2 par 'equipements2' (l'ancien equipement 2)
+            createSelectOption('modal_equipement2', memberData);
+            
+            // Tenue et GPB
+            createSelectOption('modal_tenue', memberData);
+            createSelectOption('modal_gpb', memberData);
+            
+            // Si vous aviez ajouté des sélecteurs pour afis, secondaire, grenade, ils seraient initialisés ici.
             
             modal.showModal();
         }
@@ -1474,10 +1533,14 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             aoContainer.innerHTML = aoHtml || `<p><i>Aucun membre assigné aux cellules AO.</i></p>`;
         }
 
+        // MAPPING MIS À JOUR pour l'édition rapide (Quick Edit)
         const quickEditMapping = {
             'Cellule': { key: 'cellules', attribute: 'cellule' },
             'Fonction': { key: 'fonctions', attribute: 'fonction' },
-            'Armement': { key: 'armements', attribute: 'armement' },
+            'Armement Principal': { key: 'principales', attribute: 'armement' }, // Attribut existant
+            'Armement Secondaire': { key: 'secondaires', attribute: 'secondaire' }, // Nouvel attribut
+            'AFI': { key: 'afis', attribute: 'afi' }, // Nouvel attribut
+            'Grenade': { key: 'grenades', attribute: 'grenade' }, // Nouvel attribut
             'Équip. 1': { key: 'equipements', attribute: 'equipement' },
             'Équip. 2': { key: 'equipements2', attribute: 'equipement2' },
             'Tenue': { key: 'tenues', attribute: 'tenue' },
@@ -1626,11 +1689,41 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 data.etat_esprit_list = getChipData('etat_esprit_container');
                 data.volume_list = getChipData('volume_adversaire_container');
                 data.vehicules_list = Array.from(document.querySelectorAll(`#vehicules_container .dynamic-input`)).map(i => i.value).filter(Boolean);
-                data.patracdvr_unassigned = Array.from(unassignedContainer.querySelectorAll('.patracdvr-member-btn')).map(btn => ({ ...btn.dataset }));
+                
+                // Sauvegarde des nouveaux/anciens attributs
+                data.patracdvr_unassigned = Array.from(unassignedContainer.querySelectorAll('.patracdvr-member-btn')).map(btn => ({ 
+                    trigramme: btn.dataset.trigramme, 
+                    fonction: btn.dataset.fonction, 
+                    cellule: btn.dataset.cellule, 
+                    armement: btn.dataset.armement,
+                    equipement: btn.dataset.equipement, 
+                    equipement2: btn.dataset.equipement2,
+                    tenue: btn.dataset.tenue, 
+                    gpb: btn.dataset.gpb,
+                    // Ajout des nouveaux attributs du memberConfig pour le PATRACDVR
+                    secondaire: btn.dataset.secondaire || 'Sans',
+                    afi: btn.dataset.afi || 'Sans',
+                    grenade: btn.dataset.grenade || 'Sans'
+                }));
+
                 data.patracdvr_rows = Array.from(document.querySelectorAll('#patracdvr_container .patracdvr-vehicle-row')).map(row => ({
                     vehicle: row.dataset.vehicleName,
-                    members: Array.from(row.querySelectorAll('.patracdvr-member-btn')).map(btn => ({ ...btn.dataset }))
+                    members: Array.from(row.querySelectorAll('.patracdvr-member-btn')).map(btn => ({
+                        trigramme: btn.dataset.trigramme, 
+                        fonction: btn.dataset.fonction, 
+                        cellule: btn.dataset.cellule, 
+                        armement: btn.dataset.armement,
+                        equipement: btn.dataset.equipement, 
+                        equipement2: btn.dataset.equipement2,
+                        tenue: btn.dataset.tenue, 
+                        gpb: btn.dataset.gpb,
+                        // Ajout des nouveaux attributs
+                        secondaire: btn.dataset.secondaire || 'Sans',
+                        afi: btn.dataset.afi || 'Sans',
+                        grenade: btn.dataset.grenade || 'Sans'
+                    }))
                 }));
+                
                 data.time_events = Array.from(document.querySelectorAll('#time_events_container .time-item')).map(item => ({
                     type: item.querySelector('.time-type-select').value,
                     hour: item.querySelector('.time-hour-input').value,
@@ -1719,8 +1812,19 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             unassignedContainer.innerHTML = '';
             patracdvrContainer.innerHTML = '';
             if (dataFromStorage && (dataFromStorage.patracdvr_rows?.length > 0 || dataFromStorage.patracdvr_unassigned?.length > 0)) {
-                (dataFromStorage.patracdvr_unassigned || []).forEach(member => addPatracdvrMember(unassignedContainer, member));
-                (dataFromStorage.patracdvr_rows || []).forEach(row => addPatracdvrRow(row.vehicle, row.members));
+                // S'assurer que les attributs secondaires sont initialisés si absents (pour rétrocompatibilité)
+                (dataFromStorage.patracdvr_unassigned || []).forEach(member => {
+                    const memberWithDefaults = {
+                        secondaire: 'Sans', afi: 'Sans', grenade: 'Sans', ...member
+                    };
+                    addPatracdvrMember(unassignedContainer, memberWithDefaults);
+                });
+                (dataFromStorage.patracdvr_rows || []).forEach(row => {
+                    const membersWithDefaults = (row.members || []).map(member => ({
+                        secondaire: 'Sans', afi: 'Sans', grenade: 'Sans', ...member
+                    }));
+                    addPatracdvrRow(row.vehicle, membersWithDefaults);
+                });
             }
         }
         
@@ -1742,6 +1846,9 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     const defaultData = {
                         cellule: memberData.cellule || 'Sans',
                         fonction: memberData.fonction || 'Sans',
+                        secondaire: memberData.secondaire || 'Sans',
+                        afi: memberData.afi || 'Sans',
+                        grenade: memberData.grenade || 'Sans',
                         ...memberData
                     };
                     addPatracdvrMember(unassignedContainer, defaultData); 
@@ -1815,6 +1922,9 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 if (isUnassignedZone) {
                     draggedItem.dataset.cellule = 'Sans';
                     draggedItem.dataset.fonction = 'Sans';
+                    draggedItem.dataset.secondaire = 'Sans';
+                    draggedItem.dataset.afi = 'Sans';
+                    draggedItem.dataset.grenade = 'Sans';
                 } else {
                     if (draggedItem.dataset.cellule === 'Sans') {
                          draggedItem.dataset.cellule = 'India 1'; 
@@ -2367,16 +2477,16 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             const aoMembers = members.filter(m => m.cellule && m.cellule.toLowerCase().startsWith('ao'));
             const allAssignedMembers = [...indiaMembers, ...aoMembers];
 
-            if (!getVal('date_op')) { alerts.push("La **Date de l'opération** est manquante."); }
+            if (!getVal('date_op')) { alerts.push("La **Date de l'opération** est manquante. (Onglet 1)"); }
 
             if (!getVal('nom_adversaire')) { alerts.push("Le **Nom de l'adversaire** est manquant. (Onglet 2)"); }
             
             allAssignedMembers.forEach(member => {
-                if (member.armement === 'Sans' && member.fonction !== 'Sans') {
+                if (member.armement === 'Sans' && member.fonction !== 'Sans' && member.fonction !== 'Cyno') {
                     alerts.push(`Membre **${member.trigramme}** est assigné mais n'a **AUCUN armement principal**. (Cellule: ${member.cellule})`);
                 }
-                if (member.fonction.toLowerCase() === 'effrac' && member.equipement !== 'EFFRAC') {
-                    alerts.push(`Le membre **${member.trigramme}** (Effrac) n'a **PAS l'équipement EFFRAC** sélectionné.`);
+                if (member.cellule && member.cellule.toLowerCase().includes('effrac') && member.equipement !== 'Belier') { // Mise à jour pour vérifier Belier ou un équipement d'effraction spécifique si vous en aviez d'autres.
+                    alerts.push(`Le membre **${member.trigramme}** (Effrac) n'a **PAS l'équipement Bélier** sélectionné.`);
                 }
             });
 
@@ -2452,15 +2562,21 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 if (button) {
                     button.dataset.trigramme = document.getElementById('modal_trigramme').value;
                     
-                    for (const key in memberConfig) {
-                        const attrName = key.replace(/s$/, '');
-                        const selectId = 'modal_' + attrName;
-                        const select = document.getElementById(selectId);
-                        if (select) {
-                            button.dataset[attrName] = select.value;
-                        }
-                    }
+                    // Mise à jour des data-attributes en fonction des sélecteurs de la modale complète
+                    // Note: Ces sélecteurs et leurs data-attributs sont basés sur le HTML initial.
+                    button.dataset.fonction = document.getElementById('modal_fonction').value;
+                    button.dataset.cellule = document.getElementById('modal_cellule').value;
+                    button.dataset.armement = document.getElementById('modal_armement').value; // Armement principal
+                    button.dataset.equipement = document.getElementById('modal_equipement').value; // Equipement 1
+                    button.dataset.equipement2 = document.getElementById('modal_equipement2').value; // Equipement 2
+                    button.dataset.tenue = document.getElementById('modal_tenue').value;
+                    button.dataset.gpb = document.getElementById('modal_gpb').value;
                     
+                    // Les attributs secondaires, afi, grenade ne sont pas dans la modale complète du HTML fourni,
+                    // mais si on les gère dans quick edit, on doit les sauvegarder. 
+                    // Pour l'édition complète, il faudrait ajouter les champs dans le HTML.
+                    // Si un membre est édité via la modale complète, on suppose que les champs non affichés ne sont pas modifiés.
+
                     updateMemberButtonVisuals(button);
                     populateQuickEditPanel(buttonId);
                     saveFormData();
@@ -2487,6 +2603,10 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     if(confirm(`Voulez-vous renvoyer le membre ${button.dataset.trigramme || 'N/A'} dans la section "Personnel à attribuer"?`)) {
                         button.dataset.cellule = 'Sans'; 
                         button.dataset.fonction = 'Sans'; 
+                        // Assurer que les nouveaux attributs sont aussi réinitialisés
+                        button.dataset.secondaire = 'Sans';
+                        button.dataset.afi = 'Sans';
+                        button.dataset.grenade = 'Sans';
                         updateMemberButtonVisuals(button);
                         unassignedContainer.appendChild(button);
                         saveFormData(); 
@@ -2614,6 +2734,9 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     
                     if (attribute === 'cellule' && value === 'Sans') {
                         activeMember.dataset.fonction = 'Sans';
+                        activeMember.dataset.secondaire = 'Sans';
+                        activeMember.dataset.afi = 'Sans';
+                        activeMember.dataset.grenade = 'Sans';
                     }
                     if (attribute === 'fonction' && value !== 'Sans' && activeMember.dataset.cellule === 'Sans') {
                         activeMember.dataset.cellule = 'India 1'; 
@@ -2645,6 +2768,9 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 
                 if (attribute === 'cellule' && value === 'Sans') {
                     activeMember.dataset.fonction = 'Sans';
+                    activeMember.dataset.secondaire = 'Sans';
+                    activeMember.dataset.afi = 'Sans';
+                    activeMember.dataset.grenade = 'Sans';
                 }
                 if (attribute === 'fonction' && value !== 'Sans' && activeMember.dataset.cellule === 'Sans') {
                     activeMember.dataset.cellule = 'India 1';
@@ -3514,12 +3640,22 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 
                 addNewPage();
                 drawTitle("7. PATRACDVR");
-                const patracHeaders = ["Trigramme", "Fonction", "Cellule", "Armement", "Équip. 1", "Équip. 2", "Tenue", "GPB"];
+                // Mise à jour des en-têtes pour inclure les nouveaux équipements (même si non dans la modale complète)
+                const patracHeaders = ["Trigramme", "Fonction", "Cellule", "Arm. Ppal", "Arm. Sec.", "AFI/GREN", "Équip. 1", "Équip. 2", "Tenue", "GPB"];
+                
                 for (const row of (formData.patracdvr_rows || [])) {
                     if(row.vehicle && row.members && row.members.length > 0) {
                         drawSubTitle(`Véhicule: ${row.vehicle}`);
-                        const patracRows = row.members.filter(m => m.trigramme).map(m => [m.trigramme, m.fonction, m.cellule, m.armement, m.equipement, m.equipement2, m.tenue, m.gpb]);
-                        if (patracRows.length > 0) { drawTable(patracHeaders, patracRows, [80, 90, 90, 90, 90, 90, 80, 80], context.margin); }
+                        const patracRows = row.members.filter(m => m.trigramme).map(m => [
+                            m.trigramme, m.fonction, m.cellule, m.armement, 
+                            m.secondaire || 'Sans', 
+                            `${m.afi || 'Sans'}/${m.grenade || 'Sans'}`, 
+                            m.equipement, m.equipement2, m.tenue, m.gpb
+                        ]);
+                        if (patracRows.length > 0) { 
+                            // 10 colonnes. Largeur ajustée pour 10 colonnes (770 de large total - 80 de marge = 690)
+                            drawTable(patracHeaders, patracRows, [60, 70, 70, 70, 70, 70, 70, 70, 70, 70], context.margin); 
+                        }
                     }
                 }
                 
@@ -3758,11 +3894,17 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             htmlContent += await drawImagesHtmlFromCategory('photo_container_emplacement_ao_preview_container', 'Emplacement AO');
 
             htmlContent += drawTitleHtml("7. PATRACDVR (Détail de la Composition)");
-            const patracHeaders = ["Trigramme", "Fonction", "Cellule", "Armement", "Équip. 1", "Équip. 2", "Tenue", "GPB"];
+            // Mise à jour des en-têtes
+            const patracHeaders = ["Trigramme", "Fonction", "Cellule", "Arm. Ppal", "Arm. Sec.", "AFI/GREN", "Équip. 1", "Équip. 2", "Tenue", "GPB"];
             for (const row of (formData.patracdvr_rows || [])) {
                 if(row.vehicle && row.members && row.members.length > 0) {
                     htmlContent += drawSubTitleHtml(`Véhicule: ${row.vehicle}`);
-                    const patracRows = row.members.filter(m => m.trigramme).map(m => [m.trigramme, m.fonction, m.cellule, m.armement, m.equipement, m.equipement2, m.tenue, m.gpb]);
+                    const patracRows = row.members.filter(m => m.trigramme).map(m => [
+                        m.trigramme, m.fonction, m.cellule, m.armement, 
+                        m.secondaire || 'Sans', 
+                        `${m.afi || 'Sans'}/${m.grenade || 'Sans'}`, 
+                        m.equipement, m.equipement2, m.tenue, m.gpb
+                    ]);
                     if (patracRows.length > 0) { htmlContent += drawTableHtml(patracHeaders, patracRows); }
                 }
             }
@@ -3791,5 +3933,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             return htmlContent;
         }
     </script>
+</body>
+</html>
 </body>
 </html>
