@@ -361,7 +361,7 @@
                     imageHtml += `<img src="${objectURL}" alt="${finalTitle}" class="w-full h-auto rounded-md" style="max-height: 500px; object-fit: contain; margin: auto;" onload="URL.revokeObjectURL(this.src)">`;
                     imageHtml += `</div>`;
                 } else {
-                    imageHtml += `<div class="p-4 rounded-lg shadow-md mt-4 border-2 border-red-500 bg-red-100 text-red-800">`;
+                    imageHtml += `<div class="p-4 bg-red-100 text-red-700 rounded-lg">`;
                     imageHtml += `<h4 class="text-xl font-semibold mb-3 text-center">Échec du chargement de l'image: ${finalTitle}</h4>`;
                     imageHtml += `<p class="text-sm text-center">L'image avec l'ID ${imagesData[i].id} n'a pas pu être affichée (Données IndexedDB manquantes ou corrompues).</p>`;
                     imageHtml += `</div>`;
@@ -371,7 +371,7 @@
             return imageHtml;
         }
 
-        // --- Fonctions de Section (Générateurs Synchrones) ---
+        // --- Fonctions de Section (Générateurs Synchrones de texte) ---
         
         const section_situation = (data) => {
             let html = drawTitleHtml("1. SITUATION");
@@ -495,72 +495,18 @@
             return html;
         };
 
-        // --- Logique d'Affichage Dynamique et de Navigation (Clé de la correction) ---
+        // --- Logique d'Affichage Statique (Corrigée pour la fiabilité) ---
 
         // Mappage des sections vers leurs générateurs de contenu
         const sectionContentMap = {
-            'sit_adv': { generator: section_situation, loaded: false, async: false },
-            'env_miss': { generator: section_environnement, loaded: false, async: false },
-            'execution': { generator: section_execution, loaded: false, async: false },
-            'india': { generator: section_articulation_india, loaded: false, async: false },
-            'ao': { generator: section_articulation_ao, loaded: false, async: false },
-            'patrac_cat': { generator: section_patrac_cat, loaded: false, async: false },
-            'photos': { generator: section_photos, loaded: false, async: true }
+            'sit_adv': { generator: section_situation },
+            'env_miss': { generator: section_environnement },
+            'execution': { generator: section_execution },
+            'india': { generator: section_articulation_india },
+            'ao': { generator: section_articulation_ao },
+            'patrac_cat': { generator: section_patrac_cat },
+            'photos': { generator: drawImagesHtmlFromCategory } // Le seul générateur asynchrone
         };
-
-        async function loadContentDynamically(sectionId, contentElement) {
-            const mapEntry = sectionContentMap[sectionId];
-            if (!mapEntry || mapEntry.loading) return; 
-
-            mapEntry.loading = true;
-            
-            // Afficher un message de chargement
-            contentElement.innerHTML = `<div class="text-center p-10 text-xl text-gray-500">Chargement de la section "${sectionId}" en cours...</div>`;
-
-            try {
-                let content;
-                // Le générateur reçoit les formData si non fourni précédemment
-                const generatorFunction = mapEntry.generator;
-                
-                if (mapEntry.async) {
-                    content = await generatorFunction(formData);
-                } else {
-                    content = generatorFunction(formData);
-                }
-
-                contentElement.innerHTML = content;
-                mapEntry.loaded = true;
-            } catch (error) {
-                console.error(`Erreur de génération de contenu pour ${sectionId}:`, error);
-                contentElement.innerHTML = `<div class="p-4 bg-red-100 text-red-700 rounded-lg">Erreur lors du chargement des données. Consultez la console.</div>`;
-            } finally {
-                mapEntry.loading = false;
-            }
-        }
-        
-        async function showSection(sectionId) {
-            const contentSections = document.querySelectorAll('.content-section');
-            const navItems = document.querySelectorAll('.nav-item');
-
-            const contentElement = document.getElementById(`content-${sectionId}`);
-            const navElement = document.getElementById(`nav-${sectionId}`);
-            
-            // 1. Masquer toutes les sections / Désactiver tous les boutons
-            contentSections.forEach(section => { section.classList.remove('active'); });
-            navItems.forEach(nav => { nav.classList.remove('active'); });
-
-            if (contentElement && navElement) {
-                 // 2. Tenter de charger le contenu si non déjà chargé
-                 if (!sectionContentMap[sectionId].loaded) {
-                     await loadContentDynamically(sectionId, contentElement);
-                 }
-                
-                 // 3. Afficher la section / Activer le bouton
-                 contentElement.classList.add('active');
-                 navElement.classList.add('active');
-                 document.getElementById('main-content').scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }
-        }
 
         async function initializePage() {
             const contentArea = document.getElementById('main-content');
@@ -591,6 +537,26 @@
             document.getElementById('main-title').textContent = `Ordre Initial pour: ${formData.nom_adversaire || 'Opération'}`;
             document.getElementById('op-date').textContent = `Date de l'opération: ${formData.date_op || 'N/A'}`;
             
+            // 4. Générer et injecter TOUT le contenu statiquement (y compris la section photos asynchrone)
+            // Cela imite le comportement de la "première itération" que vous avez trouvée fonctionnelle.
+            const allContentPromises = [
+                // Sections synchrones
+                Promise.resolve(document.getElementById('content-sit_adv').innerHTML = sectionContentMap['sit_adv'].generator(formData) + section_adversaire(formData)),
+                Promise.resolve(document.getElementById('content-env_miss').innerHTML = sectionContentMap['env_miss'].generator(formData) + section_mission(formData)),
+                Promise.resolve(document.getElementById('content-execution').innerHTML = sectionContentMap['execution'].generator(formData)),
+                Promise.resolve(document.getElementById('content-india').innerHTML = sectionContentMap['india'].generator(formData)),
+                Promise.resolve(document.getElementById('content-ao').innerHTML = sectionContentMap['ao'].generator(formData)),
+                Promise.resolve(document.getElementById('content-patrac_cat').innerHTML = sectionContentMap['patrac_cat'].generator(formData)),
+                
+                // Section asynchrone (Photos) - On attend qu'elle soit rendue
+                sectionContentMap['photos'].generator(formData).then(html => {
+                    document.getElementById('content-photos').innerHTML = html;
+                })
+            ];
+
+            // Attendre la résolution de TOUS les chargements (y compris les images)
+            await Promise.allSettled(allContentPromises);
+
             loadingMessage.style.display = 'none'; // Cacher le message de chargement initial
         }
 
@@ -612,18 +578,19 @@
                 document.getElementById('darkModeIcon').textContent = isDarkMode ? 'nightlight' : 'clear_day';
             });
             
-            // Lancer l'initialisation du contenu
+            // Lancer l'initialisation du contenu de manière asynchrone
             initializePage().finally(() => {
-                // 4. Attacher la logique de navigation
+                // 4. Attacher la logique de navigation (MAINTENANT que tout le contenu est injecté)
                 const navItems = document.querySelectorAll('.nav-item');
                 navItems.forEach(nav => {
                     nav.addEventListener('click', () => {
                         const sectionId = nav.id.split('-')[1];
+                        // La fonction showSection est maintenant simple : elle montre le contenu pré-généré
                         showSection(sectionId);
                     });
                 });
 
-                // Afficher la première section par défaut, déclenchant le chargement dynamique
+                // Afficher la première section par défaut
                 showSection('sit_adv');
             });
         });
