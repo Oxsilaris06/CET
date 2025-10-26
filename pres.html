@@ -42,6 +42,8 @@
             line-height: 1.5; 
             padding: 20px;
             transition: background-color 0.3s, color 0.3s;
+            /* Espace pour le dock menu */
+            padding-bottom: 80px; 
         }
         .container { 
             width: 100%; max-width: 1400px; 
@@ -52,15 +54,15 @@
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
         }
         
-        /* --- CORRECTION 1: Titre H1 style initial et taille augmentée --- */
+        /* --- Titre H1: Alignement sur le style de oi.html + Ajustement de taille --- */
         h1 { 
-            font-size: 3.5em; /* +40% de 2.5em */
+            font-size: 5.25em; /* Augmenté de 50% (3.5em * 1.5 = 5.25em) */
             margin-bottom: 25px; 
             color: var(--accent-blue); 
             font-family: 'Saira Stencil One', sans-serif !important; 
             text-align: center; 
-            letter-spacing: 3px; 
-            font-weight: 400; 
+            letter-spacing: 1.5px; 
+            font-weight: 400; /* Assure l'absence d'effet gras */
             border-bottom: 3px solid var(--accent-blue); 
             padding-bottom: 10px; 
         }
@@ -215,15 +217,73 @@
             word-break: break-word; 
         }
         
+        /* --- DOCK MENU STYLES (Copie de oi.html) --- */
+        .dock-menu { 
+            position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); 
+            display: flex; gap: 10px; padding: 10px; z-index: 1000; 
+            background-color: rgba(30, 30, 30, 0.7); 
+            border: 1px solid var(--border-color); 
+            border-radius: 35px; backdrop-filter: blur(10px); 
+            transition: all 0.3s ease-in-out; 
+        }
+        .dock-menu-item { 
+            display: flex; align-items: center; justify-content: center; 
+            background-color: var(--bg-container); color: var(--text-primary); 
+            border: 1px solid var(--border-color); 
+            border-radius: 50%; width: 50px; height: 50px; 
+            font-size: 28px; cursor: pointer; 
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2); 
+            transition: all 0.2s; text-decoration: none; flex-shrink: 0; 
+        }
+        .dock-menu-item:hover { transform: scale(1.1); }
+        .dock-menu.collapsed { 
+            width: 55px; height: 55px; padding: 5px; 
+            border-radius: 50%; border: none; 
+            background-color: transparent; 
+        }
+        .dock-menu.collapsed .dock-menu-item:not(#dockToggleBtn) { 
+            opacity: 0; width: 0; margin-left: -10px; visibility: hidden; 
+        }
+        #dockToggleBtn .material-symbols-outlined { transition: transform 0.3s ease; }
+        .dock-menu.collapsed #dockToggleBtn .material-symbols-outlined { transform: rotate(180deg); }
+
+        @media (max-width: 600px) {
+            .dock-menu:not(.collapsed) {
+                width: 95%;
+                padding: 5px;
+                gap: 5px;
+                justify-content: center;
+                display: flex; 
+                flex-wrap: wrap; 
+            }
+            .dock-menu:not(.collapsed) .dock-menu-item {
+                width: 45px;
+                height: 45px;
+                font-size: 24px;
+            }
+        }
+        
     </style>
 </head>
 <body class="dark-mode">
 
-    <div class="dock-menu">
+    <!-- DOCK MENU -->
+    <div class="dock-menu" id="dockMenu">
+        <!-- Bouton pour cacher/déployer le dock -->
+        <div class="dock-menu-item" id="dockToggleBtn" title="Réduire"><span class="material-symbols-outlined">expand_more</span></div>
+        
+        <!-- Bouton Accueil (Retour à oi.html) -->
+        <a href="index.html" class="dock-menu-item" title="Accueil (Retour à l'OI)"><span class="material-symbols-outlined">home</span></a>
+        
+        <!-- Bouton Recharger/Mettre à jour -->
+        <div class="dock-menu-item" id="reloadBtn" title="Recharger les données"><span class="material-symbols-outlined">update</span></div>
+
+        <!-- Bouton Thème (Déjà présent) -->
         <div class="dock-menu-item" id="darkModeToggle" title="Changer le thème">
             <span class="material-symbols-outlined" id="darkModeIcon">nightlight</span>
         </div>
     </div>
+    <!-- FIN DOCK MENU -->
 
     <div class="container">
         <header class="text-center mb-8">
@@ -855,6 +915,26 @@
         }
 
         document.addEventListener('DOMContentLoaded', () => {
+            const dockMenu = document.getElementById('dockMenu'); 
+            const dockToggleBtn = document.getElementById('dockToggleBtn');
+
+            // Initialisation du Dock (Récupère l'état sauvegardé de oi.html)
+            dockToggleBtn.addEventListener('click', (event) => { 
+                event.stopPropagation(); 
+                dockMenu.classList.toggle('collapsed'); 
+                localStorage.setItem('dockCollapsed', dockMenu.classList.contains('collapsed')); 
+            });
+            
+            if (localStorage.getItem('dockCollapsed') === 'true') { 
+                dockMenu.classList.add('collapsed'); 
+            }
+
+            // Gestion de la mise à jour (Rechargement)
+            document.getElementById('reloadBtn').addEventListener('click', () => {
+                // Relance l'initialisation de la page pour recharger les données du localStorage
+                location.reload(); 
+            });
+
             // Initialisation du thème
             const theme = localStorage.getItem('theme');
             if (theme === 'light') { 
