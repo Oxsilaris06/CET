@@ -76,7 +76,7 @@
             padding-bottom: 4px;
         }
 
-        /* Menu principal (Patrouille / Reco) */
+        /* Menu principal (Patrouille / Reco / Tir) */
         .main-menu {
             display: flex;
             gap: 10px; 
@@ -149,9 +149,11 @@
             background-color: transparent; 
             border: none;
             border-bottom: 1px solid var(--border-color);
+            flex-wrap: wrap; /* Permet le retour à la ligne sur mobile */
         }
         .toggle-btn {
-            flex: 1;
+            flex: 1 1 45%; /* Donne plus de flexibilité aux boutons */
+            min-width: 150px;
             padding: 14px 10px; 
             border: 1px solid var(--border-color); 
             border-radius: 8px;
@@ -205,7 +207,7 @@
             border-color: var(--accent-blue); 
         }
 
-        /* STYLES DOCK MENU (Version précédente rétablie - non optimisée pour mobile first) */
+        /* STYLES DOCK MENU (Rétabli) */
         .dock-menu { 
             position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); 
             display: flex; gap: 10px; padding: 10px; z-index: 1000; 
@@ -276,6 +278,7 @@
         <div class="main-menu">
             <button class="main-menu-btn active" data-target="patrouille">Patrouille</button>
             <button class="main-menu-btn" data-target="reco">Reco</button>
+            <button class="main-menu-btn" data-target="tir">Tir</button>
         </div>
 
         <!-- Contenu Patrouille -->
@@ -287,12 +290,17 @@
                 <button class="toggle-btn" data-toggle="tm">
                     <!-- Image ak.svg pour Tuerie Planifiée -->
                     <img src="ak.svg" alt="Icône AK47 pour Tuerie Planifiée">
-                     Tuerie Planifiée
+                    Tuerie Planifiée
                 </button>
                 <button class="toggle-btn" data-toggle="forcene">
                     <!-- Image bad.svg pour Forcené -->
                     <img src="bad.svg" alt="Icône Barricade pour Forcené">
-                     Forcené
+                    Forcené
+                </button>
+                <button class="toggle-btn" data-toggle="mo">
+                    <!-- Icône Matériel de Maintien de l'Ordre, utilise une icône de bouclier -->
+                    <span class="material-symbols-outlined" style="font-size: var(--large-icon-size); margin-right: 8px;">security</span>
+                    MO
                 </button>
             </div>
 
@@ -312,12 +320,26 @@
                 <h3 style="color:var(--danger-red); font-size:1em; margin-bottom: 10px;">Éléments Supplémentaires Forcené (PC)</h3>
                 <div id="patrouille-forcene-list"></div>
             </div>
+
+            <!-- Contenu Toggle MO -->
+            <div class="toggle-content" id="toggle-mo">
+                <h3 style="color:var(--danger-red); font-size:1em; margin-bottom: 10px;">Éléments Supplémentaires Maintien de l'Ordre (MO)</h3>
+                <div id="patrouille-mo-list"></div>
+            </div>
         </div>
 
         <!-- Contenu Reco -->
         <div class="checklist-section" id="reco">
             <h2 style="color:var(--text-primary); font-size:1.2em; margin-bottom: 15px; border-bottom: 2px solid var(--border-color); padding-bottom: 5px;">Checklist Reco (Reconnaissance/Observation)</h2>
             <div id="reco-list">
+                <!-- La liste est générée par JS -->
+            </div>
+        </div>
+        
+        <!-- Contenu Tir (Nouveau Menu) -->
+        <div class="checklist-section" id="tir">
+            <h2 style="color:var(--text-primary); font-size:1.2em; margin-bottom: 15px; border-bottom: 2px solid var(--border-color); padding-bottom: 5px;">Checklist Tir (Entraînement/Stand)</h2>
+            <div id="tir-list">
                 <!-- La liste est générée par JS -->
             </div>
         </div>
@@ -328,7 +350,7 @@
         const CHECKLIST_DATA = {
             patrouille: {
                 "Sécurité": ["CPS : PSA? UMP? G36? T7?"],
-                "Armement chargé dans le VL?": ["UMP", "G36"],
+                "Armement chargé dans le VL?": ["PSA", "UMP", "G36"],
                 "AFI": ["T7", "DLGC"], 
                 "Com": ["TPH - DIR", "Adaptateur TPH/TPL", "TPL - CANAL TOM"],
                 "Effraction": ["Lot 5.11"],
@@ -339,18 +361,29 @@
                 "Panneau molle": ["Dépistages Stup", "Embout alcoo", "Doc terrain"] 
             },
             tm: {
-                "Munitions": ["Chargeur supplémentaires"], // Correction de la virgule manquante
+                "Munitions": ["Chargeur supplémentaires"],
                 "Grenades": ["GENL?", "MP7?"], 
             },
             forcene: {
-                "Matériel PC": ["Lot PC (Tableaux, Dossier papier, Marqueurs)"], // Correction de la virgule manquante
+                "Matériel PC": ["Lot PC (Tableaux, Dossier papier, Marqueurs)"],
                 "Camo": ["Ghillie"],
                 "AFI": ["LBD40"], 
             },
+            // NOUVEAU TOGGLE : MO
+            mo: { 
+                "Matériel & Munitions": ["Jambières MO avec Grenades", "Sac MO", "Boucliers MO"],
+                "Petit +": ["Eau", "Casse -croûte?"]
+            },
             reco: {
                 "Sécurité": ["CPS : PSA?"], 
-                "Matériel Reco": ["Tenue adaptée", "Sac Reco", "Brassard", "Carte Pro", "PASS"],
+                "Matériel Reco": ["Tenue adaptée", "SAC RECO", "Brassard", "Carte Pro", "PASS"],
                 "Tech Reco": ["Drone", "Ecouteurs Bluetooth","Mesures : Lacet? Metre?"]
+            },
+            // NOUVEAU MENU PRINCIPAL : TIR
+            tir: {
+                "Armement": ["Armes : PSA? G36? UMP? FAP?", "Munitions"],
+                "Matériel": ["Caisse de tir", "Caisse lunettes", "Porte cibles", "Cibles"],
+                "Petit +": ["Boite munition de service", "Eau", "Casse-croûte?"]
             }
         };
 
@@ -466,8 +499,12 @@
             // 1. Initialiser les listes de contrôle avec la nouvelle structure
             generateChecklist(CHECKLIST_DATA.patrouille, 'patrouille-base-list');
             generateChecklist(CHECKLIST_DATA.reco, 'reco-list');
-            generateChecklist(CHECKLIST_DATA.tm, 'patrouille-tm-list', true); // Toggle content
-            generateChecklist(CHECKLIST_DATA.forcene, 'patrouille-forcene-list', true); // Toggle content
+            generateChecklist(CHECKLIST_DATA.tir, 'tir-list'); // Nouveau menu
+            
+            // Toggles
+            generateChecklist(CHECKLIST_DATA.tm, 'patrouille-tm-list', true); 
+            generateChecklist(CHECKLIST_DATA.forcene, 'patrouille-forcene-list', true);
+            generateChecklist(CHECKLIST_DATA.mo, 'patrouille-mo-list', true); // Nouveau toggle
 
             // 2. Événements des boutons de menu principal
             document.querySelectorAll('.main-menu-btn').forEach(btn => {
@@ -529,6 +566,7 @@
                     localStorage.removeItem('operationalChecklistState');
                     localStorage.removeItem('toggle-tm-active');
                     localStorage.removeItem('toggle-forcene-active');
+                    localStorage.removeItem('toggle-mo-active'); // Nouveau toggle
                     location.reload(); 
                 } 
             });
