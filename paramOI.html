@@ -165,7 +165,14 @@
                 <div class="collapsible-content">
                     <div class="form-group"><label for="oiFonctions">Fonctions</label><textarea id="oiFonctions" placeholder="Chef inter, Chef dispo, DE, Sans"></textarea><p class="help-text">Séparez chaque valeur par une virgule.</p></div>
                     <div class="form-group"><label for="oiCellules">Cellules</label><textarea id="oiCellules" placeholder="AO1, AO2, India 1, India 2"></textarea></div>
-                    <div class="form-group"><label for="oiArmements">Armements</label><textarea id="oiArmements" placeholder="Sans, UMP9, G36, PIE"></textarea></div>
+                    
+                    <!-- Nouveaux champs d'armement détaillés -->
+                    <div class="form-group"><label for="oiPrincipales">Armes Principales</label><textarea id="oiPrincipales" placeholder="UMP9, G36, FAP, Sans"></textarea></div>
+                    <div class="form-group"><label for="oiSecondaires">Armes Secondaires</label><textarea id="oiSecondaires" placeholder="PSA, Glock, Sans"></textarea></div>
+                    <div class="form-group"><label for="oiAfis">A.F.I. (Armes à Feux Intermédiaires)</label><textarea id="oiAfis" placeholder="PIE, LBD40, LBD44, Sans"></textarea></div>
+                    <div class="form-group"><label for="oiGrenades">Grenades</label><textarea id="oiGrenades" placeholder="GENL, MP7, Sans"></textarea></div>
+                    <!-- Ancien champ armements supprimé -->
+                    
                     <div class="form-group"><label for="oiEquipements">Équipements 1</label><textarea id="oiEquipements" placeholder="Sans, BBAL, GENL, EFFRAC"></textarea></div>
                     <div class="form-group"><label for="oiEquipements2">Équipements 2</label><textarea id="oiEquipements2" placeholder="Sans, Échelle, Stop stick"></textarea></div>
                     <div class="form-group"><label for="oiTenues">Tenues</label><textarea id="oiTenues" placeholder="UBAS, 4S, Bleu, Treillis"></textarea></div>
@@ -197,7 +204,10 @@
             const memberConfig = {
                 fonctions: [],
                 cellules: [],
-                armements: [],
+                principales: [], // Nouveau champ
+                secondaires: [], // Nouveau champ
+                afis: [],         // Nouveau champ
+                grenades: [],    // Nouveau champ
                 equipements: [],
                 equipements2: [],
                 tenues: [],
@@ -207,7 +217,10 @@
             const quickEditMapping = {
                 'Fonction': { key: 'fonctions', attribute: 'fonction' },
                 'Cellule': { key: 'cellules', attribute: 'cellule' },
-                'Armement': { key: 'armements', attribute: 'armement' },
+                'Princ.': { key: 'principales', attribute: 'principales' }, // Nouveau
+                'Sec.': { key: 'secondaires', attribute: 'secondaires' },   // Nouveau
+                'A.F.I.': { key: 'afis', attribute: 'afis' },               // Nouveau
+                'Grenades': { key: 'grenades', attribute: 'grenades' },     // Nouveau
                 'Équip. 1': { key: 'equipements', attribute: 'equipement' },
                 'Équip. 2': { key: 'equipements2', attribute: 'equipement2' },
                 'Tenue': { key: 'tenues', attribute: 'tenue' },
@@ -231,12 +244,36 @@
                 setTimeout(() => { notificationDiv.style.display = 'none'; }, 4000);
             }
 
-            function addMemberButton(memberData = { trigramme: 'N/A', fonction: 'Sans', cellule: 'India 1', armement: 'Sans', equipement: 'Sans', equipement2: 'Sans', tenue: 'UBAS', gpb: 'GPBL' }) {
+            function addMemberButton(memberData = {}) {
+                // Définir les valeurs par défaut avec les nouveaux champs
+                const defaultData = { 
+                    trigramme: 'N/A', fonction: 'Sans', cellule: 'India 1', 
+                    principales: 'Sans', secondaires: 'Sans', afis: 'Sans', grenades: 'Sans', // Nouveaux defaults
+                    equipement: 'Sans', equipement2: 'Sans', tenue: 'UBAS', gpb: 'GPBL',
+                    // Ajouter le support pour l'ancienne clé pour l'import
+                    armement: 'Sans',
+                    ...memberData
+                };
+                
+                // Mettre à jour les nouvelles clés si l'ancienne clé "armement" est présente et les nouvelles ne le sont pas
+                if (defaultData.armement && defaultData.armement !== 'Sans') {
+                    if (!defaultData.principales || defaultData.principales === 'Sans') {
+                        defaultData.principales = defaultData.armement;
+                    }
+                }
+
                 const btn = document.createElement('button');
                 btn.type = 'button';
                 btn.className = 'member-btn';
                 btn.id = `member_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-                Object.keys(memberData).forEach(key => btn.dataset[key] = memberData[key]);
+                
+                Object.keys(defaultData).forEach(key => {
+                    // N'enregistrer que les clés pertinentes dans dataset
+                    if (key !== 'armement') { 
+                        btn.dataset[key] = defaultData[key];
+                    }
+                });
+
                 updateMemberButtonVisuals(btn);
                 memberListDiv.appendChild(btn);
                 return btn;
@@ -258,6 +295,7 @@
                     categoryDiv.innerHTML = `<h5>${title}</h5><div class="quick-edit-options"></div>`;
                     const optionsContainer = categoryDiv.querySelector('.quick-edit-options');
 
+                    // Utiliser le nom de la clé (ex: 'principales') pour accéder à memberConfig
                     memberConfig[config.key].forEach(option => {
                         const btn = document.createElement('button');
                         btn.type = 'button';
@@ -342,10 +380,17 @@
                 memberListDiv.innerHTML = '';
                 (data.members || []).forEach(addMemberButton);
 
-                const getArrayFromTextarea = (id) => (data.options?.[id] || []).join(', ');
+                const getArrayFromTextarea = (key) => (data.options?.[key] || []).join(', ');
+                
                 document.getElementById('oiFonctions').value = getArrayFromTextarea('fonctions');
                 document.getElementById('oiCellules').value = getArrayFromTextarea('cellules');
-                document.getElementById('oiArmements').value = getArrayFromTextarea('armements');
+                
+                // Remplir les nouveaux champs, avec fallback sur 'armements' pour l'import d'anciennes configs
+                document.getElementById('oiPrincipales').value = getArrayFromTextarea('principales') || getArrayFromTextarea('armements');
+                document.getElementById('oiSecondaires').value = getArrayFromTextarea('secondaires') || '';
+                document.getElementById('oiAfis').value = getArrayFromTextarea('afis') || '';
+                document.getElementById('oiGrenades').value = getArrayFromTextarea('grenades') || '';
+
                 document.getElementById('oiEquipements').value = getArrayFromTextarea('equipements');
                 document.getElementById('oiEquipements2').value = getArrayFromTextarea('equipements2');
                 document.getElementById('oiTenues').value = getArrayFromTextarea('tenues');
@@ -381,7 +426,10 @@
                     trigramme: btn.dataset.trigramme,
                     fonction: btn.dataset.fonction,
                     cellule: btn.dataset.cellule,
-                    armement: btn.dataset.armement,
+                    principales: btn.dataset.principales,
+                    secondaires: btn.dataset.secondaires,
+                    afis: btn.dataset.afis,
+                    grenades: btn.dataset.grenades,
                     equipement: btn.dataset.equipement,
                     equipement2: btn.dataset.equipement2,
                     tenue: btn.dataset.tenue,
@@ -394,7 +442,10 @@
                     options: {
                         fonctions: getArrayFromTextarea('oiFonctions'),
                         cellules: getArrayFromTextarea('oiCellules'),
-                        armements: getArrayFromTextarea('oiArmements'),
+                        principales: getArrayFromTextarea('oiPrincipales'), // Nouveau
+                        secondaires: getArrayFromTextarea('oiSecondaires'), // Nouveau
+                        afis: getArrayFromTextarea('oiAfis'),               // Nouveau
+                        grenades: getArrayFromTextarea('oiGrenades'),      // Nouveau
                         equipements: getArrayFromTextarea('oiEquipements'),
                         equipements2: getArrayFromTextarea('oiEquipements2'),
                         tenues: getArrayFromTextarea('oiTenues'),
@@ -407,7 +458,10 @@
                 const getArrayFromTextarea = (id) => document.getElementById(id).value.split(',').map(item => item.trim()).filter(Boolean);
                 memberConfig.fonctions = getArrayFromTextarea('oiFonctions');
                 memberConfig.cellules = getArrayFromTextarea('oiCellules');
-                memberConfig.armements = getArrayFromTextarea('oiArmements');
+                memberConfig.principales = getArrayFromTextarea('oiPrincipales'); // Nouveau
+                memberConfig.secondaires = getArrayFromTextarea('oiSecondaires'); // Nouveau
+                memberConfig.afis = getArrayFromTextarea('oiAfis');               // Nouveau
+                memberConfig.grenades = getArrayFromTextarea('oiGrenades');      // Nouveau
                 memberConfig.equipements = getArrayFromTextarea('oiEquipements');
                 memberConfig.equipements2 = getArrayFromTextarea('oiEquipements2');
                 memberConfig.tenues = getArrayFromTextarea('oiTenues');
@@ -448,7 +502,23 @@
             
             resetFormBtn.addEventListener('click', () => {
                 if(confirm("Voulez-vous vraiment réinitialiser le formulaire ? Toutes les données non sauvegardées seront perdues.")) {
-                    populateForm({});
+                    // Reset avec les valeurs par défaut
+                    populateForm({
+                        geminiApiKey: '',
+                        members: [],
+                        options: {
+                            fonctions: ["Chef inter", "Chef dispo", "Chef Oscar", "DE", "Cyno", "Inter", "AO", "Sans"],
+                            cellules: ["AO1", "AO2", "AO3", "AO4", "AO5", "AO6", "AO7", "India 1", "India 2", "India 3", "India 4", "India 5", "Effrac", "Sans"],
+                            principales: ["UMP9", "G36", "FAP", "Sans"],
+                            secondaires: ["PSA", "Sans"],
+                            afis: ["PIE", "LBD40", "LBD44", "Sans"],
+                            grenades: ["GENL", "MP7", "Sans"],
+                            equipements: ["Sans", "BBAL", "Belier", "Lacry", "IL", "Lot 5.11"],
+                            equipements2: ["Sans", "Échelle", "Stop stick", "Lacry", "Cale", "IL", "Pass"],
+                            tenues: ["UBAS", "4S", "Bleu", "Civil", "Ghillie", "Treillis"],
+                            gpbs: ["GPBL", "GPBPD", "Sans"]
+                        }
+                    });
                     showNotification('Formulaire réinitialisé avec succès.', 'success');
                 }
             });
@@ -486,14 +556,18 @@
             darkModeToggle.addEventListener('click', toggleTheme);
 
             // Initial load to set up the form
+            // Utiliser les valeurs par défaut pour les nouveaux champs
             populateForm({
-                geminiApiKey: '',
+                geminiApiKey: localStorage.getItem('geminiApiKey') || '',
                 members: [],
                 options: {
                     fonctions: ["Chef inter", "Chef dispo", "Chef Oscar", "DE", "Cyno", "Inter", "AO", "Sans"],
                     cellules: ["AO1", "AO2", "AO3", "AO4", "AO5", "AO6", "AO7", "India 1", "India 2", "India 3", "India 4", "India 5", "Effrac", "Sans"],
-                    armements: ["PSA", "UMP9", "G36", "PIE", "LBD", "FAP", "Sans"],
-                    equipements: ["Sans", "BBAL", "GENL", "EFFRAC", "MP7", "IL", "Lot 5.11"],
+                    principales: ["UMP9", "G36", "FAP", "Sans"],
+                    secondaires: ["PSA", "Sans"],
+                    afis: ["PIE", "LBD40", "LBD44", "Sans"],
+                    grenades: ["GENL", "MP7", "Sans"],
+                    equipements: ["Sans", "BBAL", "Belier", "Lacry", "IL", "Lot 5.11"],
                     equipements2: ["Sans", "Échelle", "Stop stick", "Lacry", "Cale", "IL", "Pass"],
                     tenues: ["UBAS", "4S", "Bleu", "Civil", "Ghillie", "Treillis"],
                     gpbs: ["GPBL", "GPBPD", "Sans"]
