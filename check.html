@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Checklist Opérationnelle</title>
+    <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Saira+Stencil+One:wght@400&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
+    <style>
+        /* Variables et thèmes inspirés de oi.html */
+        :root {
+            --bg-body: #121212; --bg-container: #1e1e1e; --bg-interactive: #2a2a2a;
+            --text-primary: #e0e0e0; --text-secondary: #95a5a6; --border-color: #444444;
+            --accent-blue: #5b9bd5; --accent-hover: #4a7aa5;
+            --danger-red: #c0392b;
+            --success-green: #27ae60;
+            --icon-color: var(--text-secondary); /* Couleur par défaut des icônes de toggle */
+        }
+        body.light-mode {
+            --bg-body: #f0f2f5; --bg-container: #ffffff; --bg-interactive: #f8f9fa;
+            --text-primary: #212529; --text-secondary: #6c757d; --accent-blue: #0033a0;
+            --border-color: #dee2e6;
+            --icon-color: var(--text-secondary);
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { 
+            font-family: 'Oswald', sans-serif; 
+            background-color: var(--bg-body); 
+            color: var(--text-primary); 
+            line-height: 1.6; 
+            padding: 10px; 
+            padding-bottom: 90px; 
+            transition: background-color 0.3s, color 0.3s; 
+        }
+        .container { 
+            width: 100%; 
+            max-width: 700px; 
+            margin: auto; 
+            background: var(--bg-container); 
+            padding: 20px; 
+            border-radius: 8px; 
+            border: 1px solid var(--border-color); 
+            min-height: calc(100vh - 100px);
+        }
+        /* Mise à jour H1: force la police et s'assure qu'elle n'est pas en gras */
+        h1 { 
+            font-size: 2em; 
+            margin-bottom: 20px; 
+            color: var(--accent-blue); 
+            font-family: 'Saira Stencil One', sans-serif; /* Correction pour utiliser Saira Stencil One */
+            text-align: center; 
+            letter-spacing: 1.5px; 
+            font-weight: 400; /* Assure pas d'effet gras excessif */
+        }
+        
+        /* Menu principal (Patrouille / Reco) */
+        .main-menu {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .main-menu-btn {
+            flex: 1;
+            padding: 15px;
+            border: 2px solid var(--border-color);
+            border-radius: 8px;
+            background-color: var(--bg-interactive);
+            color: var(--text-secondary);
+            font-size: 1.1em;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .main-menu-btn:hover {
+            border-color: var(--accent-hover);
+            color: var(--text-primary);
+        }
+        .main-menu-btn.active {
+            border-color: var(--accent-blue);
+            background-color: var(--accent-blue);
+            color: white;
+            box-shadow: 0 0 10px rgba(91, 155, 213, 0.5);
+        }
+
+        /* Checklist Items */
+        .checklist-section {
+            display: none;
+            padding: 10px 0;
+        }
+        .checklist-section.active {
+            display: block;
+        }
+        .checklist-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 15px;
+            margin-bottom: 10px;
+            background-color: var(--bg-interactive);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 1.1em;
+            user-select: none;
+        }
+        .checklist-item:hover {
+            border-color: var(--accent-hover);
+        }
+        .checklist-item.checked {
+            background-color: var(--success-green);
+            color: white;
+            border-color: var(--success-green);
+            text-decoration: line-through;
+            opacity: 0.8;
+        }
+        .checklist-item.checked .material-symbols-outlined {
+            color: white;
+        }
+        .checklist-item .material-symbols-outlined {
+            font-size: 24px;
+            color: var(--accent-blue);
+            transition: color 0.2s;
+        }
+        .checklist-item.checked .status-icon {
+            content: 'done';
+            color: white !important;
+        }
+        
+        /* Toggles spécifiques à Patrouille */
+        .toggle-container {
+            display: flex;
+            justify-content: space-around;
+            gap: 10px;
+            padding: 15px;
+            margin-bottom: 15px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background-color: var(--bg-body);
+        }
+        .toggle-btn {
+            flex: 1;
+            padding: 12px;
+            border: 1px solid var(--text-secondary);
+            border-radius: 6px;
+            background-color: var(--bg-interactive);
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.9em;
+            line-height: 1; /* Assurer que le texte ne soit pas trop étiré */
+        }
+        /* Nouvelle couleur pour le toggle actif : Accent Blue */
+        .toggle-btn.active {
+            background-color: var(--accent-blue); 
+            color: white;
+            border-color: var(--accent-blue);
+        }
+        /* Style des images dans les toggles */
+        .toggle-btn img {
+            width: 24px;
+            height: 24px;
+            margin-right: 8px;
+            /* Le filtre de couleur peut aider les images non SVG à s'intégrer, mais dépend du type d'image. */
+            /* Pour un SVG simple, il pourrait être plus facile de le mettre en ligne. */
+            filter: grayscale(100%); /* Assombrir en mode non actif */
+            transition: filter 0.2s, opacity 0.2s;
+        }
+        /* Changement de style quand le toggle est actif */
+        .toggle-btn.active img {
+            filter: none; /* Supprimer le filtre pour la couleur originale */
+            opacity: 1; 
+        }
+
+
+        .toggle-content {
+            display: none;
+            margin-top: 15px;
+            padding: 10px 0;
+            border-top: 1px dashed var(--border-color);
+        }
+        .toggle-content.active {
+            display: block;
+        }
+        /* Les éléments de checklist secondaires dans les toggles sont en couleur danger pour les différencier */
+        .toggle-content .checklist-item {
+            background-color: var(--bg-body);
+            border-color: var(--border-color);
+        }
+        .toggle-content .checklist-item:hover {
+            border-color: var(--accent-blue); 
+        }
+
+        /* Styles Dock Menu (Copie conforme de oi.html) */
+        .dock-menu { 
+            position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); 
+            display: flex; gap: 10px; padding: 10px; z-index: 1000; 
+            background-color: rgba(30, 30, 30, 0.7); 
+            border: 1px solid var(--border-color); 
+            border-radius: 35px; backdrop-filter: blur(10px); 
+            transition: all 0.3s ease-in-out; 
+        }
+        .dock-menu-item { 
+            display: flex; align-items: center; justify-content: center; 
+            background-color: var(--bg-container); color: var(--text-primary); 
+            border: 1px solid var(--border-color); 
+            border-radius: 50%; width: 50px; height: 50px; 
+            font-size: 28px; cursor: pointer; 
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2); 
+            transition: all 0.2s; text-decoration: none; flex-shrink: 0; 
+        }
+        .dock-menu-item:hover { transform: scale(1.1); }
+        .dock-menu.collapsed { 
+            width: 55px; height: 55px; padding: 5px; 
+            border-radius: 50%; border: none; 
+            background-color: transparent; 
+        }
+        .dock-menu.collapsed .dock-menu-item:not(#dockToggleBtn) { 
+            opacity: 0; width: 0; margin-left: -10px; visibility: hidden; 
+        }
+        #dockToggleBtn .material-symbols-outlined { transition: transform 0.3s ease; }
+        .dock-menu.collapsed #dockToggleBtn .material-symbols-outlined { transform: rotate(180deg); }
+        @media (max-width: 600px) {
+            .dock-menu:not(.collapsed) {
+                width: 95%;
+                padding: 5px;
+                gap: 5px;
+                justify-content: center;
+                display: flex; 
+                flex-wrap: wrap; 
+            }
+            .dock-menu:not(.collapsed) .dock-menu-item {
+                width: 45px;
+                height: 45px;
+                font-size: 24px;
+            }
+        }
+    </style>
+</head>
+<body class="dark-mode">
+
+    <!-- Dock Menu -->
+    <div class="dock-menu" id="dockMenu">
+        <div class="dock-menu-item" id="dockToggleBtn" title="Réduire"><span class="material-symbols-outlined">expand_more</span></div>
+        <a href="index.html" class="dock-menu-item" title="Accueil"><span class="material-symbols-outlined">home</span></a>
+        <!-- Pas d'import/export pour une checklist simple -->
+        <div class="dock-menu-item" id="darkModeToggle" title="Changer le thème"><span class="material-symbols-outlined" id="darkModeIcon">nightlight</span></div>
+        <div class="dock-menu-item" id="resetBtn" title="Réinitialiser la checklist"><span class="material-symbols-outlined">refresh</span></div>
+    </div>
+    
+    <div class="container">
+        <h1>CHECKLIST OPÉRATIONNELLE</h1>
+
+        <!-- Sélecteur de menu principal -->
+        <div class="main-menu">
+            <button class="main-menu-btn active" data-target="patrouille">Patrouille</button>
+            <button class="main-menu-btn" data-target="reco">Reco</button>
+        </div>
+
+        <!-- Contenu Patrouille -->
+        <div class="checklist-section active" id="patrouille">
+            
+            <h2 style="color:var(--text-primary); font-size:1.2em; margin-bottom: 15px; border-bottom: 2px solid var(--border-color); padding-bottom: 5px;">Checklist de base Patrouille</h2>
+            
+            <div class="toggle-container">
+                <button class="toggle-btn" data-toggle="tm">
+                    <!-- Image ak.svg pour Tuerie Planifiée -->
+                    <img src="ak.svg" alt="Icône AK47 pour Tuerie Planifiée">
+                    TOOGLE Tuerie Planifiée
+                </button>
+                <button class="toggle-btn" data-toggle="forcene">
+                    <!-- Image bad.svg pour Forcené -->
+                    <img src="bad.svg" alt="Icône Barricade pour Forcené">
+                    TOOGLE Forcené
+                </button>
+            </div>
+
+            <!-- Liste de base Patrouille -->
+            <div id="patrouille-base-list">
+                <!-- Les listes sont générées par JS pour la simplicité de la gestion des données -->
+            </div>
+
+            <!-- Contenu Toggle TM -->
+            <div class="toggle-content" id="toggle-tm">
+                <h3 style="color:var(--danger-red); font-size:1em; margin-bottom: 10px;">Éléments Supplémentaires Tuerie Planifiée</h3>
+                <div id="patrouille-tm-list"></div>
+            </div>
+
+            <!-- Contenu Toggle Forcené -->
+            <div class="toggle-content" id="toggle-forcene">
+                <h3 style="color:var(--danger-red); font-size:1em; margin-bottom: 10px;">Éléments Supplémentaires Forcené</h3>
+                <div id="patrouille-forcene-list"></div>
+            </div>
+        </div>
+
+        <!-- Contenu Reco -->
+        <div class="checklist-section" id="reco">
+            <h2 style="color:var(--text-primary); font-size:1.2em; margin-bottom: 15px; border-bottom: 2px solid var(--border-color); padding-bottom: 5px;">Checklist Reco (Reconnaissance/Observation)</h2>
+            <div id="reco-list">
+                <!-- La liste est générée par JS -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Définition des données de la checklist
+        const CHECKLIST_DATA = {
+            patrouille: [
+                "CPS : PSA, UMP, G36, T7?",
+                "LOT Lourd individuel",
+                "Chargement Armement",
+                "TPH - DIR?",
+                "TPL - CANAL TOM?",
+                "Geoloc - Geodispo - Cam piéton",
+                "OPS Mobilité - Création de la patrouille",
+                "Sac oscar",
+                "Sac secours",
+                "BBAL",
+                "Lot 5.11",
+                "Dépistages Stup ? Embout alcoo?"
+            ],
+            tm: [
+                "Chargeur supplémentaires",
+                "GENL?",
+                "MP7?"
+            ],
+            forcene: [
+                "Lot PC : Tableaux, Dossier papier, Marqueurs",
+                "Ghillie", 
+                "LBD40",
+                "MP7",
+                "GENL"
+            ],
+            reco: [
+                "Tenue adaptée?",
+                "CPS PSA?",
+                "Brassard ? Carte Pro?",
+                "PASS?",
+                "DRONE?",
+                "SAC RECO?",
+            ]
+        };
+
+        // État de la checklist stocké localement
+        let checklistState = JSON.parse(localStorage.getItem('operationalChecklistState')) || {};
+
+        /**
+         * Met à jour l'état local et la sauvegarde.
+         */
+        function updateState(key, isChecked) {
+            checklistState[key] = isChecked;
+            localStorage.setItem('operationalChecklistState', JSON.stringify(checklistState));
+        }
+
+        /**
+         * Inverse l'état d'un élément de checklist et met à jour l'UI.
+         */
+        function toggleCheckItem(event) {
+            const item = event.currentTarget;
+            const key = item.dataset.key;
+            const isChecked = item.classList.toggle('checked');
+            
+            // Mise à jour de l'icône
+            const icon = item.querySelector('.status-icon');
+            icon.textContent = isChecked ? 'done' : 'check_box_outline_blank';
+
+            updateState(key, isChecked);
+        }
+
+        /**
+         * Génère les éléments de checklist pour une liste donnée.
+         */
+        function generateChecklist(dataList, containerId) {
+            const container = document.getElementById(containerId);
+            if (!container) return;
+
+            container.innerHTML = ''; // Nettoyer le conteneur
+
+            dataList.forEach((itemText, index) => {
+                // Créer une clé unique basée sur la liste et le texte pour la persistance
+                const key = `${containerId}-${index}-${itemText.replace(/[^a-zA-Z0-9]/g, '').substring(0, 10)}`;
+                const isChecked = checklistState[key] || false;
+
+                const item = document.createElement('div');
+                item.className = 'checklist-item';
+                item.dataset.key = key;
+                item.textContent = itemText;
+                
+                if (isChecked) {
+                    item.classList.add('checked');
+                }
+
+                const icon = document.createElement('span');
+                icon.className = 'material-symbols-outlined status-icon';
+                icon.textContent = isChecked ? 'done' : 'check_box_outline_blank';
+                item.appendChild(icon);
+
+                item.addEventListener('click', toggleCheckItem);
+                container.appendChild(item);
+            });
+        }
+        
+        /**
+         * Gère l'affichage des sections principales (Patrouille / Reco).
+         */
+        function switchMenu(targetId) {
+            document.querySelectorAll('.checklist-section').forEach(section => {
+                section.classList.remove('active');
+            });
+            document.getElementById(targetId).classList.add('active');
+
+            document.querySelectorAll('.main-menu-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.target === targetId);
+            });
+        }
+
+        /**
+         * Gère les toggles supplémentaires pour le menu Patrouille.
+         */
+        function handleToggle(event) {
+            const button = event.currentTarget;
+            const toggleType = button.dataset.toggle;
+            const targetContent = document.getElementById(`toggle-${toggleType}`);
+
+            const isActive = button.classList.toggle('active');
+            targetContent.classList.toggle('active', isActive);
+
+            // Sauvegarde l'état du toggle
+            localStorage.setItem(`toggle-${toggleType}-active`, isActive);
+        }
+
+        /**
+         * Initialise les listes, les menus et les interactions au chargement de la page.
+         */
+        document.addEventListener('DOMContentLoaded', () => {
+            // 1. Initialiser les listes de contrôle
+            generateChecklist(CHECKLIST_DATA.patrouille, 'patrouille-base-list');
+            generateChecklist(CHECKLIST_DATA.reco, 'reco-list');
+            generateChecklist(CHECKLIST_DATA.tm, 'patrouille-tm-list');
+            generateChecklist(CHECKLIST_DATA.forcene, 'patrouille-forcene-list');
+
+            // 2. Événements des boutons de menu principal
+            document.querySelectorAll('.main-menu-btn').forEach(btn => {
+                btn.addEventListener('click', () => switchMenu(btn.dataset.target));
+            });
+            
+            // Initialisation du menu actif
+            switchMenu('patrouille'); // Patrouille est le menu par défaut
+
+            // 3. Événements des toggles (Patrouille uniquement)
+            document.querySelectorAll('.toggle-btn').forEach(btn => {
+                btn.addEventListener('click', handleToggle);
+                
+                // Rétablir l'état des toggles à partir du stockage local
+                const toggleType = btn.dataset.toggle;
+                const isSavedActive = localStorage.getItem(`toggle-${toggleType}-active`) === 'true';
+                if (isSavedActive) {
+                    btn.classList.add('active');
+                    document.getElementById(`toggle-${toggleType}`).classList.add('active');
+                }
+            });
+
+            // 4. Fonctionnalités du Dock (Home, Theme, Reset)
+
+            const dockMenu = document.getElementById('dockMenu'); 
+            const dockToggleBtn = document.getElementById('dockToggleBtn');
+            const darkModeToggle = document.getElementById('darkModeToggle');
+            const darkModeIcon = document.getElementById('darkModeIcon');
+            const resetBtn = document.getElementById('resetBtn');
+
+            // a. Gestion du Dock Collapsed
+            if (localStorage.getItem('dockCollapsedCheck') === 'true') { 
+                dockMenu.classList.add('collapsed'); 
+            }
+            dockToggleBtn.addEventListener('click', (event) => { 
+                event.stopPropagation(); 
+                dockMenu.classList.toggle('collapsed'); 
+                localStorage.setItem('dockCollapsedCheck', dockMenu.classList.contains('collapsed')); 
+            });
+
+            // b. Gestion du Thème (Dark/Light Mode)
+            const isDarkMode = localStorage.getItem('themeCheck') !== 'light';
+            document.body.classList.toggle('dark-mode', isDarkMode);
+            document.body.classList.toggle('light-mode', !isDarkMode);
+            darkModeIcon.textContent = isDarkMode ? 'nightlight' : 'clear_day';
+
+            darkModeToggle.addEventListener('click', () => {
+                const isDark = document.body.classList.toggle('light-mode');
+                document.body.classList.toggle('dark-mode', !isDark);
+                
+                const currentIsDarkMode = document.body.classList.contains('dark-mode');
+                localStorage.setItem('themeCheck', currentIsDarkMode ? 'dark' : 'light');
+                darkModeIcon.textContent = currentIsDarkMode ? 'nightlight' : 'clear_day';
+            });
+
+            // c. Réinitialisation
+            resetBtn.addEventListener('click', () => {
+                if (confirm("Voulez-vous vraiment réinitialiser toutes les cases cochées de cette checklist ?")) {
+                    localStorage.removeItem('operationalChecklistState');
+                    localStorage.removeItem('toggle-tm-active');
+                    localStorage.removeItem('toggle-forcene-active');
+                    location.reload(); 
+                } 
+            });
+        });
+    </script>
+</body>
+</html>
