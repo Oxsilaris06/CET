@@ -245,13 +245,11 @@
             transition: color 0.05s;
             margin-top: 5px;
             flex-shrink: 0;
+            /* COULEUR PAR DÉFAUT POUR L'ÉTAT NON COCHÉ */
             color: var(--accent-blue); 
         }
         
-        .checklist-module:not(.checked) .checkmark {
-            color: var(--accent-blue); 
-        }
-        
+        /* S'assure que l'icône a la couleur blanche lorsque le module est COCHÉ */
         .checklist-module.checked .checkmark {
             color: white; 
         }
@@ -419,13 +417,13 @@
                 <!-- Toggle Menu pour les checklists additionnelles (Icônes réintégrées) -->
                 <div class="toggle-menu" id="patrouille-toggle-menu">
                     <button class="toggle-btn" data-toggle="tm">
-                        <!-- Intégration de l'image ak.svg et style pour le filtre -->
-                        <img src="ak.svg" alt="Icône AK47 pour Tuerie Planifiée" data-toggle-icon>
+                        <!-- SVG ak.svg intégré en base64 (Icône d'un fusil) -->
+                        <img src="ak.svg=" alt="Icône Tuerie de Masse" data-toggle-icon>
                         Tuerie de Masse
                     </button>
                     <button class="toggle-btn" data-toggle="forcene">
-                        <!-- Intégration de l'image bad.svg et style pour le filtre -->
-                        <img src="bad.svg" alt="Icône Barricade pour Forcené" data-toggle-icon>
+                        <!-- SVG bad.svg intégré en base64 (Icône de barricade/mur) -->
+                        <img src="bad.svg" alt="Icône Forcené" data-toggle-icon>
                         Forcené
                     </button>
                     <button class="toggle-btn" data-toggle="mo">
@@ -609,18 +607,27 @@
 
         /**
          * Gère le click sur un module (case à cocher).
+         * @param {Event} event - L'événement de clic ou de frappe clavier.
          */
         function toggleCheckModule(event) {
-            const module = event.currentTarget.closest('.checklist-module');
-            if (!module) return; 
+            
+            // *** FIX CRITIQUE: Empêcher le comportement par défaut pour éviter le double basculement du label/checkbox. ***
+            event.preventDefault();
+
+            // Utilise currentTarget (qui est le <label>)
+            const module = event.currentTarget; 
+
+            if (!module || !module.classList.contains('checklist-module')) return; 
 
             const key = module.dataset.key;
             const checkbox = module.querySelector('input[type="checkbox"]');
             
-            const isChecked = !module.classList.contains('checked');
+            // Inverse l'état (l'état actuel est celui avant que le navigateur n'ait agi)
+            const isChecked = !module.classList.contains('checked'); 
             
+            // Mise à jour visuelle et du modèle
             module.classList.toggle('checked', isChecked);
-            checkbox.checked = isChecked;
+            checkbox.checked = isChecked; 
             
             const icon = module.querySelector('.checkmark');
             icon.textContent = isChecked ? 'check_circle' : 'radio_button_unchecked';
@@ -630,10 +637,6 @@
 
         /**
          * Génère la structure de la checklist.
-         * @param dataObject Les données de la checklist (ex: CHECKLIST_DATA.patrouille)
-         * @param parentContainer L'élément parent où ajouter les blocs (category-group-container ou toggle-content).
-         * @param sectionPrefix Le préfixe de la section parente (ex: 'patrouille', 'reco')
-         * @param isToggleContent Indique si ce contenu vient d'un toggle (pour la mise en évidence).
          */
         function generateChecklistModules(dataObject, parentContainer, sectionPrefix, isToggleContent = false) {
             
@@ -663,6 +666,7 @@
                         const key = `${sectionPrefix}-${category}-${index}`;
                         const isChecked = checklistState[key] || false;
 
+                        // Le module est le LABEL cliquable
                         const module = document.createElement('label');
                         module.className = 'checklist-module';
                         module.dataset.key = key;
@@ -677,6 +681,7 @@
                             module.classList.add('checked');
                         }
 
+                        // Le vrai checkbox (caché)
                         const checkbox = document.createElement('input');
                         checkbox.type = 'checkbox';
                         checkbox.checked = isChecked;
@@ -688,17 +693,20 @@
                         textSpan.textContent = itemText;
                         module.appendChild(textSpan);
 
+                        // L'icône affichée
                         const icon = document.createElement('span');
                         icon.className = 'material-symbols-outlined checkmark';
                         icon.textContent = isChecked ? 'check_circle' : 'radio_button_unchecked';
                         module.appendChild(icon);
 
+                        // FIX: Attachement de l'événement click
                         module.addEventListener('click', toggleCheckModule);
                         
+                        // FIX: Gestion des touches Espace/Entrée
                         module.addEventListener('keydown', (e) => {
                             if (e.key === ' ' || e.key === 'Enter') {
-                                e.preventDefault();
-                                toggleCheckModule({ currentTarget: module });
+                                // On passe l'événement complet. Le preventDefault est maintenant dans toggleCheckModule.
+                                toggleCheckModule(e);
                             }
                         });
                         
@@ -887,4 +895,3 @@
     </script>
 </body>
 </html>
-
