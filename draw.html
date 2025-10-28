@@ -3,475 +3,286 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Designer Appartement - Mobile First</title>
+    <title>Croquis Tactique Simplifié</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/two.js/0.8.7/two.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/hammer.js/2.0.8/hammer.min.js"></script>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
     <style>
-        /* RESET MOBILE FIRST */
+        /* Styles basés sur la palette sombre (Tailwind) pour une visibilité tactique */
+        :root {
+            --bg-canvas: #f8fafc; /* Blanc cassé pour la zone de dessin */
+            --bg-body: #1f2937; /* Gris foncé */
+            --text-primary: #f3f4f6; /* Texte clair */
+            --accent-main: #3b82f6; /* Bleu */
+            --accent-active: #1e40af; /* Bleu foncé */
+            --grid-line: #f1f5f9; /* Ligne de grille très claire */
+            --color-line: #1f2937; /* Couleur par défaut des lignes */
+            --color-room: #9CA3AF40; /* Gris transparent */
+            --color-door: #F87171; /* Rouge */
+            --color-poi: #FBBF24; /* Jaune */
+        }
+        
         * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+            margin: 0; padding: 0; box-sizing: border-box;
             -webkit-tap-highlight-color: transparent;
             touch-action: manipulation;
         }
         
-        html {
-            font-size: 16px;
-        }
-        
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-            background: #f8f9fa;
-            color: #1a1a1a;
-            line-height: 1.5;
-            padding: 0;
-            margin: 0;
-            min-height: 100vh;
-            overflow-x: hidden;
-        }
-
-        /* CONTAINER PRINCIPAL */
-        .mobile-container {
-            max-width: 100%;
+            font-family: 'Inter', sans-serif;
+            background: var(--bg-body);
+            color: var(--text-primary);
             min-height: 100vh;
             display: flex;
             flex-direction: column;
+            overflow: hidden; /* Empêche le scroll global pour le dessin */
         }
 
-        /* HEADER OPTIMISÉ MOBILE */
+        /* HEADER & TOOLBAR: Optimisé pour rester en haut */
         .app-header {
-            background: linear(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 1rem;
-            position: sticky;
-            top: 0;
+            background: var(--bg-body);
+            color: var(--text-primary);
+            padding: 1rem 0;
             z-index: 100;
-            box-shadow: 0 2px 20px rgba(0,0,0,0.1);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
         }
-
-        .app-header h1 {
-            font-size: 1.4rem;
-            font-weight: 700;
-            text-align: center;
-            margin-bottom: 0.25rem;
-        }
-
-        .app-header p {
-            font-size: 0.9rem;
-            text-align: center;
-            opacity: 0.9;
-        }
-
-        /* BARRE D'OUTILS TOUCH-FRIENDLY */
+        
         .toolbar-mobile {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 0.5rem;
-            padding: 1rem;
-            background: white;
-            border-bottom: 1px solid #e9ecef;
-            position: sticky;
-            top: 96px;
-            z-index: 90;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.25rem;
+            padding: 0 0.5rem;
+            overflow-x: auto;
+            align-items: center;
+            flex-grow: 1; 
         }
 
         .tool-btn-mobile {
-            padding: 0.8rem 0.5rem;
+            flex-shrink: 0;
+            padding: 0.5rem 0.6rem;
             border: none;
-            background: white;
-            border-radius: 12px;
+            background: #4b5563; /* Gris sombre */
+            color: var(--text-primary);
+            border-radius: 6px;
             cursor: pointer;
-            font-size: 0.75rem;
+            font-size: 0.65rem;
             font-weight: 600;
             transition: all 0.2s ease;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            box-shadow: 0 1px 4px rgba(0,0,0,0.1);
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 0.3rem;
-            min-height: 60px;
+            gap: 0.1rem;
+            min-height: 55px;
+            border: 2px solid transparent;
             touch-action: manipulation;
         }
 
-        .tool-btn-mobile:active {
-            transform: scale(0.95);
-            background: #f8f9fa;
-        }
-
         .tool-btn-mobile.active {
-            background: #007bff;
-            color: white;
-            box-shadow: 0 4px 12px rgba(0,123,255,0.3);
+            background: var(--accent-main);
+            border-color: var(--accent-active);
         }
 
-        .tool-icon {
-            font-size: 1.2rem;
-        }
-
-        /* CANVAS OPTIMISÉ TACTILE */
+        .tool-icon { font-size: 1.2rem; }
+        
+        /* CANVAS ZONE PRINCIPALE */
         .canvas-mobile-container {
             flex: 1;
-            background: white;
-            margin: 0;
-            padding: 1rem;
+            padding: 0; 
             position: relative;
-            min-height: 50vh;
+            background: var(--bg-canvas); 
+            min-height: calc(100vh - 80px); /* Ajuster la hauteur */
+            z-index: 1;
         }
 
         #drawing-area {
             width: 100%;
-            height: 400px;
-            background: #fafafa;
-            border: 2px dashed #dee2e6;
-            border-radius: 16px;
-            touch-action: none;
-            -webkit-user-select: none;
+            height: 100%;
+            touch-action: none; 
             user-select: none;
+            position: relative;
+            z-index: 2; 
         }
 
-        /* INDICATEUR VISUEL POUR LE DESSIN */
-        .drawing-indicator {
+        /* GRID VISUAL */
+        .grid-background {
             position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: rgba(0,123,255,0.1);
-            color: #007bff;
-            padding: 1rem 1.5rem;
-            border-radius: 12px;
-            font-weight: 600;
-            text-align: center;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-size: 50px 50px;
+            background-image: linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+                              linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
             pointer-events: none;
+            z-index: 1; 
+        }
+        
+        /* TOAST & INDICATEUR */
+        #toast-message {
+            position: fixed;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--accent-main);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            font-weight: 600;
             opacity: 0;
             transition: opacity 0.3s ease;
+            z-index: 3000;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
         }
+        #toast-message.show { opacity: 1; }
+        #toast-message.error { background: var(--color-door); }
 
-        .drawing-indicator.show {
-            opacity: 1;
-        }
-
-        /* PANEL PROPRIÉTÉS MOBILE */
-        .properties-mobile {
-            background: white;
-            border-top: 2px solid #e9ecef;
-            padding: 1.5rem 1rem;
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            z-index: 1000;
-            transform: translateY(100%);
-            transition: transform 0.3s ease;
-            box-shadow: 0 -4px 20px rgba(0,0,0,0.1);
-            max-height: 70vh;
-            overflow-y: auto;
-        }
-
-        .properties-mobile.open {
-            transform: translateY(0);
-        }
-
-        .properties-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 1rem;
-            padding-bottom: 0.5rem;
-            border-bottom: 1px solid #e9ecef;
-        }
-
-        .close-panel {
-            background: none;
-            border: none;
-            font-size: 1.5rem;
-            color: #666;
-            cursor: pointer;
-            padding: 0.5rem;
-        }
-
-        /* FORMULAIRES MOBILE */
-        .form-group-mobile {
-            margin-bottom: 1.2rem;
-        }
-
-        .form-group-mobile label {
-            display: block;
-            margin-bottom: 0.5rem;
-            font-weight: 600;
-            font-size: 0.9rem;
-            color: #333;
-        }
-
-        .form-input-mobile {
-            width: 100%;
-            padding: 0.8rem 1rem;
-            border: 2px solid #e9ecef;
-            border-radius: 10px;
-            font-size: 1rem;
-            background: white;
-            transition: border-color 0.2s ease;
-        }
-
-        .form-input-mobile:focus {
-            border-color: #007bff;
-            outline: none;
-        }
-
-        /* LISTE DES PIÈCES MOBILE */
-        .rooms-list-mobile {
-            margin-top: 1.5rem;
-        }
-
-        .rooms-list-mobile h3 {
-            margin-bottom: 1rem;
-            font-size: 1.1rem;
-        }
-
-        .room-item-mobile {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 1rem;
-            background: #f8f9fa;
-            border-radius: 10px;
-            margin-bottom: 0.8rem;
-            border-left: 4px solid #007bff;
-        }
-
-        .room-info h4 {
-            font-size: 1rem;
-            margin-bottom: 0.25rem;
-        }
-
-        .room-info small {
-            color: #666;
-            font-size: 0.8rem;
-        }
-
-        .room-color {
-            width: 24px;
-            height: 24px;
-            border-radius: 6px;
-            border: 2px solid #fff;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-
-        /* BOUTONS PRIMAIRE MOBILE */
-        .btn-primary-mobile {
-            width: 100%;
-            padding: 1rem;
-            background: #007bff;
-            color: white;
-            border: none;
-            border-radius: 12px;
-            font-size: 1rem;
-            font-weight: 600;
-            cursor: pointer;
-            margin-top: 1rem;
-            transition: all 0.2s ease;
-            touch-action: manipulation;
-        }
-
-        .btn-primary-mobile:active {
-            transform: scale(0.98);
-            background: #0056b3;
-        }
-
-        /* OVERLAY PLEIN ÉCRAN SUR MOBILE */
-        .mobile-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0,0,0,0.8);
+        /* BOUTON D'EXPORTATION */
+        .export-buttons {
+            flex-shrink: 0;
             display: flex;
             flex-direction: column;
-            justify-content: center;
             align-items: center;
-            z-index: 2000;
+            padding: 0 0.5rem;
+            gap: 5px;
+        }
+        .export-btn {
+            background: #FBBF24; /* Jaune */
+            color: var(--bg-body);
+            font-weight: 800;
+            padding: 0.6rem 0.8rem;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.2s;
+            text-transform: uppercase;
+            font-size: 0.7rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        /* OVERLAY BIENVENUE */
+        .mobile-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.9);
+            display: flex; justify-content: center; align-items: center;
+            z-index: 4000; color: white; text-align: center;
             padding: 2rem;
-            color: white;
-            text-align: center;
         }
 
         .overlay-content {
-            background: white;
-            color: #333;
+            background: var(--bg-body);
+            color: var(--text-primary);
             padding: 2rem;
-            border-radius: 20px;
+            border-radius: 12px;
             max-width: 400px;
             width: 100%;
         }
 
-        .overlay-content h2 {
-            margin-bottom: 1rem;
-            color: #007bff;
-        }
-
-        .overlay-content ol {
-            text-align: left;
-            margin: 1rem 0;
-            padding-left: 1.5rem;
-        }
-
-        .overlay-content li {
-            margin-bottom: 0.8rem;
-        }
-
-        /* ANIMATIONS POUR LE MOBILE */
-        @keyframes pulse {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.05); }
-            100% { transform: scale(1); }
-        }
-
-        .pulse {
-            animation: pulse 2s infinite;
-        }
-
-        /* MEDIA QUERIES POUR TABLETTE */
-        @media (min-width: 768px) {
-            html {
-                font-size: 18px;
-            }
-            
-            .toolbar-mobile {
-                grid-template-columns: repeat(4, 1fr);
-                gap: 1rem;
-                padding: 1.5rem;
-            }
-            
-            .tool-btn-mobile {
-                padding: 1rem 0.5rem;
-                font-size: 0.85rem;
-                min-height: 70px;
-            }
-            
-            #drawing-area {
-                height: 500px;
-            }
-            
-            .properties-mobile {
-                max-width: 400px;
-                right: 2rem;
-                bottom: 2rem;
-                left: auto;
-                border-radius: 16px;
-                border-top: none;
-            }
-        }
-
-        /* MEDIA QUERIES POUR DESKTOP */
+        .overlay-content h2 { margin-bottom: 1rem; color: var(--accent-main); }
+        .overlay-content ol { text-align: left; margin: 1rem 0; padding-left: 1.5rem; color: var(--text-secondary); }
+        .overlay-content li { margin-bottom: 0.8rem; }
+        .btn-primary-mobile { background: var(--accent-main); color: white; border: none; padding: 0.8rem; border-radius: 6px; font-weight: 600; cursor: pointer; margin-top: 1rem; }
+        
+        /* PC LAYOUT */
         @media (min-width: 1024px) {
-            .mobile-container {
-                max-width: 1200px;
-                margin: 0 auto;
-            }
-            
-            .toolbar-mobile {
-                grid-template-columns: repeat(4, 1fr);
-                gap: 1.5rem;
-                padding: 2rem;
-            }
+             body { flex-direction: row; }
+             .app-header { display: none; }
+             .toolbar-mobile { flex-direction: column; flex: 0 0 150px; position: static; height: 100vh; border-right: 1px solid #333; padding: 1rem; gap: 1rem; }
+             .toolbar-mobile button { flex: none; width: 100%; min-height: 75px; }
+             .app-title-pc { display: block; text-align: center; font-size: 1.8rem; font-weight: 800; color: var(--accent-main); margin-bottom: 1rem; }
+             .canvas-mobile-container { flex: 1; padding: 0; }
+             .export-buttons { position: absolute; top: 1rem; right: 1rem; flex-direction: row; }
         }
     </style>
 </head>
 <body>
     <div class="mobile-container">
-        <!-- HEADER MOBILE -->
+        <!-- HEADER MOBILE (Affiché seulement sur mobile) -->
         <header class="app-header">
-            <h1>🏠 Designer Appartement</h1>
-            <p>Créez votre plan - Optimisé mobile & tactile</p>
+            <h1 style="font-size: 1.25rem;">Croquis Tactique V2.0</h1>
+            <div class="export-buttons mobile-header-export">
+                 <button class="export-btn" onclick="exportCanvas('png')">PNG</button>
+                 <button class="export-btn" onclick="exportCanvas('svg')">SVG</button>
+            </div>
         </header>
 
-        <!-- BARRE D'OUTILS TACTILE -->
+        <!-- BARRE D'OUTILS PRINCIPALE -->
         <div class="toolbar-mobile">
-            <button class="tool-btn-mobile active" data-tool="draw">
-                <span class="tool-icon">⬜</span>
-                <span>Dessiner</span>
+            <div class="app-title-pc" style="display:none;">Tactique V2.0</div>
+            
+            <!-- Dessin -->
+            <button class="tool-btn-mobile active" data-tool="draw_rect">
+                <span class="material-symbols-outlined tool-icon">crop_square</span>
+                <span>Rectangle (Pièce)</span>
             </button>
+            <button class="tool-btn-mobile" data-tool="draw_line">
+                <span class="material-symbols-outlined tool-icon">line_start_square</span>
+                <span>Ligne (Mur)</span>
+            </button>
+            
+            <!-- Symboles -->
+            <button class="tool-btn-mobile" data-tool="symbol_door">
+                <span class="material-symbols-outlined tool-icon">door_open</span>
+                <span>Porte 🚪</span>
+            </button>
+            <button class="tool-btn-mobile" data-tool="symbol_window">
+                <span class="material-symbols-outlined tool-icon">window</span>
+                <span>Fenêtre 🪟</span>
+            </button>
+            <button class="tool-btn-mobile" data-tool="symbol_poi">
+                <span class="material-symbols-outlined tool-icon">emergency_share</span>
+                <span>P.O.I 💥</span>
+            </button>
+            
+            <!-- Interactions -->
             <button class="tool-btn-mobile" data-tool="select">
-                <span class="tool-icon">✋</span>
+                <span class="material-symbols-outlined tool-icon">ads_click</span>
                 <span>Sélectionner</span>
             </button>
             <button class="tool-btn-mobile" data-tool="move">
-                <span class="tool-icon">📤</span>
+                <span class="material-symbols-outlined tool-icon">open_with</span>
                 <span>Déplacer</span>
             </button>
             <button class="tool-btn-mobile" data-tool="delete">
-                <span class="tool-icon">🗑️</span>
+                <span class="material-symbols-outlined tool-icon">delete</span>
                 <span>Supprimer</span>
             </button>
-        </div>
-
-        <!-- ZONE DE DESSIN TACTILE -->
-        <div class="canvas-mobile-container">
-            <div id="drawing-area"></div>
-            <div class="drawing-indicator" id="drawing-indicator">
-                👆 Maintenez et glissez pour dessiner
-            </div>
-        </div>
-
-        <!-- BOUTON POUR OUVRIR LES PROPRIÉTÉS -->
-        <button class="btn-primary-mobile" id="open-properties">
-            ⚙️ Ouvrir les propriétés
-        </button>
-
-        <!-- PANEL PROPRIÉTÉS MOBILE -->
-        <div class="properties-mobile" id="properties-panel">
-            <div class="properties-header">
-                <h3>📐 Propriétés</h3>
-                <button class="close-panel" id="close-properties">×</button>
-            </div>
+             
+            <!-- Couleurs (Couleur de la prochaine forme) -->
+            <input type="color" id="color-picker" value="#9CA3AF" style="width: 100%; height: 30px; border:none; border-radius: 4px; margin-top: 10px;">
             
-            <div class="form-group-mobile">
-                <label for="room-name-mobile">Nom de la pièce:</label>
-                <input type="text" id="room-name-mobile" class="form-input-mobile" placeholder="Salon, Chambre..." value="Salon">
-            </div>
-            
-            <div class="form-group-mobile">
-                <label for="room-color-mobile">Couleur:</label>
-                <input type="color" id="room-color-mobile" class="form-input-mobile" value="#FFE4E1" style="height: 50px;">
+            <!-- Utilitaire PC (visible uniquement sur PC) -->
+            <div class="export-buttons pc-export">
+                 <button class="export-btn" onclick="exportCanvas('png')">Exporter PNG</button>
+                 <button class="export-btn" onclick="exportCanvas('svg')">Exporter SVG</button>
             </div>
 
-            <div class="form-group-mobile">
-                <label for="room-width-mobile">Largeur (m):</label>
-                <input type="number" id="room-width-mobile" class="form-input-mobile" value="4" min="1" step="0.1">
-            </div>
-
-            <div class="form-group-mobile">
-                <label for="room-height-mobile">Longueur (m):</label>
-                <input type="number" id="room-height-mobile" class="form-input-mobile" value="3" min="1" step="0.1">
-            </div>
-
-            <button class="btn-primary-mobile" id="apply-properties-mobile">
-                💾 Appliquer
+            <button class="tool-btn-mobile" data-tool="reset" style="background:var(--color-door); margin-top: 10px;">
+                <span class="material-symbols-outlined tool-icon">delete_sweep</span>
+                <span>Tout Effacer</span>
             </button>
+        </div>
 
-            <div class="rooms-list-mobile">
-                <h3>🏠 Vos pièces</h3>
-                <div id="rooms-container-mobile">
-                    <div style="text-align: center; color: #666; padding: 2rem;">
-                        Aucune pièce créée
-                    </div>
-                </div>
-            </div>
+        <!-- ZONE DE DESSIN -->
+        <div class="canvas-mobile-container">
+            <div class="grid-background" id="grid-background"></div>
+            <div id="drawing-area"></div>
+             <div id="toast-message"></div>
         </div>
     </div>
 
     <!-- OVERLAY D'INSTRUCTIONS AU PREMIER CHARGEMENT -->
     <div class="mobile-overlay" id="welcome-overlay">
         <div class="overlay-content">
-            <h2>👋 Bienvenue !</h2>
-            <p><strong>Comment dessiner sur mobile :</strong></p>
+            <h2>Bienvenue dans Croquis Tactique!</h2>
+            <p>Cet outil est optimisé pour le dessin rapide et assisté de plans d'intervention. </p>
             <ol>
-                <li>Appuyez sur <strong>"Dessiner"</strong></li>
-                <li><strong>Maintenez appuyé</strong> sur l'écran</li>
-                <li><strong>Glissez</strong> pour former un rectangle</li>
-                <li>Relâchez pour créer la pièce</li>
+                <li>Sélectionnez un outil (Rectangle, Ligne, Symbole).</li>
+                <li>**Maintenez et glissez** sur l'écran pour dessiner.</li>
+                <li>Les formes s'alignent automatiquement sur la **grille (Snap-to-Grid)**.</li>
+                <li>Utilisez **deux doigts** pour déplacer la vue (Pan).</li>
             </ol>
-            <p><small>💡 Conseil : Utilisez deux doigts pour zoomer/dézoomer</small></p>
             <button class="btn-primary-mobile pulse" id="start-drawing">
                 Commencer à dessiner !
             </button>
@@ -480,366 +291,23 @@
 
     <script>
         // Échelle pour conversion mètres/pixels
-        const SCALE = 50;
-        
-        // Variables d'état
-        let currentTool = 'draw';
+        const SCALE = 50; // 50px = 1 mètre
+        const GRID_SIZE = 50; 
+        const MIN_DRAW_DISTANCE = 25; // Distance minimale pour enregistrer un dessin
+
+        // Variables d'état global
+        let currentTool = 'draw_rect';
         let selectedShape = null;
         let isDrawing = false;
+        let isMoving = false;
+        let dragOffsetX, dragOffsetY;
         let startX, startY;
-        let currentRect = null;
-        let rooms = [];
-        let roomCounter = 1;
+        let currentShape = null;
+        let elements = [];
         let two;
+        let mc;
 
-        // Initialisation au chargement
-        document.addEventListener('DOMContentLoaded', function() {
-            initializeApp();
-            setupEventListeners();
-            showWelcomeOverlay();
-        });
-
-        function initializeApp() {
-            const drawingArea = document.getElementById('drawing-area');
-            two = new Two({
-                width: drawingArea.clientWidth,
-                height: drawingArea.clientHeight,
-                type: Two.Types.svg
-            }).appendTo(drawingArea);
-
-            // Ajustement responsive
-            window.addEventListener('resize', function() {
-                two.width = drawingArea.clientWidth;
-                two.height = drawingArea.clientHeight;
-                two.update();
-            });
-        }
-
-        function setupEventListeners() {
-            // Gestion des outils tactiles
-            document.querySelectorAll('.tool-btn-mobile').forEach(btn => {
-                btn.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    switchTool(this.dataset.tool);
-                });
-            });
-
-            // Panel propriétés
-            document.getElementById('open-properties').addEventListener('click', openPropertiesPanel);
-            document.getElementById('close-properties').addEventListener('click', closePropertiesPanel);
-            document.getElementById('apply-properties-mobile').addEventListener('click', applyProperties);
-
-            // Overlay de bienvenue
-            document.getElementById('start-drawing').addEventListener('click', hideWelcomeOverlay);
-
-            // Événements tactiles pour le dessin
-            const drawingArea = document.getElementById('drawing-area');
-            
-            // Touch events
-            drawingArea.addEventListener('touchstart', handleTouchStart, { passive: false });
-            drawingArea.addEventListener('touchmove', handleTouchMove, { passive: false });
-            drawingArea.addEventListener('touchend', handleTouchEnd);
-
-            // Mouse events pour compatibilité
-            drawingArea.addEventListener('mousedown', handleMouseStart);
-            drawingArea.addEventListener('mousemove', handleMouseMove);
-            drawingArea.addEventListener('mouseup', handleMouseEnd);
-        }
-
-        function handleTouchStart(e) {
-            e.preventDefault();
-            if (e.touches.length === 1) { // Un seul doigt pour dessiner
-                const touch = e.touches[0];
-                const rect = drawingArea.getBoundingClientRect();
-                startX = touch.clientX - rect.left;
-                startY = touch.clientY - rect.top;
-                
-                if (currentTool === 'draw') {
-                    startDrawing(startX, startY);
-                } else {
-                    handleSelection(startX, startY);
-                }
-            }
-        }
-
-        function handleTouchMove(e) {
-            e.preventDefault();
-            if (e.touches.length === 1 && isDrawing) {
-                const touch = e.touches[0];
-                const rect = drawingArea.getBoundingClientRect();
-                const currentX = touch.clientX - rect.left;
-                const currentY = touch.clientY - rect.top;
-                
-                updateDrawing(currentX, currentY);
-            }
-        }
-
-        function handleTouchEnd(e) {
-            if (isDrawing) {
-                finishDrawing();
-            }
-        }
-
-        function handleMouseStart(e) {
-            const rect = drawingArea.getBoundingClientRect();
-            startX = e.clientX - rect.left;
-            startY = e.clientY - rect.top;
-            
-            if (currentTool === 'draw') {
-                startDrawing(startX, startY);
-            } else {
-                handleSelection(startX, startY);
-            }
-        }
-
-        function handleMouseMove(e) {
-            if (isDrawing) {
-                const rect = drawingArea.getBoundingClientRect();
-                const currentX = e.clientX - rect.left;
-                const currentY = e.clientY - rect.top;
-                updateDrawing(currentX, currentY);
-            }
-        }
-
-        function handleMouseEnd() {
-            if (isDrawing) {
-                finishDrawing();
-            }
-        }
-
-        function startDrawing(x, y) {
-            if (currentTool !== 'draw') return;
-
-            isDrawing = true;
-            startX = x;
-            startY = y;
-            
-            // Afficher l'indicateur visuel
-            const indicator = document.getElementById('drawing-indicator');
-            indicator.classList.add('show');
-            
-            // Créer le rectangle temporaire
-            currentRect = two.makeRectangle(x, y, 1, 1);
-            currentRect.fill = document.getElementById('room-color-mobile').value + '80';
-            currentRect.stroke = '#333';
-            currentRect.linewidth = 3;
-            
-            two.update();
-        }
-
-        function updateDrawing(currentX, currentY) {
-            if (!isDrawing || !currentRect) return;
-
-            const width = currentX - startX;
-            const height = currentY - startY;
-            
-            currentRect.translation.x = startX + width / 2;
-            currentRect.translation.y = startY + height / 2;
-            currentRect.width = Math.abs(width);
-            currentRect.height = Math.abs(height);
-            
-            two.update();
-        }
-
-        function finishDrawing() {
-            if (!isDrawing || !currentRect) return;
-
-            isDrawing = false;
-            document.getElementById('drawing-indicator').classList.remove('show');
-
-            // Validation taille minimale
-            if (currentRect.width < 20 || currentRect.height < 20) {
-                two.remove(currentRect);
-                two.update();
-                showToast('Pièce trop petite !', 'error');
-                return;
-            }
-
-            createRoomFromShape(currentRect);
-            currentRect = null;
-            openPropertiesPanel(); // Ouvrir automatiquement le panel
-        }
-
-        function createRoomFromShape(shape) {
-            const roomName = document.getElementById('room-name-mobile').value || `Pièce ${roomCounter++}`;
-            const roomColor = document.getElementById('room-color-mobile').value;
-            
-            shape.fill = roomColor;
-            
-            // Ajouter le texte
-            const text = two.makeText(roomName, shape.translation.x, shape.translation.y);
-            text.size = 16;
-            text.fill = '#1a1a1a';
-            text.weight = 'bold';
-            
-            const roomData = {
-                id: 'room_' + Date.now(),
-                name: roomName,
-                rect: shape,
-                text: text,
-                width: shape.width / SCALE,
-                height: shape.height / SCALE,
-                color: roomColor
-            };
-            
-            shape.roomData = roomData;
-            text.roomData = roomData;
-            
-            rooms.push(roomData);
-            updateRoomList();
-            showToast(`✅ ${roomName} créée !`);
-        }
-
-        function handleSelection(x, y) {
-            // Réinitialiser sélection précédente
-            if (selectedShape) {
-                selectedShape.stroke = '#333';
-                selectedShape.linewidth = 2;
-            }
-
-            selectedShape = null;
-
-            // Chercher une forme sous le point
-            two.scene.children.forEach(child => {
-                if (child.roomData && isPointInShape(x, y, child)) {
-                    selectedShape = child;
-                }
-            });
-
-            if (selectedShape) {
-                if (currentTool === 'delete') {
-                    deleteSelectedShape();
-                } else {
-                    selectShapeForEditing();
-                }
-            }
-        }
-
-        function deleteSelectedShape() {
-            const roomData = selectedShape.roomData;
-            two.remove(roomData.rect);
-            two.remove(roomData.text);
-            rooms = rooms.filter(r => r.id !== roomData.id);
-            updateRoomList();
-            two.update();
-            showToast(`🗑️ ${roomData.name} supprimée`);
-            selectedShape = null;
-        }
-
-        function selectShapeForEditing() {
-            selectedShape.stroke = '#007bff';
-            selectedShape.linewidth = 4;
-            two.update();
-            
-            const roomData = selectedShape.roomData;
-            document.getElementById('room-name-mobile').value = roomData.name;
-            document.getElementById('room-color-mobile').value = roomData.color;
-            document.getElementById('room-width-mobile').value = roomData.width.toFixed(1);
-            document.getElementById('room-height-mobile').value = roomData.height.toFixed(1);
-            
-            openPropertiesPanel();
-        }
-
-        function isPointInShape(x, y, shape) {
-            if (shape.roomData) {
-                const room = shape.roomData;
-                const rect = room.rect;
-                const halfWidth = rect.width / 2;
-                const halfHeight = rect.height / 2;
-                
-                return x >= rect.translation.x - halfWidth &&
-                       x <= rect.translation.x + halfWidth &&
-                       y >= rect.translation.y - halfHeight &&
-                       y <= rect.translation.y + halfHeight;
-            }
-            return false;
-        }
-
-        function switchTool(tool) {
-            currentTool = tool;
-            
-            // Mise à jour UI
-            document.querySelectorAll('.tool-btn-mobile').forEach(btn => {
-                btn.classList.remove('active');
-            });
-            event.target.classList.add('active');
-            
-            // Feedback visuel
-            const toolNames = {
-                draw: 'Dessin',
-                select: 'Sélection',
-                move: 'Déplacement',
-                delete: 'Suppression'
-            };
-            
-            showToast(`Mode ${toolNames[tool]} activé`);
-        }
-
-        function openPropertiesPanel() {
-            document.getElementById('properties-panel').classList.add('open');
-        }
-
-        function closePropertiesPanel() {
-            document.getElementById('properties-panel').classList.remove('open');
-        }
-
-        function applyProperties() {
-            if (selectedShape && selectedShape.roomData) {
-                const roomData = selectedShape.roomData;
-                
-                roomData.name = document.getElementById('room-name-mobile').value;
-                roomData.text.value = roomData.name;
-                
-                const newWidth = parseFloat(document.getElementById('room-width-mobile').value) * SCALE;
-                const newHeight = parseFloat(document.getElementById('room-height-mobile').value) * SCALE;
-                
-                roomData.rect.width = newWidth;
-                roomData.rect.height = newHeight;
-                roomData.width = newWidth / SCALE;
-                roomData.height = newHeight / SCALE;
-                
-                roomData.rect.fill = document.getElementById('room-color-mobile').value;
-                roomData.color = document.getElementById('room-color-mobile').value;
-                
-                two.update();
-                updateRoomList();
-                showToast('✅ Modifications appliquées');
-            }
-        }
-
-        function updateRoomList() {
-            const container = document.getElementById('rooms-container-mobile');
-            
-            if (rooms.length === 0) {
-                container.innerHTML = '<div style="text-align: center; color: #666; padding: 2rem;">Aucune pièce créée</div>';
-                return;
-            }
-            
-            container.innerHTML = rooms.map(room => `
-                <div class="room-item-mobile" data-room-id="${room.id}">
-                    <div class="room-info">
-                        <h4>${room.name}</h4>
-                        <small>${room.width.toFixed(1)}m × ${room.height.toFixed(1)}m</small>
-                    </div>
-                    <div class="room-color" style="background: ${room.color};"></div>
-                </div>
-            `).join('');
-            
-            // Rendre les pièces cliquables
-            container.querySelectorAll('.room-item-mobile').forEach((item, index) => {
-                item.addEventListener('click', () => {
-                    const room = rooms[index];
-                    if (room && room.rect) {
-                        if (selectedShape) {
-                            selectedShape.stroke = '#333';
-                            selectedShape.linewidth = 2;
-                        }
-                        selectedShape = room.rect;
-                        selectShapeForEditing();
-                    }
-                });
-            });
-        }
+        // --- Fonctions d'aide (accessibles globalement) ---
 
         function showWelcomeOverlay() {
             document.getElementById('welcome-overlay').style.display = 'flex';
@@ -850,38 +318,571 @@
         }
 
         function showToast(message, type = 'success') {
-            // Créer un toast temporaire
-            const toast = document.createElement('div');
+            const toast = document.getElementById('toast-message');
             toast.textContent = message;
-            toast.style.cssText = `
-                position: fixed;
-                top: 50%;
-                left: 50%;
-                transform: translate(-50%, -50%);
-                background: ${type === 'error' ? '#dc3545' : '#28a745'};
-                color: white;
-                padding: 1rem 2rem;
-                border-radius: 12px;
-                font-weight: 600;
-                z-index: 3000;
-                box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-            `;
-            
-            document.body.appendChild(toast);
+            toast.className = `drawing-indicator ${type} show`;
             
             setTimeout(() => {
-                toast.remove();
+                toast.classList.remove('show');
             }, 2000);
         }
+        
+        function resetCanvas() {
+             elements.forEach(el => two.remove(el));
+             elements = [];
+             selectedShape = null;
+             localStorage.removeItem('twoJSState');
+             showToast('Croquis effacé.', 'error');
+        }
 
-        // Empêcher le zoom avec deux doigts (optionnel)
-        document.addEventListener('gesturestart', function(e) {
-            e.preventDefault();
+        function getEventPos(e) {
+             const rect = two.renderer.domElement.getBoundingClientRect();
+             
+             const isTouchEvent = e.touches && e.touches.length > 0;
+             const clientX = isTouchEvent ? e.touches[0].clientX : e.clientX;
+             const clientY = isTouchEvent ? e.touches[0].clientY : e.clientY;
+
+             const canvasX = clientX - rect.left;
+             const canvasY = clientY - rect.top;
+
+             const scale = two.scale;
+             const tx = two.translation.x;
+             const ty = two.translation.y;
+             
+             // Retourne les coordonnées du monde (Two.js space)
+             return {
+                 x: (canvasX - tx) / scale,
+                 y: (canvasY - ty) / scale
+             };
+        }
+
+        // --- FIN Fonctions d'aide ---
+
+
+        // Initialisation
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeApp();
+            setupEventListeners();
+            loadState(); 
+            showWelcomeOverlay();
         });
 
-        document.addEventListener('gesturechange', function(e) {
-            e.preventDefault();
-        });
+        function initializeApp() {
+            const drawingArea = document.getElementById('drawing-area');
+            
+            two = new Two({
+                width: drawingArea.clientWidth,
+                height: drawingArea.clientHeight,
+                type: Two.Types.svg,
+                autostart: true
+            }).appendTo(drawingArea);
+            
+            // Initialiser les dimensions de Two.js à la taille du conteneur
+            resizeCanvas();
+
+            window.addEventListener('resize', resizeCanvas);
+
+            // Hammer.js pour Pan et Zoom
+            mc = new Hammer.Manager(drawingArea);
+            mc.add([new Hammer.Pan({ threshold: 5, pointers: 2 }), new Hammer.Pinch({ enable: true })]);
+            mc.on("panstart", handlePanStart).on("panmove", handlePanMove).on("panend", handlePanEnd);
+            mc.on("pinchstart", handlePinchStart).on("pinchmove", handlePinchMove);
+        }
+
+        function resizeCanvas() {
+            const drawingArea = document.getElementById('drawing-area');
+            two.width = drawingArea.clientWidth;
+            two.height = drawingArea.clientHeight;
+            two.update();
+        }
+
+        function setupEventListeners() {
+            document.querySelectorAll('.tool-btn-mobile').forEach(btn => {
+                btn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    switchTool(this.dataset.tool);
+                });
+            });
+
+            document.getElementById('start-drawing').addEventListener('click', hideWelcomeOverlay);
+
+            const drawingArea = document.getElementById('drawing-area');
+            drawingArea.addEventListener('touchstart', handleCanvasInteractionStart, { passive: false });
+            drawingArea.addEventListener('touchmove', handleCanvasInteractionMove, { passive: false });
+            drawingArea.addEventListener('touchend', handleCanvasInteractionEnd);
+            drawingArea.addEventListener('mousedown', handleCanvasInteractionStart);
+            drawingArea.addEventListener('mousemove', handleCanvasInteractionMove);
+            drawingArea.addEventListener('mouseup', handleCanvasInteractionEnd);
+            
+            // Met à jour la couleur par défaut lors du changement du color picker
+            document.getElementById('color-picker').addEventListener('input', (e) => {
+                 document.documentElement.style.setProperty('--color-line', e.target.value);
+            });
+        }
+        
+        // --- GESTION PAN/ZOOM ---
+        let initialPanX = 0, initialPanY = 0, initialZoom = 1;
+        function handlePanStart(e) { initialPanX = two.translation.x; initialPanY = two.translation.y; two.renderer.domElement.style.cursor = 'grabbing'; }
+        function handlePanMove(e) { two.translation.set(initialPanX + e.deltaX, initialPanY + e.deltaY); }
+        function handlePanEnd(e) { two.renderer.domElement.style.cursor = 'default'; saveState(); }
+        function handlePinchStart(e) { initialZoom = two.scale; }
+        function handlePinchMove(e) {
+            let newScale = initialZoom * e.scale;
+            newScale = Math.max(0.2, Math.min(3.0, newScale));
+            two.scale = newScale;
+        }
+
+        // --- GESTION DES INTERACTIONS ---
+
+        function handleCanvasInteractionStart(e) {
+            const isTouch = e.touches && e.touches.length === 1;
+            const isMouse = e.type === 'mousedown';
+
+            if (!isTouch && !isMouse) return;
+
+            const eventPos = getEventPos(e);
+            startX = eventPos.x;
+            startY = eventPos.y;
+
+            if (currentTool.startsWith('draw') || currentTool.startsWith('symbol')) {
+                mc.stop(); 
+                if (currentTool.startsWith('draw_rect') || currentTool.startsWith('draw_line')) {
+                    startDrawing(startX, startY);
+                } else {
+                    createSymbol(startX, startY);
+                    switchTool('move'); // Passe en mode déplacement après création de symbole
+                }
+            } else if (currentTool === 'select' || currentTool === 'move' || currentTool === 'delete') {
+                const clickedShape = getShapeAtPosition(startX, startY);
+                
+                if (currentTool === 'delete' && clickedShape) {
+                    deleteSelectedShape(clickedShape);
+                    return;
+                }
+
+                deselectShape();
+                if (clickedShape) {
+                    selectedShape = clickedShape;
+                    selectShapeForEditing();
+
+                    if (currentTool === 'move') {
+                        isMoving = true;
+                        dragOffsetX = startX - selectedShape.translation.x;
+                        dragOffsetY = startY - selectedShape.translation.y;
+                    }
+                }
+            }
+        }
+
+        function handleCanvasInteractionMove(e) {
+            if (!isDrawing && !isMoving) return;
+            e.preventDefault(); 
+            const eventPos = getEventPos(e);
+            
+            if (isDrawing && currentShape) {
+                updateDrawing(eventPos.x, eventPos.y);
+            } else if (isMoving && selectedShape) {
+                updateMoving(eventPos.x, eventPos.y);
+            }
+        }
+
+        function handleCanvasInteractionEnd(e) {
+            if (isDrawing) {
+                finishDrawing();
+                mc.start(); 
+            } else if (isMoving) {
+                isMoving = false;
+                snapToGrid(selectedShape);
+                saveState();
+                mc.start();
+            }
+        }
+
+        // --- DESSIN / LOGIQUE ASSISTÉE ---
+
+        function snapValue(value) {
+            return Math.round(value / GRID_SIZE) * GRID_SIZE;
+        }
+
+        function startDrawing(x, y) {
+            isDrawing = true;
+            startX = snapValue(x);
+            startY = snapValue(y);
+            
+            const color = document.getElementById('color-picker').value;
+            
+            if (currentTool === 'draw_rect') {
+                currentShape = two.makeRectangle(startX, startY, 0, 0);
+                currentShape.fill = color + '40'; // Transparent
+                currentShape.stroke = color;
+                currentShape.linewidth = 3;
+            } else if (currentTool === 'draw_line') {
+                currentShape = two.makeLine(startX, startY, startX, startY);
+                currentShape.stroke = color;
+                currentShape.linewidth = 5;
+                currentShape.cap = 'round';
+            }
+            
+            if (currentShape) {
+                 currentShape.data = { type: currentTool, id: Date.now(), color: color };
+                 elements.push(currentShape);
+            }
+        }
+
+        function updateDrawing(currentX, currentY) {
+            if (!currentShape) return;
+            
+            const snappedX = snapValue(currentX);
+            const snappedY = snapValue(currentY);
+
+            if (currentTool === 'draw_rect') {
+                const width = snappedX - startX;
+                const height = snappedY - startY;
+                currentShape.translation.x = startX + width / 2;
+                currentShape.translation.y = startY + height / 2;
+                currentShape.width = Math.abs(width);
+                currentShape.height = Math.abs(height);
+            } else if (currentTool === 'draw_line') {
+                currentShape.vertices[1].set(snappedX, snappedY);
+            }
+        }
+
+        function finishDrawing() {
+            if (!currentShape) return;
+
+            isDrawing = false;
+            
+            let isValid = false;
+            if (currentTool === 'draw_rect' && (currentShape.width >= GRID_SIZE || currentShape.height >= GRID_SIZE)) {
+                isValid = true;
+            } else if (currentTool === 'draw_line' && currentShape.length > MIN_DRAW_DISTANCE) {
+                // Vérifier si la ligne a une longueur significative
+                const dx = currentShape.vertices[0].x - currentShape.vertices[1].x;
+                const dy = currentShape.vertices[0].y - currentShape.vertices[1].y;
+                if (Math.sqrt(dx * dx + dy * dy) >= MIN_DRAW_DISTANCE) {
+                    isValid = true;
+                }
+            }
+
+            if (isValid) {
+                // Création du label pour la liste (non dessiné)
+                currentShape.data.label = (currentTool === 'draw_rect' ? 'Pièce' : 'Ligne/Mur');
+                saveState();
+                showToast(`✅ Élément dessiné !`);
+            } else {
+                two.remove(currentShape);
+                elements = elements.filter(el => el.data?.id !== currentShape.data.id);
+                showToast('Dessin annulé (trop petit).', 'error');
+            }
+            
+            currentShape = null;
+        }
+
+        function createSymbol(x, y) {
+            const snappedX = snapValue(x);
+            const snappedY = snapValue(y);
+            const tool = currentTool.split('_')[1];
+
+            let symbol;
+            let label = '';
+            let color = '';
+            
+            if (tool === 'door') {
+                symbol = two.makeRectangle(snappedX, snappedY, 15, 45);
+                color = varGetter('--color-door');
+                symbol.fill = color; symbol.stroke = color; symbol.linewidth = 2;
+                label = 'Porte';
+            } else if (tool === 'window') {
+                symbol = two.makeRectangle(snappedX, snappedY, 45, 10);
+                color = varGetter('--accent-main');
+                symbol.fill = color; symbol.stroke = color; symbol.linewidth = 2;
+                label = 'Fenêtre';
+            } else if (tool === 'poi') {
+                symbol = two.makeCircle(snappedX, snappedY, 15);
+                color = varGetter('--color-poi');
+                symbol.fill = color; symbol.stroke = color; symbol.linewidth = 3;
+                label = 'P.O.I.';
+            }
+
+            if (symbol) {
+                 symbol.data = { type: currentTool, id: Date.now(), label: label, color: color };
+                 elements.push(symbol);
+                 
+                 const text = two.makeText(label, symbol.translation.x, symbol.translation.y + symbol.data.radius + 20);
+                 text.size = 14; text.fill = varGetter('--color-line'); text.weight = 600;
+                 text.data = symbol.data;
+                 elements.push(text);
+
+                 // On passe en mode 'move' après insertion (pour bouger immédiatement)
+                 selectedShape = symbol;
+                 selectShapeForEditing();
+                 showToast(`➕ ${label} ajouté !`);
+            }
+        }
+        
+        // --- SÉLECTION / DÉPLACEMENT / SUPPRESSION ---
+        
+        function getShapeAtPosition(x, y) {
+             for (let i = elements.length - 1; i >= 0; i--) {
+                 const child = elements[i];
+                 if (child.data && child.type !== Two.Text && isPointInShape(x, y, child)) {
+                    return child;
+                 }
+             }
+             return null;
+        }
+        
+        function isPointInShape(x, y, shape) {
+            // Simplification: vérifie le Bounding Box avec tolérance
+             if (!shape || shape.type === Two.Text) return false;
+             
+             const bbox = shape.getBoundingClientRect();
+             const tolerance = 15 / two.scale; // Tolérance basée sur le zoom
+             
+             return x >= bbox.left - tolerance &&
+                    x <= bbox.right + tolerance &&
+                    y >= bbox.top - tolerance &&
+                    y <= bbox.bottom + tolerance;
+        }
+
+        function selectShapeForEditing() {
+            deselectShape(); // Désélectionne l'ancien
+            if (!selectedShape) return;
+            
+            // Style de sélection
+            selectedShape.stroke = varGetter('--accent-main');
+            selectedShape.linewidth = selectedShape.linewidth + 2; 
+            
+            // Met à jour la couleur dans le picker (si c'est une forme colorée)
+            if(selectedShape.data.color) {
+                 document.getElementById('color-picker').value = selectedShape.data.color.substring(0, 7);
+            }
+            
+            two.update();
+        }
+
+        function deselectShape() {
+            if (selectedShape) {
+                // Restaurer le style d'origine (couleur stockée dans data.color)
+                selectedShape.stroke = selectedShape.data.color || varGetter('--color-line'); 
+                selectedShape.linewidth = selectedShape.linewidth - 2; 
+                selectedShape = null;
+            }
+            two.update();
+        }
+
+        function deleteSelectedShape(shape) {
+            const dataId = shape.data.id;
+            
+            // Supprimer la forme principale et le texte/label
+            const shapesToRemove = elements.filter(el => el.data?.id === dataId);
+            shapesToRemove.forEach(s => two.remove(s));
+
+            // Filtrer les éléments restants
+            elements = elements.filter(el => el.data?.id !== dataId);
+            
+            if (selectedShape?.data?.id === dataId) {
+                selectedShape = null;
+            }
+            
+            showToast(`🗑️ Élément supprimé`);
+            saveState();
+        }
+        
+        function updateMoving(currentX, currentY) {
+            const newX = currentX - dragOffsetX;
+            const newY = currentY - dragOffsetY;
+            
+            if (selectedShape) {
+                selectedShape.translation.x = newX;
+                selectedShape.translation.y = newY;
+                
+                // Déplacer le texte associé
+                const textShape = elements.find(el => el.data?.id === selectedShape.data.id && el.type === Two.Text);
+                if (textShape) {
+                    textShape.translation.x = newX;
+                    if (selectedShape.type === Two.Circle) {
+                         textShape.translation.y = newY + selectedShape.radius + 20;
+                    } else {
+                         textShape.translation.y = newY + (selectedShape.height || 0) / 2 + 15; // Ajustement minimal
+                    }
+                }
+            }
+        }
+        
+        function snapToGrid(shape) {
+            if (!shape || shape.type === Two.Text) return;
+            
+            shape.translation.x = snapValue(shape.translation.x);
+            shape.translation.y = snapValue(shape.translation.y);
+            
+             // Déplace le texte associé pour maintenir la cohérence
+            const textShape = elements.find(el => el.data?.id === shape.data.id && el.type === Two.Text);
+            if (textShape) {
+                textShape.translation.x = shape.translation.x;
+                if (shape.type === Two.Circle) {
+                     textShape.translation.y = shape.translation.y + shape.radius + 20;
+                } else {
+                     textShape.translation.y = shape.translation.y + (shape.height || 0) / 2 + 15;
+                }
+            }
+            saveState();
+        }
+
+        // --- EXPORTATION ---
+        
+        function exportCanvas(format) {
+            const svgElement = two.renderer.domElement;
+            const title = "croquis_tactique";
+
+            if (format === 'svg') {
+                const svgData = new XMLSerializer().serializeToString(svgElement);
+                const blob = new Blob([svgData], { type: "image/svg+xml" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${title}.svg`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                showToast("SVG exporté !", 'success');
+            } else if (format === 'png') {
+                 // Pour PNG, nous devons d'abord dessiner sur un canvas HTML
+                const bbox = svgElement.getBBox();
+                const tempSvg = svgElement.cloneNode(true);
+
+                // Définir la vue pour ne capturer que le contenu dessiné
+                tempSvg.setAttribute('viewBox', `${bbox.x} ${bbox.y} ${bbox.width} ${bbox.height}`);
+                tempSvg.setAttribute('width', bbox.width);
+                tempSvg.setAttribute('height', bbox.height);
+                
+                const svgString = new XMLSerializer().serializeToString(tempSvg);
+                const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+                
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = bbox.width;
+                    canvas.height = bbox.height;
+                    const ctx = canvas.getContext('2d');
+                    
+                    // Fond blanc pour le PNG
+                    ctx.fillStyle = 'white';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    
+                    // Dessin de l'image SVG
+                    ctx.drawImage(img, 0, 0);
+
+                    canvas.toBlob((pngBlob) => {
+                        const pngUrl = URL.createObjectURL(pngBlob);
+                        const a = document.createElement('a');
+                        a.href = pngUrl;
+                        a.download = `${title}.png`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                        URL.revokeObjectURL(pngUrl);
+                        showToast("PNG exporté !", 'success');
+                    }, 'image/png');
+                };
+                img.src = url;
+
+            } else {
+                 showToast("Format d'exportation non supporté.", 'error');
+            }
+        }
+        
+        // --- SAUVEGARDE (LOCAL STORAGE) ---
+        
+        function saveState() {
+            const saveables = elements.filter(el => el.data).map(el => {
+                const data = {
+                    id: el.data.id,
+                    type: el.data.type,
+                    label: el.data.label,
+                    color: el.data.color,
+                    twoType: el.type,
+                    
+                    // Propriétés de transformation et de forme
+                    x: el.translation.x,
+                    y: el.translation.y,
+                    width: el.width,
+                    height: el.height,
+                    radius: el.radius, 
+                    fill: el.fill,
+                    stroke: el.stroke,
+                    linewidth: el.linewidth,
+                };
+
+                // Ajouter la transformation du canevas une fois
+                if (elements.indexOf(el) === 0) {
+                    data.panX = two.translation.x;
+                    data.panY = two.translation.y;
+                    data.zoom = two.scale;
+                }
+                return data;
+            });
+            
+            localStorage.setItem('twoJSState', JSON.stringify(saveables));
+        }
+
+        function loadState() {
+            const savedState = localStorage.getItem('twoJSState');
+            if (!savedState) return;
+
+            resetCanvas(); 
+
+            try {
+                const saveables = JSON.parse(savedState);
+                if(saveables.length === 0) return;
+
+                // Appliquer les transformations du canevas
+                const transform = saveables[0];
+                two.translation.set(transform.panX || 0, transform.panY || 0);
+                two.scale = transform.zoom || 1;
+                
+                saveables.forEach(data => {
+                    let shape;
+                    if (data.twoType === Two.Rectangle.name) {
+                        shape = two.makeRectangle(data.x, data.y, data.width, data.height);
+                        shape.fill = data.fill;
+                        shape.stroke = data.stroke;
+                        shape.linewidth = data.linewidth;
+                    } else if (data.twoType === Two.Line.name) {
+                        shape = two.makeLine(data.x, data.y, data.width, data.height); // La ligne stocke (x1, y1, x2, y2) dans (x, y, width, height)
+                        shape.stroke = data.stroke;
+                        shape.linewidth = data.linewidth;
+                        shape.cap = 'round';
+                    } else if (data.twoType === Two.Circle.name) {
+                        shape = two.makeCircle(data.x, data.y, data.radius);
+                        shape.fill = data.fill; shape.stroke = data.stroke; shape.linewidth = data.linewidth;
+                    } else if (data.twoType === Two.Text.name) {
+                        const anchorY = data.twoType === Two.Circle.name ? data.radius + 20 : 0;
+                        shape = two.makeText(data.label, data.x, data.y);
+                        shape.size = data.size || 14; 
+                        shape.fill = data.fill;
+                        shape.weight = data.weight || 600;
+                    } else {
+                        return;
+                    }
+                    
+                    shape.data = { id: data.id, type: data.type, label: data.label, color: data.color };
+                    elements.push(shape);
+                });
+
+                showToast(`💾 Croquis chargé (${elements.length} éléments).`);
+                two.update();
+
+            } catch(e) {
+                 console.error('Erreur de chargement de l\'état sauvegardé:', e);
+                 showToast('Erreur de chargement de l\'état sauvegardé. Nettoyage...', 'error');
+                 localStorage.removeItem('twoJSState'); 
+            }
+        }
+        
+        const varGetter = (name) => getComputedStyle(document.body).getPropertyValue(name).trim();
     </script>
 </body>
 </html>
