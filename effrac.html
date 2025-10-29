@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<link rel="icon" href="favicon.ico" sizes="any" type="image/png">
+    <link rel="icon" href="favicon.ico" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="favicon.ico">
+    <link rel="manifest" href="site.webmanifest">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <title>Instruction Effraction en Intervention</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+        .nav-item {
+            transition: all 0.3s ease;
+        }
+        /* Utilisation du bleu de airsoft.html pour l'interactivité */
+        .nav-item.active {
+            background-color: #1e40af; /* Blue-800 */
+            color: white;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        .content-section {
+            display: none;
+            animation: fadeIn 0.5s ease;
+        }
+        .content-section.active {
+            display: block;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .alert-box {
+            border-left: 5px solid;
+            padding: 1rem;
+            border-radius: 0.375rem; /* rounded-md */
+        }
+        /* Utilisation du rouge de airsoft.html pour les alertes/points importants */
+        .text-important {
+             font-weight: 600;
+             color: #dc2626; /* Red-600 */
+        }
+        
+        /* Conteneurs pour images flexibles */
+        .double-img-container, .triple-img-container, .single-img-container {
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            width: 100%;
+            margin-top: 0.5rem;
+            /* Augmentation de la hauteur minimale pour le matériel opérationnel */
+            min-height: 160px; 
+        }
+
+        /* Style uniforme pour toutes les images de la présentation */
+        .double-img-container img, 
+        .triple-img-container img, 
+        .single-img-container img {
+            max-height: 160px; /* Taille uniforme augmentée pour plus de visibilité */
+            max-width: 100%; 
+            object-fit: contain; /* Assure que l'image tient dans les limites */
+            cursor: pointer;
+            border-radius: 0.375rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+        
+        /* Ajustement CRITIQUE des largeurs pour forcer l'occupation de l'espace */
+        .double-img-container > div > img {
+            /* Force l'image à utiliser l'espace maximal alloué par le div parent (w-1/2) */
+            width: 100%; 
+        }
+        .triple-img-container > div > img {
+            /* Force l'image à utiliser l'espace maximal alloué par le div parent (w-1/3) */
+            width: 100%; 
+        }
+        .single-img-container img {
+             /* Laisse l'image simple utiliser 90% de son conteneur pour s'étendre */
+             max-width: 90%;
+        }
+
+        /* NOUVEAU: Style pour les liens cliquables pour vidéo */
+        .video-link {
+            color: #1d4ed8; /* blue-700 */
+            text-decoration: underline;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        
+        /* NOUVEAU: Style pour les liens cliquables pour Lightbox (chiffres) */
+        .lightbox-link {
+            color: #1d4ed8; /* blue-700 */
+            text-decoration: underline;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+
+        /* NOUVEAU: Style pour le signe '+' d'association */
+        .plus-sign {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #4b5563; /* gray-600 */
+            margin: 0 0.5rem;
+        }
+        
+        /* Ajustement spécifique pour les petites images de la section Ouvrants (pour ne pas être trop grandes) */
+        #content-ouvrants .double-img-container img {
+            max-height: 100px;
+        }
+
+
+        /* LIGHTBOX STYLES (Copied from airsoft.html) */
+        #lightbox-modal, #video-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.9);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 50;
+            backdrop-filter: blur(5px);
+            overflow: auto; /* Permet le défilement si le contenu dépasse la taille de l'écran */
+        }
+        
+        #lightbox-content {
+            /* Suppression des max-width/height stricts pour laisser l'image gérer le zoom */
+            max-width: 95%; 
+            max-height: 95%; 
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1rem;
+            padding: 2rem 0; /* Ajouter du padding pour éviter que le contenu ne touche le bord */
+        }
+
+        #lightbox-img {
+            /* Mettre les restrictions sur l'image elle-même pour un meilleur contrôle du zoom/défilement */
+            max-width: 90vw; /* Maximum 90% de la largeur du viewport */
+            max-height: 90vh; /* Maximum 90% de la hauteur du viewport */
+            width: auto; /* Permet à l'image de prendre sa taille naturelle si elle est plus petite que le max */
+            height: auto;
+            object-fit: contain;
+            border-radius: 0.5rem;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+            transition: transform 0.3s ease;
+        }
+
+        /* NOUVEAU: Conteneur spécifique pour la vidéo */
+        #video-modal-content {
+            position: relative;
+            width: 90%;
+            max-width: 800px;
+            padding-bottom: 56.25%; /* Ratio 16:9 */
+            height: 0;
+            overflow: hidden;
+            background: black;
+            border-radius: 0.5rem;
+        }
+
+        #video-modal-content iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        
+        /* Fermeture des modales */
+        #lightbox-close, #video-close {
+            position: fixed; /* Reste fixe même si la modale défile */
+            top: 20px;
+            right: 30px;
+            color: #fff;
+            font-size: 40px;
+            font-weight: bold;
+            transition: 0.3s;
+            cursor: pointer;
+            padding: 10px;
+            border-radius: 50%;
+            background-color: rgba(255, 255, 255, 0.1);
+            line-height: 1;
+            z-index: 60; /* Au-dessus de l'iframe */
+        }
+        #lightbox-close:hover, #video-close:hover {
+            color: #ccc;
+            background-color: rgba(255, 255, 255, 0.2);
+        }
+    </style>
+</head>
+<body class="text-gray-800">
+
+    <div class="container mx-auto p-4 sm:p-6 lg:p-8 max-w-7xl">
+        
+        <header class="text-center mb-8">
+            <!-- Changement de couleur du titre en bleu foncé -->
+            <h1 class="text-3xl md:text-4xl font-bold text-blue-900 mb-2">L'Effraction en Intervention</h1>
+            <p class="text-lg text-gray-600">Volets légal, sémantique et opérationnel.</p>
+            <!-- PRINCIPE : Retiré de la header et mis dans la section légale -->
+        </header>
+
+        <!-- Navigation par onglets -->
+        <nav class="flex flex-wrap justify-center gap-2 sm:gap-4 mb-8" aria-label="Navigation principale">
+            <!-- Utilisation des classes de couleur bleu de airsoft.html -->
+            <button id="nav-legal" class="nav-item active py-2 px-4 rounded-lg font-medium bg-white shadow-sm hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-600">
+                Cadre Légal & Décision
+            </button>
+            <button id="nav-ouvrants" class="nav-item py-2 px-4 rounded-lg font-medium bg-white shadow-sm hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-600">
+                Ouvrants & Sémantique
+            </button>
+            <button id="nav-materiel" class="nav-item py-2 px-4 rounded-lg font-medium bg-white shadow-sm hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-600">
+                Matériel (Effraction Froide)
+            </button>
+            <button id="nav-methodes" class="nav-item py-2 px-4 rounded-lg font-medium bg-white shadow-sm hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-600">
+                Choix de la Méthode
+            </button>
+            <!-- NOUVEAU: Bouton RECO -->
+            <button id="nav-reco" class="nav-item py-2 px-4 rounded-lg font-medium bg-white shadow-sm hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-600">
+                Reco
+            </button>
+        </nav>
+
+        <main>
+            <!-- 1. Cadre Légal et Décision (A.1, A.2, A.3) -->
+            <section id="content-legal" class="content-section active bg-white rounded-lg shadow-xl p-6">
+                <h2 class="text-2xl font-bold text-blue-800 mb-4">A. Présentation et Généralités</h2>
+                
+                <!-- NOUVEAU: Affichage côte à côte des encarts PRINCIPE et Généralités -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+                    <!-- 1. PRINCIPE (Case 1) -->
+                    <div class="p-3 bg-blue-100 border-l-4 border-blue-600 text-blue-800 text-md rounded-lg">
+                        <span class="font-bold">Principe :</span> L'effraction s'inscrit dans le prolongement du droit d'arrestation et de perquisition.
+                    </div>
+                    <!-- 2. Généralités (Case 2) -->
+                    <div class="p-3 bg-blue-100 border-l-4 border-blue-600 text-blue-800 text-md rounded-lg">
+                        <span class="font-bold">Généralités :</span> Ce document traitera uniquement de l'effraction <span class="text-blue-800 font-bold">FROIDE</span>.
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                    <!-- Définition Juridique -->
+                    <div class="bg-gray-50 p-4 rounded-lg shadow-md">
+                        <h3 class="text-xl font-semibold text-gray-900 mb-3 border-b pb-2">A.1 Définition Juridique de l'Effraction</h3>
+                        <p class="mb-3 text-sm text-gray-700 font-medium">Prévue par l'article 132-73 du code pénal :</p>
+                        <blockquote class="border-l-4 border-red-500 pl-4 italic text-gray-700 bg-white p-3 rounded-md">
+                            &lt;&lt; L'effraction consiste dans le forcement, la dégradation ou la destruction de tout dispositif de fermeture ou de toute espèce de clôture. Est assimilé à l'effraction l'usage de fausses clefs, de clefs indûment obtenues ou de tout instrument pouvant être frauduleusement employé pour actionner un dispositif de fermeture sans le forcer ni le dégrader. &gt;&gt;
+                        </blockquote>
+                        <p class="text-xs text-gray-500 mt-2 text-right">(Source : Légifrance)</p>
+                    </div>
+                    
+                    <!-- Cadre Légal -->
+                    <div class="bg-blue-50 p-4 rounded-lg shadow-md">
+                        <h3 class="text-xl font-semibold text-blue-900 mb-3 border-b pb-2">A.2 Cadre Légal</h3>
+                        <!-- Texte en bleu -->
+                        <p class="mb-3 text-gray-700">L'effraction est possible pour l'ensemble des régimes d'enquête (préliminaire, flagrance, commission rogatoire) car elle se situe dans le prolongement du <span class="font-bold text-blue-800">droit d'arrestation et de perquisition</span>.</p>
+                        
+                        <!-- Bloc des exceptions en rouge -->
+                        <div class="p-3 bg-red-100 border-l-4 border-red-600 text-red-800 rounded-lg mt-4">
+                            <h4 class="font-semibold text-lg text-red-800 mt-0 mb-2">Autres Cas de Légitimité (24h/24h) :</h4>
+                            <ul class="list-disc list-inside space-y-1 text-red-700">
+                                <li>Appel au secours.</li>
+                                <li>Appel du chef de maison.</li>
+                                <li>État de nécessité (Article 122-7 du code pénal).</li>
+                            </ul>
+                            <p class="text-xs text-red-700 mt-3">Ces dispositions de droit commun permettent à n'importe quel citoyen de pénétrer dans un domicile, réduisant l'effraction (dans ces contextes précis) à une plage horaire 24h/24h.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Décision du Bris de Porte -->
+                <div class="bg-blue-50 p-4 rounded-lg shadow-xl border-t-4 border-blue-600">
+                    <h3 class="text-xl font-semibold text-blue-900 mb-3 border-b pb-2">A.3 La Décision du Bris de Porte</h3>
+                    <p class="text-sm font-medium mb-3">La décision revient au <span class="text-blue-800 font-bold">CHEF OPERATIONNEL </span> (et non pas sanctuarisée au directeur d'enquête). Elle doit être motivée par des facteurs précis :</p>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <ul class="list-disc list-inside space-y-1 text-gray-700">
+                            <li>L'objectif de l'enquête (Préservation des indices).</li>
+                            <li>L'environnement adverse (Nécessité de pénétrer rapidement).</li>
+                            <li>La qualité de l'ouvrant (Porte blindée ?).</li>
+                            <li>Le matériel à disposition.</li>
+                        </ul>
+                        <ul class="list-disc list-inside space-y-1 text-gray-700">
+                            <li>La compétence des personnels (Cellule effraction entraînée).</li>
+                            <li>La dangerosité de l'adversaire (Opportunité de sonner ?).</li>
+                        </ul>
+                        <!-- Point Clé en rouge/jaune, conservé -->
+                        <div class="alert-box border-red-500 bg-red-100 mt-0 lg:mt-0">
+                            <p class="font-bold text-red-800">Point Clé :</p>
+                            <p class="text-sm text-red-700">La reconnaissance est <span class="font-bold italic">JAMAIS</span> facultative. Le chef opérationnel doit recueillir les autorisations auprès du magistrat si le directeur d'enquête ne l'a pas fait au préalable.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 2. Ouvrants et Sémantique (B.1, B.2, B.3) -->
+            <section id="content-ouvrants" class="content-section bg-white rounded-lg shadow-xl p-6">
+                <h2 class="text-2xl font-bold text-blue-800 mb-4">B. Les Ouvrants et la Sémantique</h2>
+
+                <!-- B.1 Les Portes -->
+                <div class="mb-8 p-4 bg-gray-50 rounded-lg shadow-md">
+                    <h3 class="text-xl font-semibold text-gray-900 mb-3 border-b pb-2">B.1 Les Portes</h3>
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div>
+                            <p class="mb-2 text-sm font-medium">Dimensions & Types :</p>
+                            <ul class="list-disc list-inside space-y-1 text-gray-700 text-sm ml-2">
+                                <!-- AJOUT DES HYPERLIENS LIGHTBOX SUR LES CHIFFRES 3 ET 5 -->
+                                <li>Dimension courante : 203 cm x 90 cm (NF), <span class="lightbox-link" onclick="openLightboxExternal('https://www.ou-serrurier.fr/guide/wp-content/uploads/2018/08/mob-diagram-c1-serrure-3-point.png', 'Schéma de serrure 3 points')">3</span> ou <span class="lightbox-link" onclick="openLightboxExternal('https://www.ou-serrurier.fr/guide/wp-content/uploads/2018/10/serrure-5-points-desk.png', 'Schéma de serrure 5 points')">5</span> points d'ancrage.</li>
+                                <li>Types : Pleine, semi-vitrée, vitrée.</li>
+                                <li>Matières : Bois, PVC, aluminium, composite, acier, blindée.</li>
+                            </ul>
+                            <p class="mt-4 mb-2 text-sm font-medium">Ouvertures :</p>
+                            <ul class="list-disc list-inside space-y-1 text-gray-700 text-sm ml-2">
+                                <li>Favorable (Poussante).</li>
+                                <li>Défavorable (Tirante).</li>
+                                <li>À galandage (Latérale).</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="lg:col-span-2">
+                            <p class="mb-2 text-sm font-medium text-center">Nomenclature Standard (Porte simple) :</p>
+                            <!-- Image Nomenclature Standard (URL directe) -->
+                            <div class="single-img-container">
+                                <img src="https://www.ideesmaison.com/images/view/34-Porte-entree.gif" 
+                                     alt="Nomenclature Standard (Porte simple)" 
+                                     onerror="this.onerror=null; this.src='https://placehold.co/400x120/E8D09E/333333?text=Nomenclature+Standard+de+Porte';"
+                                     onclick="openLightbox(this)">
+                            </div>
+                            <p class="text-xs text-gray-500 mt-1 text-center">Un <span class="italic">vantail</span> est la partie mobile. L'ensemble est encastré dans un <span class="italic">chambranle</span> fixé au bâti.</p>
+                        </div>
+                    </div>
+                    <div class="mt-4 p-3 bg-red-100 border-l-4 border-red-600 text-red-800 text-sm rounded-lg">
+                        <span class="font-bold">SÉCURITÉ D'UNE PORTE :</span> Déterminée par la matière de sa conception, la serrure et la solidité de la fixation du chambranle sur le bâti.
+                    </div>
+                </div>
+
+                <!-- B.2 Les Serrures -->
+                <div class="mb-8 p-4 bg-blue-50 rounded-lg shadow-md">
+                    <h3 class="text-xl font-semibold text-blue-900 mb-3 border-b pb-2">B.2 Les Serrures</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div>
+                            <p class="mb-2 text-sm font-medium">Composition :</p>
+                            <ul class="list-disc list-inside space-y-1 text-gray-700 text-sm ml-2">
+                                <li><span class="font-semibold">Pêne :</span> Pièce métallique qui va et vient dans la gâche (demi-tour pour la fermeture, dormant pour le verrouillage).</li>
+                                <li><span class="font-semibold">Cylindre (ou barillet) :</span> Permet le verrouillage par la clé.</li>
+                                <li>Points de sécurité : Peut en comprendre 1, 3, 5 voire 7.</li>
+                            </ul>
+                        </div>
+                        <div class="md:col-span-2">
+                            <p class="mb-2 text-sm font-medium text-center">Types de Serrures Courantes :</p>
+                            <div class="double-img-container">
+                                <!-- Image Serrure À larder (encastrée) (URL directe) -->
+                                <div class="text-center w-1/2">
+                                    <span class="text-xs font-semibold block mb-1">À larder (encastrée)</span>
+                                    <img src="https://serrurier-savoyard.fr/wp-content/uploads/2019/06/definitions-elements-de-serrure.jpg" 
+                                         alt="Serrure À larder (encastrée)" 
+                                         onerror="this.onerror=null; this.src='https://placehold.co/200x120/9EBDE8/333333?text=Serrure+A+larder';"
+                                         onclick="openLightbox(this)">
+                                </div>
+                                <!-- Image Serrure en applique (URL directe) -->
+                                <div class="text-center w-1/2">
+                                    <span class="text-xs font-semibold block mb-1">En applique</span>
+                                    <img src="https://images.ctfassets.net/j4m9q0fykyy4/3BwMkfpvutzZvvPGyTjdfo/eb15f8f292ecc4c6bc55610f5ab38853/2018-07-Serrure-en-applique.jpg" 
+                                         alt="Serrure en applique" 
+                                         onerror="this.onerror=null; this.src='https://placehold.co/200x120/9EBDE8/333333?text=Serrure+En+applique';"
+                                         onclick="openLightbox(this)">
+                                </div>
+                            </div>
+                            <p class="text-xs text-gray-500 mt-1 text-center">La solidité est déterminée par le nombre de points d'ancrage et la fixation sur la porte.</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- B.3 Autres systèmes de verrouillage -->
+                <div class="p-4 bg-green-50 rounded-lg shadow-md">
+                    <h3 class="text-xl font-semibold text-green-900 mb-3 border-b pb-2">B.3 Autres Systèmes de Verrouillage</h3>
+                    <p class="mb-3 text-sm font-medium">Ces attributs renforcent la sécurité de la porte :</p>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <div class="bg-white p-3 rounded-lg border-l-4 border-green-300">
+                            <h4 class="font-semibold text-green-800">Systèmes « Légers » :</h4>
+                            <ul class="list-disc list-inside space-y-1 text-gray-700 text-sm ml-2">
+                                <li>Loquet.</li>
+                                <li>Vervelle.</li>
+                                <li>Entrebâilleur.</li>
+                            </ul>
+                            <!-- Images Loquet / Vervelle (URLs directes) -->
+                            <div class="double-img-container mt-2">
+                                <div class="text-center w-1/2">
+                                    <span class="text-xs font-semibold block mb-1">Loquet</span>
+                                    <img src="https://i.etsystatic.com/10654656/r/il/19773c/2210719916/il_570xN.2210719916_rix6.jpg" 
+                                         alt="Loquet de porte" 
+                                         onerror="this.onerror=null; this.src='https://placehold.co/200x120/BDE89E/333333?text=Loquet';"
+                                         onclick="openLightbox(this)">
+                                </div>
+                                <div class="text-center w-1/2">
+                                    <span class="text-xs font-semibold block mb-1">Vervelle</span>
+                                    <img src="https://www.ouvretaporte.fr/wp-content/uploads/2019/04/Installer-une-vervelle-3-1024x1024.jpg" 
+                                         alt="Vervelle" 
+                                         onerror="this.onerror=null; this.src='https://placehold.co/200x120/BDE89E/333333?text=Vervelle';"
+                                         onclick="openLightbox(this)">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="bg-white p-3 rounded-lg border-l-4 border-red-300 sm:col-span-1 lg:col-span-2">
+                            <h4 class="font-semibold text-red-800">Systèmes de Résistance :</h4>
+                            <ul class="list-disc list-inside space-y-1 text-gray-700 text-sm ml-2">
+                                <li><span class="font-semibold">Cornière anti-effraction :</span> Évite le pincement de la porte.</li>
+                                <li><span class="font-semibold">Bloc porte :</span> Ensemble complet (porte, cadre, chambranle) pré-monté, souvent blindé.</li>
+                            </ul>
+                            <div class="double-img-container mt-2">
+                                <!-- Image Cornières anti-effraction (URL directe) -->
+                                <div class="text-center w-1/2">
+                                    <span class="text-xs font-semibold block mb-1">Cornières anti-effraction</span>
+                                    <img src="https://www.fabriquemetallier.fr/12323-thickbox_default/corniere-anti-pince.jpg" 
+                                         alt="Cornières anti-effraction" 
+                                         onerror="this.onerror=null; this.src='https://placehold.co/200x120/E89EBD/333333?text=Cornieres+anti-effraction';"
+                                         onclick="openLightbox(this)">
+                                </div>
+                                <!-- Image Bloc-porte (URL directe) -->
+                                <div class="text-center w-1/2">
+                                    <span class="text-xs font-semibold block mb-1">Bloc-porte</span>
+                                    <img src="https://m.media-amazon.com/images/I/81yzqmi5WuL.jpg" 
+                                         alt="Bloc-porte" 
+                                         onerror="this.onerror=null; this.src='https://placehold.co/200x120/E89EBD/333333?text=Bloc-porte+blind%C3%A9';"
+                                         onclick="openLightbox(this)">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 3. Matériel (Effraction Froide) (C.1) -->
+            <section id="content-materiel" class="content-section bg-white rounded-lg shadow-xl p-6">
+                <h2 class="text-2xl font-bold text-blue-800 mb-4">C. Volet Opérationnel : Matériel à Disposition</h2>
+                
+                <div class="mb-6 p-4 bg-red-100 border-l-4 border-red-600 text-red-800 rounded-lg">
+                    <h3 class="font-bold text-xl mb-2">Types d'Effraction</h3>
+                    <ul class="list-disc list-inside space-y-1 text-gray-700 text-sm">
+                        <li><span class="font-bold">Chaude :</span> Explosifs (GIGN uniquement).</li>
+                        <li><span class="font-bold">Fine :</span> Reproduction de clé, crochetage, piratage de code.</li>
+                        <li><span class="font-bold">Froide :</span> Ouverture par moyen mécanique ou hydraulique.</span></li>
+                    </ul>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+                    <!-- Moyens Mécaniques -->
+                    <div class="p-4 bg-gray-50 rounded-lg shadow-md">
+                        <!-- AJOUT DU LIEN DE DEMONSTRATION -->
+                        <h3 class="text-xl font-semibold text-gray-900 mb-3 border-b pb-2">Moyens Mécaniques <span class="video-link" onclick="openVideoModal('HchC4ekUq-I', 'Démonstration Moyens Mécaniques')">(Démonstration)</span></h3>
+                        <p class="text-sm font-medium mb-3">Matériel standard ou acquisition DFUE :</p>
+                        <ul class="list-disc list-inside space-y-1 text-gray-700 text-sm ml-2">
+                            <li>Pied de biche.</li>
+                            <li>Breaching tool 5.11.</li>
+                            <li>Bélier.</li>
+                        </ul>
+                        <!-- L'affichage passe en deux lignes pour agrandir les images -->
+                        <div class="single-img-container mt-4">
+                            <!-- Image Lot 5.11 (URL directe) -->
+                            <div class="text-center w-full">
+                                <span class="text-xs font-semibold block mb-1">Lot 5.11</span>
+                                <img src="https://t-o-shop.com/15143-large_default/kit-lourd-heavy-breaching-set.jpg" 
+                                     alt="Lot 5.11 (Breaching Tool)" 
+                                     onerror="this.onerror=null; this.src='https://placehold.co/400x160/B8B8B8/333333?text=Lot+5.11';"
+                                     onclick="openLightbox(this)">
+                            </div>
+                        </div>
+                        <div class="double-img-container mt-4">
+                            <div class="text-center w-1/2">
+                                <!-- Images Bélier / Pied de biche (URLs directes) -->
+                                <span class="text-xs font-semibold block mb-1">Pied de biche</span>
+                                <img src="https://serrurerie-optimlock.fr/wp-content/uploads/2023/04/poussee-sur-porte-avec-pied-de-biche-jpg.webp" 
+                                     alt="Pied de biche" 
+                                     onerror="this.onerror=null; this.src='https://placehold.co/200x160/B8B8B8/333333?text=Pied';"
+                                     onclick="openLightbox(this)">
+                            </div>
+                            <div class="text-center w-1/2">
+                                <span class="text-xs font-semibold block mb-1">Bélier</span>
+                                <!-- CORRECTION DU LIEN BELIER -->
+                                <img src="https://p.turbosquid.com/ts-thumb/1K/tT6AFt/wsst7ebz/policebatteringrammb3dmodel004/jpg/1600693827/600x600/fit_q87/5abe5a5a049e86c97679ecc3a99390b24e1a7ec0/policebatteringrammb3dmodel004.jpg" 
+                                     alt="Bélier de défoncement" 
+                                     onerror="this.onerror=null; this.src='https://placehold.co/200x160/B8B8B8/333333?text=Bélier';"
+                                     onclick="openLightbox(this)">
+                            </div>
+                        </div>
+                        <p class="text-xs text-gray-500 mt-2 text-center">Outils favorisés pour résistance faible à modérée (PVC, Aluminium, Bois).</p>
+                    </div>
+
+                    <!-- Moyens Hydrauliques -->
+                    <div class="p-4 bg-blue-50 rounded-lg shadow-md">
+                        <h3 class="text-xl font-semibold text-blue-900 mb-3 border-b pb-2">Moyens Hydrauliques <span class="video-link" onclick="openVideoModal('p_WfhDOeSo8', 'Démonstration Moyens Hydrauliques')">(Démonstration)</span></h3>
+                        <p class="text-sm font-medium mb-3">Outils privilégiés pour les portes blindées :</p>
+                        <ul class="list-disc list-inside space-y-1 text-gray-700 text-sm ml-2">
+                            <li>Holmatro HDR50.</li>
+                            <li>Libervit <span class="video-link" onclick="openVideoModal('UrMkpN3R1t0', 'Libervit OP71 en action')">OP71</span>.</li>
+                            <li>Libervit DOOR-RAIDER light B.</li>
+                        </ul>
+                        <div class="triple-img-container mt-4">
+                            <!-- Holmatro HDR50 -->
+                            <div class="text-center w-1/3">
+                                <span class="text-xs font-semibold block mb-1">HDR50 (Holmatro)</span>
+                                <img src="https://www.thetactical.ma/img/p/1/0/9/9/1099.jpg" 
+                                     alt="Holmatro HDR50" 
+                                     onerror="this.onerror=null; this.src='https://placehold.co/120x160/9ED8E8/333333?text=HDR50';"
+                                     onclick="openLightbox(this)">
+                            </div>
+                            <!-- DOOR-RAIDER -->
+                            <div class="text-center w-1/3">
+                                <span class="text-xs font-semibold block mb-1">Door Raider</span>
+                                <img src="https://lh6.googleusercontent.com/proxy/54t8Od1BpJvmbHCB_UiFLUnyC7Vvmn2k5GSVtLSAQBVrnox3yBAwYik-iYR2t6lWU2mMvAPuBa9cTJ-E0hyU0c3Dja5wfg" 
+                                     alt="Libervit Door Raider" 
+                                     onerror="this.onerror=null; this.src='https://placehold.co/120x160/9ED8E8/333333?text=Door+Raider';"
+                                     onclick="openLightbox(this)">
+                            </div>
+                            <!-- OP71 -->
+                            <div class="text-center w-1/3">
+                                <span class="text-xs font-semibold block mb-1">OP71</span>
+                                <img src="https://i.ytimg.com/vi/UrMkpN3R1t0/sddefault.jpg" 
+                                     alt="Libervit OP71" 
+                                     onerror="this.onerror=null; this.src='https://placehold.co/120x160/9ED8E8/333333?text=OP71';"
+                                     onclick="openLightbox(this)">
+                            </div>
+                        </div>
+                        <p class="text-xs text-gray-500 mt-2 text-center">Force d'écartement élevée. Attention au sens d'ouverture et à la solidité du bâti.</p>
+                    </div>
+
+                    <!-- Aides à l'Effraction -->
+                    <div class="p-4 bg-yellow-50 rounded-lg shadow-md">
+                        <!-- DÉPLACEMENT DE L'HYPERLIEN VERS LE TITRE -->
+                        <h3 class="text-xl font-semibold text-yellow-900 mb-3 border-b pb-2">Aides à l'Effraction <span class="video-link" onclick="openVideoModal('yT_Az98Jp04', 'Démonstration Benelli M4A1 (Short)')">(Démonstration)</span></h3>
+                        <p class="text-sm font-medium mb-3">Dispositifs ne permettant pas l'ouverture seule de l'ouvrant :</p>
+                        <ul class="list-disc list-inside space-y-1 text-gray-700 text-sm ml-2">
+                            <!-- SUPPRESSION DE L'HYPERLIEN DU TEXTE INTERNE -->
+                            <li>Cartouche céramique ENTRY II (Benelli M4A1).</li>
+                            <li>Cintreuse à rebord.</li>
+                        </ul>
+                        
+                        <div class="triple-img-container mt-4">
+                            <!-- Image Cartouches ceramiques (URL directe) -->
+                            <div class="text-center w-1/3">
+                                <span class="text-xs font-semibold block mb-1">Cartouches ceramiques</span>
+                                <img src="https://www.defense-technology.com/wp-content/uploads/2020/04/1012104.jpg" 
+                                     alt="Cartouches ceramiques" 
+                                     onerror="this.onerror=null; this.src='https://placehold.co/120x160/E8D69E/333333?text=Cartouches';"
+                                     onclick="openLightbox(this)">
+                            </div>
+                            <div class="plus-sign w-1/6 text-center">+</div>
+                            <!-- Image Benelli M4A1 (URL directe) -->
+                            <div class="text-center w-1/3">
+                                <span class="text-xs font-semibold block mb-1">Benelli M4A1</span>
+                                <img src="https://www.meyson.fr/20641-large_default/fusil-benelli-m4a1-crosse-telescopique-calibre-1276.webp" 
+                                     alt="Fusil Benelli M4A1" 
+                                     onerror="this.onerror=null; this.src='https://placehold.co/120x160/E8D69E/333333?text=Benelli+M4A1';"
+                                     onclick="openLightbox(this)">
+                            </div>
+                        </div>
+
+                        <!-- Cintreuse à rebords -->
+                        <div class="single-img-container mt-4 border-t pt-4">
+                            <div class="text-center w-full">
+                                <span class="text-sm font-semibold block mb-1">Cintreuse à rebords (Edge Bender)</span>
+                                <img src="https://www.tac-store.com/26540-large_default/cintreuse-a-rebords-edgebender-2.jpg" 
+                                     alt="Cintreuse à rebords Edge Bender" 
+                                     onerror="this.onerror=null; this.src='https://placehold.co/400x160/E8D69E/333333?text=Cintreuse+a+rebords';"
+                                     onclick="openLightbox(this)">
+                            </div>
+                        </div>
+
+                        <p class="text-xs text-gray-500 mt-2 text-center">Doivent être couplés à un moyen mécanique/hydraulique pour la finalisation.</p>
+                    </div>
+
+                </div>
+            </section>
+
+            <!-- 4. Choix de la Méthode (C.2) -->
+            <section id="content-methodes" class="content-section bg-white rounded-lg shadow-xl p-6">
+                <h2 class="text-2xl font-bold text-blue-800 mb-4">C. Volet Opérationnel : Choix de la Méthode</h2>
+
+                <!-- Alerte en rouge -->
+                <div class="p-4 alert-box border-red-500 bg-red-50 mb-6">
+                    <h3 class="font-bold text-xl text-red-700 mb-2">Rôle du Technicien en Effraction</h3>
+                    <p class="text-sm font-medium mb-3">Trouver le meilleur compromis entre rapidité/efficacité et discrétion.</p>
+                    <ul class="list-disc list-inside space-y-1 text-gray-700 text-sm">
+                        <li><span class="font-semibold">Capacité d'analyse :</span> Évaluer l'ouvrant pendant la reconnaissance et l'effraction (recalcitrance, tension). Savoir basculer sur un autre moyen.</li>
+                        <li><span class="font-semibold">Maîtrise :</span> Être polyvalent et savoir mettre en œuvre l'ensemble des outils.</li>
+                    </ul>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+                    <!-- Conseils Techniques Mécaniques -->
+                    <div class="p-4 bg-gray-100 rounded-lg shadow-md border-t-4 border-gray-400">
+                        <h3 class="text-xl font-semibold text-gray-800 mb-3">Moyens Mécaniques - Conseils Techniques</h3>
+                        <p class="text-sm font-medium mb-3">Pour portes de résistance faible à modérée (PVC, Bois, Alu) :</p>
+                        <ul class="list-disc list-inside space-y-2 text-gray-700 text-sm ml-2">
+                            <li><span class="font-semibold">Porte PVC/Alu (non blindé) :</span> Breaching tool 5.11 ou Pied de biche / Bélier.</li>
+                            <li><span class="font-semibold">Porte Bois non vitrée :</span> Pied de biche / Bélier ou Benelli M4A1 / Bélier.</li>
+                            <li><span class="font-semibold">Porte Bois vitrée :</span> Breaching tool 5.11 (pour minimiser les dégâts).</li>
+                            <li><span class="font-semibold">Porte Défavorable (Tirante) :</span> Breaching tool 5.11 / Bélier.</li>
+                        </ul>
+                    </div>
+
+                    <!-- Conseils Techniques Hydrauliques -->
+                    <div class="p-4 bg-blue-100 rounded-lg shadow-md border-t-4 border-blue-400">
+                        <h3 class="text-xl font-semibold text-blue-800 mb-3">Moyens Hydrauliques - Conseils Techniques</h3>
+                        <p class="text-sm font-medium mb-3">Pour portes blindées (quel que soit le nombre de points d'ancrage) :</p>
+                        <ul class="list-disc list-inside space-y-2 text-gray-700 text-sm ml-2">
+                            <li><span class="font-semibold">Ouverture Favorable (Poussante) :</span> Holmatro HDR 50, Libervit DOOR RAIDER.</li>
+                            <li><span class="font-semibold">Ouverture Défavorable (Tirante) :</span> OPB71 / Cintreuse à rebord (si cornière anti-pincement).</li>
+                            <li><span class="font-semibold">Couplage :</span> Si l'hydraulique n'est pas suffisant, utiliser un moyen mécanique (ex: bélier) pour aider le vérin à finaliser l'ouverture.</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- D. Conclusion -->
+                <div class="mt-8 p-4 alert-box border-green-500 bg-green-50">
+                    <h3 class="font-bold text-green-800 mb-2">D. Conclusion</h3>
+                    <ul class="list-disc list-inside space-y-2 text-gray-700 text-sm">
+                        <li>L'effraction est un <span class="font-bold">paramètre majeur</span> de la réussite d'une mission.</li>
+                        <li>C'est une spécialité en évolution permanente (matériel et sécurité des ouvrants).</li>
+                        <li>Le technicien doit <span class="font-semibold">se maintenir à jour</span>, entretenir son savoir-faire et <span class="font-semibold">toujours prévoir un moyen d'effraction "bis"</span> en cas d'échec.</li>
+                    </ul>
+                </div>
+
+            </section>
+            
+            <!-- NOUVEAU: 5. Reco / Flipper Zero -->
+            <section id="content-reco" class="content-section bg-white rounded-lg shadow-xl p-6">
+                <h2 class="text-2xl font-bold text-blue-800 mb-4">D. Reco - Le Flipper Zero</h2>
+                
+                <!-- Description -->
+                <div class="mb-6 p-4 bg-red-50 rounded-lg shadow-md border-l-4 border-red-600">
+                    <h3 class="text-xl font-semibold text-red-800 mb-2 border-b pb-2">Description Rapide du Flipper Zero</h3>
+                    <p class="text-base text-gray-700">
+                        Le Flipper Zero est un outil portable multi-fonctions, conçu pour l'exploration et le piratage des protocoles numériques et radio. Il intègre plusieurs modules comme un émetteur-récepteur Sub-GHz pour les télécommandes, un lecteur et émulateur de cartes RFID/NFC, un émetteur infrarouge universel et des capacités de débogage GPIO. C'est un véritable couteau suisse numérique qui permet d'interagir avec presque tous les systèmes électroniques de la vie courante. Déja grandement utilisé par les voleurs de voitures, cambrioleurs et autres hackers éthiques ou non.
+                    </p>
+                </div>
+                
+                <!-- Explication PRI -->
+                <div class="mb-6 p-4 bg-green-50 rounded-lg shadow-md border-l-4 border-green-600">
+                    <h3 class="text-xl font-semibold text-green-800 mb-2 border-b pb-2">Outil Idéal pour l'Effraction Discrète...</h3>
+                    <p class="text-base text-gray-700">
+                        Dans le cadre d'une reconnaissance préalable a l'intervention, le Flipper Zero est l'outil parfait pour l'effraction discrète, grâce à sa petite taille, son apparence de jouet inoffensif et ses capacités non-destructives. Il permet au technicien de scanner et d'interagir sans contact avec de nombreux systèmes de verrouillage électroniques courants tels que les portes de garage, les barrières, les portails ou certaines serrures RFID d'hôtel ou de bureau, le tout sans forcer l'ouvrant ni laisser de trace mécanique. Son utilisation est rapide et furtive, ce qui est crucial pendant une phase de reconnaissance. En mode passif, il peut également capturer et analyser des signaux radio ou NFC, fournissant ainsi au elements de reco des informations critiques sur le type de sécurité électronique à contourner ou à neutraliser. Cela permet une prise de décision éclairée concernant l'effraction froide ou mécanique, sans compromettre la discrétion de la phase de reconnaissance.
+                    </p>
+                </div>
+
+                <!-- Médias et Lien d'Achat -->
+                <div class="p-4 bg-blue-50 rounded-lg shadow-md border-t-4 border-blue-400">
+                    <h3 class="text-xl font-semibold text-blue-800 mb-3 border-b pb-2">Démonstration et Documentation</h3>
+                    
+                    <!-- Vidéo -->
+                    <p class="text-sm font-medium mb-3">
+                        Démonstration des capacités du Flipper Zero en action (Short YouTube) : 
+                        <span class="video-link" onclick="openVideoModal('A4ti_fwuiX8', 'Démonstration Flipper Zero (Short)')">Voir la vidéo</span>
+                    </p>
+
+                    <!-- Images -->
+                    <p class="text-sm font-medium mb-3 mt-4">Images du dispositif :</p>
+                    <div class="double-img-container">
+                        <div class="text-center w-1/2">
+                            <span class="text-xs font-semibold block mb-1">Flipper Zero </span>
+                            <img src="https://m.media-amazon.com/images/I/61hypBE3WXL.jpg" 
+                                 alt="Flipper Zero appareil seul" 
+                                 onerror="this.onerror=null; this.src='https://placehold.co/200x160/25449E/FFFFFF?text=Flipper+Zero+1';"
+                                 onclick="openLightbox(this)">
+                        </div>
+                        <div class="text-center w-1/2">
+                            <span class="text-xs font-semibold block mb-1">Flipper Zero - Aspect clé de voitures</span>
+                            <img src="https://m.media-amazon.com/images/I/61mUMr8UBvL.jpg" 
+                                 alt="Flipper Zero en utilisation" 
+                                 onerror="this.onerror=null; this.src='https://placehold.co/200x160/25449E/FFFFFF?text=Flipper+Zero+2';"
+                                 onclick="openLightbox(this)">
+                        </div>
+                    </div>
+                    
+                    <!-- Lien d'achat -->
+                    <p class="text-sm font-medium mt-4">
+                        Lien d'achat (Amazon) : 
+                        <a href="https://www.amazon.fr/Flipper-Carte-microSD-Adaptateur-lecteur/dp/B0D8QRGFV1/ref=sr_1_2_sspa?__mk_fr_FR=%C3%85M%C3%85%C5%BD%C3%95%C3%91&crid=2AK4JDFRPOIDJ&dib=eyJ2IjoiMSJ9.ZgCgIUQI7k1GyqYIkK-kuaHfGZ81exs2FO8K3CYjUkb-5t7aEn8_7l6X9_xdimFwaUSCV-i2skbneqaRGRjxjGHhWIXfHEgNmE7TuZrcFNZXvzckSP5kimlz2iNGc14rwL9GRQ0e7TmtyyMrvkTEMUsuP-QPZEGNbAYLn0zK75ECED_7I0cphe98nuxzpt10uBeaw6yVBo2LIws7lL4xC8s69yvm5LOVl1mPH5Q7ob3ovat3sFRL-mAMgXx1RN26T_ZX8cFHNXyqBCJl53ESmGYWqm-9LPoLC0RORGjGk0A.fPq9VRaIo05DqsTvfHCK3926cchJWjFN1OPzsf02I38&dib_tag=se&keywords=flipper+zero&qid=1761744724&s=computers&sprefix=flipper+zero%2Ccomputers%2C80&sr=1-2-spons&sp_csd=d2lkZ2V0TmFtZT1zcF9hdGY&psc=1" 
+                           target="_blank" 
+                           rel="noopener noreferrer"
+                           class="video-link" >
+                           Accéder à la page Amazon
+                        </a>
+                    </p>
+                </div>
+
+            </section>
+            
+        </main>
+    </div>
+    
+    <!-- LIGHTBOX MODALE (pour les images) -->
+    <div id="lightbox-modal">
+        <span id="lightbox-close" onclick="closeLightbox()">&times;</span>
+        <div id="lightbox-content">
+            <img id="lightbox-img" src="" alt="">
+            <p id="lightbox-caption"></p>
+        </div>
+    </div>
+    
+    <!-- NOUVEAU: MODALE VIDEO (pour l'iframe YouTube) -->
+    <div id="video-modal">
+        <span id="video-close" onclick="closeVideoModal()">&times;</span>
+        <div id="video-modal-content">
+            <!-- L'iframe sera injecté ici par JavaScript -->
+        </div>
+        <p id="video-caption" class="text-white text-lg mt-4"></p>
+    </div>
+
+    <!-- CREDITS MIS A JOUR -->
+    <footer class="text-center mt-8 p-4 text-gray-500 text-xs border-t border-gray-200">
+        Réalisation : Compagnie de Puget-Theniers - PSIG Gilette - G/ Maheux
+    </footer>
+
+    <!-- JavaScript pour la navigation par onglets, la lightbox et la modale vidéo -->
+    <script>
+        // Fonction utilitaire pour ouvrir une lightbox avec une source externe et une légende
+        function openLightboxExternal(src, alt) {
+            const tempImg = { src: src, alt: alt }; // Crée un objet temporaire simulant un élément <img>
+            openLightbox(tempImg);
+        }
+
+        // Fonctions de navigation simplifiées pour l'effrac.html
+        function showSection(sectionId) {
+            const contentSections = document.querySelectorAll('.content-section');
+            const navItems = document.querySelectorAll('.nav-item');
+
+            const contentElement = document.getElementById(`content-${sectionId}`);
+            const navElement = document.getElementById(`nav-${sectionId}`);
+            
+            if (!contentElement || !navElement) {
+                console.error(`Erreur: Élément non trouvé pour la section/navigation ID: ${sectionId}`);
+                return;
+            }
+
+            // Masquer toutes les sections de contenu
+            contentSections.forEach(section => {
+                section.classList.remove('active');
+            });
+            // Désactiver tous les boutons de navigation
+            navItems.forEach(nav => {
+                nav.classList.remove('active');
+            });
+
+            // Afficher la section demandée et activer le bouton correspondant
+            contentElement.classList.add('active');
+            navElement.classList.add('active');
+        }
+
+        // --- Fonctions Lightbox (Images) ---
+        const lightboxModal = document.getElementById('lightbox-modal');
+        const lightboxImg = document.getElementById('lightbox-img');
+        const lightboxCaption = document.getElementById('lightbox-caption');
+
+        /**
+         * Ouvre la lightbox avec l'image cliquée ou l'objet temporaire.
+         * @param {HTMLImageElement | {src: string, alt: string}} imgElement L'élément <img> ou l'objet contenant src et alt.
+         */
+        function openLightbox(imgElement) {
+            if (!imgElement) return;
+
+            // 1. Définir la source et le texte alternatif de la grande image
+            lightboxImg.src = imgElement.src;
+            lightboxImg.alt = imgElement.alt;
+            
+            // 2. Définir la légende (utilise l'alt de l'image)
+            if (imgElement.alt) {
+                const captionText = imgElement.alt;
+                lightboxCaption.textContent = captionText.charAt(0).toUpperCase() + captionText.slice(1);
+            } else {
+                lightboxCaption.textContent = '';
+            }
+
+            // 3. Afficher la modale
+            lightboxModal.style.display = 'flex';
+        }
+
+        /**
+         * Ferme la lightbox.
+         */
+        function closeLightbox() {
+            lightboxModal.style.display = 'none';
+        }
+
+        // --- Fonctions Modale Vidéo ---
+        const videoModal = document.getElementById('video-modal');
+        const videoContent = document.getElementById('video-modal-content');
+        const videoCaption = document.getElementById('video-caption');
+        
+        /**
+         * Ouvre la modale vidéo et charge l'iframe YouTube.
+         * @param {string} videoId L'ID de la vidéo YouTube (HchC4ekUq-I, UrMkpN3R1t0, p_WfhDOeSo8).
+         * @param {string} caption Le titre à afficher sous la vidéo.
+         */
+        function openVideoModal(videoId, caption) {
+            if (!videoId) return;
+            
+            // Nettoyer l'ancien contenu
+            videoContent.innerHTML = '';
+
+            // MODIFICATION CLÉ: Ajout de ?rel=0 pour une meilleure compatibilité et des paramètres standards
+            // Utilisation du format sans /embed/shorts pour les Shorts, qui fonctionne souvent mieux.
+            const iframeUrl = `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&showinfo=0&iv_load_policy=3&modestbranding=1`;
+            
+            const iframe = document.createElement('iframe');
+            iframe.setAttribute('src', iframeUrl);
+            iframe.setAttribute('frameborder', '0');
+            iframe.setAttribute('allow', 'accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture');
+            iframe.setAttribute('allowfullscreen', 'true');
+            iframe.setAttribute('title', caption); // Accessibilité
+
+            // Injecter l'iframe et définir la légende
+            videoContent.appendChild(iframe);
+            videoCaption.textContent = caption;
+            
+            // Afficher la modale
+            videoModal.style.display = 'flex';
+        }
+
+        /**
+         * Ferme la modale vidéo et arrête la lecture.
+         */
+        function closeVideoModal() {
+            // Arrêter la vidéo en retirant l'iframe
+            videoContent.innerHTML = '';
+            videoCaption.textContent = '';
+            videoModal.style.display = 'none';
+        }
+
+        // --- Gestion des événements de fermeture (Lightbox et Video) ---
+
+        // Fermer les modales en cliquant en dehors de la zone de contenu
+        function handleModalClick(event) {
+            // Vérifier que le clic cible la modale elle-même et non son contenu (pour éviter de fermer en cliquant sur l'image)
+            if (event.target === lightboxModal) {
+                closeLightbox();
+            }
+            if (event.target === videoModal) {
+                closeVideoModal();
+            }
+        }
+        lightboxModal.addEventListener('click', handleModalClick);
+        videoModal.addEventListener('click', handleModalClick);
+        
+        // Fermer avec la touche Échap
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                if (lightboxModal.style.display === 'flex') {
+                    closeLightbox();
+                }
+                if (videoModal.style.display === 'flex') {
+                    closeVideoModal();
+                }
+            }
+        });
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const navItems = document.querySelectorAll('.nav-item');
+            
+            navItems.forEach(nav => {
+                nav.addEventListener('click', () => {
+                    // L'ID du bouton est 'nav-ID_SECTION'
+                    const sectionId = nav.id.split('-')[1];
+                    showSection(sectionId);
+                });
+            });
+
+            // Initialiser la première section au chargement
+            showSection('legal');
+        });
+    </script>
+</body>
+</html>
