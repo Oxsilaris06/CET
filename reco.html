@@ -713,6 +713,9 @@
         let isDragging = false;
         let startPos = 0;
         let currentTranslate = 0; 
+        // Stocke la translation idéale pour centrer la première carte.
+        let firstCardOffset = 0; 
+
         // Mise à jour de la liste des IDs pour inclure le nouveau bouton
         const MEANS_IDS = ['drone', 'flipper', 'optique_habrok', 'optique_mum14', 'logiciels', 'logiciels2'];
 
@@ -757,8 +760,6 @@
         }
         
         // NOUVELLE FONCTION POUR GÉRER LA SÉLECTION DES MOYENS
-        let firstCardOffset = 0; // Stocke la translation nécessaire pour centrer la première carte
-
         function showMeans(meansId) {
             const targetIndex = MEANS_IDS.indexOf(meansId);
             if (targetIndex === -1) return;
@@ -776,29 +777,28 @@
             const targetCardWidth = targetCard.offsetWidth;
 
             if (targetIndex === 0) {
-                 // Calculer la position idéale pour centrer la première carte
+                 // 1. Calculer et stocker la position de centrage de la première carte
                  const viewportCenter = carouselWidth / 2;
                  const cardHalfWidth = targetCardWidth / 2;
-                 // La position 0 de la première carte est à sa marge gauche (5% de la carte)
                  const firstCardMarginLeft = parseFloat(window.getComputedStyle(targetCard).marginLeft);
                  const firstCardCenter = firstCardMarginLeft + cardHalfWidth;
 
+                 // Translation nécessaire pour amener le centre de la carte 1 au centre de la grille.
                  firstCardOffset = viewportCenter - firstCardCenter;
             }
             
             let accumulatedOffset = 0;
-            // 1. Calculer la distance parcourue depuis le début jusqu'à la carte CIBLE
+            // 2. Calculer la distance parcourue depuis le début (position 0) jusqu'à la carte CIBLE
             for (let i = 0; i < targetIndex; i++) {
                const card = cards[i];
                const cardStyle = window.getComputedStyle(card);
-               // Largeur de la carte + Marge droite
-               accumulatedOffset += card.offsetWidth + parseFloat(cardStyle.marginRight);
+               // Largeur de la carte + Marge droite (La marge gauche de la carte suivante est incluse dans sa propre offset)
+               accumulatedOffset += card.offsetWidth + parseFloat(cardStyle.marginRight) + parseFloat(cardStyle.marginLeft);
             }
             
-            // 2. Calculer la translation totale nécessaire pour positionner la carte cible
-            // Si la cible était la carte 1 (index 0), finalTranslateX serait égal à firstCardOffset.
-            // On prend l'offset de la première carte, et on soustrait l'accumulatedOffset
-            // pour ramener la carte cible à la même position relative que la carte 1.
+            // 3. Calculer la translation finale :
+            // Translation = Position de référence (Carte 1) - Distance déjà parcourue
+            // On veut que la carte cible ait le même offset par rapport au bord gauche du conteneur que la carte 1.
             const finalTranslateX = firstCardOffset - accumulatedOffset;
 
 
