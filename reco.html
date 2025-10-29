@@ -118,10 +118,11 @@
         }
 
         .reco-card {
-            min-width: 90%; /* Nouvelle largeur sur mobile */
+            min-width: 90%; 
             flex-shrink: 0;
             padding: 1.25rem;
-            margin: 0 5%; /* Marge symétrique gauche/droite pour le swipe */
+            /* Augmenter la marge pour forcer l'espace de 3px, puis ajuster le min-width si nécessaire */
+            margin: 0 5%; 
             border-radius: 0.5rem;
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
             transition: all 0.3s ease-in-out, opacity 0.4s;
@@ -130,10 +131,19 @@
             opacity: 0;
             min-height: 200px; 
             max-height: 600px;
-            /* Mettre une largeur maximale pour forcer l'uniformité visuelle sur les cartes courtes */
             max-width: 380px; 
         }
         
+        /* Styles pour le texte des fiches C (pour éviter le dépassement sur petit écran) */
+        .reco-card p.reco-text {
+             /* Permet d'adapter le texte sans déborder */
+            word-wrap: break-word; 
+            overflow-wrap: break-word;
+            max-width: calc(100% - 6px); /* 100% moins la marge de 3px de chaque côté */
+            margin-left: 3px;
+            margin-right: 3px;
+        }
+
         /* Ajustement des fiches pour éviter le débordement de texte sur mobile */
         .reco-card ul {
             font-size: 0.8rem; 
@@ -216,6 +226,30 @@
             color: white;
             border-color: #1e40af;
         }
+        
+        /* NOUVEAU: Style des boutons de fermeture des modales (fixes et cachés par défaut) */
+        #lightbox-close, #video-close {
+            position: fixed; 
+            top: 20px;
+            right: 30px;
+            color: #fff;
+            font-size: 40px;
+            font-weight: bold;
+            transition: 0.3s;
+            cursor: pointer;
+            padding: 10px;
+            border-radius: 50%;
+            background-color: rgba(255, 255, 255, 0.1);
+            line-height: 1;
+            z-index: 60; 
+            display: none; /* CACHÉ PAR DÉFAUT */
+        }
+        
+        /* Rendre visible uniquement lorsque la modale est affichée */
+        #lightbox-modal.active #lightbox-close, 
+        #video-modal.active #video-close {
+            display: block;
+        }
     </style>
 </head>
 <body class="text-gray-800">
@@ -223,7 +257,7 @@
     <div class="container mx-auto p-4 sm:p-6 lg:p-8 max-w-7xl">
         
         <header class="text-center mb-8">
-            <h1 class="text-3xl md:text-4xl font-bold text-blue-900 mb-2">La Reconnaissance</h1>
+            <h1 class="text-3xl md:text-4xl font-bold text-blue-900 mb-2"> Reconnaissance</h1>
             <p class="text-lg text-gray-600">Préparation, conduite et attitudes pour la réussite d'une reconnaissance préalable à une domiciliaire.</p>
         </header>
 
@@ -563,7 +597,7 @@
                                      <div class="flex flex-col">
                                          <h6 class="font-semibold text-base text-blue-800">Applications de Mesure Visuelle (iOS/Android)</h6>
                                          <img src="https://play-lh.googleusercontent.com/r_jAN9dZDu0Qi2s5bxhjK2tD0JekAAhV-zMDMD_O3osHZ2UwbqUTnPtSxdD6HE-8-YQ" alt="AR Ruler App interface" class="object-contain w-1/2 mx-auto mb-3" />
-                                         <p class="reco-text mt-2 text-center" style="max-width: 280px; margin: 0 auto;">
+                                         <p class="reco-text mt-2 text-center" style="max-width: 280px; margin: 0 auto; font-size: 0.8rem;">
                                              Utilisation d'applications de réalité augmentée (type Mesurer/Measure sur smartphone) pour l'analyse des portes à distance.<br>
                                              Permet une prise de cote approximative (H x L) et l'estimation de l'angle d'ouverture lors de la reconnaissance, sans contact physique.
                                              <br>
@@ -577,7 +611,7 @@
                             <div class="reco-card bg-gray-100 flex flex-col items-center" data-means-content="logiciels2">
                                 <h5 class="font-bold text-lg text-gray-900 mb-2">Générateur d'Ordre Initial (OI)</h5>
                                 <img src="oxsilaris06/cet/CET-7c3cb7e0750caaf561e84ae0575f9f5c3cf5d4ca/512x512.png" alt="Image du Générateur d'Ordre Initial" class="object-contain" />
-                                <p class="reco-text mt-3 text-center" style="max-width: 280px; margin: 0 auto;">
+                                <p class="reco-text mt-3 text-center" style="max-width: 280px; margin: 0 auto; font-size: 0.8rem;">
                                     Accès direct au <a href="oi.html" target="_blank" class="link-text">Générateur d'OI </a> pour structurer rapidement l'ordre d'initial.
                                     <br><br>
                                     Fonctionnement : L'application est un assistant de saisie structuré qui collecte les renseignements (Adversaire, Articulation, PATRACDVR) et les compile automatiquement dans un format PDF standardisé.
@@ -852,19 +886,20 @@
         const lightboxModal = document.getElementById('lightbox-modal');
         const lightboxImg = document.getElementById('lightbox-img');
         const lightboxCaption = document.getElementById('lightbox-caption');
+        const lightboxClose = document.getElementById('lightbox-close');
+        const videoModal = document.getElementById('video-modal');
+        const videoClose = document.getElementById('video-close');
+
 
         /**
          * Ouvre la lightbox avec l'image cliquée ou l'objet temporaire.
-         * @param {HTMLImageElement | {src: string, alt: string}} imgElement L'élément <img> ou l'objet contenant src et alt.
          */
         function openLightbox(imgElement) {
             if (!imgElement) return;
 
-            // 1. Définir la source et le texte alternatif de la grande image
             lightboxImg.src = imgElement.src;
             lightboxImg.alt = imgElement.alt;
             
-            // 2. Définir la légende (utilise l'alt de l'image)
             if (imgElement.alt) {
                 const captionText = imgElement.alt;
                 lightboxCaption.textContent = captionText.charAt(0).toUpperCase() + captionText.slice(1);
@@ -872,8 +907,8 @@
                 lightboxCaption.textContent = '';
             }
 
-            // 3. Afficher la modale
             lightboxModal.style.display = 'flex';
+            lightboxModal.classList.add('active'); // Rend la croix visible
         }
 
         /**
@@ -881,26 +916,24 @@
          */
         function closeLightbox() {
             lightboxModal.style.display = 'none';
+            lightboxModal.classList.remove('active'); // Cache la croix
         }
-
+        
+        // Attribution des événements de fermeture aux croix
+        lightboxClose.onclick = closeLightbox;
+        
         // --- Fonctions Modale Vidéo ---
-        const videoModal = document.getElementById('video-modal');
         const videoContent = document.getElementById('video-modal-content');
         const videoCaption = document.getElementById('video-caption');
         
         /**
          * Ouvre la modale vidéo et charge l'iframe YouTube.
-         * @param {string} videoId L'ID de la vidéo YouTube (HchC4ekUq-I, UrMkpN3R1t0, p_WfhDOeSo8).
-         * @param {string} caption Le titre à afficher sous la vidéo.
          */
         function openVideoModal(videoId, caption) {
             if (!videoId) return;
             
-            // Nettoyer l'ancien contenu
             videoContent.innerHTML = '';
 
-            // MODIFICATION CLÉ: Ajout de ?rel=0 pour une meilleure compatibilité et des paramètres standards
-            // Utilisation du format sans /embed/shorts pour les Shorts, qui fonctionne souvent mieux.
             const iframeUrl = `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&showinfo=0&iv_load_policy=3&modestbranding=1`;
             
             const iframe = document.createElement('iframe');
@@ -908,25 +941,27 @@
             iframe.setAttribute('frameborder', '0');
             iframe.setAttribute('allow', 'accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture');
             iframe.setAttribute('allowfullscreen', 'true');
-            iframe.setAttribute('title', caption); // Accessibilité
+            iframe.setAttribute('title', caption); 
 
-            // Injecter l'iframe et définir la légende
             videoContent.appendChild(iframe);
             videoCaption.textContent = caption;
             
-            // Afficher la modale
             videoModal.style.display = 'flex';
+            videoModal.classList.add('active'); // Rend la croix visible
         }
 
         /**
          * Ferme la modale vidéo et arrête la lecture.
          */
         function closeVideoModal() {
-            // Arrêter la vidéo en retirant l'iframe
             videoContent.innerHTML = '';
             videoCaption.textContent = '';
             videoModal.style.display = 'none';
+            videoModal.classList.remove('active'); // Cache la croix
         }
+        
+        // Attribution des événements de fermeture aux croix
+        videoClose.onclick = closeVideoModal;
 
         // --- Gestion des événements de fermeture (Lightbox et Video) ---
 
