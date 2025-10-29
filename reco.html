@@ -757,6 +757,8 @@
         }
         
         // NOUVELLE FONCTION POUR GÉRER LA SÉLECTION DES MOYENS
+        let firstCardOffset = 0; // Stocke la translation nécessaire pour centrer la première carte
+
         function showMeans(meansId) {
             const targetIndex = MEANS_IDS.indexOf(meansId);
             if (targetIndex === -1) return;
@@ -767,42 +769,50 @@
             const cards = document.querySelectorAll('.reco-card');
             const recoGrid = document.querySelector('.reco-grid');
             
-            if (cards.length > 0) {
-                 const targetCard = cards[targetIndex]; 
-                 
-                 // Définir la largeur disponible pour le carrousel
-                 const carouselWidth = recoGrid.clientWidth; 
-                 const targetCardWidth = targetCard.offsetWidth;
+            if (cards.length === 0) return;
 
-                 let offsetFromStart = 0;
-                 // Calcul de la distance totale des cartes précédentes (largeur + marge droite)
-                 for (let i = 0; i < targetIndex; i++) {
-                    const card = cards[i];
-                    const cardStyle = window.getComputedStyle(card);
-                    // On utilise offsetWidth car min-width + margin-right doivent être inclus
-                    offsetFromStart += card.offsetWidth + parseFloat(cardStyle.marginRight);
-                 }
-                 
-                 // Calcul du décalage nécessaire pour centrer la carte cible.
-                 const cardHalfWidth = targetCardWidth / 2;
+            const targetCard = cards[targetIndex]; 
+            const carouselWidth = recoGrid.clientWidth; 
+            const targetCardWidth = targetCard.offsetWidth;
+
+            if (targetIndex === 0) {
+                 // Calculer la position idéale pour centrer la première carte
                  const viewportCenter = carouselWidth / 2;
+                 const cardHalfWidth = targetCardWidth / 2;
+                 // La position 0 de la première carte est à sa marge gauche (5% de la carte)
+                 const firstCardMarginLeft = parseFloat(window.getComputedStyle(targetCard).marginLeft);
+                 const firstCardCenter = firstCardMarginLeft + cardHalfWidth;
 
-                 // La translation finale déplace le carrousel pour que le centre de la carte
-                 // (offsetFromStart + cardHalfWidth) coïncide avec le centre du conteneur (viewportCenter).
-                 const finalTranslateX = viewportCenter - offsetFromStart - cardHalfWidth;
-
-                 carousel.style.transform = `translateX(${finalTranslateX}px)`;
-                 currentTranslate = finalTranslateX;
-
-
-                 // Mise à jour des classes active et de la visibilité
-                 cards.forEach((card, index) => {
-                    card.classList.remove('active');
-                    if (index === targetIndex) {
-                        card.classList.add('active');
-                    }
-                });
+                 firstCardOffset = viewportCenter - firstCardCenter;
             }
+            
+            let accumulatedOffset = 0;
+            // 1. Calculer la distance parcourue depuis le début jusqu'à la carte CIBLE
+            for (let i = 0; i < targetIndex; i++) {
+               const card = cards[i];
+               const cardStyle = window.getComputedStyle(card);
+               // Largeur de la carte + Marge droite
+               accumulatedOffset += card.offsetWidth + parseFloat(cardStyle.marginRight);
+            }
+            
+            // 2. Calculer la translation totale nécessaire pour positionner la carte cible
+            // Si la cible était la carte 1 (index 0), finalTranslateX serait égal à firstCardOffset.
+            // On prend l'offset de la première carte, et on soustrait l'accumulatedOffset
+            // pour ramener la carte cible à la même position relative que la carte 1.
+            const finalTranslateX = firstCardOffset - accumulatedOffset;
+
+
+            carousel.style.transform = `translateX(${finalTranslateX}px)`;
+            currentTranslate = finalTranslateX;
+
+
+            // Mise à jour des classes active et de la visibilité
+            cards.forEach((card, index) => {
+                card.classList.remove('active');
+                if (index === targetIndex) {
+                    card.classList.add('active');
+                }
+            });
 
             // Mise à jour des boutons du sélecteur
             document.querySelectorAll('.means-selector-btn').forEach(btn => {
@@ -894,6 +904,8 @@
 
              // Gestion de la redimension de la fenêtre (pour recalculer le centrage)
              window.addEventListener('resize', () => {
+                 // Réinitialiser la référence du centrage de la première carte et l'appliquer
+                 firstCardOffset = 0; 
                  if (document.getElementById('content-moyens').classList.contains('active')) {
                      showMeans(MEANS_IDS[currentMeansIndex]);
                  }
@@ -1024,7 +1036,5 @@
             }
         });
     </script>
-
 </body>
 </html>
-									
