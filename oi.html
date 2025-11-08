@@ -984,11 +984,12 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             date_naissance: '', lieu_naissance: '', stature_adversaire: '', ethnie_adversaire: 'Caucasien',
             signes_particuliers: '', profession_adversaire: '', antecedents_adversaire: '',
             attitude_adversaire: '', substances_adversaire: '', armes_connues: '',
-            // Les métadonnées de photos sont stockées dans un objet séparé
+            // Les métadonnées de photos sont stockées dans un objet séparé.
+            // Les IDs sont construits dynamiquement (ex: adversary_photo_preview_container_0, adversary_photo_preview_container_1)
             photos: {
-                'adversary_photo_preview_container': [],
-                'adversary_extra_photos_preview_container': [],
-                'renforts_photo_preview_container': [] 
+                'adversary_photo_preview_container': [], // Photo principale (Aperçu: au-dessus du tableau, PDF: à côté du tableau)
+                'adversary_extra_photos_preview_container': [], // Photos secondaires (Page dédiée)
+                'renforts_photo_preview_container': [] // Renforts (Seulement pour adv 1)
             }
         });
         let adversaries = [initialAdversaryData()];
@@ -1070,26 +1071,35 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
 
 
         const displayMap = {
+            // Adversaire (Mappé sur les IDs de l'adversaire actif)
             'adversary_photo_preview_container': 'adversary_photo_display',
             'adversary_extra_photos_preview_container': 'adversary_extra_photos_display',
             'renforts_photo_preview_container': 'renforts_photo_display',
+            
+            // Articulation/Logistique (IDs fixes)
             'photo_container_itineraire_exterieur_preview_container': 'photo_container_itineraire_exterieur_display',
             'photo_container_itineraire_interieur_preview_container': 'photo_container_itineraire_interieur_display',
             'photo_container_bapteme_terrain_preview_container': 'photo_container_bapteme_terrain_display',
             'photo_container_emplacement_ao_preview_container': 'photo_container_emplacement_ao_display',
-            'photo_container_transport_pr_preview_container': null,
-            'photo_container_transport_domicile_preview_container': null,
-            'photo_container_cellule_effraction_preview_container': null,
+            'photo_container_transport_pr_preview_container': null, // Pas d'affichage dans le Step 6
+            'photo_container_transport_domicile_preview_container': null, // Pas d'affichage dans le Step 6
+            'photo_container_cellule_effraction_preview_container': null, // Pas d'affichage dans le Step 6
         };
         
         // --- NOUVELLE FONCTION: Mappage des champs de l'adversaire actif ---
         function getAdversaryFieldId(baseId) {
             return `${baseId}_${activeAdversaryIndex}`;
         }
+        
+        // La gestion des photos est faite par ID dynamique dans le Step 2 (Aperçu) et ID dynamique dans le Step 8 (Gestion)
+        // Les métadonnées sont stockées dans `adversaries[index].photos` en utilisant les `baseId` (ex: 'adversary_photo_preview_container').
+        // L'UI utilise les IDs complets (ex: 'adversary_photo_preview_container_0').
+        
         function getAdversaryPhotoContainerId(baseId) {
+            // Utilisé pour générer l'ID complet de l'élément dans le DOM pour l'adversaire actif
             return `${baseId}_${activeAdversaryIndex}`;
         }
-
+        
         // --- NOUVELLE FONCTION: Génère les champs HTML pour l'adversaire actif ---
         function renderAdversaryFields() {
             const container = document.getElementById('adversaryFieldsContainer');
@@ -1097,11 +1107,12 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             const data = adversaries[activeAdversaryIndex];
             
             const isMainAdversary = activeAdversaryIndex === 0;
+            // IDs pour l'affichage de l'aperçu dans le Step 2
             const mainPhotoDisplayId = getAdversaryPhotoContainerId('adversary_photo_display');
             const extraPhotoDisplayId = getAdversaryPhotoContainerId('adversary_extra_photos_display');
             const renfortsPhotoDisplayId = getAdversaryPhotoContainerId('renforts_photo_display');
             
-            // Si l'adversaire n'est pas le principal, les champs renforts n'existent pas
+            // Seul l'adversaire principal a la section des renforts
             const renfortsHtml = isMainAdversary ? `
                 <h3>Photos des renforts potentiels (Aperçu)</h3>
                 <div id="${renfortsPhotoDisplayId}" class="photo-display-area"></div>
@@ -1109,6 +1120,8 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
 
             container.innerHTML = `
                 <h3 id="adversary_name_display">Adversaire ${activeAdversaryIndex + 1} (${isMainAdversary ? 'Principal' : 'Potentiel'})</h3>
+                
+                <!-- Photo Principale: Aperçu au-dessus du tableau -->
                 <label>Photo principale de l'adversaire (Aperçu):</label>
                 <div id="${mainPhotoDisplayId}" class="photo-display-area"></div>
                 
@@ -1158,6 +1171,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 
                 ${renfortsHtml}
 
+                <!-- Photos Supplémentaires: Aperçu au-dessus du tableau -->
                 <h3 style="margin-top: 20px;">Photos supplémentaires de l'adversaire (Aperçu)</h3>
                 <div id="${extraPhotoDisplayId}" class="photo-display-area"></div>
                 
@@ -1193,7 +1207,11 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
         // Fonction utilitaire pour synchroniser les aperçus des photos de l'adversaire actif
         function syncAdversaryThumbnails() {
              // 1. Vider les zones d'affichage (Step 2)
-            document.querySelectorAll('.photo-display-area').forEach(container => container.innerHTML = '');
+            document.querySelectorAll('.photo-display-area').forEach(container => {
+                if (container.id.includes('adversary') || container.id.includes('renforts')) {
+                    container.innerHTML = '';
+                }
+            });
             
             // 2. Parcourir toutes les métadonnées de photos de l'adversaire ACTIF
             const currentAdversaryPhotos = adversaries[activeAdversaryIndex].photos;
@@ -1224,6 +1242,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
         
         // Fonction qui génère les sections d'upload de photos pour le Step 8
         function renderAdversaryPhotoManagement(container, isMain) {
+            // Ces baseIds sont utilisés comme clés dans adversaries[index].photos
             const photoSectionIds = [
                 { baseId: 'adversary_photo_preview_container', title: 'Photo Principale', single: true },
                 { baseId: 'adversary_extra_photos_preview_container', title: 'Photos Supplémentaires', single: false },
@@ -1247,7 +1266,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                         </button>
                         <input type="file" id="${inputId}" class="photo-input" 
                             accept="image/jpeg, image/png" ${section.single ? '' : 'multiple'} 
-                            onchange="handleAdversaryFileChange(this, '${previewContainerId}', ${section.single})">
+                            onchange="handleAdversaryFileChange(this, '${section.baseId}', ${section.single})">
                         <div id="${previewContainerId}" class="image-preview-container"></div>
                     </div>
                 `;
@@ -1259,11 +1278,15 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             const currentAdversaryPhotos = adversaries[activeAdversaryIndex].photos;
 
              for (const previewBaseId in currentAdversaryPhotos) {
-                const previewContainerId = getAdversaryPhotoContainerId(previewBaseId);
+                const previewContainerId = getAdversaryPhotoContainerId(previewBaseId); // L'ID réel du conteneur dans le DOM
                 const previewContainer = document.getElementById(previewContainerId);
-                const fileDataArray = currentAdversaryPhotos[previewBaseId];
+                // Le tableau de métadonnées est stocké sous la clé 'previewBaseId' dans l'objet photos de l'adversaire
+                const fileDataArray = currentAdversaryPhotos[previewBaseId]; 
                 
                 if (previewContainer && fileDataArray) {
+                    // Supprimer l'ancien contenu (nécessaire car le conteneur est recréé à chaque switchAdversary)
+                    previewContainer.innerHTML = ''; 
+
                     fileDataArray.forEach(imgData => {
                         const objectURL = localStorage.getItem(`blob_url_${imgData.id}`) || '';
                         if (objectURL) {
@@ -1273,7 +1296,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                                 <img id="${imgData.id}" class="image-preview" src="${objectURL}" style="display:block;" data-annotations='${imgData.annotations}'>
                                 <div style="display: flex; gap: 5px; margin-top: 5px;">
                                     <button type="button" class="add-btn" style="background-color: var(--accent-blue); padding: 4px 8px;" onclick="openAnnotationModal('${imgData.id}')"><span class="material-symbols-outlined" style="font-size: 1.2em;">edit</span></button>
-                                    <button type="button" class="remove-btn" style="padding: 4px 8px;" onclick="removeAdversaryImage('${imgData.id}', this)">&times;</button>
+                                    <button type="button" class="remove-btn" style="padding: 4px 8px;" onclick="removeAdversaryImage('${imgData.id}', '${previewBaseId}', this)">&times;</button>
                                 </div>`;
                             previewContainer.appendChild(interactiveItem);
                         }
@@ -1407,17 +1430,22 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
         }
 
 
-        async function handleAdversaryFileChange(input, previewContainerId, isSingle) {
+        async function handleAdversaryFileChange(input, previewBaseId, isSingle) {
+            // Le previewContainerId réel dans le DOM est:
+            const previewContainerId = getAdversaryPhotoContainerId(previewBaseId); 
             const previewContainer = document.getElementById(previewContainerId);
             const adversaryData = adversaries[activeAdversaryIndex];
+            
+            // On utilise le baseId comme clé pour stocker les métadonnées dans l'objet photos de l'adversaire
+            const photoMetadataArray = adversaryData.photos[previewBaseId]; 
 
             if (isSingle) {
                 // Supprimer les anciennes images de l'UI et de la DB
-                for (const imgMeta of adversaryData.photos[previewContainerId]) {
+                for (const imgMeta of photoMetadataArray) {
                     await dbManager.deleteImage(imgMeta.id);
                     localStorage.removeItem(`blob_url_${imgMeta.id}`);
                 }
-                adversaryData.photos[previewContainerId] = [];
+                adversaryData.photos[previewBaseId] = [];
                 previewContainer.innerHTML = '';
             }
         
@@ -1437,12 +1465,12 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                             <img id="${previewImgId}" class="image-preview" src="${objectURL}" style="display:block;" data-annotations='${annotations}'>
                             <div style="display: flex; gap: 5px; margin-top: 5px;">
                                 <button type="button" class="add-btn" style="background-color: var(--accent-blue); padding: 4px 8px;" onclick="openAnnotationModal('${previewImgId}')"><span class="material-symbols-outlined" style="font-size: 1.2em;">edit</span></button>
-                                <button type="button" class="remove-btn" style="padding: 4px 8px;" onclick="removeAdversaryImage('${previewImgId}', '${previewContainerId}', this)">&times;</button>
+                                <button type="button" class="remove-btn" style="padding: 4px 8px;" onclick="removeAdversaryImage('${previewImgId}', '${previewBaseId}', this)">&times;</button>
                             </div>`;
                         previewContainer.appendChild(interactiveItem);
                         
-                        // Mettre à jour la structure de données de l'adversaire
-                        adversaryData.photos[previewContainerId].push({ id: previewImgId, annotations: annotations });
+                        // Mettre à jour la structure de données de l'adversaire (avec le baseId)
+                        adversaryData.photos[previewBaseId].push({ id: previewImgId, annotations: annotations });
         
                     } catch (error) {
                         console.error("Erreur lors du stockage de l'image:", error);
@@ -1455,7 +1483,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             saveFormData();
         }
         
-        async function removeAdversaryImage(imgId, containerId, buttonElement) {
+        async function removeAdversaryImage(imgId, previewBaseId, buttonElement) {
              const adversaryData = adversaries[activeAdversaryIndex];
             try {
                 // Supprimer de IndexedDB et localStorage
@@ -1465,9 +1493,9 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 // Supprimer de l'UI
                 buttonElement.closest('.image-preview-item').remove();
         
-                // Supprimer des métadonnées de l'adversaire
-                if (adversaryData.photos[containerId]) {
-                    adversaryData.photos[containerId] = adversaryData.photos[containerId].filter(meta => meta.id !== imgId);
+                // Supprimer des métadonnées de l'adversaire (avec le baseId)
+                if (adversaryData.photos[previewBaseId]) {
+                    adversaryData.photos[previewBaseId] = adversaryData.photos[previewBaseId].filter(meta => meta.id !== imgId);
                 }
         
                 // Mettre à jour les aperçus
@@ -1707,6 +1735,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 ];
                 const defaultValues = prefilledData[currentEventCount] || { type: `T${currentEventCount}`, desc: ''};
                 type = defaultValues.type;
+                hour = defaultValues.hour || '';
                 desc = defaultValues.desc;
             }
 
@@ -2908,10 +2937,10 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                      const advName = adv.nom_adversaire || `Adversaire ${index + 1}`;
                      if (!adv.nom_adversaire) { alerts.push(`Le nom de l'**${advName}** est manquant.`); }
                      
-                     // Exemple de vérification spécifique à l'adversaire (peut être étendu)
-                     const mainPhotoMeta = adv.photos[getAdversaryPhotoContainerId('adversary_photo_preview_container')];
-                     if (index === 0 && (!mainPhotoMeta || mainPhotoMeta.length === 0 || !localStorage.getItem(`blob_url_${mainPhotoMeta[0].id}`))) {
-                         alerts.push(`La **Photo principale** de l'${advName} est manquante.`);
+                     // Vérification de la photo principale pour TOUS les adversaires déclarés
+                     const mainPhotoMeta = adv.photos[`adversary_photo_preview_container`];
+                     if (!mainPhotoMeta || mainPhotoMeta.length === 0 || !localStorage.getItem(`blob_url_${mainPhotoMeta[0]?.id}`)) {
+                         alerts.push(`La **Photo principale** de l'**${advName}** est manquante.`);
                      }
                  });
             }
@@ -3237,12 +3266,14 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     previewImg.dataset.annotations = JSON.stringify(annotations);
                     
                     // Mettre à jour les métadonnées de l'adversaire
-                    const adversaryData = adversaries.find(adv => 
+                    // On parcourt TOUS les adversaires pour trouver l'image, car l'image peut avoir été annotée
+                    // même si l'adversaire n'est plus "actif"
+                    const foundAdversary = adversaries.find(adv => 
                          Object.values(adv.photos).flat().some(meta => meta.id === targetId)
                     );
-                    if (adversaryData) {
-                        for (const containerId in adversaryData.photos) {
-                            const meta = adversaryData.photos[containerId].find(m => m.id === targetId);
+                    if (foundAdversary) {
+                        for (const containerId in foundAdversary.photos) {
+                            const meta = foundAdversary.photos[containerId].find(m => m.id === targetId);
                             if (meta) {
                                 meta.annotations = JSON.stringify(annotations);
                                 break;
@@ -3584,8 +3615,9 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
 
         function getAdversaryImageInfo(formData, index, photoBaseId) {
             const advData = formData.adversaries?.[index];
-            if (advData && advData.photos && advData.photos[getAdversaryPhotoContainerId(photoBaseId)]) {
-                const imagesMeta = advData.photos[getAdversaryPhotoContainerId(photoBaseId)];
+            if (advData && advData.photos && advData.photos[photoBaseId]) {
+                 // Les métadonnées sont stockées avec le baseId comme clé (ex: 'adversary_photo_preview_container')
+                const imagesMeta = advData.photos[photoBaseId];
                 return imagesMeta.map(meta => ({
                     id: meta.id,
                     annotationsJson: meta.annotations || '[]'
@@ -3902,11 +3934,15 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
       
                 for (let i = 0; i < formData.adversaries.length; i++) {
                     const adv = formData.adversaries[i];
-                    const photoBaseId = i === 0 ? 'adversary_photo_preview_container' : 'renforts_photo_preview_container';
+                    
+                    // BaseId des catégories de photos (les clés dans adv.photos sont les mêmes pour tous les adversaires)
+                    const mainPhotoBaseId = 'adversary_photo_preview_container';
+                    const extraPhotoBaseId = 'adversary_extra_photos_preview_container';
+                    const renfortsPhotoBaseId = 'renforts_photo_preview_container';
                     
                     drawSubTitle(`2.${i+1} - ${adv.nom_adversaire || (i === 0 ? 'Adversaire Principal' : 'Adversaire Potentiel')}`);
                     
-                    const mainImageMeta = getAdversaryImageInfo(formData, i, 'adversary_photo_preview_container');
+                    const mainImageMeta = getAdversaryImageInfo(formData, i, mainPhotoBaseId);
                     let isImagePresent = mainImageMeta.length > 0;
                     const photoBoxWidth = 200;
                     const photoBoxHeight = 220;
@@ -3937,7 +3973,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     let photoBottomY = topY;
                     let tableBottomY = topY;
                     
-                    // Dessin de la photo principale (si présente et si place sur la page)
+                    // --- GESTION PHOTO PRINCIPALE DANS LE TABLEAU (Adversaire 1 ou 2) ---
                     if (isImagePresent && mainImageMeta.length > 0) {
                         const { id } = mainImageMeta[0];
                         const frameY = topY - photoBoxHeight; 
@@ -3990,10 +4026,18 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     
                     context.y = Math.min(tableBottomY, photoBottomY) - 20;
 
-                    // Photos supplémentaires/renforts
-                    await drawImagesFromCategory(getAdversaryImageInfo(formData, i, 'adversary_extra_photos_preview_container'), `Photo(s) Supplémentaire(s) - ${adv.nom_adversaire || `Adversaire ${i+1}`}`);
+                    // --- GESTION PHOTOS SUPPLÉMENTAIRES (PAGE DÉDIÉE) ---
+                    await drawImagesFromCategory(
+                        getAdversaryImageInfo(formData, i, extraPhotoBaseId), 
+                        `Photo(s) Supplémentaire(s) - ${adv.nom_adversaire || `Adversaire ${i+1}`}`
+                    );
+                    
+                    // --- GESTION PHOTOS RENFORTS (PAGE DÉDIÉE, UNIQUEMENT ADV 1) ---
                     if (i === 0) {
-                         await drawImagesFromCategory(getAdversaryImageInfo(formData, i, 'renforts_photo_preview_container'), `Photo(s) Renforts Potentiels`);
+                         await drawImagesFromCategory(
+                            getAdversaryImageInfo(formData, i, renfortsPhotoBaseId), 
+                            `Photo(s) Renforts Potentiels`
+                        );
                     }
                     
                     if (i < formData.adversaries.length - 1) {
@@ -4234,11 +4278,16 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
 
             htmlContent += drawTitleHtml("2. ADVERSAIRE(S)");
             
+            const adversaryPhotoBaseId = 'adversary_photo_preview_container';
+            const extraPhotoBaseId = 'adversary_extra_photos_preview_container';
+            const renfortsPhotoBaseId = 'renforts_photo_preview_container';
+            
             for (let i = 0; i < formData.adversaries.length; i++) {
                 const adv = formData.adversaries[i];
                 htmlContent += drawSubTitleHtml(`Adversaire ${i + 1}: ${adv.nom_adversaire || (i === 0 ? 'Principal' : 'Potentiel')}`);
                 
-                const mainImageMeta = getAdversaryImageInfo(formData, i, 'adversary_photo_preview_container');
+                // Photo principale (Aperçu: au-dessus du tableau)
+                const mainImageMeta = getAdversaryImageInfo(formData, i, adversaryPhotoBaseId);
                 htmlContent += await drawImagesHtmlFromCategory(mainImageMeta, `Photo principale de l'${adv.nom_adversaire || `Adversaire ${i+1}`}`); 
 
                 const meText = (adv.me_list || []).map((me, idx) => `ME${idx+1}: ${me}`).join(' | ');
@@ -4259,10 +4308,12 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                      htmlContent += drawTextHtml("Aucune information détaillée sur cet adversaire.");
                 }
 
-                htmlContent += await drawImagesHtmlFromCategory(getAdversaryImageInfo(formData, i, 'adversary_extra_photos_preview_container'), `Photo(s) Supplémentaire(s)`);
+                // Photos supplémentaires (Page dédiée)
+                htmlContent += await drawImagesHtmlFromCategory(getAdversaryImageInfo(formData, i, extraPhotoBaseId), `Photo(s) Supplémentaire(s)`);
                 
+                // Photos Renforts (Uniquement Adversaire 1)
                 if (i === 0) {
-                    htmlContent += await drawImagesHtmlFromCategory(getAdversaryImageInfo(formData, i, 'renforts_photo_preview_container'), 'Photo(s) Renforts Potentiels');
+                    htmlContent += await drawImagesHtmlFromCategory(getAdversaryImageInfo(formData, i, renfortsPhotoBaseId), 'Photo(s) Renforts Potentiels');
                 }
             }
             
