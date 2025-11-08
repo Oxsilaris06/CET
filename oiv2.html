@@ -113,7 +113,7 @@
         }
 
         .collapsible-container { background-color: var(--bg-interactive); border: 1px solid var(--border-color); border-radius: 5px; margin-bottom: 15px; }
-        .collapsible-header { display: flex; justify-content: space-between; align-items: center; cursor: pointer; padding: 15px; }
+        .collapsible-header { cursor: pointer; padding: 15px; display: flex; justify-content: space-between; align-items: center; }
         .collapsible-header h3 { margin: 0; font-size: 1.2em; }
         .collapsible-header .material-symbols-outlined { transition: transform 0.3s; }
         .collapsible-container.open .collapsible-header .material-symbols-outlined { transform: rotate(180deg); }
@@ -3476,9 +3476,10 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 const allMembers = (formData.patracdvr_rows || []).flatMap(row => row.members);
                 
                 allMembers.forEach(member => {
-                    if (member.cellule && member.cellule.toLowerCase().startsWith(teamPrefix)) {
+                    const cellule = member.cellule; // CORRECTION: extraction directe de 'cellule'
+                    if (cellule && cellule.toLowerCase().startsWith(teamPrefix)) {
                         if (!membersByCell[cellule]) membersByCell[cellule] = [];
-                        member.trigramme && membersByCell[member.cellule].push(member.trigramme);
+                        member.trigramme && membersByCell[cellule].push(member.trigramme);
                     }
                 });
 
@@ -3842,6 +3843,33 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     imageHtml += `</div>`;
                 }
                 return imageHtml;
+            };
+
+            const getCompositionHtml = (teamPrefix) => {
+                const allMembers = (formData.patracdvr_rows || []).flatMap(row => row.members);
+                const membersByCell = {};
+                
+                allMembers.forEach(member => {
+                    const cellule = member.cellule; // Correction: Extraction de cellule
+                    if (cellule && cellule.toLowerCase().startsWith(teamPrefix) && member.trigramme) {
+                        if (!membersByCell[cellule]) membersByCell[cellule] = [];
+                        membersByCell[cellule].push(member);
+                    }
+                });
+
+                const naturalSort = (a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+                const sortedKeys = Object.keys(membersByCell).sort(naturalSort);
+                
+                let compositionHtml = '<div style="padding-left: 15px; margin-bottom: 15px;">';
+                sortedKeys.forEach(cell => {
+                    const memberList = membersByCell[cell].map(m => {
+                        const func = m.fonction && m.fonction !== 'Sans' ? ` (${m.fonction})` : '';
+                        return `<span style="color:var(--text-primary); font-weight:600;">${m.trigramme}${func}</span>`;
+                    }).join(' • ');
+                    compositionHtml += `<p style="margin-bottom: 5px;"><strong style="color:var(--danger-red); font-size: 1.1em;">${cell.toUpperCase()}</strong> : ${memberList}</p>`;
+                });
+                compositionHtml += '</div>';
+                return sortedKeys.length > 0 ? compositionHtml : drawTextHtml('Aucun membre assigné.', false, secondaryText);
             };
 
             const drawAdversaryBlockHtml = async (adversaryIndex) => {
