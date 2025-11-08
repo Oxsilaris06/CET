@@ -3796,15 +3796,60 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 }
                 lines.push(currentLine); return lines;
             };
+            
+            // MODIFICATION: Ajout du paramètre `x` pour permettre l'indentation
             const drawWrappedText = (text, options = {}) => {
                 const { font = helveticaFont, size = 12, color = context.colors.text, x = context.margin + 15 } = options;
                 const maxWidth = context.pageWidth - x - context.margin;
                 const lines = wrapText(text, font, size, maxWidth);
-                const totalHeight = lines.length * (size + 4);
-                if (checkY(totalHeight + 10)) { context.y -= (size + 4); }
-                lines.forEach((line, index) => { context.currentPage.drawText(line, { x, y: context.y - (index * (size + 4)), font, size, color }); });
+                const lineHeight = size + 4; // Ligne + espacement
+                const totalHeight = lines.length * lineHeight;
+                
+                if (checkY(totalHeight + 10)) { context.y -= lineHeight; }
+
+                lines.forEach((line, index) => { 
+                    context.currentPage.drawText(line, { 
+                        x, 
+                        y: context.y - (index * lineHeight), 
+                        font, 
+                        size, 
+                        color 
+                    }); 
+                });
                 context.y -= (totalHeight + 10);
             };
+
+            // NOUVELLE FONCTION: Dessine une liste de paires Clé:Valeur avec saut de page
+            const drawList = (dataList, options = {}) => {
+                const { font = helveticaFont, size = 12, valueFont = helveticaBoldFont, indent = context.margin + 15 } = options;
+                const lineHeight = size + 4;
+                const maxWidth = context.pageWidth - indent - context.margin;
+
+                dataList.forEach(({ key, value }) => {
+                    const prefix = `${key}: `;
+                    const prefixWidth = font.widthOfTextAtSize(prefix, size);
+                    const lines = wrapText(String(value || ''), valueFont, size, maxWidth - prefixWidth);
+
+                    const totalHeight = lines.length * lineHeight;
+                    if (checkY(totalHeight)) { context.y -= lineHeight; } 
+
+                    // Dessiner la clé
+                    context.currentPage.drawText(prefix, { x: indent - 15, y: context.y, font, size, color: context.colors.text });
+                    
+                    // Dessiner les lignes de valeur
+                    lines.forEach((line, index) => {
+                         context.currentPage.drawText(line, { 
+                            x: indent + prefixWidth - 15, 
+                            y: context.y - (index * lineHeight), 
+                            font: valueFont, 
+                            size, 
+                            color: context.colors.text 
+                        });
+                    });
+                    context.y -= (totalHeight + 5); 
+                });
+            };
+
             const drawTable = (headers, rows, columnWidths, startX) => {
                 let currentY = context.y; const rowPadding = 5; const headerFontSize = 10; const contentFontSize = 10;
                 const drawRow = (rowData, isHeader) => {
@@ -3957,21 +4002,26 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                         tableMaxWidth = photoBoxX - tableStartX - photoBoxMargin;
                     }
                     
-                    const adversaireHeaders = ["Information", "Détail"];
                     const meText = (adv.me_list || []).map((me, idx) => `ME${idx+1}: ${me}`).join(' | ');
-                    const adversaireRows = [
-                        ['Nom/Prénom', adv.nom_adversaire], ['Domicile', adv.domicile_adversaire],
-                        ['Naissance', `${adv.date_naissance} à ${adv.lieu_naissance}`],
-                        ['Description', `${adv.stature_adversaire} / ${adv.ethnie_adversaire}`],
-                        ['Signes particuliers', adv.signes_particuliers], ['Profession', adv.profession_adversaire],
-                        ['Antécédents', adv.antecedents_adversaire], ['État d\'esprit', (adv.etat_esprit_list || []).join(', ')],
-                        ['Attitude', adv.attitude_adversaire], ['Volume (renfort)', (adv.volume_list || []).join(', ')],
-                        ['Substances', adv.substances_adversaire], ['Véhicules', (adv.vehicules_list || []).join(', ')],
-                        ['Armes', adv.armes_connues], ['Moyens Employés', meText],
-                    ].filter(row => row[1] && String(row[1]).trim() !== 'à');
+                    
+                    const adversaireList = [
+                        { key: 'Nom/Prénom', value: adv.nom_adversaire }, 
+                        { key: 'Domicile', value: adv.domicile_adversaire },
+                        { key: 'Naissance', value: `${adv.date_naissance} à ${adv.lieu_naissance}` },
+                        { key: 'Description', value: `${adv.stature_adversaire} / ${adv.ethnie_adversaire}` },
+                        { key: 'Signes particuliers', value: adv.signes_particuliers }, 
+                        { key: 'Profession', value: adv.profession_adversaire },
+                        { key: 'Antécédents', value: adv.antecedents_adversaire }, 
+                        { key: 'État d\'esprit', value: (adv.etat_esprit_list || []).join(', ') },
+                        { key: 'Attitude', value: adv.attitude_adversaire }, 
+                        { key: 'Volume (renfort)', value: (adv.volume_list || []).join(', ') },
+                        { key: 'Substances', value: adv.substances_adversaire }, 
+                        { key: 'Véhicules', value: (adv.vehicules_list || []).join(', ') },
+                        { key: 'Armes', value: adv.armes_connues }, 
+                        { key: 'Moyens Employés', value: meText },
+                    ].filter(row => row.value && String(row.value).trim() !== 'à');
                     
                     let photoBottomY = topY;
-                    let tableBottomY = topY;
                     
                     // --- GESTION PHOTO PRINCIPALE DANS LE TABLEAU (Adversaire 1 ou 2) ---
                     if (isImagePresent && mainImageMeta.length > 0) {
@@ -4014,15 +4064,10 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                         }
                     }
 
-                    // Dessin du tableau
-                    if (adversaireRows.length > 0) {
-                        // Positionner la table juste après le titre de l'adversaire
-                        context.y = topY - 25; 
-                        drawTable(adversaireHeaders, adversaireRows, [150, tableMaxWidth - 150], tableStartX);
-                        tableBottomY = context.y;
-                    } else {
-                        tableBottomY = topY - 25;
-                    }
+                    // Dessin des informations sous forme de liste pour une meilleure gestion des sauts de ligne
+                    context.y = topY - 25; 
+                    drawList(adversaireList, { indent: tableStartX + 10, valueFont: helveticaFont });
+                    tableBottomY = context.y;
                     
                     context.y = Math.min(tableBottomY, photoBottomY) - 20;
 
@@ -4065,15 +4110,22 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 drawTitle("5. EXÉCUTION");
                 const execText = `En vue d'appréhender le mis en cause et empêcher la déperdition des preuves,\nJe veux, le ${getVal('date_execution') || '(date)'} à partir de ${getVal('heure_execution') || '(heure)'}, pour une action ${getVal('type_action') || '(type d\'action)'} investir le domicile\nprésumé de ${formData.adversaries?.[0]?.nom_adversaire || '(nom de l\'adversaire)'} après avoir bouclé celui-ci.`;
                 drawWrappedText(execText, { size: 16, x: context.margin });
+                
+                // NOUVEAU: Chronologie utilisant drawList pour la gestion des sauts de page
                 drawSubTitle("Chronologie des temps");
-                const chronoHeaders = ["Type", "Heure", "Description"];
-                const chronoRows = (formData.time_events || []).map(e => [e.type || 'N/A', e.hour || 'N/A', e.description || 'N/A']);
-                drawTable(chronoHeaders, chronoRows, [80, 120, 550], context.margin);
+                const chronoList = (formData.time_events || []).map(e => ({
+                    key: `${e.type} (${e.hour || 'H:MM'})`, 
+                    value: e.description || 'Description manquante'
+                }));
+                drawList(chronoList, { indent: context.margin + 15, valueFont: helveticaFont, size: 12 });
+                
                 drawSubTitle("Hypothèses");
-                const h1 = `H1: ${getVal('hypothese_h1')}`;
-                const h2 = `H2: ${getVal('hypothese_h2')}`;
-                const h3 = `H3: ${getVal('hypothese_h3')}`;
-                drawWrappedText(`${h1}\n${h2}\n${h3}`, { size: 14, font: helveticaBoldFont, color: context.colors.danger });
+                const hList = [
+                    { key: 'H1', value: getVal('hypothese_h1') },
+                    { key: 'H2', value: getVal('hypothese_h2') },
+                    { key: 'H3', value: getVal('hypothese_h3') }
+                ].filter(h => h.value);
+                drawList(hList, { indent: context.margin + 15, valueFont: helveticaBoldFont, size: 14 });
 
                 addNewPage();
                 drawTitle("6. ARTICULATION");
