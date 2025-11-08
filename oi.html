@@ -27,7 +27,7 @@
         html { font-size: 16px; }
         body { font-family: 'Oswald', sans-serif; background-color: var(--bg-body); color: var(--text-primary); line-height: 1.6; padding: 10px; padding-bottom: 90px; transition: background-color 0.3s, color 0.3s; }
         .container { width: 100%; max-width: 800px; margin: auto; background: var(--bg-container); padding: 20px; border-radius: 8px; border: 1px solid var(--border-color); }
-        h1 { font-size: 2.2em; margin-bottom: 20px; color: var(--accent-blue); font-family: 'Saira Stencil One', sans-serif; text-align: center; letter-spacing: 1.5px; font-weight: 400; }
+        h1 { font-size: 2.2em; margin-bottom: 20px; color: var(--accent-blue); font-family: 'Saira+Stencil+One', sans-serif; text-align: center; letter-spacing: 1.5px; font-weight: 400; }
         h2 { font-size: 1.4em; color: var(--accent-blue); border-bottom: 2px solid var(--accent-blue); padding-bottom: 10px; margin-top: 20px; }
         h3 { font-size: 1.1em; color: var(--text-primary); margin-top: 15px; margin-bottom: 10px; }
         h4 { font-size: 1.0em; color: var(--text-secondary); margin-top: 10px; margin-bottom: 5px; }
@@ -1273,7 +1273,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                                 <img id="${imgData.id}" class="image-preview" src="${objectURL}" style="display:block;" data-annotations='${imgData.annotations}'>
                                 <div style="display: flex; gap: 5px; margin-top: 5px;">
                                     <button type="button" class="add-btn" style="background-color: var(--accent-blue); padding: 4px 8px;" onclick="openAnnotationModal('${imgData.id}')"><span class="material-symbols-outlined" style="font-size: 1.2em;">edit</span></button>
-                                    <button type="button" class="remove-btn" style="padding: 4px 8px;" onclick="removeImage('${imgData.id}', this)">&times;</button>
+                                    <button type="button" class="remove-btn" style="padding: 4px 8px;" onclick="removeAdversaryImage('${imgData.id}', this)">&times;</button>
                                 </div>`;
                             previewContainer.appendChild(interactiveItem);
                         }
@@ -1400,10 +1400,13 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 // Conserver l'objet 'photos' de la structure de données existante (car il est géré par handleAdversaryFileChange)
                 currentData.photos = adversaries[activeAdversaryIndex].photos;
                 adversaries[activeAdversaryIndex] = currentData;
-                saveFormData(); 
+                
+                // CORRECTION ERREUR DE BOUCLE: Retirer l'appel récursif à saveFormData
+                // saveFormData(); // Ancien appel récursif
             }
         }
-        
+
+
         async function handleAdversaryFileChange(input, previewContainerId, isSingle) {
             const previewContainer = document.getElementById(previewContainerId);
             const adversaryData = adversaries[activeAdversaryIndex];
@@ -2906,8 +2909,8 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                      if (!adv.nom_adversaire) { alerts.push(`Le nom de l'**${advName}** est manquant.`); }
                      
                      // Exemple de vérification spécifique à l'adversaire (peut être étendu)
-                     const mainPhotoMeta = adv.photos['adversary_photo_preview_container']?.[0];
-                     if (index === 0 && (!mainPhotoMeta || !localStorage.getItem(`blob_url_${mainPhotoMeta.id}`))) {
+                     const mainPhotoMeta = adv.photos[getAdversaryPhotoContainerId('adversary_photo_preview_container')];
+                     if (index === 0 && (!mainPhotoMeta || mainPhotoMeta.length === 0 || !localStorage.getItem(`blob_url_${mainPhotoMeta[0].id}`))) {
                          alerts.push(`La **Photo principale** de l'${advName} est manquante.`);
                      }
                  });
@@ -3567,65 +3570,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 }
             }
 
-            launchRetexAnalysisBtn.addEventListener('click', async (event) => {
-                event.preventDefault(); 
-                
-                const files = retexFileInput.files;
-                if (files.length === 0) {
-                    retexStatus.textContent = "Veuillez sélectionner au moins un fichier JSON.";
-                    return;
-                }
-                retexOutput.innerHTML = '';
-                retexOutput.style.display = 'none';
-                generateRetexPdfBtn.style.display = 'none';
-                retexStatus.textContent = 'Lecture et analyse des fichiers en cours...';
-
-                let allReports = [];
-                const promises = Array.from(files).map(file => {
-                    return new Promise((resolve) => {
-                        const reader = new FileReader();
-                        reader.onload = (e) => {
-                            try {
-                                const jsonData = JSON.parse(e.target.result);
-                                allReports.push(jsonData);
-                            } catch (error) {
-                                console.error(`Erreur de lecture du fichier ${file.name}:`, error);
-                            }
-                            resolve();
-                        };
-                        reader.onerror = (e) => {
-                            console.error(`Erreur de lecture du fichier ${file.name}:`, e);
-                            resolve(); 
-                        }
-                        reader.readAsText(file);
-                    });
-                });
-
-                try {
-                    await Promise.all(promises);
-
-                    if (allReports.length > 0) {
-                        const htmlOutput = await generateGeminiAnalysis(allReports);
-                        
-                        if (htmlOutput) {
-                            retexOutput.innerHTML = htmlOutput;
-                            retexOutput.style.display = 'block';
-                            generateRetexPdfBtn.style.display = 'inline-block';
-                            retexStatus.textContent = `Analyse terminée. ${allReports.length} rapport(s) traité(s).`;
-                        } else {
-                            retexOutput.innerHTML = "<p>Impossible de générer le rapport. Veuillez vérifier la console pour plus de détails.</p>";
-                        }
-                    } else {
-                        retexStatus.textContent = "Erreur: Aucun rapport JSON valide n'a pu être chargé.";
-                        retexOutput.innerHTML = '';
-                    }
-                } catch (error) {
-                    retexStatus.textContent = `Erreur critique: ${error.message}`;
-                    console.error("Erreur générale lors du processus d'analyse:", error);
-                }
-            });
-
-            generateRetexPdfBtn.addEventListener('click', generateRetexPdf);
+            launchRetexAnalysisBtn.addEventListener('click', generateRetexPdf);
 
 
             if (localStorage.getItem('theme') === 'light') { document.body.classList.replace('dark-mode', 'light-mode'); document.getElementById('darkModeIcon').textContent = 'clear_day'; }
@@ -4235,13 +4180,21 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                         }
                     }
                     
-                    const objectURL = URL.createObjectURL(finalImageBlob);
+                    const objectURL = localStorage.getItem(`blob_url_${imgData.id}`) || URL.createObjectURL(finalImageBlob);
+                    if (finalImageBlob.type !== imageBlob.type) { // Clean up temporary object URL if a new blob was created
+                        URL.revokeObjectURL(objectURL);
+                    }
             
                     const finalTitle = imagesMeta.length > 1 ? `${title} (${i+1})` : title;
                     imageHtml += `<div class="image-container" style="text-align: center; margin: 20px 0; border: 1px solid ${accentColor}; padding: 10px; background-color: ${isDarkMode ? '#1e1e1e' : '#ffffff'};">`;
                     imageHtml += `<h4 style="color: ${accentColor}; margin-bottom: 10px; font-size: 1.1em;">${finalTitle}</h4>`;
-                    imageHtml += `<img src="${objectURL}" alt="${finalTitle}" style="max-width: 100%; height: auto; border-radius: 4px; box-shadow: 0 4px 8px rgba(0,0,0,${isDarkMode ? 0.4 : 0.1});" onload="URL.revokeObjectURL(this.src)">`;
+                    imageHtml += `<img src="${objectURL}" alt="${finalTitle}" style="max-width: 100%; height: auto; border-radius: 4px; box-shadow: 0 4px 8px rgba(0,0,0,${isDarkMode ? 0.4 : 0.1});">`;
                     imageHtml += `</div>`;
+                    
+                    // Si un nouvel objet URL temporaire a été créé pour l'aperçu (suite à l'annotation), on doit le révoquer après un court délai
+                    if (finalImageBlob.type !== imageBlob.type) {
+                         setTimeout(() => URL.revokeObjectURL(objectURL), 100);
+                    }
                 }
                 return imageHtml;
             };
