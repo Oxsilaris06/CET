@@ -777,6 +777,12 @@ CONDUITE AU LIEU DE GAV.</textarea>
                 <div class="wizard-step">
                     <h2>8. Gestion des Photos</h2>
                     <p>Utilisez cette section pour ajouter et annoter toutes les photos. Les aperçus s'afficheront dans les onglets correspondants.</p>
+
+                    <!-- NOUVEAU: SÉLECTEUR D'ADVERSAIRE POUR LES PHOTOS -->
+                    <div id="adversaryPhotoSwitcher" class="adversary-selector-container" style="margin-top: 20px;">
+                        <!-- Les boutons seront insérés ici par JS -->
+                    </div>
+                    <!-- FIN SÉLECTEUR -->
                 
                     <div class="collapsible-container open">
                         <div class="collapsible-header">
@@ -784,7 +790,7 @@ CONDUITE AU LIEU DE GAV.</textarea>
                             <span class="material-symbols-outlined">expand_more</span>
                         </div>
                         <div class="collapsible-content" style="display: flex; flex-direction: column; gap: 15px;">
-                            <!-- La gestion des photos a été déplacée dans le script pour cibler l'adversaire actif -->
+                            <!-- La gestion des photos pour l'adversaire actif est ici -->
                             <div id="photo_management_adversary">
                                 <!-- Les sections de gestion des photos pour l'adversaire actif seront injectées ici -->
                             </div>
@@ -888,7 +894,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                         <h3>Lien vers RETEX</h3>
                         <p>Utilisez ce bouton pour afficher la page vers la plateforme interne de compte-rendu d'opération.</p>
                         <div class="retex-actions">
-                            <button id="retexReportBtn" class="wizard-nav-btn" type="button" style="background-color: #008080;">Page Retex 🧠</button>
+                            <button id="retexReportBtn" type="button" class="wizard-nav-btn" style="background-color: #008080;">Page Retex 🧠</button>
                         </div>
                     </div>
                     <div class="retex-section" style="margin-top: 10px;">
@@ -1303,9 +1309,58 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     });
                 }
             }
+            // Mise à jour du sélecteur de l'étape 8
+            updateAdversaryPhotoSwitcher();
+        }
 
+        // NOUVELLE FONCTION: Gère le changement d'adversaire depuis l'onglet Photos
+        function switchAdversaryPhotos(index) {
+            // Sauvegarder les données de l'adversaire actif (celui qui était affiché en 8)
+            saveAdversaryData(); 
+            
+            // Si on change d'adversaire, on met à jour l'index
+            activeAdversaryIndex = index;
+            
+            // On re-rend uniquement la section de gestion des photos pour le nouvel adversaire
+            const photoManagementContainer = document.getElementById('photo_management_adversary');
+            if (photoManagementContainer) {
+                renderAdversaryPhotoManagement(photoManagementContainer, activeAdversaryIndex === 0);
+            }
+
+            // On met à jour le switcher de l'étape 2 (si on revient dessus)
+            updateAdversaryButtonLabel();
+
+            // Mettre à jour les boutons du switcher de photos
+            document.querySelectorAll('#adversaryPhotoSwitcher .adversary-selector-btn').forEach(btn => {
+                btn.classList.toggle('active', parseInt(btn.dataset.index) === index);
+            });
         }
         
+        // NOUVELLE FONCTION: Met à jour les boutons du switcher de photos
+        function updateAdversaryPhotoSwitcher() {
+            const switcherContainer = document.getElementById('adversaryPhotoSwitcher');
+            switcherContainer.innerHTML = '';
+
+            adversaries.forEach((adv, index) => {
+                const advName = adv.nom_adversaire || `Adversaire ${index + 1}`;
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'adversary-selector-btn';
+                btn.textContent = advName;
+                btn.dataset.index = index;
+                btn.addEventListener('click', () => switchAdversaryPhotos(index));
+                btn.classList.toggle('active', index === activeAdversaryIndex);
+                switcherContainer.appendChild(btn);
+            });
+
+            // Masquer si un seul adversaire
+            if (adversaries.length <= 1) {
+                switcherContainer.style.display = 'none';
+            } else {
+                 switcherContainer.style.display = 'flex';
+            }
+        }
+
         // --- NOUVELLE FONCTION: Ajout/suppression de l'adversaire 2 ---
         function addAdversary() {
             if (adversaries.length >= 2) {
@@ -1344,6 +1399,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 const type = activeAdversaryIndex === 0 ? 'Principal' : 'Potentiel';
                 header.textContent = `${currentData.nom_adversaire || `Adversaire ${activeAdversaryIndex + 1}`} (${type})`;
             }
+            updateAdversaryPhotoSwitcher(); // Mettre à jour les boutons du sélecteur de photos
         }
         
         function switchAdversary(index) {
@@ -1424,8 +1480,8 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 currentData.photos = adversaries[activeAdversaryIndex].photos;
                 adversaries[activeAdversaryIndex] = currentData;
                 
-                // CORRECTION ERREUR DE BOUCLE: Retirer l'appel récursif à saveFormData
-                // saveFormData(); // Ancien appel récursif
+                // Correction de la boucle infinie en ne pas appelant saveFormData ici.
+                // saveFormData sera appelé par l'événement input ou manuellement.
             }
         }
 
@@ -1527,9 +1583,11 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             
             if (n === 7) { // Photos Step
                 // Re-renderer la section Photos pour l'adversaire actif (si le sélecteur existe)
-                const photoMgmtContainer = document.getElementById('photo_management_adversary');
-                if (photoMgmtContainer) {
-                    renderAdversaryPhotoManagement(photoMgmtContainer, activeAdversaryIndex === 0);
+                const photoManagementContainer = document.getElementById('photo_management_adversary');
+                if (photoManagementContainer) {
+                    // S'assurer que le sélecteur d'adversaire est rendu/mis à jour avant de dessiner les photos
+                    updateAdversaryPhotoSwitcher();
+                    renderAdversaryPhotoManagement(photoManagementContainer, activeAdversaryIndex === 0);
                 }
             }
             
@@ -2098,10 +2156,9 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
          */
         function saveFormData() {
             try {
-                // 1. Sauvegarder les données de l'adversaire actif (si le formulaire est visible)
-                if (currentStep === 1) {
-                    saveAdversaryData();
-                }
+                // 1. Sauvegarder les données de l'adversaire actif DANS la structure `adversaries`
+                // C'est crucial pour que les données non-actives soient incluses à l'export/cohérence.
+                saveAdversaryData(); 
 
                 const data = {};
                 // 2. Sauvegarder les champs globaux
@@ -2123,7 +2180,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     }
                 });
 
-                // 4. Sauvegarder les données des adversaires
+                // 4. Sauvegarder l'intégralité des données des adversaires (y compris les inactifs)
                 data.adversaries = JSON.parse(JSON.stringify(adversaries)); 
 
                 // 5. Sauvegarder les données PATRACDVR
@@ -2906,6 +2963,9 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
         }
 
         function checkCoherence() {
+            // S'assurer que les données de l'adversaire actif sont à jour avant de lire
+            saveAdversaryData(); 
+            
             const dataString = localStorage.getItem('oiFormData');
             const formData = JSON.parse(dataString || '{}');
             const getVal = (id) => formData[id] || '';
@@ -2937,7 +2997,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                      const advName = adv.nom_adversaire || `Adversaire ${index + 1}`;
                      if (!adv.nom_adversaire) { alerts.push(`Le nom de l'**${advName}** est manquant.`); }
                      
-                     // Vérification de la photo principale pour TOUS les adversaires déclarés
+                     // Correction: Vérifie la photo principale
                      const mainPhotoMeta = adv.photos[`adversary_photo_preview_container`];
                      if (!mainPhotoMeta || mainPhotoMeta.length === 0 || !localStorage.getItem(`blob_url_${mainPhotoMeta[0]?.id}`)) {
                          alerts.push(`La **Photo principale** de l'**${advName}** est manquante.`);
@@ -3321,7 +3381,9 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                         Object.keys(localStorage).filter(key => key.startsWith('blob_url_')).forEach(key => localStorage.removeItem(key));
                         localStorage.setItem('oiFormData', jsonContent);
                         
-                        alert("Session importée. Attention : les images ne sont pas incluses dans l'export/import de session. Vous devrez les rajouter manuellement.");
+                        // L'import de session NE PEUT PAS restaurer les images car elles ne sont pas incluses dans le JSON
+                        // Si l'utilisateur clique sur 'importer', il est plus simple de relancer et forcer un rechargement
+                        alert("Session importée. Attention : les images (photos) ne sont pas incluses dans l'export/import de session (limitation du navigateur). Vous devrez les rajouter manuellement.");
                         location.reload();
                     } catch (err) {
                         alert("Fichier invalide ou corrompu.");
@@ -4098,10 +4160,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 drawSubTitle("Population"); drawWrappedText(getVal('population'), { size: 14 });
                 drawSubTitle("Cadre juridique"); drawWrappedText(getVal('cadre_juridique'), { size: 14 });
                 
-                addNewPage();
-                drawTitle("4. MISSION");
-                drawWrappedText(getVal('missions_psig'), { font: helveticaBoldFont, size: 30, color: context.colors.danger, x: context.margin });
-                
                 await drawImagesFromCategory((formData.dynamic_photos || {})['photo_container_transport_pr_preview_container'] || [], 'Transport PSIG vers PR');
                 await drawImagesFromCategory((formData.dynamic_photos || {})['photo_container_transport_domicile_preview_container'] || [], 'Transport PR vers Domicile');
                 await drawImagesFromCategory((formData.dynamic_photos || {})['photo_container_bapteme_terrain_preview_container'] || [], 'Baptême terrain');
@@ -4314,7 +4372,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 
                 let compositionHtml = '<div style="padding-left: 15px; margin-bottom: 15px;">';
                 sortedKeys.forEach(cell => {
-                    compositionHtml += `<p style="margin-bottom: 5px;"><strong style="color: ${dangerColor}; font-size: 1.1em;">${cell.toUpperCase()}</strong> : ${membersByCell[cell].join(', ')}</p>`;
+                    compositionHtml += `<p style="margin-bottom: 5px;"><strong style="color: ${dangerColor}; font-weight: bold; font-size: 1.1em;">${cell.toUpperCase()}</strong> : ${membersByCell[cell].join(', ')}</p>`;
                 });
                 compositionHtml += '</div>';
                 return sortedKeys.length > 0 ? compositionHtml : drawTextHtml('Aucun membre assigné.', false, secondaryText);
