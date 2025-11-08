@@ -708,7 +708,12 @@ CONDUITE AU LIEU DE GAV.</textarea>
                      <h2>5. Exécution</h2>
                      <label for="date_execution">Date d'exécution:</label><input type="date" id="date_execution">
                      <label for="heure_execution">Heure d'exécution (H):</label><input type="time" id="heure_execution" value="06:00">
-                     <label for="type_action">Type d'action:</label><input type="text" id="type_action">
+                     <!-- CHAMP DE TEXTE LIBRE POUR LA PHRASE DE MISSION -->
+                     <label for="action_body_text">Corps de la mission (Exécution):</label>
+                     <textarea id="action_body_text" rows="4">En vue d'appréhender le(s) mis en cause et empêcher la déperdition des preuves,
+Je veux, le (date) à partir de (heure), pour une action (type d'action) investir le domicile
+présumé de (Nom Adversaire 1) et (Nom Adversaire 2) après avoir bouclé celui-ci.</textarea>
+                     <!-- Fin de la modification -->
                      <h3>Chronologie</h3><div id="time_events_container"></div><button type="button" class="add-btn" onclick="addTimeEvent()">➕</button>
                      <h3>Hypothèses</h3>
                      <label for="hypothese_h1">H1:</label><input type="text" id="hypothese_h1" value="Target présente LE1">
@@ -907,7 +912,7 @@ CONDUITE AU LIEU DE GAV.</textarea>
                                 <div id="photo_container_transport_pr_preview_container" class="image-preview-container"></div>
                             </div>
                            <div class="photo-upload-section">
-                                <h4>Transport PR vers Domicile</h4>
+                                <h4>Transport PR vers Domicile/LE</h4>
                                 <button type="button" class="add-btn" style="width:100%; justify-content: center;" onclick="document.getElementById('photo_container_transport_domicile_input').click()">➕ Ajouter Photo(s)</button>
                                 <input type="file" id="photo_container_transport_domicile_input" class="photo-input" accept="image/jpeg, image/png" multiple onchange="handleFileChange(this, 'photo_container_transport_domicile_preview_container', false)">
                                 <div id="photo_container_transport_domicile_preview_container" class="image-preview-container"></div>
@@ -1718,6 +1723,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     if (container.id) {
                         const imagesMetadata = Array.from(container.querySelectorAll('.image-preview')).map(img => ({
                             id: img.id,
+                            // PERSISTANCE DES PHOTOS : Assurez-vous que l'annotation est sauvegardée même si elle est vide
                             annotations: img.dataset.annotations || '[]'
                         }));
                         if (imagesMetadata.length > 0) {
@@ -1807,10 +1813,10 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                                     const interactiveItem = document.createElement('div');
                                     interactiveItem.className = 'image-preview-item';
                                     interactiveItem.innerHTML = `
-                                        <img id="${imgData.id}" class="image-preview" src="${objectURL}" style="display:block;" data-annotations='${imgData.annotations}'>
+                                        <img id="${imgData.id}" class="image-preview" src="${objectURL}" style="display:block;" data-annotations='${imgData.annotations || '[]'}'>
                                         <div style="display: flex; gap: 5px; margin-top: 5px;">
-                                            <button type="button" class="add-btn" style="background-color: var(--accent-blue); padding: 4px 8px;" onclick="openAnnotationModal('${previewImgId}')"><span class="material-symbols-outlined" style="font-size: 1.2em;">edit</span></button>
-                                            <button type="button" class="remove-btn" style="padding: 4px 8px;" onclick="removeImage('${previewImgId}', this)">&times;</button>
+                                            <button type="button" class="add-btn" style="background-color: var(--accent-blue); padding: 4px 8px;" onclick="openAnnotationModal('${imgData.id}')"><span class="material-symbols-outlined" style="font-size: 1.2em;">edit</span></button>
+                                            <button type="button" class="remove-btn" style="padding: 4px 8px;" onclick="removeImage('${imgData.id}', this)">&times;</button>
                                         </div>`;
                                     previewContainer.appendChild(interactiveItem);
                                 } else {
@@ -3099,8 +3105,8 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                         retexStatus.textContent = "Analyse terminée.";
                         return marked.parse(textOutput);
                     } else {
-                        retexStatus.textContent = "Analyse terminée, mais aucune réponse significative n'a été reçue.";
-                        return "<p>Aucune réponse significative de l'IA.</p>";
+                        retexOutput.innerHTML = "<p>Aucune réponse significative de l'IA.</p>";
+                        return null;
                     }
                 } catch (error) {
                     console.error("Erreur lors de la génération de l'analyse:", error);
@@ -3664,7 +3670,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 drawSubTitle("Cadre juridique"); drawWrappedText(getVal('cadre_juridique'), { size: 14 });
                 
                 await drawImagesFromCategory('photo_container_transport_pr_preview_container', 'Transport PSIG vers PR');
-                await drawImagesFromCategory('photo_container_transport_domicile_preview_container', 'Transport PR vers Domicile');
+                await drawImagesFromCategory('photo_container_transport_domicile_preview_container', 'Transport PR vers Domicile/LE');
                 await drawImagesFromCategory('photo_container_bapteme_terrain_preview_container', 'Baptême terrain');
 
                 addNewPage();
@@ -3673,8 +3679,9 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
 
                 addNewPage();
                 drawTitle("5. EXÉCUTION");
-                const execText = `En vue d'appréhender le(s) mis en cause et empêcher la déperdition des preuves,\nJe veux, le ${getVal('date_execution') || '(date)'} à partir de ${getVal('heure_execution') || '(heure)'}, pour une action ${getVal('type_action') || '(type d\'action)'} investir le domicile\nprésumé de ${getVal('nom_adversaire') || '(nom de l\'adversaire)'} (et ${getVal('nom_adversaire_2') || 'l\'adversaire secondaire'}) après avoir bouclé celui-ci.`;
-                drawWrappedText(execText, { size: 16, x: context.margin });
+                // CORRECTION: Utilisation du champ de texte libre pour le corps de la mission
+                drawWrappedText(getVal('action_body_text'), { size: 16, x: context.margin }); 
+                
                 drawSubTitle("Chronologie des temps");
                 const chronoHeaders = ["Type", "Heure", "Description"];
                 const chronoRows = (formData.time_events || []).map(e => [e.type || 'N/A', e.hour || 'N/A', e.description || 'N/A']);
@@ -3967,9 +3974,9 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             htmlContent += drawTextHtml(getVal('missions_psig'), true, dangerColor, '1.6em', '0');
             
             htmlContent += drawTitleHtml("5. EXÉCUTION");
-            const execText = `En vue d'appréhender le(s) mis en cause et empêcher la déperdition des preuves,<br>Je veux, le ${getVal('date_execution') || '(date)'} à partir de ${getVal('heure_execution') || '(heure)'}, pour une action ${getVal('type_action') || '(type d\'action)'} investir le domicile<br>présumé de ${getVal('nom_adversaire') || '(nom de l\'adversaire)'} (et ${getVal('nom_adversaire_2') || 'l\'adversaire secondaire'}) après avoir bouclé celui-ci.`;
-            htmlContent += wrapHtml(execText, 'p', { 'font-size': '1.4em', 'margin-bottom': '15px', 'padding-left': '0' });
-
+            // CORRECTION: Utilisation du champ de texte libre pour le corps de la mission
+            htmlContent += drawTextHtml(getVal('action_body_text'), true, primaryText, '1.4em', '0'); 
+            
             htmlContent += drawSubTitleHtml("Chronologie des temps");
             const chronoHeaders = ["Type", "Heure", "Description"];
             const chronoRows = (formData.time_events || []).map(e => [e.type || 'N/A', e.hour || 'N/A', e.description || 'N/A']);
@@ -3979,7 +3986,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             htmlContent += drawTextHtml(`<span style="color: ${dangerColor}; font-weight: bold;">H1</span>: ${getVal('hypothese_h1')}<br><span style="color: ${dangerColor}; font-weight: bold;">H2</span>: ${getVal('hypothese_h2')}<br><span style="color: ${dangerColor}; font-weight: bold;">H3</span>: ${getVal('hypothese_h3')}`, true, primaryText, '1.2em');
             
             htmlContent += await drawImagesHtmlFromCategory('photo_container_transport_pr_preview_container', 'Transport PSIG vers PR');
-            htmlContent += await drawImagesHtmlFromCategory('photo_container_transport_domicile_preview_container', 'Transport PR vers Domicile');
+            htmlContent += await drawImagesHtmlFromCategory('photo_container_transport_domicile_preview_container', 'Transport PR vers Domicile/LE');
             htmlContent += await drawImagesHtmlFromCategory('photo_container_bapteme_terrain_preview_container', 'Baptême terrain');
 
             htmlContent += drawTitleHtml("6. ARTICULATION (MOIPC/ZMSPCP)");
