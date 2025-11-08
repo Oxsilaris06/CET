@@ -2163,7 +2163,10 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 const data = {};
                 // 2. Sauvegarder les champs globaux
                 document.querySelectorAll('#oi-form input:not([type="file"], .me-input, .dynamic-input), #oi-form textarea, #oi-form select').forEach(field => {
-                    if (field.id && !field.id.includes('_')) data[field.id] = field.value;
+                    if (field.id && !field.id.includes('_')) {
+                        // Lire la valeur des champs globaux (y compris date_op)
+                        data[field.id] = field.value;
+                    }
                 });
         
                 // 3. Sauvegarder les photos non-adversaire
@@ -4023,7 +4026,9 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 addNewPage();
                 if (backgroundImage) { context.currentPage.drawImage(backgroundImage, { x: 0, y: 0, width: context.pageWidth, height: context.pageHeight }); }
                 const mainTitle = "OPÉRATION DE POLICE JUDICIAIRE";
-                const dateTitle = `DU ${getVal('date_op') || '(DATE)'}`;
+                // CORRECTION: Assurer la lecture de la date pour le PDF
+                const dateOpValue = getVal('date_op');
+                const dateTitle = `DU ${dateOpValue || '(DATE)'}`;
                 const titleWidth = helveticaBoldFont.widthOfTextAtSize(mainTitle, 24);
                 const dateTitleWidth = helveticaBoldFont.widthOfTextAtSize(dateTitle, 18);
                 context.currentPage.drawText(mainTitle, { x: context.pageWidth / 2 - titleWidth / 2, y: context.pageHeight / 2 + 10, font: helveticaBoldFont, size: 24, color: context.colors.accent });
@@ -4058,10 +4063,11 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     const topY = context.y; 
                     
                     let tableStartX = context.margin;
-                    let tableMaxWidth = context.pageWidth - context.margin * 2;
+                    let listMaxWidth = context.pageWidth - context.margin * 2;
                     
                     if (isImagePresent) {
-                        tableMaxWidth = photoBoxX - tableStartX - photoBoxMargin;
+                        // Réduit la largeur disponible pour la liste si la photo est présente
+                        listMaxWidth = photoBoxX - tableStartX - photoBoxMargin;
                     }
                     
                     const meText = (adv.me_list || []).map((me, idx) => `ME${idx+1}: ${me}`).join(' | ');
@@ -4086,9 +4092,12 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     let photoBottomY = topY;
                     
                     // --- GESTION PHOTO PRINCIPALE DANS LE TABLEAU (Adversaire 1 ou 2) ---
+                    let photoStartDrawingY = topY;
+                    
                     if (isImagePresent && mainImageMeta.length > 0) {
+                        photoStartDrawingY = topY - photoBoxHeight;
                         const { id } = mainImageMeta[0];
-                        const frameY = topY - photoBoxHeight; 
+                        const frameY = photoStartDrawingY; 
                         
                         try {
                             const imageBytes = compressedImages[id];
@@ -4128,10 +4137,14 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
 
                     // Dessin des informations sous forme de liste pour une meilleure gestion des sauts de ligne
                     context.y = topY - 25; 
-                    drawList(adversaireList, { indent: tableStartX + 10, valueFont: helveticaFont });
+                    drawList(adversaireList, { indent: tableStartX + 15, valueFont: helveticaFont });
                     tableBottomY = context.y;
                     
-                    context.y = Math.min(tableBottomY, photoBottomY) - 20;
+                    // MODIFICATION CRITIQUE: Définir la nouvelle position Y après le bloc d'informations de l'adversaire
+                    // Elle doit être le minimum entre le bas du bloc de texte et le bas du bloc photo.
+                    context.y = Math.min(tableBottomY, photoBottomY - 20) - 10;
+                    if (context.y < context.margin) addNewPage();
+
 
                     // --- GESTION PHOTOS SUPPLÉMENTAIRES (PAGE DÉDIÉE) ---
                     await drawImagesFromCategory(
