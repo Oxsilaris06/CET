@@ -260,25 +260,8 @@
         #quickEditPanel { 
              /* Le panneau d'édition rapide remplace l'édition complète */
             padding: 15px; border: 1px solid var(--border-color); border-radius: 5px; margin-top: 20px; background-color: var(--bg-body); 
-            /* PC: Grid layout for quick edit options */
-            display: none; 
-            width: 90%;
-            max-width: 500px; /* Ajout d'une largeur max pour les grands écrans */
-            margin-left: auto;
-            margin-right: auto;
         }
-        /* Style spécifique pour PC (écran plus large que mobile) */
-        @media (min-width: 768px) {
-            #quickEditPanel {
-                display: grid; 
-                grid-template-columns: 1fr 1fr;
-                gap: 15px;
-                width: 90%;
-                max-width: 600px; /* Augmentation pour plus d'espace sur PC */
-            }
-        }
-        
-        #quickEditPanel h4 { margin-top: 0; grid-column: 1 / span 2; }
+        #quickEditPanel h4 { margin-top: 0; }
         #quickEditPanel h4 #selectedMemberTrigramme { color: var(--accent-blue); }
         .quick-edit-content .quick-edit-tab-panel { display: none; }
         .quick-edit-options { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -451,15 +434,7 @@
             body { padding: 15px; padding-bottom: 80px; }
             .dynamic-list-item { flex-direction: row; }
             #quickEditModal, #settingsModal { width: 90%; max-width: 500px; height: auto; max-height: 90vh; margin: auto; border: 1px solid var(--border-color); border-radius: 8px; }
-            #quickEditPanel { 
-                display: grid; 
-                grid-template-columns: 1fr 1fr; 
-                gap: 15px; 
-                width: 90%;
-                max-width: 600px;
-                margin-left: auto;
-                margin-right: auto;
-            }
+            #quickEditPanel { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
             .wizard-nav { flex-wrap: nowrap; }
             .wizard-nav-btn { width: auto; margin-top: 0; }
             #annotationModal { width: 95vw; max-width: 1400px; height: 95vh; border: 1px solid var(--border-color); border-radius: 8px;}
@@ -845,10 +820,7 @@ présumé de (Nom Adversaire 1) et (Nom Adversaire 2) après avoir bouclé celui
                     </div>
 
                     <div id="quickEditPanel" style="display:none;">
-                        <div class="quick-edit-category">
-                            <h5>Trigramme</h5>
-                             <input type="text" id="quick_edit_trigramme_input" placeholder="Trigramme" oninput="saveFormData()">
-                        </div>
+                        <h4>Membre: <span id="selectedMemberTrigramme">Aucun</span></h4>
                         <div class="quick-edit-content"></div>
                          <div class="quick-edit-buttons">
                               <button type="button" id="saveQuickEditBtn" class="add-btn">Sauvegarder les changements</button>
@@ -868,10 +840,7 @@ présumé de (Nom Adversaire 1) et (Nom Adversaire 2) après avoir bouclé celui
                     <div id="unassigned_members_container"></div>
                     
                     <!-- CORBEILLE -->
-                    <div id="trashCan" class="mt-4" 
-                        ondragover="event.preventDefault(); this.classList.add('drag-over');" 
-                        ondragleave="this.classList.remove('drag-over');" 
-                        ondrop="handleDeleteDrop(event); this.classList.remove('drag-over');">
+                    <div id="trashCan" class="mt-4" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDeleteDrop(event)">
                         <span class="material-symbols-outlined">delete</span>
                         JETER ICI pour supprimer définitivement le membre.
                     </div>
@@ -1679,14 +1648,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
         function populateQuickEditPanel(memberId) {
             const member = document.getElementById(memberId);
             if (!member) return;
-            
-            // Mise à jour du champ de trigramme
-            const trigrammeInput = document.getElementById('quick_edit_trigramme_input');
-            if (trigrammeInput) {
-                trigrammeInput.value = member.dataset.trigramme || 'N/A';
-            }
-
-            // Mise à jour des boutons d'option
+            document.getElementById('selectedMemberTrigramme').textContent = member.dataset.trigramme || 'N/A';
             document.querySelectorAll('#quickEditPanel .quick-edit-btn').forEach(btn => {
                 const attribute = btn.dataset.attribute;
                 const value = btn.dataset.value;
@@ -1772,8 +1734,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
          */
         function handleDeleteDrop(e) {
             e.preventDefault();
-            const trashCan = document.getElementById('trashCan');
-            trashCan.classList.remove('drag-over');
+            e.currentTarget.classList.remove('drag-over');
 
             if (draggedItem && draggedItem.classList.contains('patracdvr-member-btn')) {
                 const confirmation = confirm(`Voulez-vous vraiment SUPPRIMER DÉFINITIVEMENT le membre ${draggedItem.dataset.trigramme || 'N/A'} de la session ?`);
@@ -1787,7 +1748,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                         document.getElementById('quickEditPanel').style.display = 'none';
                     }
                     saveFormData();
-                    // showNotification(`Membre ${draggedItem.dataset.trigramme} supprimé.`, 'error');
+                    showNotification(`Membre ${draggedItem.dataset.trigramme} supprimé.`, 'error');
                 }
                 draggedItem = null;
             }
@@ -1805,11 +1766,11 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 });
         
                 data.dynamic_photos = {};
-                // CORRECTION: Assure que les métadonnées de TOUTES les images sont sauvegardées, annotées ou non.
                 document.querySelectorAll('.image-preview-container').forEach(container => {
                     if (container.id) {
                         const imagesMetadata = Array.from(container.querySelectorAll('.image-preview')).map(img => ({
                             id: img.id,
+                            // PERSISTANCE DES PHOTOS : Assurez-vous que l'annotation est sauvegardée même si elle est vide
                             annotations: img.dataset.annotations || '[]'
                         }));
                         if (imagesMetadata.length > 0) {
@@ -2736,7 +2697,115 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             // Événement Save Quick Edit (pour les champs de trigramme en plus)
             document.getElementById('saveQuickEditBtn').addEventListener('click', saveQuickEditChanges);
 
-            // Gestion de la modification rapide des options
+            // Suppression du modal d'édition complète
+            // Suppression des boutons dans le modal
+            // document.getElementById('modal_saveBtn').addEventListener('click', () => { /* Logique de sauvegarde */ });
+            // document.getElementById('modal_cancelBtn').addEventListener('click', () => modal.close());
+            // document.getElementById('modal_deleteBtn').addEventListener('click', () => { /* Logique de suppression */ });
+
+            
+            const dockMenu = document.getElementById('dockMenu'); const dockToggleBtn = document.getElementById('dockToggleBtn');
+            dockToggleBtn.addEventListener('click', (event) => { event.stopPropagation(); dockMenu.classList.toggle('collapsed'); localStorage.setItem('dockCollapsed', dockMenu.classList.contains('collapsed')); });
+            document.getElementById('darkModeToggle').addEventListener('click', () => {
+                document.body.classList.toggle('light-mode'); document.body.classList.toggle('dark-mode');
+                const isDarkMode = document.body.classList.contains('dark-mode');
+                localStorage.setItem('theme', isDarkMode ? 'dark' : 'light');
+                document.getElementById('darkModeIcon').textContent = isDarkMode ? 'nightlight' : 'clear_day';
+            });
+            document.getElementById('settingsBtn').addEventListener('click', () => {
+                const settingsModal = document.getElementById('settingsModal');
+                document.getElementById('geminiApiKey').value = localStorage.getItem('geminiApiKey') || '';
+                settingsModal.showModal();
+            });
+            document.getElementById('settings_closeBtn').addEventListener('click', () => {
+                document.getElementById('settingsModal').close();
+            });
+            document.getElementById('settings_saveBtn').addEventListener('click', () => {
+                const apiKey = document.getElementById('geminiApiKey').value;
+                if (apiKey) {
+                    localStorage.setItem('geminiApiKey', apiKey);
+                    alert("Clé API sauvegardée.");
+                    document.getElementById('settingsModal').close();
+                } else {
+                    alert("Veuillez saisir une clé API.");
+                }
+            });
+            document.getElementById('resetBtn').addEventListener('click', async () => { 
+                if (confirm("Voulez-vous vraiment réinitialiser tout le formulaire (y compris les photos) ?")) { 
+                    localStorage.removeItem('oiFormData'); 
+                    await dbManager.clearAllImages();
+                    location.reload(); 
+                } 
+            });
+            document.getElementById('tutorialBtn').addEventListener('click', startTutorial);
+            
+            importJsonConfigBtn.addEventListener('click', () => {
+                 jsonConfigInput.click();
+            });
+            
+            jsonConfigInput.addEventListener('change', (event) => {
+                const file = event.target.files[0];
+                if (!file) { return; }
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const config = JSON.parse(e.target.result);
+                        if (config && (Array.isArray(config.members) || config.options)) {
+                            patracdvrContainer.innerHTML = ''; 
+                            loadConfigObject(config); 
+                        }
+                        else { alert("Le fichier JSON est invalide ou ne contient pas de tableau 'members' ou d'objet 'options'."); }
+                    } catch (err) { alert("Erreur de lecture du JSON."); console.error(err); }
+                    location.reload(); 
+                };
+                reader.readAsText(file);
+                event.target.value = null; 
+            });
+
+            importDefaultConfigBtn.addEventListener('click', () => {
+                if(confirm("Ceci va remplacer la configuration PATRACDVR et les options d'équipement actuelles. Continuer?")) {
+                    loadDefaultConfig();
+                }
+            });
+            
+            retexReportBtn.addEventListener('click', () => {
+                 const dateOp = document.getElementById('date_op').value;
+                 const nomAdversaire = document.getElementById('nom_adversaire').value;
+                 if (!dateOp || !nomAdversaire) {
+                    alert("Veuillez renseigner la date de l'opération et le nom de l'adversaire pour créer le lien RETEX.");
+                    return;
+                 }
+                 const safeAdversaireName = nomAdversaire.trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
+                 const oiId = `${dateOp}_${safeAdversaireName}`;
+                 const retexUrl = `${RETEX_BASE_URL}?oiId=${encodeURIComponent(oiId)}`;
+                 window.open(retexUrl, '_blank');
+            });
+            
+            resetPatracdvrBtn.addEventListener('click', () => { 
+                if (confirm("Voulez-vous vraiment effacer TOUS les véhicules et membres du PATRACDVR et vider la sauvegarde locale des membres ?")) { 
+                    patracdvrContainer.innerHTML = ''; 
+                    unassignedContainer.innerHTML = ''; 
+                    localStorage.removeItem('oiFormData'); 
+                    saveFormData(); 
+                    alert("PATRACDVR réinitialisé. La prochaine fois, une configuration par défaut sera chargée (si disponible).");
+                } 
+            });
+            
+            const vehicleCreationContainer = document.getElementById('vehicle_creation_buttons');
+            availableVehicles.forEach(vehicle => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'add-btn add-vehicle-btn';
+                btn.textContent = `➕ ${vehicle}`;
+                btn.addEventListener('click', () => addPatracdvrRow(vehicle));
+                vehicleCreationContainer.insertBefore(btn, document.getElementById('addManualVehicleBtn'));
+            });
+
+            document.getElementById('addManualVehicleBtn').addEventListener('click', addManualVehicle);
+            document.getElementById('addManualMemberBtn').addEventListener('click', addManualMember);
+
+            document.querySelector('.wizard-step:has(#patracdvr_container)').addEventListener('click', handleMemberSelection);
+
             document.getElementById('quickEditPanel').addEventListener('click', (event) => {
                 event.stopPropagation();
                 const target = event.target;
