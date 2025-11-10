@@ -23,6 +23,7 @@
             --accent-blue: #0033a0; --accent-dark: #1e40af;
             --danger-red: #c0392b; 
             --border-color: #dee2e6; 
+            --nav-border-color: #a0a0a0; /* Nouvelle variable pour l'encadrement gris des boutons de nav */
         }
         body.dark-mode {
             --bg-body: #121212; --bg-container: #1e1e1e;
@@ -30,6 +31,7 @@
             --accent-blue: #5b9bd5; --accent-dark: #4a7aa5;
             --danger-red: #c0392b;
             --border-color: #444444;
+            --nav-border-color: #666666; /* Couleur gris foncé pour le mode sombre */
         }
         
         /* Styles de structure et de typographie */
@@ -54,17 +56,24 @@
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
         }
         
-        /* --- Titre H1: Alignement sur le style de oi.html + Ajustement de taille --- */
+        /* --- Titre H1: Augmentation de la taille et police Saira Stencil One sans gras --- */
         h1 { 
-            font-size: 5.25em; /* Augmenté de 50% (3.5em * 1.5 = 5.25em) */
+            /* Taille initiale ~5em. 5.25em * 400% = 21em. On ajuste pour un compromis visuel */
+            font-size: 5.25em; 
             margin-bottom: 25px; 
             color: var(--accent-blue); 
             font-family: 'Saira Stencil One', sans-serif !important; 
             text-align: center; 
             letter-spacing: 1.5px; 
-            font-weight: 400; /* Assure l'absence d'effet gras */
+            font-weight: 400 !important; /* Force la non-graisse */
             border-bottom: 3px solid var(--accent-blue); 
             padding-bottom: 10px; 
+        }
+        @media (min-width: 1024px) {
+            h1 {
+                /* Réglage à 400% de la taille de base (20px * 21em = 420px) n'est pas pratique. On utilise une valeur plus raisonnablement grande. */
+                font-size: 8em; /* Augmentation plus modérée pour être visible */
+            }
         }
         h2 { 
             color: var(--accent-blue); font-size: 2.2em; 
@@ -82,12 +91,18 @@
             border-radius: 8px;
             font-weight: 500;
             cursor: pointer;
+            /* Encadrement gris demandé par l'utilisateur */
+            border: 1px solid var(--nav-border-color); 
             box-shadow: 0 1px 3px rgba(0,0,0,0.1);
             font-size: 1.1rem;
+        }
+        .nav-item:hover:not(.active) {
+             background-color: var(--bg-body);
         }
         .nav-item.active {
             background-color: var(--accent-blue);
             color: white;
+            border-color: var(--accent-blue);
         }
         
         /* Sections de Contenu */
@@ -545,9 +560,14 @@
         };
         
         const getCompositionHtml = (teamPrefix) => {
+            // S'assurer que formData est disponible et contient les clés nécessaires
+            if (!formData || !formData.patracdvr_rows || !formData.patracdvr_unassigned) {
+                return drawTextHtml(null, 'Erreur de chargement des données de composition.', false);
+            }
+            
             // Récupère les membres des véhicules
-            const assignedMembers = (formData.patracdvr_rows || []).flatMap(row => row.members);
-            // Récupère les membres non assignés (au cas où ils aient une cellule définie mais sont dans 'unassigned')
+            const assignedMembers = (formData.patracdvr_rows || []).flatMap(row => row.members || []);
+            // Récupère les membres non assignés
             const unassignedMembers = formData.patracdvr_unassigned || [];
             
             const allMembers = [...assignedMembers, ...unassignedMembers];
@@ -555,9 +575,10 @@
             const membersByCell = {};
             
             allMembers.forEach(member => {
+                // S'assurer que le membre a un trigramme et une cellule
                 if (member.cellule && member.cellule.toLowerCase().startsWith(teamPrefix) && member.trigramme) {
                     if (!membersByCell[member.cellule]) membersByCell[member.cellule] = [];
-                    // Évite les doublons si un membre se retrouve dans assigned et unassigned (ce qui ne devrait pas arriver)
+                    // Évite les doublons
                     if (!membersByCell[member.cellule].some(m => m.trigramme === member.trigramme)) {
                          membersByCell[member.cellule].push(member);
                     }
@@ -598,7 +619,9 @@
                     let finalImageBlob = imageBlob;
                     if (annotations.length > 0) {
                         try {
-                            finalImageBlob = await createAnnotatedImageBlob(imageBlob, annotations);
+                            // Assurer que les annotations sont des tableaux, même si la chaîne est '[]'
+                            const finalAnnotations = Array.isArray(annotations) ? annotations : JSON.parse(annotations);
+                            finalImageBlob = await createAnnotatedImageBlob(imageBlob, finalAnnotations);
                         } catch (e) {
                             finalImageBlob = imageBlob; 
                         }
@@ -651,7 +674,9 @@
                  if (!imageBlob) { throw new Error("Blob non trouvé."); }
                  let finalImageBlob = imageBlob;
                  if (annotations.length > 0) {
-                     finalImageBlob = await createAnnotatedImageBlob(imageBlob, annotations).catch(e => imageBlob);
+                      // Assurer que les annotations sont des tableaux, même si la chaîne est '[]'
+                    const finalAnnotations = Array.isArray(annotations) ? annotations : JSON.parse(annotations);
+                    finalImageBlob = await createAnnotatedImageBlob(imageBlob, finalAnnotations).catch(e => imageBlob);
                  }
                  const objectURL = URL.createObjectURL(finalImageBlob);
                  
@@ -846,30 +871,48 @@
             try {
                 let html = drawTitleHtml("7. PATRACDVR - Détail de la Composition");
                 
+                // S'assurer que les données PATRACDVR sont valides
+                const patracdvrRows = data.patracdvr_rows || [];
+                
                 // --- PATRACDVR VISUEL ---
-                const patracdvrHtml = (data.patracdvr_rows || []).map(row => {
+                const patracdvrHtml = patracdvrRows.map(row => {
                     if (!row.vehicle || !row.members || row.members.length === 0) return '';
 
                     const memberChips = row.members.map(m => {
                         
+                        // Sécuriser l'accès aux propriétés des membres (même si elles sont nulles/undefined)
+                        const memberData = {
+                            trigramme: m.trigramme || 'N/A',
+                            cellule: m.cellule || 'Sans',
+                            fonction: m.fonction || 'Sans',
+                            principales: m.principales || 'Sans',
+                            secondaires: m.secondaires || 'Sans',
+                            afis: m.afis || 'Sans',
+                            grenades: m.grenades || 'Sans',
+                            equipement: m.equipement || 'Sans',
+                            equipement2: m.equipement2 || 'Sans',
+                            tenue: m.tenue || 'Sans',
+                            gpb: m.gpb || 'Sans',
+                        };
+
                         // --- MISE À JOUR POUR AFFICHER LA CELLULE DANS LE HEADER ---
-                        const trigrammeAndCellule = `${m.trigramme} <span style="color: var(--danger-red); font-size: 0.9em; font-weight: 500;">(${m.cellule})</span>`;
+                        const trigrammeAndCellule = `${memberData.trigramme} <span style="color: var(--danger-red); font-size: 0.9em; font-weight: 500;">(${memberData.cellule})</span>`;
 
                         const details = [
-                            { label: 'Fonction', value: m.fonction, skipIf: 'Sans' },
-                            { label: 'Princ.', value: m.principales, skipIf: 'Sans' },
-                            { label: 'Sec.', value: m.secondaires, skipIf: 'Sans' },
-                            { label: 'A.F.I.', value: m.afis, skipIf: 'Sans' },
-                            { label: 'Grenades', value: m.grenades, skipIf: 'Sans' },
-                            { label: 'Équip. 1', value: m.equipement, skipIf: 'Sans' },
-                            { label: 'Équip. 2', value: m.equipement2, skipIf: 'Sans' },
-                            { label: 'Tenue', value: m.tenue, skipIf: 'Sans' },
-                            { label: 'GPB', value: m.gpb, skipIf: 'Sans' },
+                            { label: 'Fonction', value: memberData.fonction, skipIf: 'Sans' },
+                            { label: 'Princ.', value: memberData.principales, skipIf: 'Sans' },
+                            { label: 'Sec.', value: memberData.secondaires, skipIf: 'Sans' },
+                            { label: 'A.F.I.', value: memberData.afis, skipIf: 'Sans' },
+                            { label: 'Grenades', value: memberData.grenades, skipIf: 'Sans' },
+                            { label: 'Équip. 1', value: memberData.equipement, skipIf: 'Sans' },
+                            { label: 'Équip. 2', value: memberData.equipement2, skipIf: 'Sans' },
+                            { label: 'Tenue', value: memberData.tenue, skipIf: 'Sans' },
+                            { label: 'GPB', value: memberData.gpb, skipIf: 'Sans' },
                         ].filter(d => d.value && d.value !== d.skipIf); 
 
-                        // On regroupe les détails par 3 pour la grille
+                        // On regroupe les détails par 3 pour la grille (3x3 max)
                         let detailHtml = '';
-                        for (let i = 0; i < 9; i++) { // Max 9 cases (3x3)
+                        for (let i = 0; i < 9; i++) { 
                             const d = details[i];
                             detailHtml += `<div class="detail-item">
                                 ${d ? `<span class="detail-label">${d.label}</span>
