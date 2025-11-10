@@ -196,8 +196,13 @@
         .mission-text { font-size: 1.8em; }
         
         /* Images */
-        .image-container { text-align: center; margin: 25px 0; border: 1px solid var(--accent-blue); padding: 15px; border-radius: 5px; background-color: var(--bg-body); }
+        .image-container { 
+            text-align: center; margin: 25px 0; border: 1px solid var(--accent-blue); 
+            padding: 15px; border-radius: 5px; background-color: var(--bg-body); 
+            cursor: pointer; /* Curseur cliquable */
+        }
         .image-container img { max-height: 500px; object-fit: contain; margin: auto; }
+        .adversaire-photo-box { cursor: pointer; } /* Curseur cliquable pour la photo principale */
 
         /* --- STYLES PATRACDVR VISUEL AMÉLIORÉS (Détails complets) --- */
         .patracdvr-visual-container {
@@ -319,9 +324,45 @@
             }
         }
         
+        /* --- LIGHTBOX STYLES --- */
+        #lightboxModal {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(0, 0, 0, 0.9);
+            display: flex; align-items: center; justify-content: center;
+            border: none; padding: 0; margin: 0;
+            z-index: 2000;
+        }
+        #lightboxModal:not([open]) {
+            display: none;
+        }
+        #lightboxImage {
+            max-width: 90%; max-height: 90%;
+            object-fit: contain;
+            border-radius: 8px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+            cursor: pointer;
+        }
+        #lightboxClose {
+            position: absolute; top: 20px; right: 30px;
+            color: white; font-size: 40px; font-weight: bold;
+            cursor: pointer; transition: color 0.2s;
+            text-shadow: 0 0 5px black;
+            z-index: 2001;
+        }
+        #lightboxClose:hover {
+            color: var(--danger-red);
+        }
+
     </style>
 </head>
 <body class="dark-mode">
+
+    <!-- LIGHTBOX MODAL -->
+    <dialog id="lightboxModal" onclick="closeLightbox()">
+        <span id="lightboxClose">&times;</span>
+        <img id="lightboxImage" src="" alt="Image agrandie">
+    </dialog>
+    <!-- FIN LIGHTBOX MODAL -->
 
     <!-- DOCK MENU -->
     <div class="dock-menu" id="dockMenu">
@@ -563,6 +604,7 @@
         const getCompositionHtml = (teamPrefix) => {
             // S'assurer que formData est disponible et contient les clés nécessaires
             if (!formData || !formData.patracdvr_rows || !formData.patracdvr_unassigned) {
+                // Ce cas devrait être géré par initializePage, mais c'est une sécurité
                 return drawTextHtml(null, 'Erreur de chargement des données de composition.', false);
             }
             
@@ -603,7 +645,6 @@
         
         async function drawImagesHtmlFromCategory(previewContainerId, title) {
             let imageHtml = '';
-            // Les conteneurs dynamiques dans oi.html utilisent le suffixe _preview_container
             const imagesData = (formData.dynamic_photos || {})[previewContainerId] || [];
 
             if (imagesData.length === 0) return '';
@@ -620,7 +661,6 @@
                     let finalImageBlob = imageBlob;
                     if (annotations.length > 0) {
                         try {
-                            // Assurer que les annotations sont des tableaux, même si la chaîne est '[]'
                             const finalAnnotations = Array.isArray(annotations) ? annotations : JSON.parse(annotations);
                             finalImageBlob = await createAnnotatedImageBlob(imageBlob, finalAnnotations);
                         } catch (e) {
@@ -644,8 +684,10 @@
                 
                 if (result.status === 'fulfilled' && !result.value.hasError) {
                     const { objectURL } = result.value;
-                    imageHtml += `<div class="image-container">`;
+                    // Ajout de l'appel Lightbox au clic sur le conteneur
+                    imageHtml += `<div class="image-container" onclick="openLightbox('${objectURL}')">`;
                     imageHtml += `<h4 style="color:var(--accent-blue); margin-bottom:10px; font-size:1.1em; padding-left:0; text-align:center;">${finalTitle}</h4>`;
+                    // Note: L'URL est révoquée après le chargement de l'image, la Lightbox devra la recharger si l'image est trop grande pour être conservée dans l'URL. Ici, on s'appuie sur le fait que la Lightbox utilise la même URL d'objet.
                     imageHtml += `<img src="${objectURL}" alt="${finalTitle}" style="max-height: 500px; object-fit: contain; margin: auto;" onload="URL.revokeObjectURL(this.src)">`;
                     imageHtml += `</div>`;
                 } else {
@@ -681,7 +723,8 @@
                  }
                  const objectURL = URL.createObjectURL(finalImageBlob);
                  
-                 return `<div class="adversaire-photo-box flex flex-col items-center justify-center">
+                 // Ajout de l'appel Lightbox
+                 return `<div class="adversaire-photo-box flex flex-col items-center justify-center" onclick="openLightbox('${objectURL}')">
                              <h4 style="color:var(--accent-blue); margin-bottom:5px; font-size:1.1em; padding:0;">Photo Principale</h4>
                              <img src="${objectURL}" alt="Photo de l'objectif" style="width:100%; height:auto; object-fit:contain;" onload="URL.revokeObjectURL(this.src)">
                          </div>`;
@@ -963,6 +1006,7 @@
                 return html;
             } catch (e) {
                 console.error("ERREUR DANS LA GÉNÉRATION DE PATRACDVR/CAT:", e);
+                // Retourne un message d'erreur si la fonction plante
                 return `<div style="padding:15px; background-color:var(--danger-red); color:white; text-align:center;">
                             ERREUR CRITIQUE DE CHARGEMENT DANS LA SECTION 7/9. Consultez la console.
                         </div>`;
@@ -978,6 +1022,28 @@
             'ao': section_articulation_ao,
             'patrac_cat': section_patrac_cat,
         };
+
+        // --- Logique Lightbox ---
+        const lightboxModal = document.getElementById('lightboxModal');
+        const lightboxImage = document.getElementById('lightboxImage');
+
+        function openLightbox(src) {
+            lightboxImage.src = src;
+            if(typeof lightboxModal.showModal === 'function') {
+                lightboxModal.showModal();
+            } else {
+                lightboxModal.style.display = 'flex';
+            }
+        }
+
+        function closeLightbox() {
+            if(typeof lightboxModal.close === 'function') {
+                lightboxModal.close();
+            } else {
+                lightboxModal.style.display = 'none';
+            }
+            lightboxImage.src = ''; 
+        }
 
         // --- Logique d'Affichage et de Contrôle ---
 
@@ -1062,6 +1128,13 @@
             if (localStorage.getItem('dockCollapsed') === 'true') { 
                 dockMenu.classList.add('collapsed'); 
             }
+            
+            // Ajout du listener pour la fermeture de la Lightbox
+            lightboxModal.addEventListener('click', (event) => {
+                 if (event.target === lightboxModal || event.target === lightboxClose) {
+                    closeLightbox();
+                 }
+            });
 
             // Gestion de la mise à jour (Rechargement)
             document.getElementById('reloadBtn').addEventListener('click', () => {
