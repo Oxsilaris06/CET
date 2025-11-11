@@ -197,6 +197,8 @@
             transition: color 0.2s;
             float: right; /* Pour forcer la croix à droite dans la cellule */
             margin-left: 5px;
+            /* Rendre le bouton plus visible */
+            line-height: 1; 
         }
         .delete-btn:hover {
             color: var(--danger-red);
@@ -211,6 +213,7 @@
         }
         .heure-cell-text {
             flex-grow: 1;
+            font-weight: bold;
         }
 
         
@@ -418,8 +421,7 @@
                         <th style="width: 15%;">Pax</th>
                         <th style="width: 20%;">Lieu</th>
                         <th style="width: 20%;">Fenêtre/Porte</th>
-                        <th style="width: 25%;">Remarques</th>
-                        <!-- Suppression de la colonne d'action -->
+                        <th style="width: 30%;">Remarques</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -648,6 +650,7 @@
         
         /**
          * Simule le wrapping de texte pour PDFLib en utilisant widthOfTextAtSize.
+         * J'ai mis à jour cette fonction pour gérer les sauts de ligne (\n) en entrée.
          * @param {PDFFont} font L'objet PDFFont
          * @param {number} fontSize La taille de la police.
          * @param {string} text Le texte à envelopper.
@@ -655,29 +658,35 @@
          * @returns {string[]} Un tableau de lignes de texte.
          */
         function wrapTextForPdf(font, fontSize, text, maxWidth) {
-            const words = String(text || '').replace(/\n/g, ' \n ').split(' ');
+            // Remplacer les \n par un jeton unique entouré d'espaces pour le split
+            const token = ' \n ';
+            const chunks = String(text || '').replace(/\n/g, token).split(' ');
             let lines = []; 
             let currentLine = '';
 
-            for (const word of words) {
-                if (word === '\n') { 
+            for (const chunk of chunks) {
+                if (chunk === '\n') { 
+                    // Gérer le saut de ligne explicite
                     lines.push(currentLine); 
                     currentLine = ''; 
                     continue; 
                 }
                 
-                const lineWithWord = currentLine === '' ? word : `${currentLine} ${word}`;
+                const lineWithChunk = currentLine === '' ? chunk : `${currentLine} ${chunk}`;
                 
-                if (font.widthOfTextAtSize(lineWithWord, fontSize) > maxWidth && currentLine !== '') { 
+                // Si la ligne déborde et qu'elle n'est pas vide
+                if (font.widthOfTextAtSize(lineWithChunk, fontSize) > maxWidth && currentLine !== '') { 
                     lines.push(currentLine); 
-                    currentLine = word; 
+                    currentLine = chunk; 
                 } else { 
-                    currentLine = lineWithWord; 
+                    currentLine = lineWithChunk; 
                 }
             }
             
+            // Ajouter la dernière ligne
             lines.push(currentLine); 
-            return lines.filter(line => line.trim() !== ''); // Filtrer les lignes vides
+            // Supprimer les chaînes vides résultant de multiples espaces ou d'un saut de ligne au début/fin
+            return lines.map(line => line.trim()).filter(line => line.length > 0);
         }
         
         // Fonction pour obtenir les couleurs du PDF en fonction du thème, prenant 'rgb' en argument
@@ -829,7 +838,7 @@
             };
 
             const drawLogEntry = (entry) => {
-                // Récupérer les couleurs (Couleur de fond noire garantie)
+                // Récupérer les couleurs 
                 const paxInfo = PDF_PAX_COLORS[entry.pax];
                 const paxColor = context.colors[entry.pax.toLowerCase().replace('/', '')] || context.colors.text;
                 
@@ -838,7 +847,6 @@
 
                 const parts = [
                     { text: entry.heure, colIndex: 0, font: context.helveticaFont, size: context.fontSize, color: context.colors.text },
-                    // Pour le PAX, on utilise la couleur de fond du PAX pour le texte pour un meilleur contraste sur fond noir
                     { text: paxInfo.text, colIndex: 1, font: context.helveticaBoldFont, size: context.fontSize, color: paxColor }, 
                     { text: entry.lieu, colIndex: 2, font: context.helveticaFont, size: context.fontSize, color: context.colors.text }, 
                     { text: entry.fenetrePorte, colIndex: 3, font: context.helveticaFont, size: context.fontSize, color: context.colors.text },
@@ -868,7 +876,8 @@
                         if (i === 1) {
                            const bgX = x + 1;
                            const bgY = tableY - part.size - (lineIndex * context.lineHeight) - 2;
-                           const textWidth = part.font.widthOfTextAtSize(line, part.size) + 4;
+                           // Utiliser la largeur maximale du contenu (max line length) ou de la colonne
+                           const textWidth = Math.min(part.font.widthOfTextAtSize(line, part.size) + 4, colWidthsPx[i]);
                            
                            // DESSIN DU FOND COLORÉ
                            context.currentPage.drawRectangle({
@@ -882,7 +891,6 @@
                            });
                            
                            // TEXTE PAX (CORRECTION LISIBILITÉ CIVIL)
-                           // Le texte est en noir si la couleur de fond du PAX est jaune (Civil/Otage)
                            const paxTextColor = paxInfo.fontColor === '#000000' ? pdfRgb(0, 0, 0) : pdfRgb(1, 1, 1);
                            
                            context.currentPage.drawText(line, {
