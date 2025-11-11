@@ -187,6 +187,7 @@
         .pax-Inter { background-color: var(--inter-blue); color: white; }
         .pax-AO { background-color: var(--ao-green); color: black; }
         
+        /* Modification pour la croix de suppression */
         .delete-btn {
             background: none;
             border: none;
@@ -194,10 +195,24 @@
             cursor: pointer;
             font-size: 1.2em;
             transition: color 0.2s;
+            float: right; /* Pour forcer la croix à droite dans la cellule */
+            margin-left: 5px;
         }
         .delete-btn:hover {
             color: var(--danger-red);
         }
+        /* Nouvelle classe pour la cellule heure/suppression */
+        .heure-action-cell {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 5px;
+            padding-right: 0 !important; /* Retirer le padding droit de la cellule */
+        }
+        .heure-cell-text {
+            flex-grow: 1;
+        }
+
         
         /* Boutons d'action */
         .action-button {
@@ -404,7 +419,7 @@
                         <th style="width: 20%;">Lieu</th>
                         <th style="width: 20%;">Fenêtre/Porte</th>
                         <th style="width: 25%;">Remarques</th>
-                        <th style="width: 5%;"></th>
+                        <!-- Suppression de la colonne d'action -->
                     </tr>
                 </thead>
                 <tbody>
@@ -451,8 +466,8 @@
         // Couleurs statiques pour le PDF
         const PDF_PAX_COLORS = {
             'Adversaire': { text: 'Adversaire', color: '#be1b09', fontColor: '#ffffff' },
-            'Otage': { text: 'Civil/Otage', color: '#f1c40f', fontColor: '#000000' },
-            'Civil': { text: 'Civil/Otage', color: '#f1c40f', fontColor: '#000000' },
+            'Otage': { text: 'Civil/Otage', color: '#f1c40f', fontColor: '#000000' }, // Texte noir sur jaune
+            'Civil': { text: 'Civil/Otage', color: '#f1c40f', fontColor: '#000000' }, // Texte noir sur jaune
             'Inter': { text: 'Inter', color: '#3498db', fontColor: '#ffffff' },
             'AO': { text: 'AO', color: '#2ecc71', fontColor: '#000000' }
         };
@@ -498,7 +513,7 @@
             // Récupérer les données directement du tableau pour une source de vérité unique
             return Array.from(logTableBody.querySelectorAll('tr')).map(row => ({
                 id: row.dataset.id,
-                heure: row.querySelector('.heure-cell').textContent,
+                heure: row.querySelector('.heure-cell-text').textContent,
                 pax: row.querySelector('.pax-cell').textContent.split('/')[0].trim(), // Récupère le type réel (Adversaire, Otage, Inter, AO)
                 lieu: row.dataset.lieu,
                 fenetrePorte: row.dataset.fenetreporte,
@@ -525,32 +540,40 @@
                 row.dataset.lieu = entry.lieu;
                 row.dataset.fenetreporte = entry.fenetrePorte;
                 row.dataset.remarques = entry.remarques;
-
-                // Cellule Heure
+                
+                // Cellule Heure + Suppression (CONSIGNE: Déplacer la croix pour l'accessibilité)
                 const heureCell = row.insertCell();
-                heureCell.className = 'heure-cell';
-                heureCell.textContent = entry.heure;
+                heureCell.style.width = '15%';
+                heureCell.innerHTML = `
+                    <div class="heure-action-cell">
+                        <span class="heure-cell-text">${entry.heure}</span>
+                        <button type="button" class="delete-btn" onclick="deleteLogEntry('${entry.id}')">
+                            <span class="material-symbols-outlined">close</span>
+                        </button>
+                    </div>`;
 
                 // Cellule Pax (avec couleur)
                 const paxCell = row.insertCell();
+                paxCell.style.width = '15%';
                 paxCell.innerHTML = `<span class="pax-cell pax-${entry.pax}" style="background-color: ${paxInfo.color}; color: ${paxInfo.fontColor};">${paxInfo.text}</span>`;
                 
                 // Cellule Lieu
                 const lieuCell = row.insertCell();
+                lieuCell.style.width = '20%';
                 lieuCell.textContent = entry.lieu;
 
                 // Cellule Fenêtre/Porte
                 const fpCell = row.insertCell();
+                fpCell.style.width = '20%';
                 fpCell.textContent = entry.fenetrePorte;
 
                 // Cellule Remarques
                 const remarquesCell = row.insertCell();
+                remarquesCell.style.width = '30%'; // Utilise le reste de l'espace
                 remarquesCell.textContent = entry.remarques;
 
-                // Cellule Action (Supprimer)
-                const actionCell = row.insertCell();
-                actionCell.innerHTML = `<button type="button" class="delete-btn" onclick="deleteLogEntry('${entry.id}')"><span class="material-symbols-outlined">close</span></button>`;
-                actionCell.style.textAlign = 'center';
+                // Supprimer la colonne d'action vide
+                // La table n'a plus 6 colonnes, donc la 6ème colonne n'est plus insérée.
             });
             
              // Mettre à jour les données dans localStorage après le rendu trié
@@ -657,7 +680,7 @@
             return lines.filter(line => line.trim() !== ''); // Filtrer les lignes vides
         }
         
-        // CORRIGÉ: Fonction pour obtenir les couleurs du PDF en fonction du thème, prenant 'rgb' en argument
+        // Fonction pour obtenir les couleurs du PDF en fonction du thème, prenant 'rgb' en argument
         function getPdfColors(isDarkMode, rgb) {
             if (isDarkMode) {
                 return {
@@ -674,11 +697,15 @@
             }
         }
 
+        // Déclaration globale de rgb
+        let pdfRgb; 
 
         async function buildPdf() {
             if (typeof PDFLib === 'undefined') { throw new Error("PDFLib non chargé."); }
 
             const { PDFDocument, StandardFonts, rgb, PageSizes, TextAlignment } = PDFLib;
+            pdfRgb = rgb; // Rend la fonction rgb disponible globalement
+            
             const pdfDoc = await PDFDocument.create();
             let helveticaFont, helveticaBoldFont;
             try {
@@ -693,7 +720,7 @@
             
             // DÉTERMINER LE THÈME ACTUEL
             const isDarkMode = document.body.classList.contains('dark-mode');
-            // CORRIGÉ: Appel de getPdfColors avec 'rgb'
+            // Appel de getPdfColors avec 'rgb'
             const pdfThemeColors = getPdfColors(isDarkMode, rgb); 
             
             // Configuration PDF
@@ -721,7 +748,7 @@
                     ...pdfThemeColors, // Couleurs de base (fond/texte/ligne) basées sur le thème
                     // Couleurs PAX fixes (RVB)
                     adversaire: rgb(0xbe/255, 0x1b/255, 0x09/255), // Rouge
-                    otage: rgb(0xf1/255, 0xc4/255, 0x0f/255), // Jaune
+                    otage: rgb(0xf1/255, 0xc4/255, 0x0f/255), // Jaune (Civil/Otage)
                     inter: rgb(0x34/255, 0x98/255, 0xdb/255), // Bleu
                     ao: rgb(0x2e/255, 0xcc/255, 0x71/255) // Vert
                 }
@@ -842,17 +869,22 @@
                            const bgX = x + 1;
                            const bgY = tableY - part.size - (lineIndex * context.lineHeight) - 2;
                            const textWidth = part.font.widthOfTextAtSize(line, part.size) + 4;
+                           
+                           // DESSIN DU FOND COLORÉ
                            context.currentPage.drawRectangle({
                                x: bgX,
-                               y: bgY - 2, // Légèrement plus bas que la base de la ligne
+                               y: bgY - 2, 
                                width: textWidth,
                                height: part.size + 4,
                                color: paxColor, // Couleur de fond du PAX
                                opacity: 1,
                                borderWidth: 0
                            });
-                           // Texte en noir ou blanc pour le PAX pour assurer le contraste sur le fond coloré
-                           const paxTextColor = paxInfo.fontColor === '#000000' ? rgb(0, 0, 0) : rgb(1, 1, 1);
+                           
+                           // TEXTE PAX (CORRECTION LISIBILITÉ CIVIL)
+                           // Le texte est en noir si la couleur de fond du PAX est jaune (Civil/Otage)
+                           const paxTextColor = paxInfo.fontColor === '#000000' ? pdfRgb(0, 0, 0) : pdfRgb(1, 1, 1);
+                           
                            context.currentPage.drawText(line, {
                                x: x + 3, y: tableY - part.size - (lineIndex * context.lineHeight) - 2, 
                                font: part.font, size: part.size, color: paxTextColor
