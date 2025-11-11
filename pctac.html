@@ -540,7 +540,7 @@
                 const row = logTableBody.insertRow();
                 row.dataset.id = entry.id;
                 row.dataset.lieu = entry.lieu;
-                row.dataset.fenetreporte = entry.fenetrePorte;
+                row.dataset.fenetreporte = entry.fenetreporte;
                 row.dataset.remarques = entry.remarques;
                 
                 // Cellule Heure + Suppression (CONSIGNE: Déplacer la croix pour l'accessibilité)
@@ -870,42 +870,56 @@
                     const colWidth = context.pageWidth * colWidths[i];
                     const x = currentX;
                     const textLines = allLines[i];
+                    
+                    // --- Logique de dessin de la colonne PAX (indice 1) ---
+                    if (i === 1) {
+                        const bgX = x + 1;
+                        // Calculer le centre vertical du bloc de couleur par rapport au bas de la ligne
+                        const paxBlockHeight = context.lineHeight + 4; // Hauteur du bloc de couleur (une seule ligne, même si la rangée est plus haute)
+                        const paxBlockY = tableY - rowHeight + (rowHeight - paxBlockHeight) / 2;
+                        
+                        // DESSIN DU FOND COLORÉ
+                        context.currentPage.drawRectangle({
+                            x: bgX,
+                            y: paxBlockY, 
+                            width: colWidthsPx[i] - 2, // Largeur de la colonne Pax
+                            height: paxBlockHeight,
+                            color: paxColor, // Couleur de fond du PAX
+                            opacity: 1,
+                            borderWidth: 0
+                        });
+                        
+                        // TEXTE PAX
+                        const text = textLines[0];
+                        const textWidth = part.font.widthOfTextAtSize(text, part.size);
+                        
+                        // Centrage horizontal et vertical dans le bloc coloré
+                        const textX = bgX + (colWidthsPx[i] - textWidth) / 2;
+                        const textY = paxBlockY + (paxBlockHeight - part.size) / 2 + 1; // +1 pour alignement optique
+                        
+                        // Correction de la couleur du texte Civil/Otage (texte noir sur fond jaune)
+                        const paxTextColor = paxInfo.fontColor === '#000000' ? pdfRgb(0, 0, 0) : pdfRgb(1, 1, 1);
+                        
+                        context.currentPage.drawText(text, {
+                            x: textX, y: textY, 
+                            font: part.font, size: part.size, color: paxTextColor
+                        });
 
-                    textLines.forEach((line, lineIndex) => {
-                        // Pour la colonne PAX, dessiner un fond coloré pour la lisibilité
-                        if (i === 1) {
-                           const bgX = x + 1;
-                           const bgY = tableY - part.size - (lineIndex * context.lineHeight) - 2;
-                           // Utiliser la largeur maximale du contenu (max line length) ou de la colonne
-                           const textWidth = Math.min(part.font.widthOfTextAtSize(line, part.size) + 4, colWidthsPx[i]);
-                           
-                           // DESSIN DU FOND COLORÉ
-                           context.currentPage.drawRectangle({
-                               x: bgX,
-                               y: bgY - 2, 
-                               width: textWidth,
-                               height: part.size + 4,
-                               color: paxColor, // Couleur de fond du PAX
-                               opacity: 1,
-                               borderWidth: 0
-                           });
-                           
-                           // TEXTE PAX (CORRECTION LISIBILITÉ CIVIL)
-                           const paxTextColor = paxInfo.fontColor === '#000000' ? pdfRgb(0, 0, 0) : pdfRgb(1, 1, 1);
-                           
-                           context.currentPage.drawText(line, {
-                               x: x + 3, y: tableY - part.size - (lineIndex * context.lineHeight) - 2, 
-                               font: part.font, size: part.size, color: paxTextColor
-                           });
-
-                        } else {
-                            // Texte standard
-                           context.currentPage.drawText(line, {
-                               x: x + 2, y: tableY - part.size - (lineIndex * context.lineHeight) - 2, 
-                               font: part.font, size: part.size, color: part.color
-                           });
-                        }
-                    });
+                    } else {
+                        // --- Logique de dessin pour toutes les autres colonnes (multi-lignes) ---
+                        
+                        // Dessiner chaque ligne de texte
+                        textLines.forEach((line, lineIndex) => {
+                            // Position verticale : à partir du haut de la ligne (tableY) moins la hauteur totale de la rangée (rowHeight)
+                            // Plus le décalage de la ligne (lineIndex * context.lineHeight)
+                            const textY = tableY - context.lineHeight - (lineIndex * context.lineHeight) - 2;
+                            
+                            context.currentPage.drawText(line, {
+                                x: x + 2, y: textY, 
+                                font: part.font, size: part.size, color: part.color
+                            });
+                        });
+                    }
                     
                     currentX += colWidth;
                 });
