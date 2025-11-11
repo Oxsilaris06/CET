@@ -513,14 +513,22 @@
         
         function getLogData() {
             // Récupérer les données directement du tableau pour une source de vérité unique
-            return Array.from(logTableBody.querySelectorAll('tr')).map(row => ({
-                id: row.dataset.id,
-                heure: row.querySelector('.heure-cell-text').textContent,
-                pax: row.querySelector('.pax-cell').textContent.split('/')[0].trim(), // Récupère le type réel (Adversaire, Otage, Inter, AO)
-                lieu: row.dataset.lieu,
-                fenetrePorte: row.dataset.fenetreporte,
-                remarques: row.dataset.remarques,
-            }));
+            // Assurer que les champs dataset sont des chaînes, pas undefined, et ne contiennent pas 'undefined' textuel
+            return Array.from(logTableBody.querySelectorAll('tr')).map(row => {
+                const getSafeDataset = (key) => {
+                    const value = row.dataset[key] || '';
+                    return value === 'undefined' ? '' : value; // Nettoyage de l'ancien 'undefined' textuel
+                };
+
+                return {
+                    id: row.dataset.id,
+                    heure: row.querySelector('.heure-cell-text').textContent,
+                    pax: row.querySelector('.pax-cell').textContent.split('/')[0].trim(),
+                    lieu: getSafeDataset('lieu'),
+                    fenetrePorte: getSafeDataset('fenetreporte'),
+                    remarques: getSafeDataset('remarques'),
+                };
+            });
         }
 
         function renderLogTable(logData) {
@@ -539,9 +547,10 @@
 
                 const row = logTableBody.insertRow();
                 row.dataset.id = entry.id;
-                row.dataset.lieu = entry.lieu;
-                row.dataset.fenetreporte = entry.fenetreporte;
-                row.dataset.remarques = entry.remarques;
+                // Stocker des chaînes vides si les valeurs sont null ou undefined
+                row.dataset.lieu = entry.lieu || '';
+                row.dataset.fenetreporte = entry.fenetrePorte || '';
+                row.dataset.remarques = entry.remarques || '';
                 
                 // Cellule Heure + Suppression (CONSIGNE: Déplacer la croix pour l'accessibilité)
                 const heureCell = row.insertCell();
@@ -658,9 +667,12 @@
          * @returns {string[]} Un tableau de lignes de texte.
          */
         function wrapTextForPdf(font, fontSize, text, maxWidth) {
+            // Le texte doit être une chaîne pour le traitement
+            text = String(text || ''); 
+
             // Remplacer les \n par un jeton unique entouré d'espaces pour le split
             const token = ' \n ';
-            const chunks = String(text || '').replace(/\n/g, token).split(' ');
+            const chunks = text.replace(/\n/g, token).split(' ');
             let lines = []; 
             let currentLine = '';
 
@@ -686,7 +698,7 @@
             // Ajouter la dernière ligne
             lines.push(currentLine); 
             // Supprimer les chaînes vides résultant de multiples espaces ou d'un saut de ligne au début/fin
-            return lines.map(line => line.trim()).filter(line => line.length > 0);
+            return lines.map(line => line.trim()).filter(line => line.length > 0 || line === '');
         }
         
         // Fonction pour obtenir les couleurs du PDF en fonction du thème, prenant 'rgb' en argument
@@ -839,8 +851,10 @@
 
             const drawLogEntry = (entry) => {
                 // Récupérer les couleurs 
-                const paxInfo = PDF_PAX_COLORS[entry.pax];
-                const paxColor = context.colors[entry.pax.toLowerCase().replace('/', '')] || context.colors.text;
+                const paxInfo = PDF_PAX_COLORS[entry.pax] || PDF_PAX_COLORS['Adversaire'];
+                // La clé pour les couleurs RGB est la version en minuscules et sans slash
+                const paxColorKey = entry.pax.toLowerCase().replace('/', '').replace('civil', 'otage'); // Assure que Civil tombe sur Otage
+                const paxColor = context.colors[paxColorKey] || context.colors.text;
                 
                 // Calcul de la largeur pour chaque colonne
                 const colWidthsPx = colWidths.map(ratio => context.pageWidth * ratio - 4);
@@ -855,6 +869,8 @@
                 
                 // Utilisation de la fonction corrigée wrapTextForPdf pour obtenir les lignes de texte
                 let allLines = parts.map((part, i) => {
+                    // Si le champ est vide, on assure un tableau d'une ligne vide pour la hauteur
+                    if (!part.text) return ['']; 
                     return wrapTextForPdf(part.font, part.size, part.text, colWidthsPx[i]);
                 });
 
@@ -890,7 +906,7 @@
                         });
                         
                         // TEXTE PAX
-                        const text = textLines[0];
+                        const text = textLines[0] || '';
                         const textWidth = part.font.widthOfTextAtSize(text, part.size);
                         
                         // Centrage horizontal et vertical dans le bloc coloré
@@ -898,6 +914,7 @@
                         const textY = paxBlockY + (paxBlockHeight - part.size) / 2 + 1; // +1 pour alignement optique
                         
                         // Correction de la couleur du texte Civil/Otage (texte noir sur fond jaune)
+                        // Utilise la couleur fontColor définie dans PDF_PAX_COLORS
                         const paxTextColor = paxInfo.fontColor === '#000000' ? pdfRgb(0, 0, 0) : pdfRgb(1, 1, 1);
                         
                         context.currentPage.drawText(text, {
@@ -914,10 +931,13 @@
                             // Plus le décalage de la ligne (lineIndex * context.lineHeight)
                             const textY = tableY - context.lineHeight - (lineIndex * context.lineHeight) - 2;
                             
-                            context.currentPage.drawText(line, {
-                                x: x + 2, y: textY, 
-                                font: part.font, size: part.size, color: part.color
-                            });
+                            // Si la ligne est une chaîne vide (résultat d'un saut de ligne ou d'un champ vide), on dessine un espace vide pour consommer la hauteur
+                            if (line) {
+                                context.currentPage.drawText(line, {
+                                    x: x + 2, y: textY, 
+                                    font: part.font, size: part.size, color: part.color
+                                });
+                            }
                         });
                     }
                     
