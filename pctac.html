@@ -455,7 +455,7 @@
         const logForm = document.getElementById('log-form');
         const heureInput = document.getElementById('heure_input');
         const paxInput = document.getElementById('pax_input');
-        const lieuInput = document.getElementById('lieu_input'); // Renommé façadeInput en lieuInput
+        const lieuInput = document.getElementById('lieu_input');
         const fenetrePorteInput = document.getElementById('fenetre_porte_input');
         const remarquesInput = document.getElementById('remarques_input');
         const paxSelectContainer = document.getElementById('pax_select_container');
@@ -494,7 +494,7 @@
                 id: row.dataset.id,
                 heure: row.querySelector('.heure-cell').textContent,
                 pax: row.querySelector('.pax-cell').textContent.split('/')[0].trim(), // Récupère le type réel (Adversaire, Otage, Inter, AO)
-                lieu: row.dataset.lieu, // Renommé facade en lieu
+                lieu: row.dataset.lieu,
                 fenetrePorte: row.dataset.fenetreporte,
                 remarques: row.dataset.remarques,
             }));
@@ -516,7 +516,7 @@
 
                 const row = logTableBody.insertRow();
                 row.dataset.id = entry.id;
-                row.dataset.lieu = entry.lieu; // Renommé facade en lieu
+                row.dataset.lieu = entry.lieu;
                 row.dataset.fenetreporte = entry.fenetrePorte;
                 row.dataset.remarques = entry.remarques;
 
@@ -529,9 +529,9 @@
                 const paxCell = row.insertCell();
                 paxCell.innerHTML = `<span class="pax-cell pax-${entry.pax}" style="background-color: ${paxInfo.color}; color: ${paxInfo.fontColor};">${paxInfo.text}</span>`;
                 
-                // Cellule Lieu (Façade)
+                // Cellule Lieu
                 const lieuCell = row.insertCell();
-                lieuCell.textContent = entry.lieu; // Utilisation de lieu
+                lieuCell.textContent = entry.lieu;
 
                 // Cellule Fenêtre/Porte
                 const fpCell = row.insertCell();
@@ -565,7 +565,7 @@
                 id: Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
                 heure: heureInput.value,
                 pax: paxInput.value,
-                lieu: lieuInput.value.trim(), // Utilisation de lieuInput
+                lieu: lieuInput.value.trim(),
                 fenetrePorte: fenetrePorteInput.value.trim(),
                 remarques: remarquesInput.value.trim(),
             };
@@ -578,7 +578,7 @@
 
             // Réinitialiser les champs pour la prochaine entrée (sauf l'heure)
             heureInput.value = newEntry.heure; // Garder l'heure pour les logs consécutifs
-            lieuInput.value = ''; // Réinitialisation de lieuInput
+            lieuInput.value = '';
             fenetrePorteInput.value = '';
             remarquesInput.value = '';
             // Conserver la sélection Pax
@@ -616,11 +616,45 @@
         }
         
         // --- 3. Génération PDF ---
+        
+        /**
+         * Simule le wrapping de texte pour PDFLib en utilisant widthOfTextAtSize.
+         * @param {PDFFont} font L'objet PDFFont
+         * @param {number} fontSize La taille de la police.
+         * @param {string} text Le texte à envelopper.
+         * @param {number} maxWidth La largeur maximale en pixels.
+         * @returns {string[]} Un tableau de lignes de texte.
+         */
+        function wrapTextForPdf(font, fontSize, text, maxWidth) {
+            const words = String(text || '').replace(/\n/g, ' \n ').split(' ');
+            let lines = []; 
+            let currentLine = '';
+
+            for (const word of words) {
+                if (word === '\n') { 
+                    lines.push(currentLine); 
+                    currentLine = ''; 
+                    continue; 
+                }
+                
+                const lineWithWord = currentLine === '' ? word : `${currentLine} ${word}`;
+                
+                if (font.widthOfTextAtSize(lineWithWord, fontSize) > maxWidth && currentLine !== '') { 
+                    lines.push(currentLine); 
+                    currentLine = word; 
+                } else { 
+                    currentLine = lineWithWord; 
+                }
+            }
+            
+            lines.push(currentLine); 
+            return lines.filter(line => line.trim() !== ''); // Filtrer les lignes vides
+        }
 
         async function buildPdf() {
             if (typeof PDFLib === 'undefined') { throw new Error("PDFLib non chargé."); }
 
-            const { PDFDocument, StandardFonts, rgb, PageSizes } = PDFLib;
+            const { PDFDocument, StandardFonts, rgb, PageSizes, TextAlignment } = PDFLib;
             const pdfDoc = await PDFDocument.create();
             let helveticaFont, helveticaBoldFont;
             try {
@@ -664,7 +698,25 @@
                 }
             };
             
+            const drawFooter = () => {
+                const footerText = `Page ${context.pageNumber}`;
+                const textWidth = context.helveticaFont.widthOfTextAtSize(footerText, context.fontSize);
+                
+                context.currentPage.drawText(footerText, {
+                    x: (context.pageWidth / 2) - (textWidth / 2), 
+                    y: context.margin / 2, // Pied de page centré verticalement dans la marge basse
+                    font: context.helveticaFont, 
+                    size: context.fontSize, 
+                    color: context.colors.text
+                });
+            };
+
             const addNewPage = () => {
+                // Si ce n'est pas la première page, dessiner le pied de page de la page précédente
+                if (context.currentPage) {
+                    drawFooter();
+                }
+
                 context.currentPage = context.pdfDoc.addPage([PageSizes.A4[1], PageSizes.A4[0]]); // Format paysage
                 context.pageNumber++;
                 context.pageWidth = context.currentPage.getWidth();
@@ -674,23 +726,18 @@
                 // Dessine le fond noir
                 context.currentPage.drawRectangle({ x: 0, y: 0, width: context.pageWidth, height: context.pageHeight, color: context.colors.background });
                 
-                // Entête (Titre et Date)
-                const today = new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                // En-tête (Seulement le titre, la date est supprimée)
                 context.currentPage.drawText("PC TAC - Journal d'intervention", {
                     x: context.margin, y: context.pageHeight - context.margin / 2,
                     font: context.helveticaBoldFont, size: 14, color: context.colors.text
                 });
-                context.currentPage.drawText(`Date: ${today} | Page ${context.pageNumber}`, {
-                    x: context.pageWidth - context.margin, y: context.pageHeight - context.margin / 2,
-                    font: context.helveticaFont, size: 10, color: context.colors.text,
-                    // Marque les pages et numérotées (consigne)
-                    textAlign: PDFLib.TextAlignment.Right
-                });
+                
                 context.y = context.pageHeight - context.margin - 20; // Décaler le Y pour le contenu
             };
 
             const checkY = (spaceNeeded) => { 
-                if (context.y - spaceNeeded < context.margin) { 
+                // Vérifier si la place est suffisante, en laissant de la place pour le pied de page (context.margin)
+                if (context.y - spaceNeeded < context.margin * 1.5) { 
                     addNewPage(); 
                     // Ajout des headers du tableau si nouvelle page
                     drawTableHeader();
@@ -700,7 +747,6 @@
             };
             
             const drawTableHeader = () => {
-                 // Renommé "Façade" en "Lieu"
                  const headers = ["Heure", "Pax", "Lieu", "Fenêtre/Porte", "Remarques"];
                  let currentX = context.margin;
                  const tableY = context.y;
@@ -727,22 +773,29 @@
             };
 
             const drawLogEntry = (entry) => {
-                // Utiliser la couleur spécifique du PAX
+                // Récupérer les couleurs (Couleur de fond noire garantie)
+                const paxInfo = PAX_COLORS[entry.pax];
                 const paxColor = context.colors[entry.pax.toLowerCase().replace('/', '')] || context.colors.text;
-                
+                const fontColor = paxInfo.fontColor === '#000000' ? rgb(0, 0, 0) : context.colors.text; // Utilise noir ou blanc pour Pax
+
+                // Calcul de la largeur pour chaque colonne
+                const colWidthsPx = colWidths.map(ratio => context.pageWidth * ratio - 4);
+
                 const parts = [
                     { text: entry.heure, colIndex: 0, font: context.helveticaFont, size: context.fontSize, color: context.colors.text },
-                    { text: PAX_COLORS[entry.pax].text, colIndex: 1, font: context.helveticaBoldFont, size: context.fontSize, color: paxColor },
-                    { text: entry.lieu, colIndex: 2, font: context.helveticaFont, size: context.fontSize, color: context.colors.text }, // Utilisation de lieu
+                    // Pour le PAX, on utilise la couleur de fond du PAX pour le texte pour un meilleur contraste sur fond noir
+                    { text: paxInfo.text, colIndex: 1, font: context.helveticaBoldFont, size: context.fontSize, color: paxColor }, 
+                    { text: entry.lieu, colIndex: 2, font: context.helveticaFont, size: context.fontSize, color: context.colors.text }, 
                     { text: entry.fenetrePorte, colIndex: 3, font: context.helveticaFont, size: context.fontSize, color: context.colors.text },
                     { text: entry.remarques, colIndex: 4, font: context.helveticaFont, size: context.fontSize, color: context.colors.text },
                 ];
                 
-                const maxLines = parts.reduce((max, part, i) => {
-                    const colWidth = context.pageWidth * colWidths[i] - 4;
-                    const lines = context.helveticaFont.splitText(part.text, colWidth);
-                    return Math.max(max, lines.length);
-                }, 1);
+                // Utilisation de la fonction corrigée wrapTextForPdf pour obtenir les lignes de texte
+                let allLines = parts.map((part, i) => {
+                    return wrapTextForPdf(part.font, part.size, part.text, colWidthsPx[i]);
+                });
+
+                const maxLines = allLines.reduce((max, lines) => Math.max(max, lines.length), 1);
 
                 const rowHeight = maxLines * context.lineHeight + 5;
                 if (checkY(rowHeight)) return;
@@ -753,13 +806,37 @@
                 parts.forEach((part, i) => {
                     const colWidth = context.pageWidth * colWidths[i];
                     const x = currentX;
+                    const textLines = allLines[i];
 
-                    const textLines = part.font.splitText(part.text, colWidth - 4);
                     textLines.forEach((line, lineIndex) => {
-                        context.currentPage.drawText(line, {
-                            x: x + 2, y: tableY - part.size - (lineIndex * context.lineHeight) - 2, // Ajustement visuel
-                            font: part.font, size: part.size, color: part.color
-                        });
+                        // Pour la colonne PAX, dessiner un fond coloré pour la lisibilité
+                        if (i === 1) {
+                           const bgX = x + 1;
+                           const bgY = tableY - part.size - (lineIndex * context.lineHeight) - 2;
+                           const textWidth = part.font.widthOfTextAtSize(line, part.size) + 4;
+                           context.currentPage.drawRectangle({
+                               x: bgX,
+                               y: bgY - 2, // Légèrement plus bas que la base de la ligne
+                               width: textWidth,
+                               height: part.size + 4,
+                               color: paxColor, // Couleur de fond du PAX
+                               opacity: 1,
+                               borderWidth: 0
+                           });
+                           // Texte en noir ou blanc pour le PAX pour assurer le contraste sur le fond coloré
+                           const paxTextColor = paxInfo.fontColor === '#000000' ? rgb(0, 0, 0) : rgb(1, 1, 1);
+                           context.currentPage.drawText(line, {
+                               x: x + 3, y: tableY - part.size - (lineIndex * context.lineHeight) - 2, 
+                               font: part.font, size: part.size, color: paxTextColor
+                           });
+
+                        } else {
+                            // Texte standard
+                           context.currentPage.drawText(line, {
+                               x: x + 2, y: tableY - part.size - (lineIndex * context.lineHeight) - 2, 
+                               font: part.font, size: part.size, color: part.color
+                           });
+                        }
                     });
                     
                     currentX += colWidth;
@@ -783,6 +860,9 @@
             logData.forEach(entry => {
                 drawLogEntry(entry);
             });
+            
+            // Dessiner le pied de page de la dernière page
+            drawFooter();
 
             // Sauvegarde
             const pdfBytes = await pdfDoc.save();
@@ -806,19 +886,30 @@
                     return; 
                 }
 
+                // Solution robuste pour le téléchargement sur mobile/PC:
                 const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-                const url = URL.createObjectURL(blob);
-                
-                const link = document.createElement('a');
                 const today = new Date().toLocaleDateString('fr-FR').replace(/\//g, '-');
-                link.download = `PC_Tac_Log_${today}.pdf`;
-                link.href = url;
-                
-                document.body.appendChild(link); 
-                link.click(); 
-                document.body.removeChild(link);
-                
-                URL.revokeObjectURL(url);
+                const fileName = `PC_Tac_Log_${today}.pdf`;
+
+                if (navigator.msSaveBlob) {
+                    // IE/Edge
+                    navigator.msSaveBlob(blob, fileName);
+                } else {
+                    // Navigateurs modernes
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = fileName;
+                    
+                    document.body.appendChild(link);
+                    link.click();
+                    
+                    // Nettoyage asynchrone pour améliorer la performance sur mobile
+                    setTimeout(() => {
+                        document.body.removeChild(link);
+                        URL.revokeObjectURL(url);
+                    }, 0); 
+                }
                 
             } catch (error) {
                 console.error("Erreur critique lors de la génération du PDF:", error);
@@ -909,7 +1000,7 @@
             heureInput.value = new Date().toTimeString().split(' ')[0].substring(0, 5);
             paxInput.value = 'Adversaire';
             paxSelectContainer.querySelector(`[data-pax="Adversaire"]`).click();
-            lieuInput.value = ''; // Réinitialisation de lieuInput
+            lieuInput.value = '';
             fenetrePorteInput.value = '';
             remarquesInput.value = '';
             // NOTE: Using native alert() as per original code structure, though general instructions recommend custom modals.
