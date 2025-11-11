@@ -350,6 +350,8 @@
     </style>
 </head>
 <body class="dark-mode">
+    <!-- Champ de fichier caché pour l'importation de JSON -->
+    <input type="file" id="jsonImportInput" accept=".json" style="display: none;">
 
     <!-- Modale de Confirmation -->
     <div class="custom-modal-backdrop" id="modalBackdrop"></div>
@@ -362,14 +364,12 @@
         </div>
     </div>
     
-    <!-- La modale de présentation (dialog id="presentationModal") a été supprimée -->
-
     <div class="container">
         <h1>PC Tac</h1>
         
         <!-- Formulaire d'ajout de ligne -->
         <form id="log-form" class="log-entry-form">
-            <h3 style="color: var(--accent-blue); margin-top: 0;">Ajouter une entrée</h3>
+            <h3 style="color: var(--accent-blue); margin-top: 0;">Ajouter une entrée au fil</h3>
             
             <div class="form-row main-fields">
                  <div>
@@ -441,17 +441,27 @@
         <div class="dock-menu-item" id="dockToggleBtn" title="Réduire/Agrandir">
             <span class="material-symbols-outlined">expand_more</span>
         </div>
-        <!-- NOUVEAU: Bouton Home (déplacé après dockToggleBtn) -->
+        <!-- Bouton Home -->
         <a class="dock-menu-item" href="index.html" title="Accueil" style="text-decoration: none;">
             <span class="material-symbols-outlined">home</span>
         </a>
+        
+        <!-- NOUVEAU: Bouton Export JSON -->
+        <div class="dock-menu-item" id="exportJsonDockBtn" title="Exporter les données au format JSON">
+            <span class="material-symbols-outlined">save</span>
+        </div>
+         <!-- NOUVEAU: Bouton Import JSON -->
+         <div class="dock-menu-item" id="importJsonDockBtn" title="Importer des données au format JSON">
+            <span class="material-symbols-outlined">upload_file</span>
+        </div>
+        
         <div class="dock-menu-item" id="darkModeToggle" title="Changer le thème">
             <span class="material-symbols-outlined" id="darkModeIcon">nightlight</span>
         </div>
         <div class="dock-menu-item" id="fullscreenToggle" title="Plein écran">
             <span class="material-symbols-outlined" id="fullscreenIcon">fullscreen</span>
         </div>
-        <!-- Bouton PDF (maintenant téléchargement direct) -->
+        <!-- Bouton PDF (téléchargement direct) -->
          <div class="dock-menu-item" id="previewPdfDockBtn" title="Générer et télécharger le PDF">
             <span class="material-symbols-outlined">picture_as_pdf</span>
         </div>
@@ -468,8 +478,8 @@
         // Couleurs statiques pour le PDF
         const PDF_PAX_COLORS = {
             'Adversaire': { text: 'Adversaire', color: '#be1b09', fontColor: '#ffffff' },
-            'Otage': { text: 'Civil/Otage', color: '#f1c40f', fontColor: '#000000' }, // Texte noir sur jaune
-            'Civil': { text: 'Civil/Otage', color: '#f1c40f', fontColor: '#000000' }, // Texte noir sur jaune
+            'Otage': { text: 'Civil/Otage', color: '#f1c40f', fontColor: '#000000' }, 
+            'Civil': { text: 'Civil/Otage', color: '#f1c40f', fontColor: '#000000' }, 
             'Inter': { text: 'Inter', color: '#3498db', fontColor: '#ffffff' },
             'AO': { text: 'AO', color: '#2ecc71', fontColor: '#000000' }
         };
@@ -484,6 +494,9 @@
         const paxSelectContainer = document.getElementById('pax_select_container');
         const previewPdfDockBtn = document.getElementById('previewPdfDockBtn');
         const resetDataDockBtn = document.getElementById('resetDataDockBtn');
+        const jsonImportInput = document.getElementById('jsonImportInput'); 
+        const exportJsonDockBtn = document.getElementById('exportJsonDockBtn'); 
+        const importJsonDockBtn = document.getElementById('importJsonDockBtn'); 
         
         // --- 1. Gestion des Données et Stockage ---
 
@@ -512,18 +525,24 @@
         }
         
         function getLogData() {
-            // Récupérer les données directement du tableau pour une source de vérité unique
-            // Assurer que les champs dataset sont des chaînes, pas undefined, et ne contiennent pas 'undefined' textuel
             return Array.from(logTableBody.querySelectorAll('tr')).map(row => {
                 const getSafeDataset = (key) => {
                     const value = row.dataset[key] || '';
-                    return value === 'undefined' ? '' : value; // Nettoyage de l'ancien 'undefined' textuel
+                    return value === 'undefined' ? '' : value; 
                 };
+
+                const paxTextContent = row.querySelector('.pax-cell').textContent.split('/')[0].trim();
+                let paxValue;
+                if (paxTextContent === 'Civil') paxValue = 'Otage'; 
+                else if (paxTextContent === 'Adversaire') paxValue = 'Adversaire';
+                else if (paxTextContent === 'Inter') paxValue = 'Inter';
+                else if (paxTextContent === 'AO') paxValue = 'AO';
+                else paxValue = 'Adversaire'; 
 
                 return {
                     id: row.dataset.id,
                     heure: row.querySelector('.heure-cell-text').textContent,
-                    pax: row.querySelector('.pax-cell').textContent.split('/')[0].trim(),
+                    pax: paxValue,
                     lieu: getSafeDataset('lieu'),
                     fenetrePorte: getSafeDataset('fenetreporte'),
                     remarques: getSafeDataset('remarques'),
@@ -534,7 +553,6 @@
         function renderLogTable(logData) {
             // 1. Trier les données par heure
             logData.sort((a, b) => {
-                // Utiliser la fonction de comparaison de chaînes pour un tri par heure/minute correct
                 if (a.heure < b.heure) return -1;
                 if (a.heure > b.heure) return 1;
                 return 0; 
@@ -543,16 +561,16 @@
             logTableBody.innerHTML = '';
             
             logData.forEach(entry => {
-                const paxInfo = PDF_PAX_COLORS[entry.pax] || PDF_PAX_COLORS['Adversaire']; // Fallback
+                const paxKey = ['Adversaire', 'Otage', 'Civil', 'Inter', 'AO'].includes(entry.pax) ? entry.pax : 'Adversaire';
+                const paxInfo = PDF_PAX_COLORS[paxKey] || PDF_PAX_COLORS['Adversaire']; 
 
                 const row = logTableBody.insertRow();
                 row.dataset.id = entry.id;
-                // Stocker des chaînes vides si les valeurs sont null ou undefined
                 row.dataset.lieu = entry.lieu || '';
                 row.dataset.fenetreporte = entry.fenetrePorte || '';
                 row.dataset.remarques = entry.remarques || '';
+                row.dataset.pax = paxKey; 
                 
-                // Cellule Heure + Suppression (CONSIGNE: Déplacer la croix pour l'accessibilité)
                 const heureCell = row.insertCell();
                 heureCell.style.width = '15%';
                 heureCell.innerHTML = `
@@ -563,40 +581,30 @@
                         </button>
                     </div>`;
 
-                // Cellule Pax (avec couleur)
                 const paxCell = row.insertCell();
                 paxCell.style.width = '15%';
-                paxCell.innerHTML = `<span class="pax-cell pax-${entry.pax}" style="background-color: ${paxInfo.color}; color: ${paxInfo.fontColor};">${paxInfo.text}</span>`;
+                paxCell.innerHTML = `<span class="pax-cell pax-${paxKey}" style="background-color: ${paxInfo.color}; color: ${paxInfo.fontColor};">${paxInfo.text}</span>`;
                 
-                // Cellule Lieu
                 const lieuCell = row.insertCell();
                 lieuCell.style.width = '20%';
                 lieuCell.textContent = entry.lieu;
 
-                // Cellule Fenêtre/Porte
                 const fpCell = row.insertCell();
                 fpCell.style.width = '20%';
                 fpCell.textContent = entry.fenetrePorte;
 
-                // Cellule Remarques
                 const remarquesCell = row.insertCell();
-                remarquesCell.style.width = '30%'; // Utilise le reste de l'espace
+                remarquesCell.style.width = '30%'; 
                 remarquesCell.textContent = entry.remarques;
-
-                // Supprimer la colonne d'action vide
-                // La table n'a plus 6 colonnes, donc la 6ème colonne n'est plus insérée.
             });
             
-             // Mettre à jour les données dans localStorage après le rendu trié
              saveLogData(getLogData());
         }
         
         function addLogEntry(e) {
             e.preventDefault();
 
-            // S'assurer qu'au moins l'heure et le pax sont remplis
             if (!heureInput.value || !paxInput.value) {
-                // NOTE: Using native alert() as per original code structure, though general instructions recommend custom modals.
                 alert("Veuillez renseigner au moins l'heure et le type de PAX.");
                 return;
             }
@@ -613,15 +621,12 @@
             const logData = loadLogData();
             logData.push(newEntry);
 
-            // Re-render pour inclure la nouvelle entrée et trier
             renderLogTable(logData);
 
-            // Réinitialiser les champs pour la prochaine entrée (sauf l'heure)
-            heureInput.value = newEntry.heure; // Garder l'heure pour les logs consécutifs
+            heureInput.value = newEntry.heure; 
             lieuInput.value = '';
             fenetrePorteInput.value = '';
             remarquesInput.value = '';
-            // Conserver la sélection Pax
         }
         
         function deleteLogEntry(id) {
@@ -634,16 +639,12 @@
         function initPaxSelection() {
             Array.from(paxSelectContainer.querySelectorAll('.pax-select-option')).forEach(option => {
                 option.addEventListener('click', function() {
-                    // Désélectionner tous
                     Array.from(paxSelectContainer.querySelectorAll('.pax-select-option')).forEach(o => o.classList.remove('selected'));
-                    // Sélectionner le courant
                     this.classList.add('selected');
-                    // Mettre à jour l'input hidden pour la soumission
                     paxInput.value = this.dataset.pax;
                 });
             });
             
-            // Initialiser la sélection et l'heure
             const initialPax = loadLogData().slice(-1)[0]?.pax || 'Adversaire';
             const initialHour = new Date().toTimeString().split(' ')[0].substring(0, 5);
             heureInput.value = initialHour;
@@ -655,53 +656,121 @@
             }
         }
         
-        // --- 3. Génération PDF ---
+        // --- 3. Gestion JSON (Export/Import) ---
         
-        /**
-         * Simule le wrapping de texte pour PDFLib en utilisant widthOfTextAtSize.
-         * J'ai mis à jour cette fonction pour gérer les sauts de ligne (\n) en entrée.
-         * @param {PDFFont} font L'objet PDFFont
-         * @param {number} fontSize La taille de la police.
-         * @param {string} text Le texte à envelopper.
-         * @param {number} maxWidth La largeur maximale en pixels.
-         * @returns {string[]} Un tableau de lignes de texte.
-         */
-        function wrapTextForPdf(font, fontSize, text, maxWidth) {
-            // Le texte doit être une chaîne pour le traitement
-            text = String(text || ''); 
+        function exportJson() {
+             const logData = getLogData();
+             if (logData.length === 0) {
+                 alert("Le journal est vide. Rien à exporter.");
+                 return;
+             }
+             
+             // --- LOGIQUE DE NOMMAGE DU FICHIER CORRIGÉE ---
+             const now = new Date();
+             
+             // Format AAAA-MM-JJ
+             const year = now.getFullYear();
+             const month = String(now.getMonth() + 1).padStart(2, '0');
+             const day = String(now.getDate()).padStart(2, '0');
+             const datePart = `${year}-${month}-${day}`;
 
-            // Remplacer les \n par un jeton unique entouré d'espaces pour le split
+             // Format HH-MM (sans secondes)
+             const hours = String(now.getHours()).padStart(2, '0');
+             const minutes = String(now.getMinutes()).padStart(2, '0');
+             const timePart = `${hours}-${minutes}`; // Utilisation du tiret pour la lisibilité
+
+             const fileName = `PC_Tac_Session_${datePart}_${timePart}.json`;
+             // --- FIN LOGIQUE DE NOMMAGE ---
+
+             const exportObject = {
+                 metadata: {
+                     appName: "PC Tac Log",
+                     version: "1.0",
+                     timestamp: now.toISOString()
+                 },
+                 logEntries: logData
+             };
+
+             const jsonString = JSON.stringify(exportObject, null, 2);
+             const blob = new Blob([jsonString], { type: "application/json" });
+             
+             const url = URL.createObjectURL(blob);
+             const link = document.createElement('a');
+             link.href = url;
+             link.download = fileName;
+             
+             document.body.appendChild(link);
+             link.click();
+             document.body.removeChild(link);
+             URL.revokeObjectURL(url);
+        }
+        
+        async function importJson(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const jsonContent = JSON.parse(e.target.result);
+                    
+                    if (jsonContent.metadata && jsonContent.metadata.appName === "PC Tac Log" && Array.isArray(jsonContent.logEntries)) {
+                        
+                        const validatedEntries = jsonContent.logEntries.map(entry => ({
+                            id: entry.id || Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
+                            heure: entry.heure || '00:00',
+                            pax: ['Adversaire', 'Otage', 'Civil', 'Inter', 'AO'].includes(entry.pax) ? entry.pax : 'Adversaire',
+                            lieu: entry.lieu || '',
+                            fenetrePorte: entry.fenetrePorte || '',
+                            remarques: entry.remarques || '',
+                        }));
+                        
+                        renderLogTable(validatedEntries);
+                        alert(`Importation JSON réussie : ${validatedEntries.length} entrées chargées.`);
+                        
+                    } else {
+                        throw new Error("Fichier JSON invalide. Assurez-vous qu'il provient d'une exportation PC Tac.");
+                    }
+                } catch (error) {
+                    console.error("Erreur lors de l'importation JSON:", error);
+                    alert(`Erreur d'importation : ${error.message}`);
+                } finally {
+                    jsonImportInput.value = ''; 
+                }
+            };
+            reader.readAsText(file);
+        }
+        
+        // --- 4. Génération PDF ---
+        
+        function wrapTextForPdf(font, fontSize, text, maxWidth) {
+            text = String(text || ''); 
             const token = ' \n ';
-            const chunks = text.replace(/\n/g, token).split(' ');
+            const chunks = text.replace(/\r?\n/g, token).split(' ');
             let lines = []; 
             let currentLine = '';
 
             for (const chunk of chunks) {
                 if (chunk === '\n') { 
-                    // Gérer le saut de ligne explicite
-                    lines.push(currentLine); 
+                    lines.push(currentLine.trim()); 
                     currentLine = ''; 
                     continue; 
                 }
                 
                 const lineWithChunk = currentLine === '' ? chunk : `${currentLine} ${chunk}`;
                 
-                // Si la ligne déborde et qu'elle n'est pas vide
                 if (font.widthOfTextAtSize(lineWithChunk, fontSize) > maxWidth && currentLine !== '') { 
-                    lines.push(currentLine); 
+                    lines.push(currentLine.trim()); 
                     currentLine = chunk; 
                 } else { 
                     currentLine = lineWithChunk; 
                 }
             }
             
-            // Ajouter la dernière ligne
-            lines.push(currentLine); 
-            // Supprimer les chaînes vides résultant de multiples espaces ou d'un saut de ligne au début/fin
-            return lines.map(line => line.trim()).filter(line => line.length > 0 || line === '');
+            lines.push(currentLine.trim()); 
+            return lines.filter(line => line.length > 0);
         }
         
-        // Fonction pour obtenir les couleurs du PDF en fonction du thème, prenant 'rgb' en argument
         function getPdfColors(isDarkMode, rgb) {
             if (isDarkMode) {
                 return {
@@ -718,14 +787,13 @@
             }
         }
 
-        // Déclaration globale de rgb
         let pdfRgb; 
 
         async function buildPdf() {
             if (typeof PDFLib === 'undefined') { throw new Error("PDFLib non chargé."); }
 
-            const { PDFDocument, StandardFonts, rgb, PageSizes, TextAlignment } = PDFLib;
-            pdfRgb = rgb; // Rend la fonction rgb disponible globalement
+            const { PDFDocument, StandardFonts, rgb, PageSizes } = PDFLib;
+            pdfRgb = rgb; 
             
             const pdfDoc = await PDFDocument.create();
             let helveticaFont, helveticaBoldFont;
@@ -738,13 +806,9 @@
             }
             
             const logData = getLogData();
-            
-            // DÉTERMINER LE THÈME ACTUEL
             const isDarkMode = document.body.classList.contains('dark-mode');
-            // Appel de getPdfColors avec 'rgb'
             const pdfThemeColors = getPdfColors(isDarkMode, rgb); 
             
-            // Configuration PDF
             const pageConfig = { 
                 width: PageSizes.A4[1], 
                 height: PageSizes.A4[0],
@@ -752,7 +816,7 @@
                 fontSize: 10,
                 lineHeight: 14
             };
-            const colWidths = [0.10, 0.15, 0.20, 0.20, 0.35]; // Proportionnel au total (1.0)
+            const colWidths = [0.10, 0.15, 0.20, 0.20, 0.35]; 
             
             const context = {
                 pdfDoc, helveticaFont, helveticaBoldFont,
@@ -764,14 +828,12 @@
                 margin: pageConfig.margin,
                 fontSize: pageConfig.fontSize,
                 lineHeight: pageConfig.lineHeight,
-                // Fond noir et écriture colorée selon le type de Pax (consigne)
                 colors: {
-                    ...pdfThemeColors, // Couleurs de base (fond/texte/ligne) basées sur le thème
-                    // Couleurs PAX fixes (RVB)
-                    adversaire: rgb(0xbe/255, 0x1b/255, 0x09/255), // Rouge
-                    otage: rgb(0xf1/255, 0xc4/255, 0x0f/255), // Jaune (Civil/Otage)
-                    inter: rgb(0x34/255, 0x98/255, 0xdb/255), // Bleu
-                    ao: rgb(0x2e/255, 0xcc/255, 0x71/255) // Vert
+                    ...pdfThemeColors, 
+                    adversaire: rgb(0xbe/255, 0x1b/255, 0x09/255), 
+                    otage: rgb(0xf1/255, 0xc4/255, 0x0f/255), 
+                    inter: rgb(0x34/255, 0x98/255, 0xdb/255), 
+                    ao: rgb(0x2e/255, 0xcc/255, 0x71/255) 
                 }
             };
             
@@ -781,7 +843,7 @@
                 
                 context.currentPage.drawText(footerText, {
                     x: (context.pageWidth / 2) - (textWidth / 2), 
-                    y: context.margin / 2, // Pied de page centré verticalement dans la marge basse
+                    y: context.margin / 2, 
                     font: context.helveticaFont, 
                     size: context.fontSize, 
                     color: context.colors.text
@@ -789,34 +851,27 @@
             };
 
             const addNewPage = () => {
-                // Si ce n'est pas la première page, dessiner le pied de page de la page précédente
-                if (context.currentPage) {
-                    drawFooter();
-                }
+                if (context.currentPage) { drawFooter(); }
 
-                context.currentPage = context.pdfDoc.addPage([PageSizes.A4[1], PageSizes.A4[0]]); // Format paysage
+                context.currentPage = context.pdfDoc.addPage([PageSizes.A4[1], PageSizes.A4[0]]); 
                 context.pageNumber++;
                 context.pageWidth = context.currentPage.getWidth();
                 context.pageHeight = context.currentPage.getHeight();
                 context.y = context.pageHeight - context.margin;
                 
-                // Dessine le fond selon le thème
                 context.currentPage.drawRectangle({ x: 0, y: 0, width: context.pageWidth, height: context.pageHeight, color: context.colors.background });
                 
-                // En-tête (Seulement le titre)
                 context.currentPage.drawText("PC TAC - Journal d'intervention", {
                     x: context.margin, y: context.pageHeight - context.margin / 2,
                     font: context.helveticaBoldFont, size: 14, color: context.colors.text
                 });
                 
-                context.y = context.pageHeight - context.margin - 20; // Décaler le Y pour le contenu
+                context.y = context.pageHeight - context.margin - 20; 
             };
 
             const checkY = (spaceNeeded) => { 
-                // Vérifier si la place est suffisante, en laissant de la place pour le pied de page (context.margin)
                 if (context.y - spaceNeeded < context.margin * 1.5) { 
                     addNewPage(); 
-                    // Ajout des headers du tableau si nouvelle page
                     drawTableHeader();
                     return true; 
                 } 
@@ -850,13 +905,10 @@
             };
 
             const drawLogEntry = (entry) => {
-                // Récupérer les couleurs 
                 const paxInfo = PDF_PAX_COLORS[entry.pax] || PDF_PAX_COLORS['Adversaire'];
-                // La clé pour les couleurs RGB est la version en minuscules et sans slash
-                const paxColorKey = entry.pax.toLowerCase().replace('/', '').replace('civil', 'otage'); // Assure que Civil tombe sur Otage
+                const paxColorKey = entry.pax.toLowerCase().replace('/', '').replace('civil', 'otage'); 
                 const paxColor = context.colors[paxColorKey] || context.colors.text;
                 
-                // Calcul de la largeur pour chaque colonne
                 const colWidthsPx = colWidths.map(ratio => context.pageWidth * ratio - 4);
 
                 const parts = [
@@ -867,15 +919,13 @@
                     { text: entry.remarques, colIndex: 4, font: context.helveticaFont, size: context.fontSize, color: context.colors.text },
                 ];
                 
-                // Utilisation de la fonction corrigée wrapTextForPdf pour obtenir les lignes de texte
                 let allLines = parts.map((part, i) => {
-                    // Si le champ est vide, on assure un tableau d'une ligne vide pour la hauteur
+                    part.text = String(part.text || '').trim();
                     if (!part.text) return ['']; 
                     return wrapTextForPdf(part.font, part.size, part.text, colWidthsPx[i]);
                 });
 
                 const maxLines = allLines.reduce((max, lines) => Math.max(max, lines.length), 1);
-
                 const rowHeight = maxLines * context.lineHeight + 5;
                 if (checkY(rowHeight)) return;
 
@@ -887,34 +937,25 @@
                     const x = currentX;
                     const textLines = allLines[i];
                     
-                    // --- Logique de dessin de la colonne PAX (indice 1) ---
                     if (i === 1) {
                         const bgX = x + 1;
-                        // Calculer le centre vertical du bloc de couleur par rapport au bas de la ligne
-                        const paxBlockHeight = context.lineHeight + 4; // Hauteur du bloc de couleur (une seule ligne, même si la rangée est plus haute)
+                        const paxBlockHeight = context.lineHeight + 4; 
                         const paxBlockY = tableY - rowHeight + (rowHeight - paxBlockHeight) / 2;
                         
-                        // DESSIN DU FOND COLORÉ
                         context.currentPage.drawRectangle({
                             x: bgX,
                             y: paxBlockY, 
-                            width: colWidthsPx[i] - 2, // Largeur de la colonne Pax
+                            width: colWidthsPx[i] - 2, 
                             height: paxBlockHeight,
-                            color: paxColor, // Couleur de fond du PAX
+                            color: paxColor, 
                             opacity: 1,
                             borderWidth: 0
                         });
                         
-                        // TEXTE PAX
                         const text = textLines[0] || '';
                         const textWidth = part.font.widthOfTextAtSize(text, part.size);
-                        
-                        // Centrage horizontal et vertical dans le bloc coloré
                         const textX = bgX + (colWidthsPx[i] - textWidth) / 2;
-                        const textY = paxBlockY + (paxBlockHeight - part.size) / 2 + 1; // +1 pour alignement optique
-                        
-                        // Correction de la couleur du texte Civil/Otage (texte noir sur fond jaune)
-                        // Utilise la couleur fontColor définie dans PDF_PAX_COLORS
+                        const textY = paxBlockY + (paxBlockHeight - part.size) / 2 + 1; 
                         const paxTextColor = paxInfo.fontColor === '#000000' ? pdfRgb(0, 0, 0) : pdfRgb(1, 1, 1);
                         
                         context.currentPage.drawText(text, {
@@ -923,15 +964,9 @@
                         });
 
                     } else {
-                        // --- Logique de dessin pour toutes les autres colonnes (multi-lignes) ---
-                        
-                        // Dessiner chaque ligne de texte
                         textLines.forEach((line, lineIndex) => {
-                            // Position verticale : à partir du haut de la ligne (tableY) moins la hauteur totale de la rangée (rowHeight)
-                            // Plus le décalage de la ligne (lineIndex * context.lineHeight)
                             const textY = tableY - context.lineHeight - (lineIndex * context.lineHeight) - 2;
                             
-                            // Si la ligne est une chaîne vide (résultat d'un saut de ligne ou d'un champ vide), on dessine un espace vide pour consommer la hauteur
                             if (line) {
                                 context.currentPage.drawText(line, {
                                     x: x + 2, y: textY, 
@@ -944,7 +979,6 @@
                     currentX += colWidth;
                 });
                 
-                // Dessiner la ligne de séparation de la ligne
                 context.currentPage.drawLine({
                     start: { x: context.margin, y: tableY - rowHeight + 1 },
                     end: { x: context.pageWidth - context.margin, y: tableY - rowHeight + 1 },
@@ -954,8 +988,6 @@
                 context.y -= rowHeight;
             };
 
-            // --- Logique d'exécution ---
-            
             addNewPage();
             drawTableHeader();
             
@@ -963,16 +995,13 @@
                 drawLogEntry(entry);
             });
             
-            // Dessiner le pied de page de la dernière page
             drawFooter();
 
-            // Sauvegarde
             const pdfBytes = await pdfDoc.save();
             return pdfBytes;
         }
 
         async function downloadPdf() {
-            // Utiliser le bouton du dock pour l'état de chargement
             const btn = previewPdfDockBtn; 
             const originalIcon = btn.querySelector('.material-symbols-outlined').textContent;
             
@@ -983,21 +1012,17 @@
             try {
                 const pdfBytes = await buildPdf();
                 if (!pdfBytes) { 
-                    // NOTE: Using native alert() as per original code structure, though general instructions recommend custom modals.
                     alert("La génération a échoué. Vérifiez la console (F12).");
                     return; 
                 }
 
-                // Solution robuste pour le téléchargement sur mobile/PC:
                 const blob = new Blob([pdfBytes], { type: 'application/pdf' });
                 const today = new Date().toLocaleDateString('fr-FR').replace(/\//g, '-');
                 const fileName = `PC_Tac_Log_${today}.pdf`;
 
                 if (navigator.msSaveBlob) {
-                    // IE/Edge
                     navigator.msSaveBlob(blob, fileName);
                 } else {
-                    // Navigateurs modernes
                     const url = URL.createObjectURL(blob);
                     const link = document.createElement('a');
                     link.href = url;
@@ -1006,7 +1031,6 @@
                     document.body.appendChild(link);
                     link.click();
                     
-                    // Nettoyage asynchrone pour améliorer la performance sur mobile
                     setTimeout(() => {
                         document.body.removeChild(link);
                         URL.revokeObjectURL(url);
@@ -1015,7 +1039,6 @@
                 
             } catch (error) {
                 console.error("Erreur critique lors de la génération du PDF:", error);
-                // NOTE: Using native alert() as per original code structure, though general instructions recommend custom modals.
                 alert("Une erreur critique est survenue lors de la génération du PDF. Consultez la console (F12).");
             } finally {
                 btn.querySelector('.material-symbols-outlined').textContent = originalIcon;
@@ -1024,9 +1047,7 @@
             }
         }
         
-        // La fonction openPresentationMode() est supprimée
-        
-        // --- 4. Logique du Dock et Divers ---
+        // --- 5. Logique du Dock et Divers ---
 
         function isFullscreen() {
             return document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement;
@@ -1094,32 +1115,28 @@
         }
 
         function handleResetData() {
-            // Logique de réinitialisation
             localStorage.removeItem(LOCAL_STORAGE_KEY);
             renderLogTable([]);
             hideResetModal();
-            // Réinitialiser les champs de formulaire
+            
             heureInput.value = new Date().toTimeString().split(' ')[0].substring(0, 5);
             paxInput.value = 'Adversaire';
             paxSelectContainer.querySelector(`[data-pax="Adversaire"]`).click();
             lieuInput.value = '';
             fenetrePorteInput.value = '';
             remarquesInput.value = '';
-            // NOTE: Using native alert() as per original code structure, though general instructions recommend custom modals.
             alert("Toutes les données du Log PC Tac ont été réinitialisées.");
         }
 
 
-        // --- 5. Initialisation ---
+        // --- 6. Initialisation ---
 
         document.addEventListener('DOMContentLoaded', () => {
             
-            // Initialisation du thème
             const isDarkMode = localStorage.getItem('theme') === 'dark' || !localStorage.getItem('theme');
             if (!isDarkMode) { document.body.classList.replace('dark-mode', 'light-mode'); }
             document.getElementById('darkModeIcon').textContent = isDarkMode ? 'nightlight' : 'clear_day';
 
-            // Initialisation du dock
             document.getElementById('fullscreenToggle').addEventListener('click', toggleFullscreen);
             document.getElementById('darkModeToggle').addEventListener('click', handleThemeToggle);
             document.getElementById('dockToggleBtn').addEventListener('click', toggleDock);
@@ -1131,16 +1148,17 @@
                 document.querySelector('#dockToggleBtn .material-symbols-outlined').textContent = 'expand_less';
             }
             
-            // Événements PC Tac
             logForm.addEventListener('submit', addLogEntry);
             initPaxSelection();
             renderLogTable(loadLogData());
             
-            // CONFORME: Génération directe du PDF
             previewPdfDockBtn.addEventListener('click', downloadPdf);
-            
-            // Les écouteurs de la modale de présentation sont supprimés.
 
+            // Événements Import/Export JSON
+            exportJsonDockBtn.addEventListener('click', exportJson);
+            importJsonDockBtn.addEventListener('click', () => jsonImportInput.click());
+            jsonImportInput.addEventListener('change', importJson);
+            
             // Événements Réinitialisation
             resetDataDockBtn.addEventListener('click', showResetModal);
             document.getElementById('confirmResetBtn').addEventListener('click', handleResetData);
