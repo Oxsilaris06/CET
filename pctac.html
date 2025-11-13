@@ -624,6 +624,8 @@
     <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
     <script>
         const LOCAL_STORAGE_KEY = 'pcTacLogData';
+        // NOUVEAU: Clé pour stocker l'association Nom PAX Libre -> Couleur
+        const FREE_PAX_COLOR_MAP_KEY = 'pcTacFreePaxColorMap'; 
         
         // --- COULEURS ÉTENDUES ---
         const FREE_MODE_COLORS = [
@@ -661,6 +663,7 @@
         const fenetrePorteInput = document.getElementById('fenetre_porte_input');
         const remarquesInput = document.getElementById('remarques_input');
         const paxSelectContainer = document.getElementById('pax_select_container');
+        const freeColorPalette = document.getElementById('free_color_palette'); // NOUVEAU
         const previewPdfDockBtn = document.getElementById('previewPdfDockBtn');
         const resetDataDockBtn = document.getElementById('resetDataDockBtn');
         const jsonImportInput = document.getElementById('jsonImportInput'); 
@@ -671,7 +674,26 @@
         let isTimeInputManuallyChanged = false;
 
         // --- 1. Gestion des Données et Stockage ---
+        
+        // NOUVEAU: Fonctions pour gérer la mémoire du mode TP
+        function loadFreePaxColorMap() {
+            try {
+                const dataString = localStorage.getItem(FREE_PAX_COLOR_MAP_KEY);
+                return dataString ? JSON.parse(dataString) : {};
+            } catch (e) {
+                console.error("Erreur de chargement du map de couleurs PAX libre:", e);
+                return {};
+            }
+        }
 
+        function saveFreePaxColorMap(mapData) {
+            try {
+                localStorage.setItem(FREE_PAX_COLOR_MAP_KEY, JSON.stringify(mapData));
+            } catch (e) {
+                console.error("Erreur de sauvegarde du map de couleurs PAX libre:", e);
+            }
+        }
+        
         function saveLogData(logData) {
             try {
                 // Tri par heure avant de sauvegarder (maintient l'ordre pour l'ajout standard)
@@ -815,12 +837,17 @@
                     return;
                 }
             } else {
-                paxName = freePaxInput.value.trim() || 'Pax Libre';
+                paxName = freePaxInput.value.trim();
                 paxColorHex = paxCustomColorInput.value;
-                if (!freePaxInput.value.trim()) {
-                     alert("Veuillez donner un nom a l'intervenant.");
+                if (!paxName) {
+                     alert("Veuillez donner un nom à l'intervenant.");
                      return;
                 }
+                
+                // NOUVEAU: Enregistrer l'association nom/couleur en mode TP
+                const colorMap = loadFreePaxColorMap();
+                colorMap[paxName] = paxColorHex;
+                saveFreePaxColorMap(colorMap);
             }
 
             if (!heureInput.value) {
@@ -855,10 +882,7 @@
             lieuInput.value = '';
             fenetrePorteInput.value = '';
             remarquesInput.value = '';
-            // On ne réinitialise pas le nom en mode TP/Libre pour des logs consécutifs du même intervenant,
-            // car cela représente un seul PAX.
-            // Si le PAX doit être changé, l'utilisateur le fait via le champ de texte ou le toggle.
-            // freePaxInput.value = ''; 
+            // Le nom en mode libre reste (pour des logs consécutifs du même PAX), mais pourrait être modifié
             
             // OPTIMISATION MOBILE : Placer le focus sur le champ des remarques pour la saisie rapide
             remarquesInput.focus();
@@ -878,6 +902,21 @@
              const b = bigint & 255;
              return { r: r / 255, g: g / 255, b: b / 255 };
         }
+        
+        // NOUVEAU: Fonction pour sélectionner la couleur dans la palette
+        function selectColorSwatch(hexColor) {
+             const allSwatches = Array.from(freeColorPalette.querySelectorAll('.color-swatch'));
+             allSwatches.forEach(s => s.classList.remove('selected'));
+             
+             const targetSwatch = allSwatches.find(s => s.dataset.color.toLowerCase() === hexColor.toLowerCase());
+             if (targetSwatch) {
+                 targetSwatch.classList.add('selected');
+                 paxCustomColorInput.value = hexColor;
+                 return true;
+             }
+             return false; // Couleur non trouvée dans la palette
+        }
+
 
         // Initialisation du mode PAX et de la palette de couleurs
         function initPaxModeAndColors() {
@@ -895,16 +934,15 @@
                 }
 
                 swatch.addEventListener('click', function() {
-                    Array.from(paletteContainer.querySelectorAll('.color-swatch')).forEach(s => s.classList.remove('selected'));
-                    this.classList.add('selected');
-                    paxCustomColorInput.value = this.dataset.color;
+                    selectColorSwatch(this.dataset.color);
+                    // OPTIMISATION TP: Mettre le focus sur le champ de texte après sélection de couleur
+                    freePaxInput.focus(); 
                 });
                 paletteContainer.appendChild(swatch);
             });
             
             // Sélectionner la première couleur par défaut
-            paletteContainer.querySelector('.color-swatch').classList.add('selected');
-            paxCustomColorInput.value = FREE_MODE_COLORS[0].hex;
+            selectColorSwatch(FREE_MODE_COLORS[0].hex);
 
             // Initialisation de l'heure et du PAX standard sélectionné par défaut
             setPaxMode('standard');
@@ -948,9 +986,27 @@
                  paxInput.value = selectedOption ? selectedOption.dataset.pax : 'Adversaire';
             } else {
                  // En mode libre, le champ libre gère la valeur de pax_input
-                 paxInput.value = freePaxInput.value.trim() || 'Pax Libre';
+                 const currentFreePaxName = freePaxInput.value.trim();
+                 paxInput.value = currentFreePaxName || 'Pax Libre';
+                 
+                 // NOUVEAU: Tentative d'application de la couleur mémorisée
+                 if (currentFreePaxName) {
+                     applyFreePaxMemory(currentFreePaxName);
+                 }
+                 
                  // OPTIMISATION TP: Mettre le focus sur le champ de texte en mode libre pour saisie rapide
                  freePaxInput.focus();
+            }
+        }
+        
+        // NOUVEAU: Logique pour appliquer la mémoire PAX libre
+        function applyFreePaxMemory(paxName) {
+            const colorMap = loadFreePaxColorMap();
+            const normalizedName = paxName.trim();
+            
+            if (colorMap[normalizedName]) {
+                const hexColor = colorMap[normalizedName];
+                selectColorSwatch(hexColor);
             }
         }
 
@@ -1491,6 +1547,7 @@
 
         function handleResetData() {
             localStorage.removeItem(LOCAL_STORAGE_KEY);
+            localStorage.removeItem(FREE_PAX_COLOR_MAP_KEY); // NOUVEAU: Réinitialiser aussi le map de couleurs
             renderLogTable([]);
             hideResetModal();
             
@@ -1532,15 +1589,23 @@
             // Ajout des listeners Drag & Drop sur le corps du tableau pour les événements de glissement.
             logTableBody.addEventListener('dragover', handleDragOver);
             logTableBody.addEventListener('drop', handleDrop);
-            logTableBody.addEventListener('dragend', handleDragEnd); // S'assurer que dragend est sur le corps pour attraper tous les cas
+            logTableBody.addEventListener('dragend', handleDragEnd); 
             
             // Rendu initial
             renderLogTable(loadLogData());
             
             // Écouteur pour le champ libre pour mettre à jour l'input pax_input en temps réel
+            // NOUVEAU: Ce listener met à jour pax_input et applique la mémoire de couleur en temps réel
             document.getElementById('free_pax_input').addEventListener('input', (e) => {
+                 const paxName = e.target.value.trim();
                  if (paxModeInput.value === 'free') {
-                     paxInput.value = e.target.value.trim() || 'Pax Libre';
+                     paxInput.value = paxName || 'Pax Libre';
+                     if (paxName.length > 0) {
+                         applyFreePaxMemory(paxName);
+                     } else {
+                          // Si le champ est vide, on revient à la couleur par défaut
+                          selectColorSwatch(FREE_MODE_COLORS[0].hex);
+                     }
                  }
             });
 
