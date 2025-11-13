@@ -624,10 +624,6 @@
     <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
     <script>
         const LOCAL_STORAGE_KEY = 'pcTacLogData';
-        // Clé pour stocker l'association Nom PAX Libre -> Couleur
-        const FREE_PAX_COLOR_MAP_KEY = 'pcTacFreePaxColorMap'; 
-        // Clé pour stocker l'association Couleur -> Dernier Nom PAX Libre (pour la recherche inverse)
-        const COLOR_PAX_NAME_MAP_KEY = 'pcTacColorPaxNameMap'; 
         
         // --- COULEURS ÉTENDUES ---
         const FREE_MODE_COLORS = [
@@ -665,7 +661,6 @@
         const fenetrePorteInput = document.getElementById('fenetre_porte_input');
         const remarquesInput = document.getElementById('remarques_input');
         const paxSelectContainer = document.getElementById('pax_select_container');
-        const freeColorPalette = document.getElementById('free_color_palette'); 
         const previewPdfDockBtn = document.getElementById('previewPdfDockBtn');
         const resetDataDockBtn = document.getElementById('resetDataDockBtn');
         const jsonImportInput = document.getElementById('jsonImportInput'); 
@@ -676,47 +671,7 @@
         let isTimeInputManuallyChanged = false;
 
         // --- 1. Gestion des Données et Stockage ---
-        
-        // Fonctions pour gérer la mémoire du mode TP
-        function loadFreePaxColorMap() {
-            try {
-                const dataString = localStorage.getItem(FREE_PAX_COLOR_MAP_KEY);
-                return dataString ? JSON.parse(dataString) : {};
-            } catch (e) {
-                console.error("Erreur de chargement du map de couleurs PAX libre:", e);
-                return {};
-            }
-        }
-        
-        // Fonction pour charger le map inversé (Couleur -> Nom)
-        function loadColorPaxNameMap() {
-             try {
-                const dataString = localStorage.getItem(COLOR_PAX_NAME_MAP_KEY);
-                return dataString ? JSON.parse(dataString) : {};
-            } catch (e) {
-                console.error("Erreur de chargement du map de noms PAX libre par couleur:", e);
-                return {};
-            }
-        }
 
-        function saveFreePaxColorMap(mapData) {
-            try {
-                localStorage.setItem(FREE_PAX_COLOR_MAP_KEY, JSON.stringify(mapData));
-                
-                // Mettre à jour le map inversé immédiatement après la sauvegarde du map principal
-                const colorToNameMap = {};
-                for (const name in mapData) {
-                    const color = mapData[name];
-                    // On ne stocke que le DERNIER nom associé à cette couleur
-                    colorToNameMap[color] = name; 
-                }
-                localStorage.setItem(COLOR_PAX_NAME_MAP_KEY, JSON.stringify(colorToNameMap));
-                
-            } catch (e) {
-                console.error("Erreur de sauvegarde du map de couleurs PAX libre:", e);
-            }
-        }
-        
         function saveLogData(logData) {
             try {
                 // Tri par heure avant de sauvegarder (maintient l'ordre pour l'ajout standard)
@@ -860,17 +815,12 @@
                     return;
                 }
             } else {
-                paxName = freePaxInput.value.trim();
+                paxName = freePaxInput.value.trim() || 'Pax Libre';
                 paxColorHex = paxCustomColorInput.value;
-                if (!paxName) {
-                     alert("Veuillez donner un nom à l'intervenant.");
+                if (!freePaxInput.value.trim()) {
+                     alert("Veuillez donner un nom a l'intervenant.");
                      return;
                 }
-                
-                // Enregistrer l'association nom/couleur en mode TP
-                const colorMap = loadFreePaxColorMap();
-                colorMap[paxName] = paxColorHex;
-                saveFreePaxColorMap(colorMap);
             }
 
             if (!heureInput.value) {
@@ -905,61 +855,17 @@
             lieuInput.value = '';
             fenetrePorteInput.value = '';
             remarquesInput.value = '';
+            // On ne réinitialise pas le nom en mode TP/Libre pour des logs consécutifs du même intervenant,
+            // car cela représente un seul PAX.
+            // Si le PAX doit être changé, l'utilisateur le fait via le champ de texte ou le toggle.
+            // freePaxInput.value = ''; 
             
             // OPTIMISATION MOBILE : Placer le focus sur le champ des remarques pour la saisie rapide
             remarquesInput.focus();
         }
         
         function deleteLogEntry(id) {
-            const currentLogData = getLogData();
-            const entryToDelete = currentLogData.find(entry => entry.id === id);
-            
-            // Filtrer les données sans l'entrée à supprimer
-            const logData = currentLogData.filter(entry => entry.id !== id);
-
-            // --- NOUVEAU: Logique de suppression conditionnelle de la mémoire TP ---
-            if (entryToDelete && entryToDelete.paxMode === 'free') {
-                const deletedPaxName = entryToDelete.pax;
-                
-                // Vérifier si ce PAX existe encore dans les données restantes
-                const isPaxStillPresent = logData.some(entry => 
-                    entry.paxMode === 'free' && entry.pax === deletedPaxName
-                );
-                
-                if (!isPaxStillPresent) {
-                    // Si le PAX n'est plus dans le log, supprimer son association nom/couleur
-                    let nameColorMap = loadFreePaxColorMap();
-                    let colorNameMap = loadColorPaxNameMap();
-                    
-                    const colorToRemove = nameColorMap[deletedPaxName];
-                    
-                    delete nameColorMap[deletedPaxName];
-                    // Supprimer l'entrée du map inverse (Couleur -> Nom)
-                    // Note: On ne supprime que si la couleur correspond (sécurité)
-                    if (colorToRemove && colorNameMap[colorToRemove] === deletedPaxName) {
-                       delete colorNameMap[colorToRemove];
-                    }
-                    
-                    // Sauvegarder les maps mis à jour
-                    saveFreePaxColorMap(nameColorMap); 
-                    localStorage.setItem(COLOR_PAX_NAME_MAP_KEY, JSON.stringify(colorNameMap));
-                    
-                    console.log(`Mémoire PAX libre pour "${deletedPaxName}" supprimée.`);
-
-                    // Si l'entrée supprimée correspond aux champs d'entrée actuels, réinitialiser
-                    if (freePaxInput.value.trim() === deletedPaxName) {
-                        freePaxInput.value = '';
-                        paxInput.value = 'Pax Libre';
-                        // Revenir à la couleur par défaut
-                        selectColorSwatch(FREE_MODE_COLORS[0].hex); 
-                    }
-
-                } else {
-                    console.log(`Mémoire PAX libre pour "${deletedPaxName}" conservée (présent dans d'autres entrées).`);
-                }
-            }
-            // --- FIN LOGIQUE NOUVELLE ---
-
+            const logData = getLogData().filter(entry => entry.id !== id);
             renderLogTable(logData);
         }
 
@@ -972,34 +878,6 @@
              const b = bigint & 255;
              return { r: r / 255, g: g / 255, b: b / 255 };
         }
-        
-        // Fonction pour sélectionner la couleur dans la palette
-        function selectColorSwatch(hexColor) {
-             const allSwatches = Array.from(freeColorPalette.querySelectorAll('.color-swatch'));
-             allSwatches.forEach(s => s.classList.remove('selected'));
-             
-             const targetSwatch = allSwatches.find(s => s.dataset.color.toLowerCase() === hexColor.toLowerCase());
-             
-             if (targetSwatch) {
-                 targetSwatch.classList.add('selected');
-                 paxCustomColorInput.value = hexColor;
-                 
-                 // Mettre à jour le champ de texte si on clique sur une couleur mémorisée
-                 if (paxModeInput.value === 'free') {
-                     const colorToNameMap = loadColorPaxNameMap();
-                     const associatedName = colorToNameMap[hexColor.toLowerCase()];
-                     
-                     if (associatedName) {
-                         freePaxInput.value = associatedName;
-                         paxInput.value = associatedName; 
-                     }
-                 }
-                 
-                 return true;
-             }
-             return false; // Couleur non trouvée dans la palette
-        }
-
 
         // Initialisation du mode PAX et de la palette de couleurs
         function initPaxModeAndColors() {
@@ -1017,16 +895,16 @@
                 }
 
                 swatch.addEventListener('click', function() {
-                    const hex = this.dataset.color;
-                    selectColorSwatch(hex);
-                    // OPTIMISATION TP: Mettre le focus sur le champ de texte après sélection de couleur
-                    freePaxInput.focus(); 
+                    Array.from(paletteContainer.querySelectorAll('.color-swatch')).forEach(s => s.classList.remove('selected'));
+                    this.classList.add('selected');
+                    paxCustomColorInput.value = this.dataset.color;
                 });
                 paletteContainer.appendChild(swatch);
             });
             
             // Sélectionner la première couleur par défaut
-            selectColorSwatch(FREE_MODE_COLORS[0].hex);
+            paletteContainer.querySelector('.color-swatch').classList.add('selected');
+            paxCustomColorInput.value = FREE_MODE_COLORS[0].hex;
 
             // Initialisation de l'heure et du PAX standard sélectionné par défaut
             setPaxMode('standard');
@@ -1070,37 +948,9 @@
                  paxInput.value = selectedOption ? selectedOption.dataset.pax : 'Adversaire';
             } else {
                  // En mode libre, le champ libre gère la valeur de pax_input
-                 const currentFreePaxName = freePaxInput.value.trim();
-                 paxInput.value = currentFreePaxName || 'Pax Libre';
-                 
-                 // Tentative d'application de la couleur mémorisée
-                 if (currentFreePaxName) {
-                     applyFreePaxMemory(currentFreePaxName);
-                 } else {
-                     // Si le champ de nom est vide, charger le dernier nom du dernier log ou d'une couleur par défaut
-                     const colorToNameMap = loadColorPaxNameMap();
-                     const defaultColor = paxCustomColorInput.value.toLowerCase();
-                     const lastUsedName = colorToNameMap[defaultColor];
-                     
-                     if (lastUsedName) {
-                          freePaxInput.value = lastUsedName;
-                          paxInput.value = lastUsedName;
-                     }
-                 }
-                 
+                 paxInput.value = freePaxInput.value.trim() || 'Pax Libre';
                  // OPTIMISATION TP: Mettre le focus sur le champ de texte en mode libre pour saisie rapide
                  freePaxInput.focus();
-            }
-        }
-        
-        // Logique pour appliquer la mémoire PAX libre (Nom -> Couleur)
-        function applyFreePaxMemory(paxName) {
-            const colorMap = loadFreePaxColorMap();
-            const normalizedName = paxName.trim();
-            
-            if (colorMap[normalizedName]) {
-                const hexColor = colorMap[normalizedName];
-                selectColorSwatch(hexColor);
             }
         }
 
@@ -1640,10 +1490,7 @@
         }
 
         function handleResetData() {
-            // MIS À JOUR: S'assurer que les deux maps de mémoire sont supprimés
             localStorage.removeItem(LOCAL_STORAGE_KEY);
-            localStorage.removeItem(FREE_PAX_COLOR_MAP_KEY); 
-            localStorage.removeItem(COLOR_PAX_NAME_MAP_KEY); 
             renderLogTable([]);
             hideResetModal();
             
@@ -1685,23 +1532,15 @@
             // Ajout des listeners Drag & Drop sur le corps du tableau pour les événements de glissement.
             logTableBody.addEventListener('dragover', handleDragOver);
             logTableBody.addEventListener('drop', handleDrop);
-            logTableBody.addEventListener('dragend', handleDragEnd); 
+            logTableBody.addEventListener('dragend', handleDragEnd); // S'assurer que dragend est sur le corps pour attraper tous les cas
             
             // Rendu initial
             renderLogTable(loadLogData());
             
             // Écouteur pour le champ libre pour mettre à jour l'input pax_input en temps réel
-            // Ce listener met à jour pax_input et applique la mémoire de couleur en temps réel (Nom -> Couleur)
             document.getElementById('free_pax_input').addEventListener('input', (e) => {
-                 const paxName = e.target.value.trim();
                  if (paxModeInput.value === 'free') {
-                     paxInput.value = paxName || 'Pax Libre';
-                     if (paxName.length > 0) {
-                         applyFreePaxMemory(paxName);
-                     } else {
-                          // Si le champ est vide, on revient à la couleur par défaut
-                          selectColorSwatch(FREE_MODE_COLORS[0].hex);
-                     }
+                     paxInput.value = e.target.value.trim() || 'Pax Libre';
                  }
             });
 
