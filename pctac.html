@@ -624,8 +624,10 @@
     <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
     <script>
         const LOCAL_STORAGE_KEY = 'pcTacLogData';
-        // NOUVEAU: Clé pour stocker l'association Nom PAX Libre -> Couleur
+        // Clé pour stocker l'association Nom PAX Libre -> Couleur
         const FREE_PAX_COLOR_MAP_KEY = 'pcTacFreePaxColorMap'; 
+        // Clé pour stocker l'association Couleur -> Dernier Nom PAX Libre (pour la recherche inverse)
+        const COLOR_PAX_NAME_MAP_KEY = 'pcTacColorPaxNameMap'; 
         
         // --- COULEURS ÉTENDUES ---
         const FREE_MODE_COLORS = [
@@ -663,7 +665,7 @@
         const fenetrePorteInput = document.getElementById('fenetre_porte_input');
         const remarquesInput = document.getElementById('remarques_input');
         const paxSelectContainer = document.getElementById('pax_select_container');
-        const freeColorPalette = document.getElementById('free_color_palette'); // NOUVEAU
+        const freeColorPalette = document.getElementById('free_color_palette'); 
         const previewPdfDockBtn = document.getElementById('previewPdfDockBtn');
         const resetDataDockBtn = document.getElementById('resetDataDockBtn');
         const jsonImportInput = document.getElementById('jsonImportInput'); 
@@ -685,10 +687,31 @@
                 return {};
             }
         }
+        
+        // NOUVEAU: Fonction pour charger le map inversé (Couleur -> Nom)
+        function loadColorPaxNameMap() {
+             try {
+                const dataString = localStorage.getItem(COLOR_PAX_NAME_MAP_KEY);
+                return dataString ? JSON.parse(dataString) : {};
+            } catch (e) {
+                console.error("Erreur de chargement du map de noms PAX libre par couleur:", e);
+                return {};
+            }
+        }
 
         function saveFreePaxColorMap(mapData) {
             try {
                 localStorage.setItem(FREE_PAX_COLOR_MAP_KEY, JSON.stringify(mapData));
+                
+                // MIS À JOUR: Mettre à jour le map inversé immédiatement après la sauvegarde du map principal
+                const colorToNameMap = {};
+                for (const name in mapData) {
+                    const color = mapData[name];
+                    // On ne stocke que le DERNIER nom associé à cette couleur
+                    colorToNameMap[color] = name; 
+                }
+                localStorage.setItem(COLOR_PAX_NAME_MAP_KEY, JSON.stringify(colorToNameMap));
+                
             } catch (e) {
                 console.error("Erreur de sauvegarde du map de couleurs PAX libre:", e);
             }
@@ -844,7 +867,8 @@
                      return;
                 }
                 
-                // NOUVEAU: Enregistrer l'association nom/couleur en mode TP
+                // MIS À JOUR: Enregistrer l'association nom/couleur en mode TP
+                // Le nom est toujours associé à la couleur actuelle.
                 const colorMap = loadFreePaxColorMap();
                 colorMap[paxName] = paxColorHex;
                 saveFreePaxColorMap(colorMap);
@@ -882,7 +906,6 @@
             lieuInput.value = '';
             fenetrePorteInput.value = '';
             remarquesInput.value = '';
-            // Le nom en mode libre reste (pour des logs consécutifs du même PAX), mais pourrait être modifié
             
             // OPTIMISATION MOBILE : Placer le focus sur le champ des remarques pour la saisie rapide
             remarquesInput.focus();
@@ -909,9 +932,22 @@
              allSwatches.forEach(s => s.classList.remove('selected'));
              
              const targetSwatch = allSwatches.find(s => s.dataset.color.toLowerCase() === hexColor.toLowerCase());
+             
              if (targetSwatch) {
                  targetSwatch.classList.add('selected');
                  paxCustomColorInput.value = hexColor;
+                 
+                 // NOUVEAU: Mettre à jour le champ de texte si on clique sur une couleur mémorisée
+                 if (paxModeInput.value === 'free') {
+                     const colorToNameMap = loadColorPaxNameMap();
+                     const associatedName = colorToNameMap[hexColor.toLowerCase()];
+                     
+                     if (associatedName) {
+                         freePaxInput.value = associatedName;
+                         paxInput.value = associatedName; 
+                     }
+                 }
+                 
                  return true;
              }
              return false; // Couleur non trouvée dans la palette
@@ -934,7 +970,8 @@
                 }
 
                 swatch.addEventListener('click', function() {
-                    selectColorSwatch(this.dataset.color);
+                    const hex = this.dataset.color;
+                    selectColorSwatch(hex);
                     // OPTIMISATION TP: Mettre le focus sur le champ de texte après sélection de couleur
                     freePaxInput.focus(); 
                 });
@@ -989,7 +1026,7 @@
                  const currentFreePaxName = freePaxInput.value.trim();
                  paxInput.value = currentFreePaxName || 'Pax Libre';
                  
-                 // NOUVEAU: Tentative d'application de la couleur mémorisée
+                 // Tentative d'application de la couleur mémorisée
                  if (currentFreePaxName) {
                      applyFreePaxMemory(currentFreePaxName);
                  }
@@ -999,7 +1036,7 @@
             }
         }
         
-        // NOUVEAU: Logique pour appliquer la mémoire PAX libre
+        // Logique pour appliquer la mémoire PAX libre (Nom -> Couleur)
         function applyFreePaxMemory(paxName) {
             const colorMap = loadFreePaxColorMap();
             const normalizedName = paxName.trim();
@@ -1547,7 +1584,8 @@
 
         function handleResetData() {
             localStorage.removeItem(LOCAL_STORAGE_KEY);
-            localStorage.removeItem(FREE_PAX_COLOR_MAP_KEY); // NOUVEAU: Réinitialiser aussi le map de couleurs
+            localStorage.removeItem(FREE_PAX_COLOR_MAP_KEY); 
+            localStorage.removeItem(COLOR_PAX_NAME_MAP_KEY); // NOUVEAU: Réinitialiser le map inversé
             renderLogTable([]);
             hideResetModal();
             
@@ -1595,7 +1633,7 @@
             renderLogTable(loadLogData());
             
             // Écouteur pour le champ libre pour mettre à jour l'input pax_input en temps réel
-            // NOUVEAU: Ce listener met à jour pax_input et applique la mémoire de couleur en temps réel
+            // Ce listener met à jour pax_input et applique la mémoire de couleur en temps réel (Nom -> Couleur)
             document.getElementById('free_pax_input').addEventListener('input', (e) => {
                  const paxName = e.target.value.trim();
                  if (paxModeInput.value === 'free') {
