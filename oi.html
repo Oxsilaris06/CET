@@ -129,7 +129,7 @@
         .articulation-composition-display p { margin-bottom: 5px; }
         .articulation-composition-display strong { color: var(--accent-blue); }
 
-        /* Styles du Dock Flottant (AJOUT ET MODIFICATION) */
+        /* Styles du Dock Flottant */
         .dock-menu { 
             position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); 
             display: flex; gap: 10px; padding: 10px; z-index: 1000; 
@@ -553,7 +553,7 @@
             </button>
         </div>
     </dialog>
-    <!-- Dock Flottant (AJOUT DU BOUTON FULLSCREEN) -->
+    <!-- Dock Flottant -->
     <div class="dock-menu" id="dockMenu">
         <div class="dock-menu-item" id="dockToggleBtn" title="Réduire"><span class="material-symbols-outlined">expand_more</span></div>
         <a href="index.html" class="dock-menu-item" title="Accueil"><span class="material-symbols-outlined">home</span></a>
@@ -561,11 +561,11 @@
         <div class="dock-menu-item" id="exportSessionBtn" title="Exporter la session"><span class="material-symbols-outlined">file_download</span></div>
         <div class="dock-menu-item" id="settingsBtn" title="Paramètres"><span class="material-symbols-outlined">settings</span></div>
         <div class="dock-menu-item" id="darkModeToggle" title="Changer le thème"><span class="material-symbols-outlined" id="darkModeIcon">nightlight</span></div>
-        <!-- NOUVEAU BOUTON FULLSCREEN -->
+        <!-- BOUTON FULLSCREEN -->
         <div class="dock-menu-item" id="fullscreenToggle" title="Plein écran">
             <span class="material-symbols-outlined" id="fullscreenIcon">fullscreen</span>
         </div>
-        <!-- FIN NOUVEAU BOUTON FULLSCREEN -->
+        <!-- FIN BOUTON FULLSCREEN -->
         <div class="dock-menu-item" id="resetBtn" title="Réinitialiser le formulaire"><span class="material-symbols-outlined">refresh</span></div>
         <div class="dock-menu-item" id="tutorialBtn" title="Lancer le tutoriel"><span class="material-symbols-outlined">school</span></div>
     </div>
@@ -2640,6 +2640,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
         
                     annotationsData.forEach(annotation => drawAnnotationOnContext(tempCtx, img.naturalWidth, img.naturalHeight, annotation));
         
+                    // Le format PNG est crucial pour les annotations (transparence)
                     tempCanvas.toBlob(blob => {
                         if (blob) {
                             resolve(blob);
@@ -2680,7 +2681,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 case 'location': {
                     const radius = annotation.radius || 0;
                     if (radius < 2) { context.restore(); return; }
-                    context.beginPath(); context.arc(annotation.x, annotation.y, radius, 0, 2 * Math.PI);
+                    context.beginPath(); context.arc(annotation.x, annotation.x, radius, 0, 2 * Math.PI);
                     context.fillStyle = `rgba(91, 155, 213, ${annotation.opacity || 0.5})`; context.fill();
                     context.strokeStyle = '#5b9bd5'; context.lineWidth = 2; context.stroke();
                     if (annotation.text) {
@@ -2797,40 +2798,38 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
         // --- NOUVELLE LOGIQUE FULLSCREEN ET MISE À JOUR DU DOCK ---
 
         function isFullscreen() {
-            // Vérifie si le mode plein écran est actif (tous navigateurs)
             return document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement;
         }
 
+        function requestFullscreenOnElement(element) {
+             if (element.requestFullscreen) {
+                element.requestFullscreen();
+            } else if (element.mozRequestFullScreen) {
+                element.mozRequestFullScreen();
+            } else if (element.webkitRequestFullscreen) {
+                element.webkitRequestFullscreen();
+            } else if (element.msRequestFullscreen) {
+                element.msRequestFullscreen();
+            }
+        }
+
         function toggleFullscreen() {
-            const icon = document.getElementById('fullscreenIcon');
             if (!isFullscreen()) {
-                // Demande l'activation du plein écran sur l'élément racine (tout le document)
-                const element = document.documentElement;
-                if (element.requestFullscreen) {
-                    element.requestFullscreen();
-                } else if (element.mozRequestFullScreen) { /* Firefox */
-                    element.mozRequestFullScreen();
-                } else if (element.webkitRequestFullscreen) { /* Chrome, Safari and Opera */
-                    element.webkitRequestFullscreen();
-                } else if (element.msRequestFullscreen) { /* IE/Edge */
-                    element.msRequestFullscreen();
-                }
+                requestFullscreenOnElement(document.documentElement);
             } else {
-                // Quitte le mode plein écran
                 if (document.exitFullscreen) {
                     document.exitFullscreen();
-                } else if (document.mozCancelFullScreen) { /* Firefox */
+                } else if (document.mozCancelFullScreen) {
                     document.mozCancelFullScreen();
-                } else if (document.webkitExitFullscreen) { /* Chrome, Safari and Opera */
+                } else if (document.webkitExitFullscreen) {
                     document.webkitExitFullscreen();
-                } else if (document.msExitFullscreen) { /* IE/Edge */
+                } else if (document.msExitFullscreen) {
                     document.msExitFullscreen();
                 }
             }
         }
         
         function updateFullscreenIcon() {
-            // Met à jour l'icône du dock en fonction de l'état du plein écran
             const icon = document.getElementById('fullscreenIcon');
             if (icon) {
                  if (isFullscreen()) {
@@ -2842,21 +2841,25 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                  }
             }
         }
-
-        /**
-         * Gestionnaire d'événements vide pour bloquer la demande de plein écran forcée.
-         * La demande est maintenant faite uniquement par le bouton du dock.
-         */
-        function blockForcedFullscreen(e) {
-            // Empêche la propagation de l'événement pour éviter la logique de plein écran externe si elle existait.
-            // e.preventDefault(); // Ne pas utiliser preventDefault pour ne pas bloquer les autres interactions.
-            e.stopPropagation();
+        
+        // Gestionnaire pour la première interaction qui active le plein écran
+        function handleFirstInteraction() {
+            // Le plein écran est déclenché sur la première interaction, peu importe où.
+            requestFullscreenOnElement(document.documentElement);
+            
+            // Retirer les écouteurs après la première activation
+            document.body.removeEventListener('click', handleFirstInteraction);
+            document.body.removeEventListener('touchend', handleFirstInteraction);
         }
 
         // --- FIN NOUVELLE LOGIQUE FULLSCREEN ET MISE À JOUR DU DOCK ---
 
         document.addEventListener('DOMContentLoaded', async () => {
             
+            // AJOUT: Initialisation des écouteurs pour le mode plein écran au premier clic
+            document.body.addEventListener('click', handleFirstInteraction);
+            document.body.addEventListener('touchend', handleFirstInteraction);
+
             try {
                 await dbManager.init();
             } catch (e) {
@@ -2891,7 +2894,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             const dockMenu = document.getElementById('dockMenu'); const dockToggleBtn = document.getElementById('dockToggleBtn');
             dockToggleBtn.addEventListener('click', (event) => { event.stopPropagation(); dockMenu.classList.toggle('collapsed'); localStorage.setItem('dockCollapsed', dockMenu.classList.contains('collapsed')); });
             
-            // Écouteurs pour le bouton de plein écran (NOUVEAU)
+            // Écouteurs pour le bouton de plein écran
             const fullscreenToggleBtn = document.getElementById('fullscreenToggle');
             if (fullscreenToggleBtn) {
                  fullscreenToggleBtn.addEventListener('click', toggleFullscreen);
@@ -2903,11 +2906,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                  updateFullscreenIcon(); 
             }
             
-            // DÉSACTIVER la logique de plein écran forcé par l'interaction utilisateur (e.g., sur 1.html)
-            // On s'assure que le mode plein écran n'est plus activé par défaut par un clic sur le body.
-            // On peut laisser les anciens gestionnaires de click ou touchend inactifs pour une future réactivation, ou simplement s'assurer qu'ils sont retirés/n'existent pas.
-            // Comme le code fourni ne montre plus la logique de 'handleFirstInteraction', je n'ai pas besoin de la retirer, mais j'ai ajouté une fonction vide `blockForcedFullscreen` au cas où d'autres scripts externes tenteraient de forcer le plein écran (bien que ce ne soit pas la manière habituelle de faire).
-
             document.getElementById('darkModeToggle').addEventListener('click', () => {
                 document.body.classList.toggle('light-mode'); document.body.classList.toggle('dark-mode');
                 const isDarkMode = document.body.classList.contains('dark-mode');
@@ -3543,6 +3541,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
         
             if (allImagesMeta.length > 0) {
                 console.log("Début de la compression dynamique...");
+                // CORRECTION: Assurer que le Do/While s'exécute au moins une fois et garantit que les images sont traitées.
                 do {
                     totalImageSize = 0;
                     const compressionPromises = allImagesMeta.map(async (imgMeta) => {
@@ -3551,12 +3550,65 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                         
                         const annotations = JSON.parse(imgMeta.annotations || '[]');
                         let blobToCompress = originalBlob;
+                        let format = 'image/jpeg'; // Format par défaut
+                        
                         if (annotations.length > 0) {
+                            // Si annotée, on crée un PNG annoté
                             blobToCompress = await createAnnotatedImageBlob(originalBlob, annotations);
+                            format = 'image/png';
                         }
                         
-                        const compressedBuffer = await compressImage(blobToCompress, quality);
-                        return { id: imgMeta.id, buffer: compressedBuffer };
+                        // Compression/conversion vers le buffer
+                        const isPng = format === 'image/png';
+                        
+                        return new Promise((resolve, reject) => {
+                            const img = new Image();
+                            const objectURL = URL.createObjectURL(blobToCompress);
+                            img.src = objectURL;
+                            
+                            img.onload = () => {
+                                URL.revokeObjectURL(objectURL);
+                                const canvas = document.createElement('canvas');
+                                const ctx = canvas.getContext('2d');
+                                
+                                const MAX_DIMENSION = 1920;
+                                let { naturalWidth: width, naturalHeight: height } = img;
+                                // ... Logique de redimensionnement conservée ...
+                                if (width > MAX_DIMENSION || height > MAX_DIMENSION) {
+                                    if (width > height) {
+                                        height = (MAX_DIMENSION / width) * height;
+                                        width = MAX_DIMENSION;
+                                    } else {
+                                        width = (MAX_DIMENSION / height) * width;
+                                        height = MAX_DIMENSION;
+                                    }
+                                }
+                                canvas.width = width;
+                                canvas.height = height;
+                                
+                                if (!isPng) { // Appliquer le fond blanc seulement si ce n'est pas un PNG
+                                   ctx.fillStyle = 'white';
+                                   ctx.fillRect(0, 0, canvas.width, canvas.height);
+                                }
+                                ctx.drawImage(img, 0, 0, width, height);
+
+                                canvas.toBlob(
+                                    (blob) => {
+                                        if (blob) {
+                                            resolve({ id: imgMeta.id, buffer: blob.arrayBuffer(), format: format });
+                                        } else {
+                                            reject(new Error('Canvas to blob failed.'));
+                                        }
+                                    },
+                                    format,
+                                    quality
+                                );
+                            };
+                            img.onerror = () => {
+                                URL.revokeObjectURL(objectURL);
+                                resolve({ id: imgMeta.id, buffer: null }); // Ignore l'image en cas d'erreur de chargement
+                            };
+                        });
                     });
                     
                     const results = await Promise.all(compressionPromises);
@@ -3564,7 +3616,8 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     compressedImages = {};
                     for (const result of results) {
                         if (result.buffer) {
-                            compressedImages[result.id] = result.buffer;
+                            // Stocker l'ArrayBuffer et le format dans le cache des images compressées
+                            compressedImages[result.id] = { buffer: result.buffer, format: result.format };
                             totalImageSize += result.buffer.byteLength;
                         }
                     }
@@ -3580,7 +3633,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 } while (quality >= minQuality);
 
                 if (totalImageSize + TEXT_OVERHEAD_ESTIMATE > PDF_TARGET_SIZE_BYTES) {
-                    alert(`Avertissement: Le PDF généré pourrait dépasser 2.5Mo. La taille des images compressées est de ${(totalImageSize / 1024 / 1024).toFixed(2)}MB.`);
+                    alert(`Avertissement: Le PDF généré pourrait dépasser 2.5Mo. La taille des images compressées est de ${(totalImageSize / 1024 / 1024).toFixed(2)}MB. Tente de générer avec la qualité minimum (${minQuality * 100}%).`);
                 }
             }
             // --- Fin de la Section de Compression ---
@@ -3653,15 +3706,17 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     const imgData = imagesData[i];
                     addNewPage();
                     try {
-                        const imageBytes = compressedImages[imgData.id];
-                        if (!imageBytes) throw new Error("Données d'image compressées non trouvées.");
-
+                        const compressedInfo = compressedImages[imgData.id];
+                        if (!compressedInfo || !compressedInfo.buffer) throw new Error("Données d'image compressées non trouvées.");
+                        
+                        const imageBytes = compressedInfo.buffer;
                         let image;
-                        try {
-                            image = await pdfDoc.embedJpg(imageBytes);
-                        } catch (e) {
-                            console.warn("Échec de l'intégration en tant que JPEG, tentative en PNG...", e);
-                            image = await pdfDoc.embedPng(imageBytes);
+
+                        // CORRECTION: Utiliser le format stocké pour l'intégration PDF
+                        if (compressedInfo.format === 'image/png') {
+                             image = await pdfDoc.embedPng(imageBytes);
+                        } else {
+                             image = await pdfDoc.embedJpg(imageBytes);
                         }
                         
                         const { width, height } = context.currentPage.getSize();
@@ -3787,14 +3842,14 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     const frameY = topY - photoBoxHeight; 
                     
                     try {
-                        const imageBytes = compressedImages[id];
-                        if (!imageBytes) throw new Error("Données d'image compressées pour l'adversaire non trouvées.");
+                        const compressedInfo = compressedImages[id];
+                        if (!compressedInfo || !compressedInfo.buffer) throw new Error("Données d'image compressées pour l'adversaire non trouvées.");
 
                         let image;
-                        try {
-                            image = await pdfDoc.embedJpg(imageBytes);
-                        } catch (e) {
-                            image = await pdfDoc.embedPng(imageBytes);
+                        if (compressedInfo.format === 'image/png') {
+                             image = await pdfDoc.embedPng(compressedInfo.buffer);
+                        } else {
+                             image = await pdfDoc.embedJpg(compressedInfo.buffer);
                         }
                         
                         const scaled = image.scaleToFit(photoBoxWidth - 10, photoBoxHeight - 30);
