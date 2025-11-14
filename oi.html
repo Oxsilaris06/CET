@@ -138,6 +138,7 @@
             transition: all 0.3s ease-in-out; 
         }
         .dock-menu-item { 
+			
             display: flex; align-items: center; justify-content: center; 
             background-color: var(--bg-container); color: var(--text-primary); 
             border: 1px solid var(--border-color); 
@@ -550,6 +551,7 @@
     <div class="dock-menu" id="dockMenu">
         <!-- Dock original rétabli -->
         <div class="dock-menu-item" id="dockToggleBtn" title="Réduire"><span class="material-symbols-outlined">expand_more</span></div>
+        <div class="dock-menu-item" id="fullscreenToggle" title="Plein écran"><span class="material-symbols-outlined" id="fullscreenIcon">fullscreen</span></div>
         <a href="index.html" class="dock-menu-item" title="Accueil"><span class="material-symbols-outlined">home</span></a>
         <div class="dock-menu-item" id="importSessionBtn" title="Importer une session"><span class="material-symbols-outlined">file_upload</span></div>
         <div class="dock-menu-item" id="exportSessionBtn" title="Exporter la session"><span class="material-symbols-outlined">file_download</span></div>
@@ -1124,6 +1126,82 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
     <script src="https://unpkg.com/jspdf@latest/dist/jspdf.umd.min.js"></script>
     <script src="https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js"></script>
+	// --- NOUVELLE LOGIQUE FULLSCREEN ET MISE À JOUR DU DOCK ---
+
+        function isFullscreen() {
+            return document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement;
+        }
+
+        function requestFullscreenOnElement(element) {
+             if (element.requestFullscreen) {
+                element.requestFullscreen();
+            } else if (element.mozRequestFullScreen) {
+                element.mozRequestFullScreen();
+            } else if (element.webkitRequestFullscreen) {
+                element.webkitRequestFullscreen();
+            } else if (element.msRequestFullscreen) {
+                element.msRequestFullscreen();
+            }
+        }
+
+        function toggleFullscreen() {
+            if (!isFullscreen()) {
+                requestFullscreenOnElement(document.documentElement);
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                } else if (document.mozCancelFullScreen) {
+                    document.mozCancelFullScreen();
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                } else if (document.msExitFullscreen) {
+                    document.msExitFullscreen();
+                }
+            }
+        }
+        
+        function updateFullscreenIcon() {
+            const icon = document.getElementById('fullscreenIcon');
+            if (icon) {
+                 if (isFullscreen()) {
+                    icon.textContent = 'fullscreen_exit';
+                    icon.title = 'Quitter le plein écran';
+                 } else {
+                    icon.textContent = 'fullscreen';
+                    icon.title = 'Plein écran';
+                 }
+            }
+        }
+        
+        // Gestionnaire pour la première interaction qui active le plein écran
+        function handleFirstInteraction() {
+            // Le plein écran est déclenché sur la première interaction, peu importe où.
+            requestFullscreenOnElement(document.documentElement);
+            
+            // Retirer les écouteurs après la première activation
+            document.body.removeEventListener('click', handleFirstInteraction);
+            document.body.removeEventListener('touchend', handleFirstInteraction);
+        }
+
+        // --- Début du bloc ajouté dans l'événement DOMContentLoaded ---
+        
+        // AJOUT: Initialisation des écouteurs pour le mode plein écran au premier clic
+        document.body.addEventListener('click', handleFirstInteraction);
+        document.body.addEventListener('touchend', handleFirstInteraction);
+	
+        // Écouteurs pour le bouton de plein écran
+        const fullscreenToggleBtn = document.getElementById('fullscreenToggle');
+        if (fullscreenToggleBtn) {
+             fullscreenToggleBtn.addEventListener('click', toggleFullscreen);
+             // Écouteurs pour mettre à jour l'icône
+             document.addEventListener('fullscreenchange', updateFullscreenIcon);
+             document.addEventListener('webkitfullscreenchange', updateFullscreenIcon);
+             document.addEventListener('mozfullscreenchange', updateFullscreenIcon);
+             document.addEventListener('msfullscreenchange', updateFullscreenIcon);
+             updateFullscreenIcon(); 
+        }
+
+        // --- Fin du bloc ajouté ---
     <script>
         // CORRECTION 1: Utilisation de la bonne URL pour Gemini
         const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent";
