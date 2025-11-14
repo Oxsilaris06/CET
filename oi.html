@@ -869,7 +869,7 @@ présumé de (Nom Adversaire 1) et (Nom Adversaire 2) après avoir bouclé celui
                                  <label for="ao_mission">Mission (M):</label><textarea id="ao_mission" rows="3">BOUCLER - SURVEILLER - INTERDIRE TOUTE FUITE</textarea>
                                  <label for="ao_secteur_surveillance">Secteur de surveillance (S):</label><textarea id="ao_secteur_surveillance" rows="3"></textarea>
                                  <label for="ao_points_particuliers">Points Particuliers (P):</label><textarea id="ao_points_particuliers" rows="3"></textarea>
-                                 <label for="ao_cat">Conduite à Tenir (C):</label><textarea id="ao_cat" rows="6">- Compte rendu de mise en place.
+                                 <label for="ao_cat">Conduite à Tenir (C):</label><textarea id="india_cat" rows="6">- Compte rendu de mise en place.
 - Renseigner régulièrement.
 - Si décelé, CR.
 - Si fuite, CR direction fuite + interpellation si rapport de force favorable.
@@ -1668,7 +1668,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             document.querySelectorAll('.patracdvr-member-btn').forEach(btn => {
                 const trigramme = btn.dataset.trigramme;
                 const cellule = btn.dataset.cellule;
-                if (!trigramme || !cellule || cellule.toLowerCase() === 'sans') return;
+                if (!trigramme || !cellule || cellule.toLowerCase().startsWith('india')) return;
 
                 if (cellule.toLowerCase().startsWith('india')) {
                     if (!indiaMembersByCell[cellule]) {
@@ -2201,7 +2201,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             { text: "Bienvenue dans le générateur d'Ordre Initial. Ce guide vous assistera dans la création de votre document opérationnel.", selector: '.container', center: true },
             { text: "Cette barre de progression indique les différentes sections de l'O.I. Vous pouvez cliquer sur une étape pour y naviguer directement.", selector: '.wizard-progress' },
             { text: "Remplissez les informations textuelles dans les onglets 1 à 7. Les aperçus des photos que vous ajouterez apparaîtront ici.", selector: '#date_op', step: 0 },
-            { text: "L'onglet 'Photos' (étape 8) est désormais le seul endroit pour ajouter et gérer vos images. Cliquez sur un bouton pour sélectionner une ou plusieurs photos.", selector: '.wizard-step:nth-of-type(8)', step: 7 },
+            { text: "L'onglet 'Photos' (étape 8) est désormais le seul endroit pour ajouter et gérer votre sélection d'images.", selector: '.wizard-step:nth-of-type(8)', step: 7 },
             { text: "Sur la page 'Photos', chaque image importée dispose de boutons pour l'annoter ou la supprimer individuellement.", selector: '#adversary_photo_preview_container', step: 7 },
             { text: "Une fois le formulaire complété, cette étape affichera les alertes de cohérence sur votre composition. Cliquez ensuite ici pour visualiser le document (Mode Présentation) et le télécharger au format PDF.", selector: '#previewBtn', step: 9 },
             { text: "Ce menu flottant offre un accès rapide aux fonctions globales: sauvegarder (exporter) ou charger (importer) une session, changer le thème, activer/désactiver le plein écran, réinitialiser le formulaire, ou relancer ce tutoriel.", selector: '#dockMenu' }
@@ -2681,7 +2681,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 case 'location': {
                     const radius = annotation.radius || 0;
                     if (radius < 2) { context.restore(); return; }
-                    context.beginPath(); context.arc(annotation.x, annotation.x, radius, 0, 2 * Math.PI);
+                    context.beginPath(); context.arc(annotation.x, annotation.y, radius, 0, 2 * Math.PI);
                     context.fillStyle = `rgba(91, 155, 213, ${annotation.opacity || 0.5})`; context.fill();
                     context.strokeStyle = '#5b9bd5'; context.lineWidth = 2; context.stroke();
                     if (annotation.text) {
@@ -3550,7 +3550,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                         
                         const annotations = JSON.parse(imgMeta.annotations || '[]');
                         let blobToCompress = originalBlob;
-                        let format = 'image/jpeg'; // Format par défaut
+                        let format = originalBlob.type || 'image/jpeg'; // Format par défaut
                         
                         if (annotations.length > 0) {
                             // Si annotée, on crée un PNG annoté
@@ -3592,10 +3592,14 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                                 }
                                 ctx.drawImage(img, 0, 0, width, height);
 
+                                // L'ArrayBuffer est nécessaire pour pdf-lib
                                 canvas.toBlob(
                                     (blob) => {
                                         if (blob) {
-                                            resolve({ id: imgMeta.id, buffer: blob.arrayBuffer(), format: format });
+                                            // Ajout du format dans le résultat pour l'intégration PDF
+                                            blob.arrayBuffer().then(buffer => {
+                                                resolve({ id: imgMeta.id, buffer: buffer, format: format });
+                                            }).catch(reject);
                                         } else {
                                             reject(new Error('Canvas to blob failed.'));
                                         }
@@ -4110,7 +4114,7 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                     // NOTE: Utilisation de onload pour révoquer l'URL après le chargement, mais Object URL est mis en cache ici.
                     // Pour éviter la fuite de mémoire, le nettoyage doit se faire à la main si cette page n'est jamais fermée.
                     // Cependant, pour l'aperçu PDF, l'URL doit être révoquée APRÈS le téléchargement/génération du PDF, ce qui est fait dans downloadOiPdf().
-                    imageHtml += `<img src="${objectURL}" alt="${finalTitle}" style="max-width: 100%; height: auto; border-radius: 4px; box-shadow: 0 4px 8px rgba(0,0,0,${isDarkMode ? 0.4 : 0.1});">`; 
+                    imageHtml += `<img src="${objectURL}" alt="${finalTitle}" style="max-width: 100%; height: auto; border-radius: 4px; box-shadow: 0 4px 8px rgba(0,0,0,${isDarkMode ? 0.4 : 0.1});" onload="URL.revokeObjectURL(this.src)">`; 
                     imageHtml += `</div>`;
                 }
                 return imageHtml;
