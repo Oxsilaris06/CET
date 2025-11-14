@@ -378,7 +378,7 @@
             font-weight: 500;
             color: white;
             border: none;
-            border-radius: 4px;
+            border-radius: 44px;
             cursor: pointer;
             text-transform: uppercase;
             text-decoration: none;
@@ -602,7 +602,6 @@
 
         // Fonction pour gérer le mode plein écran au premier toucher/clic
         function setupFullscreenListener() {
-            const FSS_KEY = 'fullscreen_requested';
 
             // Fonction pour vérifier si l'on est en plein écran
             const isFullscreen = () => {
@@ -622,11 +621,8 @@
 
             const elementToRequestFullscreen = document.documentElement; // La balise <html>
             
-            // On ne vérifie plus le localStorage pour forcer le plein écran à chaque rechargement
-            // tant que l'utilisateur le quitte.
-
             const requestFullscreen = (e) => {
-                // S'assurer que le plein écran n'est pas déjà actif avant de demander (pour éviter des erreurs)
+                // S'assurer que le plein écran n'est pas déjà actif avant de demander
                 if (!isFullscreen()) {
                     // 2. Tente de passer en mode plein écran
                     if (elementToRequestFullscreen.requestFullscreen) {
@@ -641,11 +637,19 @@
                 }
                 
                 // 3. Retire l'écouteur après la première interaction (touch ou click)
+                // On utilise removeEventListener car addEventListener est appelé deux fois
+                document.body.removeEventListener('click', requestFullscreen);
+                document.body.removeEventListener('touchstart', requestFullscreen);
+                
+                // Pour éviter le double déclenchement si un touchstart génère aussi un click
+                // (Bien que { once: true } devrait suffire, c'est plus robuste)
                 document.body.removeEventListener('click', requestFullscreen);
                 document.body.removeEventListener('touchstart', requestFullscreen);
             };
 
             // Ajoute les écouteurs pour touchstart (priorité mobile) et click (fallback/souris mobile)
+            // L'option { once: true } garantit que l'écouteur est automatiquement retiré après la première exécution,
+            // mais l'appel explicite dans requestFullscreen est une bonne redondance pour des événements multiples.
             document.body.addEventListener('touchstart', requestFullscreen, { once: true });
             document.body.addEventListener('click', requestFullscreen, { once: true });
             console.log('Écouteur de plein écran actif sur le premier touch/clic (uniquement mobile).');
