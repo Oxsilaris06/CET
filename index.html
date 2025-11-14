@@ -600,32 +600,40 @@
         // Fonction pour gérer le mode plein écran au premier clic et mémoriser le choix
         function setupFullscreenListener() {
             const FSS_KEY = 'fullscreen_requested';
+            // Utilise la même constante MOBILE_BREAKPOINT que pour la vidéo
+            const MOBILE_BREAKPOINT = 600; 
 
-            // 1. Vérifie si le mode plein écran a déjà été demandé et réussi
-            if (localStorage.getItem(FSS_KEY) === 'true') {
-                console.log('Mode plein écran déjà marqué comme réussi. Pas d\'écouteur ajouté.');
+            // 1. Vérifie si le mode plein écran a déjà été demandé/réussi OU si on est sur un écran large
+            if (localStorage.getItem(FSS_KEY) === 'true' || window.innerWidth > MOBILE_BREAKPOINT) {
+                console.log('Plein écran non déclenché (déjà fait ou écran PC).');
                 return;
             }
 
             const elementToRequestFullscreen = document.documentElement; // La balise <html>
 
             const requestFullscreen = (e) => {
-                // 2. Tente de passer en mode plein écran
-                if (elementToRequestFullscreen.requestFullscreen) {
-                    elementToRequestFullscreen.requestFullscreen().then(() => {
-                        // 3. Mémorise le choix dans localStorage après le succès
+                // Double vérification au cas où l'utilisateur redimensionne la fenêtre après le chargement
+                if (window.innerWidth <= MOBILE_BREAKPOINT) {
+                    // 2. Tente de passer en mode plein écran
+                    if (elementToRequestFullscreen.requestFullscreen) {
+                        elementToRequestFullscreen.requestFullscreen().then(() => {
+                            // 3. Mémorise le choix dans localStorage après le succès
+                            localStorage.setItem(FSS_KEY, 'true');
+                            console.log('Passage en plein écran réussi et mémorisé.');
+                        }).catch(err => {
+                            console.error('Erreur lors de la tentative de plein écran :', err);
+                        });
+                    } else if (elementToRequestFullscreen.webkitRequestFullscreen) { /* Safari */
+                        elementToRequestFullscreen.webkitRequestFullscreen();
                         localStorage.setItem(FSS_KEY, 'true');
-                        console.log('Passage en plein écran réussi et mémorisé.');
-                    }).catch(err => {
-                        console.error('Erreur lors de la tentative de plein écran :', err);
-                    });
-                } else if (elementToRequestFullscreen.webkitRequestFullscreen) { /* Safari */
-                    elementToRequestFullscreen.webkitRequestFullscreen();
-                    localStorage.setItem(FSS_KEY, 'true');
-                } else if (elementToRequestFullscreen.msRequestFullscreen) { /* IE11 */
-                    elementToRequestFullscreen.msRequestFullscreen();
-                    localStorage.setItem(FSS_KEY, 'true');
+                    } else if (elementToRequestFullscreen.msRequestFullscreen) { /* IE11 */
+                        elementToRequestFullscreen.msRequestFullscreen();
+                        localStorage.setItem(FSS_KEY, 'true');
+                    }
+                } else {
+                    console.log('Action ignorée car écran PC.');
                 }
+
 
                 // 4. Retire l'écouteur après la première interaction pour garantir l'unicité
                 document.body.removeEventListener('click', requestFullscreen);
@@ -635,7 +643,7 @@
             // Ajoute les écouteurs pour click (souris) et touchstart (mobile)
             document.body.addEventListener('click', requestFullscreen, { once: true });
             document.body.addEventListener('touchstart', requestFullscreen, { once: true });
-            console.log('Écouteur de plein écran actif sur le premier clic/touch.');
+            console.log('Écouteur de plein écran actif sur le premier clic/touch (uniquement mobile).');
         }
 
         // --- LOGIQUE AJOUTÉE EDEN 11 POUR LA SOURCE VIDÉO CONDITIONNELLE ---
