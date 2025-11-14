@@ -1126,8 +1126,66 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
     <script src="https://unpkg.com/jspdf@latest/dist/jspdf.umd.min.js"></script>
     <script src="https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js"></script>
-	// --- NOUVELLE LOGIQUE FULLSCREEN ET MISE À JOUR DU DOCK ---
+    <script>
+        // CORRECTION 1: Utilisation de la bonne URL pour Gemini
+        const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent";
+        const RETEX_BASE_URL = "https://oxsilaris06.github.io/Praxis/retex.html";
+        const DEFAULT_CONFIG_FILE = 'members_config.json'; 
+        
+        // Stockage des ObjectURLs pour le nettoyage lors du rechargement des données
+        let objectUrlsCache = {};
 
+        let memberConfig = {
+            fonctions: ["Chef inter", "Chef dispo", "Chef Oscar", "DE", "Cyno", "Inter", "AO", "Sans"],
+            cellules: ["AO1", "AO2", "AO3", "AO4", "AO5", "AO6", "AO7","AO8", "India 1", "India 2", "India 3", "India 4", "India 5", "Effrac", "Sans"],
+            principales: ["UMP9", "G36", "FAP", "Sans"],
+            afis: ["PIE", "LBD40", "LBD44", "Sans"],
+            secondaires: ["PSA"],
+            grenades: ["GENL", "MP7", "Sans"],
+            equipements: ["Sans", "BBAL", "Belier","Lacry", "IL", "Lot 5.11"],
+            equipements2: ["Sans", "Échelle", "Stop stick", "Lacry", "Cale", "IL", "Pass"],
+            tenues: ["UBAS", "4S", "Bleu", "Civile", "Ghillie", "Treillis"],
+            gpbs: ["GPBL", "GPBPD", "Sans"]
+        };
+        const availableVehicles = ['Sharan', 'Kodiaq', '5008', 'Scénic', 'BT'];
+        
+        let activeMemberId = null;
+
+        let currentStep = 0;
+        let visitedSteps = new Set();
+        const steps = Array.from(document.querySelectorAll(".wizard-step"));
+        const progressSteps = Array.from(document.querySelectorAll(".wizard-progress-step"));
+        const prevBtn = document.getElementById('prevBtn');
+        const nextBtn = document.getElementById('nextBtn');
+        const previewBtn = document.getElementById('previewBtn');
+        const retexReportBtn = document.getElementById('retexReportBtn');
+        const retexStatus = document.getElementById('retex_status');
+        const retexOutput = document.getElementById('retex_output');
+        const launchRetexAnalysisBtn = document.getElementById('launchRetexAnalysisBtn');
+        const generateRetexPdfBtn = document.getElementById('generateRetexPdfBtn');
+        const patracdvrContainer = document.getElementById('patracdvr_container');
+        const unassignedContainer = document.getElementById('unassigned_members_container');
+        const jsonConfigInput = document.getElementById('jsonConfigInput');
+        const resetPatracdvrBtn = document.getElementById('resetPatracdvrBtn');
+        const importJsonConfigBtn = document.getElementById('importJsonConfigBtn');
+        const importDefaultConfigBtn = document.getElementById('importDefaultConfigBtn');
+        
+        const retexFileInput = document.getElementById('retexFileInput');
+        const retexFileNames = document.getElementById('retexFileNames');
+        
+        const presentationModal = document.getElementById('presentationModal'); 
+        const downloadPdfBtn = document.getElementById('downloadPdfBtn'); 
+        
+        const coherenceAlertsContainer = document.getElementById('coherence_alerts_container');
+        const recapFinalisation = document.getElementById('recap_finalisation');
+
+        const tempCanvas = document.createElement('canvas');
+        const tempCtx = tempCanvas.getContext('2d');
+        
+        /**
+         * Gère la révocation des URLs d'objets pour éviter les fuites de mémoire.
+         */
+		
         function isFullscreen() {
             return document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement;
         }
@@ -1202,65 +1260,6 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
         }
 
         // --- Fin du bloc ajouté ---
-    <script>
-        // CORRECTION 1: Utilisation de la bonne URL pour Gemini
-        const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent";
-        const RETEX_BASE_URL = "https://oxsilaris06.github.io/Praxis/retex.html";
-        const DEFAULT_CONFIG_FILE = 'members_config.json'; 
-        
-        // Stockage des ObjectURLs pour le nettoyage lors du rechargement des données
-        let objectUrlsCache = {};
-
-        let memberConfig = {
-            fonctions: ["Chef inter", "Chef dispo", "Chef Oscar", "DE", "Cyno", "Inter", "AO", "Sans"],
-            cellules: ["AO1", "AO2", "AO3", "AO4", "AO5", "AO6", "AO7","AO8", "India 1", "India 2", "India 3", "India 4", "India 5", "Effrac", "Sans"],
-            principales: ["UMP9", "G36", "FAP", "Sans"],
-            afis: ["PIE", "LBD40", "LBD44", "Sans"],
-            secondaires: ["PSA"],
-            grenades: ["GENL", "MP7", "Sans"],
-            equipements: ["Sans", "BBAL", "Belier","Lacry", "IL", "Lot 5.11"],
-            equipements2: ["Sans", "Échelle", "Stop stick", "Lacry", "Cale", "IL", "Pass"],
-            tenues: ["UBAS", "4S", "Bleu", "Civile", "Ghillie", "Treillis"],
-            gpbs: ["GPBL", "GPBPD", "Sans"]
-        };
-        const availableVehicles = ['Sharan', 'Kodiaq', '5008', 'Scénic', 'BT'];
-        
-        let activeMemberId = null;
-
-        let currentStep = 0;
-        let visitedSteps = new Set();
-        const steps = Array.from(document.querySelectorAll(".wizard-step"));
-        const progressSteps = Array.from(document.querySelectorAll(".wizard-progress-step"));
-        const prevBtn = document.getElementById('prevBtn');
-        const nextBtn = document.getElementById('nextBtn');
-        const previewBtn = document.getElementById('previewBtn');
-        const retexReportBtn = document.getElementById('retexReportBtn');
-        const retexStatus = document.getElementById('retex_status');
-        const retexOutput = document.getElementById('retex_output');
-        const launchRetexAnalysisBtn = document.getElementById('launchRetexAnalysisBtn');
-        const generateRetexPdfBtn = document.getElementById('generateRetexPdfBtn');
-        const patracdvrContainer = document.getElementById('patracdvr_container');
-        const unassignedContainer = document.getElementById('unassigned_members_container');
-        const jsonConfigInput = document.getElementById('jsonConfigInput');
-        const resetPatracdvrBtn = document.getElementById('resetPatracdvrBtn');
-        const importJsonConfigBtn = document.getElementById('importJsonConfigBtn');
-        const importDefaultConfigBtn = document.getElementById('importDefaultConfigBtn');
-        
-        const retexFileInput = document.getElementById('retexFileInput');
-        const retexFileNames = document.getElementById('retexFileNames');
-        
-        const presentationModal = document.getElementById('presentationModal'); 
-        const downloadPdfBtn = document.getElementById('downloadPdfBtn'); 
-        
-        const coherenceAlertsContainer = document.getElementById('coherence_alerts_container');
-        const recapFinalisation = document.getElementById('recap_finalisation');
-
-        const tempCanvas = document.createElement('canvas');
-        const tempCtx = tempCanvas.getContext('2d');
-        
-        /**
-         * Gère la révocation des URLs d'objets pour éviter les fuites de mémoire.
-         */
         function cleanupObjectUrls() {
             for (const urlId in objectUrlsCache) {
                 if (objectUrlsCache[urlId]) {
