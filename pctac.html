@@ -589,6 +589,23 @@
             max-width: 350px;
             margin: 0 auto;
         }
+        /* Style pour la rangée de copie/scan */
+        .copy-scan-row {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .copy-scan-row button {
+            flex: 1;
+            padding: 10px 15px;
+            font-size: 0.95em;
+        }
+        /* Rendre l'input plus lisible en mode connecté/finalisation */
+        .signaling-input-wrapper {
+             position: relative;
+             margin-top: 10px;
+        }
+
 
     </style>
 </head>
@@ -624,7 +641,19 @@
 
         <div id="qrCodeContainer" style="display: none;"></div>
         
-        <textarea id="signalingInput" placeholder="Collez ici le code de signalisation du pair (Hôte ou Client)..." style="display: none;"></textarea>
+        <div id="signalingInputWrapper" class="signaling-input-wrapper">
+             <textarea id="signalingInput" placeholder="Collez ici le code de signalisation du pair (Hôte ou Client)..." style="display: none;"></textarea>
+             
+             <!-- Boutons de Copie pour l'Offer/Answer (Hôte/Client) -->
+             <div class="copy-scan-row">
+                <button id="copyCodeBtn" style="background-color: var(--inter-blue); color: white; display: none;">
+                    <span class="material-symbols-outlined" style="font-size: 1.1em;">content_copy</span> Copier le code
+                </button>
+                <button id="startScanBtn" style="background-color: var(--inter-blue); color: white; display: none;">
+                    <span class="material-symbols-outlined" style="font-size: 1.1em;">qr_code_scanner</span> Scanner l'Offer
+                </button>
+             </div>
+        </div>
         
         <!-- NOUVEAU: Conteneur de scan (affiché seulement en mode client) -->
         <div id="qrScannerContainer" style="display: none;"></div>
@@ -637,7 +666,6 @@
         </div>
         
         <div class="modal-buttons">
-            <button id="startScanBtn" style="background-color: var(--inter-blue); color: white; display: none;">Scanner l'Offer</button>
             <button id="p2pDisconnectBtn" style="display: none;">Déconnecter</button>
             <button id="p2pCloseModalBtn" style="background-color: var(--danger-red); color: white;">Fermer</button>
         </div>
@@ -860,6 +888,7 @@
         const p2pInstructions = document.getElementById('p2pInstructions');
         const qrCodeContainer = document.getElementById('qrCodeContainer');
         const signalingInput = document.getElementById('signalingInput');
+        const copyCodeBtn = document.getElementById('copyCodeBtn'); // Nouveau bouton Copier
         const p2pStatus = document.getElementById('p2pStatus');
         const startHostBtn = document.getElementById('startHostBtn');
         const startClientBtn = document.getElementById('startClientBtn');
@@ -880,6 +909,7 @@
             isConnected: false,
             // Configuration WebRTC STUN/TURN (utilise des serveurs publics pour la traversée NAT)
             config: {
+                // Utilisation des serveurs STUN publics
                 iceServers: [
                     { urls: 'stun:stun.l.google.com:19302' },
                     { urls: 'stun:global.stun.twilio.com:3478' }
@@ -933,7 +963,7 @@
                             // Hôte envoie l'Offer
                             this.updateUI('host_show_offer', signalingData);
                         } else if (data.type === 'answer') {
-                            // Hôte reçoit l'Answer (non nécessaire ici, simple-peer gère l'échange complet)
+                            // L'Hôte reçoit l'Answer et la connexion démarre
                         }
                     } else {
                         if (data.type === 'answer') {
@@ -945,7 +975,8 @@
 
                 this.peer.on('connect', () => {
                     this.isConnected = true;
-                    this.updateUI('connected');
+                    // Mise à jour de l'UI pour un feedback visuel immédiat
+                    this.updateUI('connected'); 
                     
                     // Après la connexion, l'Hôte envoie immédiatement l'état complet du Log.
                     if (this.isHost) {
@@ -1028,20 +1059,33 @@
                 startHostBtn.style.display = 'block';
                 startClientBtn.style.display = 'block';
                 startScanBtn.style.display = 'none'; // Cacher le bouton de scan par défaut
+                copyCodeBtn.style.display = 'none';  // Cacher le bouton de copie par défaut
                 p2pToggleBtn.classList.remove('p2p-active', 'p2p-connecting');
                 
                 p2pModal.style.borderColor = 'var(--accent-blue)';
                 
                 qrCodeContainer.innerHTML = '';
                 signalingInput.value = '';
+                signalingInput.disabled = false; // Réactiver la saisie
                 
                 let title = "Synchronisation P2P (WebRTC)";
 
                 switch (status) {
                     case 'host_waiting':
+                        title = "HÔTE : En attente de l'Offer";
+                        p2pStatus.textContent = "Génération de l'Offer en cours...";
+                        p2pStatus.classList.add('p2p-connecting');
+                        startHostBtn.style.display = 'none';
+                        startClientBtn.style.display = 'none';
+                        p2pDisconnectBtn.style.display = 'block';
+                        p2pModal.style.borderColor = 'var(--ao-green)';
+                        p2pInstructions.textContent = "Veuillez attendre que le QR Code (Offer) s'affiche.";
+                        break;
+
+                    case 'host_show_offer':
                         title = "HÔTE : Échanger l'Offer (Étape 1/2)";
                         qrCodeContainer.style.display = 'flex';
-                        p2pStatus.textContent = "1. Scannez le QR Code (Offer). 2. Collez l'Answer du Client ci-dessous.";
+                        p2pStatus.textContent = "1. Faites scanner ce QR Code. 2. Collez l'Answer du Client ci-dessous.";
                         signalingInput.style.display = 'block';
                         signalingInput.placeholder = "Collez ici le code 'Answer' du Client...";
                         p2pStatus.classList.add('p2p-connecting');
@@ -1049,18 +1093,18 @@
                         startClientBtn.style.display = 'none';
                         p2pDisconnectBtn.style.display = 'block';
                         p2pModal.style.borderColor = 'var(--ao-green)';
+                        copyCodeBtn.style.display = 'block'; // Afficher le bouton de copie pour l'Offer
                         
                         // Afficher l'Offer générée par simple-peer
-                        if (payload) {
-                            new QRCode(qrCodeContainer, {
-                                text: payload,
-                                width: 250,
-                                height: 250,
-                                correctLevel: QRCode.CorrectLevel.L 
-                            });
-                            p2pInstructions.textContent = "Scannez l'Offer, puis collez l'Answer générée par le Client ci-dessous pour démarrer la connexion.";
-                            signalingInput.value = payload; // Afficher l'Offer aussi en texte
-                        }
+                        new QRCode(qrCodeContainer, {
+                            text: payload,
+                            width: 250,
+                            height: 250,
+                            correctLevel: QRCode.CorrectLevel.L 
+                        });
+                        p2pInstructions.textContent = "Scannez l'Offer, puis collez l'Answer générée par le Client ci-dessous pour démarrer la connexion.";
+                        // On stocke l'Offer dans l'input pour la copie, mais on le cache s'il y a le QR Code
+                        signalingInput.value = payload;
                         break;
                     
                     case 'client_waiting_offer':
@@ -1083,6 +1127,7 @@
                         p2pStatus.textContent = "Connexion en cours... (Scannez le code ou copiez le Answer)";
                         signalingInput.style.display = 'block';
                         p2pStatus.classList.add('p2p-connecting');
+                        copyCodeBtn.style.display = 'block'; // Afficher le bouton de copie pour l'Answer
                         
                         new QRCode(qrCodeContainer, {
                             text: payload,
@@ -1107,6 +1152,8 @@
                         startClientBtn.style.display = 'none';
                         p2pDisconnectBtn.style.display = 'block';
                         p2pInstructions.textContent = "La connexion est établie. Le Log se synchronise en temps réel depuis l'Hôte.";
+                        // Fermer la modale après 2 secondes si le pair est connecté
+                        setTimeout(hideP2PModal, 2000); 
                         break;
                         
                     case 'disconnected':
@@ -1135,11 +1182,6 @@
 
                 const signalCode = signalingInput.value.trim();
                 if (!signalCode) {
-                    // Si l'utilisateur efface le champ, ne rien faire, sauf si c'est la fin du processus Host
-                    if (this.isHost) {
-                        // C'est ici que l'Offer doit être re-générée si nécessaire, mais simple-peer est synchrone sur signal.
-                        // On se fie au fait que l'Offer est passée dans payload à l'updateUI.
-                    }
                     return;
                 }
                 
@@ -1150,6 +1192,9 @@
                         // L'Hôte s'attend à recevoir l'Answer du Client
                         if (data.type === 'answer') {
                             this.peer.signal(data);
+                            // Rendre le champ de saisie non éditable et afficher un statut
+                            signalingInput.disabled = true; 
+                            p2pStatus.textContent = "Answer reçue. Tentative de connexion...";
                         } else {
                             showMessageModal("Erreur d'échange", "L'Hôte attend un code 'Answer' du Client.", true);
                         }
@@ -1169,7 +1214,7 @@
             }
         };
 
-        // --- Fonctions de Scan QR Code ---
+        // --- Fonctions de Scan QR Code et Copie ---
 
         const qrScannerContainer = document.getElementById('qrScannerContainer');
 
@@ -1182,6 +1227,7 @@
             // Masquer les éléments de saisie/QR code existants
             qrCodeContainer.style.display = 'none';
             signalingInput.style.display = 'none';
+            copyCodeBtn.style.display = 'none'; 
             qrScannerContainer.style.display = 'block';
 
             startScanBtn.textContent = "Annuler le Scan";
@@ -1254,6 +1300,48 @@
             // Si le scan est arrêté manuellement, réinitialiser le bouton et l'action
             startScanBtn.textContent = "Scanner l'Offer";
             startScanBtn.onclick = startQRScan;
+        }
+
+        function copySignalingCode() {
+            const code = signalingInput.value;
+            if (!code) {
+                 showMessageModal("Erreur", "Aucun code à copier.", true);
+                 return;
+            }
+            
+            // Utiliser l'API Clipboard moderne
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(code).then(() => {
+                    showMessageModal("Copié", "Code de signalisation copié dans le presse-papiers.", false);
+                }).catch(err => {
+                    console.error('Erreur de copie via Clipboard API:', err);
+                    // Fallback si l'API moderne échoue
+                    fallbackCopyTextToClipboard(code);
+                });
+            } else {
+                // Fallback pour les environnements plus anciens (comme les iframes)
+                fallbackCopyTextToClipboard(code);
+            }
+        }
+
+        function fallbackCopyTextToClipboard(text) {
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            textArea.style.position = "fixed"; 
+            textArea.style.opacity = 0;
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            
+            try {
+                const successful = document.execCommand('copy');
+                const msg = successful ? 'Copié' : 'Échec de la copie';
+                showMessageModal(msg, `Code de signalisation copié dans le presse-papiers (Méthode de secours).`, !successful);
+            } catch (err) {
+                console.error('Échec de la copie de secours:', err);
+                showMessageModal("Échec de la copie", "Impossible de copier le code. Veuillez le sélectionner manuellement.", true);
+            }
+            document.body.removeChild(textArea);
         }
 
 
@@ -2348,6 +2436,9 @@
             initPaxModeAndColors();
 
             // CORRECTION BUG 3: Rattacher correctement l'écouteur
+            document.querySelectorAll('#pax_mode_toggle_container .mode-toggle-btn').forEach(btn => {
+                btn.addEventListener('click', () => setPaxMode(btn.dataset.mode));
+            });
             freePaxInput.addEventListener('input', handleFreePaxInput);
 
             // 8.4 Logique Drag & Drop sur le corps du tableau
@@ -2392,7 +2483,12 @@
             p2pDisconnectBtn.addEventListener('click', P2PManager.disconnect.bind(P2PManager));
             startHostBtn.addEventListener('click', P2PManager.startHost.bind(P2PManager));
             startClientBtn.addEventListener('click', P2PManager.startClient.bind(P2PManager));
-            startScanBtn.addEventListener('click', startQRScan); // Ajout de l'écouteur pour le scan
+            
+            // Événement Copie pour l'Offer/Answer
+            copyCodeBtn.addEventListener('click', copySignalingCode); 
+            
+            // Événement Scan
+            startScanBtn.addEventListener('click', startQRScan);
             
             // L'entrée de texte sert pour l'échange de signalisation dans les deux rôles.
             signalingInput.addEventListener('input', P2PManager.handleSignalingExchange.bind(P2PManager));
