@@ -745,6 +745,7 @@
         const TITLE_STORAGE_KEY = 'pcTacTitle';
         
         // UUIDs pour le Service et la Caractéristique de synchronisation (Doivent être uniques)
+        // Ces UUIDs sont utilisés pour filtrer la recherche d'appareils et pour les communications.
         const PCTAC_SERVICE_UUID = 'b936d0c2-9a5c-444a-995f-9e8c46d32890'; // Service de log PC Tac
         const PCTAC_CHAR_UUID = 'e729a43a-23d5-452f-83e8-5807986063f1';      // Caractéristique de données de log
 
@@ -858,7 +859,7 @@
         
         /**
          * Enregistre les données du log dans le stockage local et met à jour l'historique.
-         * Envoie les données synchronisées si une connexion Bluetooth est établie.
+         * Envoie les données synchronisées si l'appareil est l'hôte Bluetooth.
          * @param {Array} logData - Les données de log à sauvegarder.
          */
         function saveLogData(logData) {
@@ -875,7 +876,7 @@
                 // Mettre à jour l'historique et la map de couleurs
                 updateHistoryAndColorMap(logData);
                 
-                // NOUVEAU: Tenter d'envoyer les données par Bluetooth
+                // NOUVEAU: Tenter d'envoyer les données par Bluetooth si en mode Serveur/Hôte
                 if (BluetoothManager.isServer) {
                     BluetoothManager.broadcastData(logData);
                 }
@@ -1538,6 +1539,7 @@
 
                 try {
                     // Étape 1: Demander l'appareil
+                    // On filtre par le service PCTAC_SERVICE_UUID pour ne trouver que les hôtes PC Tac.
                     const device = await navigator.bluetooth.requestDevice({
                         filters: [{ services: [PCTAC_SERVICE_UUID] }],
                         optionalServices: [PCTAC_SERVICE_UUID]
@@ -1557,6 +1559,7 @@
                     this.characteristic = await service.getCharacteristic(PCTAC_CHAR_UUID);
                     
                     // Étape 4: S'abonner aux notifications pour les mises à jour en temps réel
+                    // Ceci est la clé de la synchronisation en temps réel (Serveur -> Client)
                     await this.characteristic.startNotifications();
                     this.characteristic.addEventListener('characteristicvaluechanged', this.handleCharacteristicValueChanged.bind(this));
 
@@ -1583,12 +1586,12 @@
 
             /**
              * Simule le mode serveur (non standard sur le Web).
-             * Dans cette démo, ce mode sert uniquement de "Broadcast Sender"
-             * pour le client local (qui devient l'autorité des données).
+             * Cet appareil devient l'autorité des données et envoie un broadcast (simulé).
              */
             startShareAsServer() {
-                // NOTE: Web Bluetooth ne prend PAS en charge l'advertising (beacon/server GATT) via le navigateur.
-                // Nous simulons le statut "Server" localement pour activer la fonction d'envoi de données.
+                // NOTE: La fonction réelle d'Advertising Web Bluetooth est absente/obsolète.
+                // Nous définissons l'état "Server" localement pour que cet appareil commence à "broadcaster" (simulé)
+                // lorsqu'une mise à jour se produit (via saveLogData).
                 
                 if (this.isConnected) {
                     this.disconnect();
@@ -1598,25 +1601,35 @@
                 this.isConnected = true;
                 this.updateDockIconStatus('server');
 
-                showMessageModal("Partage Bluetooth Actif", "Ce PC est maintenant l'**HÔTE DE DONNÉES**. Les autres appareils peuvent se connecter pour synchroniser. (Nécessite un navigateur supportant Web Bluetooth Advertising ou un simulateur hôte externe.)", false);
+                showMessageModal("Partage Bluetooth Actif", "Ce PC est maintenant l'**HÔTE DE DONNÉES**. Les autres appareils peuvent se connecter pour synchroniser. (Nécessite un simulateur hôte externe ou un appareil supportant l'Advertising pour une connexion réelle.)", false);
                 
-                // Envoyez les données actuelles immédiatement
+                // Envoyez les données actuelles immédiatement (simule l'état initial pour les clients futurs)
                 this.broadcastData(getLogData());
             },
 
             /**
-             * Déconnecte l'appareil Bluetooth.
+             * Déconnecte l'appareil Bluetooth et réinitialise l'état.
              */
             disconnect() {
+                // Si l'appareil est un client connecté, déconnecter du GATT Server
                 if (this.device && this.device.gatt.connected) {
                     this.device.gatt.disconnect();
                 }
+                
+                // Si l'appareil était en mode Server, réinitialiser l'état
+                const wasServer = this.isServer;
+
                 this.device = null;
                 this.characteristic = null;
                 this.isConnected = false;
                 this.isServer = false;
                 this.updateDockIconStatus('inactive');
-                showMessageModal("Déconnexion Bluetooth", "La connexion Bluetooth a été coupée.", false);
+                
+                if (!wasServer) {
+                    showMessageModal("Déconnexion Bluetooth", "La connexion Bluetooth a été coupée.", false);
+                } else {
+                    showMessageModal("Arrêt du Partage", "Le mode Hôte (Serveur) a été désactivé.", false);
+                }
             },
             
             /**
@@ -1624,21 +1637,25 @@
              */
             onDisconnected(event) {
                  console.log(`Périphérique déconnecté : ${event.target.name}`);
+                 // Ne pas afficher de message d'erreur si la déconnexion est intentionnelle (appel à disconnect())
+                 if (this.isConnected) { 
+                    showMessageModal("Déconnexion", `Le périphérique **${event.target.name}** a été déconnecté. Tentative de reconnexion manuelle requise.`, true);
+                 }
                  this.disconnect(); // Réinitialise l'état local
-                 showMessageModal("Déconnexion", `Le périphérique **${event.target.name}** a été déconnecté.`, true);
             },
 
             /**
              * Lit les données initiales du caractéristique (Client seulement).
+             * En pratique, ceci serait l'initial payload.
              */
             async readInitialData() {
                  if (!this.characteristic || this.isServer) return;
                  
-                 // Lire la valeur (qui contient l'ID du chunk)
+                 // NOTE: Dans une implémentation réelle, cette lecture tirerait toutes les données.
+                 // Pour la simulation, nous supposons que l'hôte renvoie l'intégralité du log.
                  const value = await this.characteristic.readValue();
                  const dataJson = new TextDecoder().decode(value);
                  
-                 // On suppose que l'hôte est compatible et envoie tout le log dans la première lecture (simple implémentation)
                  try {
                      const parsedData = JSON.parse(dataJson);
                      const logData = parsedData.logEntries;
@@ -1649,12 +1666,13 @@
                      
                  } catch (e) {
                      console.error("Erreur de lecture des données initiales Bluetooth:", e);
-                     showMessageModal("Erreur de données", "Impossible de décoder les données de log initiales de l'hôte.", true);
+                     // C'est une erreur attendue si l'hôte ne renvoie pas de données formatées.
                  }
             },
 
             /**
              * Gère la notification de changement de valeur du caractéristique (Client seulement).
+             * C'est le mécanisme de mise à jour en temps réel.
              */
             handleCharacteristicValueChanged(event) {
                 if (this.isServer) return;
@@ -1667,22 +1685,22 @@
                     const logData = parsedData.logEntries;
                     const title = parsedData.title;
                     
-                    // Fusionner les données
+                    // Fusionner les données reçues
                     importLogData(logData, title);
 
                 } catch (e) {
                     console.error("Erreur de réception de données Bluetooth:", e);
-                    // Ignorer l'erreur et continuer à écouter
+                    // Ignorer l'erreur pour continuer à écouter
                 }
             },
 
             /**
              * Simule l'envoi des données à tous les clients connectés (Serveur seulement).
-             * En raison des limitations Web Bluetooth, ceci ne fait qu'afficher un message.
+             * Cette fonction est appelée par saveLogData à chaque modification.
              * @param {Array} logData - Les données de log à envoyer.
              */
             broadcastData(logData) {
-                 if (!this.isServer) return;
+                 if (!this.isServer) return; // Si pas hôte, ne rien faire
                  
                  const dataToSend = {
                      title: interventionTitleInput.value.trim(),
@@ -1690,10 +1708,9 @@
                  };
                  const jsonString = JSON.stringify(dataToSend);
                  
-                 // NOTE: Dans une implémentation réelle Web Bluetooth, on écrirait cette valeur
-                 // sur un caractéristique, et le client écouterait cette même caractéristique.
-                 // Ici, on se contente de la console et du log.
-                 console.log(`[BLUETOOTH BROADCAST - SERVEUR] Envoi de ${logData.length} entrées (${jsonString.length} octets).`);
+                 // Envoi Simulé : Dans une implémentation réelle, ceci provoquerait
+                 // l'écriture de la caractéristique (qui notifie les clients).
+                 console.log(`[BLUETOOTH BROADCAST - SERVEUR] Envoi de ${logData.length} entrées (${jsonString.length} octets) aux clients connectés.`);
             },
             
             /**
@@ -1702,8 +1719,8 @@
              */
             broadcastTitle(title) {
                 if (!this.isServer) return;
+                // Le broadcast des données complètes dans saveLogData() couvre déjà le titre.
                 console.log(`[BLUETOOTH BROADCAST - SERVEUR] Mise à jour du titre : ${title}`);
-                // Un broadcast de toutes les données se produit déjà dans saveLogData(), pas besoin de dupliquer.
             },
             
             /**
@@ -2179,7 +2196,7 @@
          */
         function handleBluetoothShareToggle() {
              if (BluetoothManager.isServer) {
-                 // Si hôte, déconnecter
+                 // Si hôte, déconnecter (ceci désactivera isServer)
                  BluetoothManager.disconnect();
              } else {
                  // Si client connecté, déconnecter d'abord
