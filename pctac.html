@@ -583,6 +583,12 @@
             gap: 10px;
             margin-top: 15px;
         }
+        /* Styles pour le scanner QR Code */
+        #qrScannerContainer {
+            width: 100%;
+            max-width: 350px;
+            margin: 0 auto;
+        }
 
     </style>
 </head>
@@ -619,7 +625,10 @@
         <div id="qrCodeContainer" style="display: none;"></div>
         
         <textarea id="signalingInput" placeholder="Collez ici le code de signalisation du pair (Hôte ou Client)..." style="display: none;"></textarea>
-
+        
+        <!-- NOUVEAU: Conteneur de scan (affiché seulement en mode client) -->
+        <div id="qrScannerContainer" style="display: none;"></div>
+        
         <p id="p2pStatus" class="p2p-connecting" style="display: none;">Démarrage...</p>
 
         <div class="modal-buttons role-buttons">
@@ -628,6 +637,7 @@
         </div>
         
         <div class="modal-buttons">
+            <button id="startScanBtn" style="background-color: var(--inter-blue); color: white; display: none;">Scanner l'Offer</button>
             <button id="p2pDisconnectBtn" style="display: none;">Déconnecter</button>
             <button id="p2pCloseModalBtn" style="background-color: var(--danger-red); color: white;">Fermer</button>
         </div>
@@ -787,6 +797,8 @@
     <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
     <!-- Bibliothèques pour la nouvelle logique P2P (WebRTC et QR Code) -->
     <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+    <!-- CHANGEMENT DE CDN : Utilisation de Cloudflare pour html5-qrcode -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.4/html5-qrcode.min.js"></script>
     <!-- simple-peer est une bibliothèque légère pour simplifier l'API WebRTC P2P -->
     <script src="https://cdn.jsdelivr.net/npm/simple-peer@9.11.0/simplepeer.min.js"></script>
     <script>
@@ -853,11 +865,13 @@
         const startClientBtn = document.getElementById('startClientBtn');
         const p2pDisconnectBtn = document.getElementById('p2pDisconnectBtn');
         const p2pCloseModalBtn = document.getElementById('p2pCloseModalBtn');
+        const startScanBtn = document.getElementById('startScanBtn'); // Nouveau bouton de scan
         
         // Variables pour suivre l'état
         let isTimeInputManuallyChanged = false;
         let paxColorMap = {}; // Map pour lier PAX libre à sa couleur
         let colorPaxMap = {}; // Map inversée pour lier Couleur -> dernier Nom de PAX libre
+        let html5QrcodeScanner = null; // Instance du scanner
         
         // --- P2P Manager ---
         const P2PManager = {
@@ -993,6 +1007,8 @@
                 this.isConnected = false;
                 this.isHost = false;
                 this.updateUI('disconnected');
+                // Arrêter le scanner si actif
+                stopQRScan(); 
             },
 
             /**
@@ -1001,6 +1017,9 @@
              * @param {string} payload - Données à afficher (Offer/Answer/Message).
              */
             updateUI(status, payload = '') {
+                // Arrêter le scanner chaque fois que l'UI change d'état critique
+                stopQRScan(); 
+                
                 // Rendre les éléments invisibles par défaut
                 qrCodeContainer.style.display = 'none';
                 signalingInput.style.display = 'none';
@@ -1008,6 +1027,7 @@
                 p2pDisconnectBtn.style.display = 'none';
                 startHostBtn.style.display = 'block';
                 startClientBtn.style.display = 'block';
+                startScanBtn.style.display = 'none'; // Cacher le bouton de scan par défaut
                 p2pToggleBtn.classList.remove('p2p-active', 'p2p-connecting');
                 
                 p2pModal.style.borderColor = 'var(--accent-blue)';
@@ -1052,8 +1072,9 @@
                         startHostBtn.style.display = 'none';
                         startClientBtn.style.display = 'none';
                         p2pDisconnectBtn.style.display = 'block';
+                        startScanBtn.style.display = 'block'; // Afficher le bouton de scan
                         p2pModal.style.borderColor = 'var(--accent-blue)';
-                        p2pInstructions.textContent = "Collez l'Offer de l'Hôte ci-dessous et appuyez sur 'Générer Answer'.";
+                        p2pInstructions.textContent = "Collez l'Offer de l'Hôte ci-dessous, ou utilisez le scanner pour la capturer.";
                         break;
                         
                     case 'client_show_answer':
@@ -1071,6 +1092,9 @@
                         });
                         signalingInput.value = payload; // Afficher l'Answer en texte
                         p2pInstructions.textContent = "Scannez/copiez ce code (Answer) et donnez-le à l'Hôte pour finaliser la connexion.";
+                        startHostBtn.style.display = 'none';
+                        startClientBtn.style.display = 'none';
+                        p2pDisconnectBtn.style.display = 'block';
                         break;
 
                     case 'connected':
@@ -1113,7 +1137,8 @@
                 if (!signalCode) {
                     // Si l'utilisateur efface le champ, ne rien faire, sauf si c'est la fin du processus Host
                     if (this.isHost) {
-                        this.updateUI('host_show_offer', this.peer._offer || ""); // Réafficher l'Offer si elle existe
+                        // C'est ici que l'Offer doit être re-générée si nécessaire, mais simple-peer est synchrone sur signal.
+                        // On se fie au fait que l'Offer est passée dans payload à l'updateUI.
                     }
                     return;
                 }
@@ -1125,15 +1150,15 @@
                         // L'Hôte s'attend à recevoir l'Answer du Client
                         if (data.type === 'answer') {
                             this.peer.signal(data);
-                            // Le changement d'état vers 'connected' se fera via l'événement 'connect' du peer
                         } else {
                             showMessageModal("Erreur d'échange", "L'Hôte attend un code 'Answer' du Client.", true);
                         }
                     } else {
                         // Le Client s'attend à recevoir l'Offer de l'Hôte (pour générer l'Answer)
                         if (data.type === 'offer') {
+                            // On désactive la saisie/scan après avoir reçu l'Offer
+                            stopQRScan(); 
                             this.peer.signal(data);
-                            // Le changement d'état vers 'client_show_answer' se fera via l'événement 'signal' du peer
                         } else {
                             showMessageModal("Erreur d'échange", "Le Client attend un code 'Offer' de l'Hôte.", true);
                         }
@@ -1143,6 +1168,93 @@
                 }
             }
         };
+
+        // --- Fonctions de Scan QR Code ---
+
+        const qrScannerContainer = document.getElementById('qrScannerContainer');
+
+        function startQRScan() {
+            if (typeof Html5QrcodeScanner === 'undefined') {
+                 showMessageModal("Erreur de dépendance", "La bibliothèque de scan (html5-qrcode) n'est pas chargée.", true);
+                 return;
+            }
+
+            // Masquer les éléments de saisie/QR code existants
+            qrCodeContainer.style.display = 'none';
+            signalingInput.style.display = 'none';
+            qrScannerContainer.style.display = 'block';
+
+            startScanBtn.textContent = "Annuler le Scan";
+            startScanBtn.onclick = stopQRScan; // Changer l'action du bouton
+
+            html5QrcodeScanner = new Html5QrcodeScanner(
+                "qrScannerContainer", 
+                { 
+                    fps: 10, 
+                    qrbox: {width: 250, height: 250}, 
+                    facingMode: "environment" 
+                },
+                false
+            );
+
+            const onScanSuccess = (decodedText, decodedResult) => {
+                // Arrêter le scanner
+                stopQRScan();
+                // Injecter la donnée scannée dans le champ de saisie
+                signalingInput.value = decodedText;
+                // Exécuter l'échange de signalisation
+                P2PManager.handleSignalingExchange(); 
+            };
+
+            const onScanError = (errorMessage) => {
+                // Erreur de scan (laissez vide pour éviter les popups intempestifs)
+            };
+            
+            html5QrcodeScanner.render(onScanSuccess, onScanError);
+
+            p2pStatus.textContent = "Veuillez pointer la caméra vers l'Offer QR de l'Hôte.";
+            p2pStatus.classList.add('p2p-connecting');
+        }
+
+        function stopQRScan() {
+            if (html5QrcodeScanner) {
+                // Vérifier si clear est une promesse et la gérer pour éviter les erreurs non gérées
+                const clearResult = html5QrcodeScanner.clear();
+                if (clearResult && typeof clearResult.then === 'function') {
+                    clearResult.then(() => {
+                        html5QrcodeScanner = null;
+                        qrScannerContainer.innerHTML = '';
+                        qrScannerContainer.style.display = 'none';
+                        
+                        // Réinitialiser l'UI Client
+                        if (P2PManager.peer && !P2PManager.isConnected && !P2PManager.isHost) {
+                             P2PManager.updateUI('client_waiting_offer');
+                        }
+                    }).catch(error => {
+                        console.warn("Erreur lors de l'arrêt du scanner:", error);
+                        // Forcer la réinitialisation de l'état même en cas d'erreur d'arrêt
+                        html5QrcodeScanner = null;
+                        qrScannerContainer.innerHTML = '';
+                        qrScannerContainer.style.display = 'none';
+                        if (P2PManager.peer && !P2PManager.isConnected && !P2PManager.isHost) {
+                             P2PManager.updateUI('client_waiting_offer');
+                        }
+                    });
+                } else {
+                    // Cas synchrone ou si clear ne retourne rien
+                    html5QrcodeScanner = null;
+                    qrScannerContainer.innerHTML = '';
+                    qrScannerContainer.style.display = 'none';
+                    if (P2PManager.peer && !P2PManager.isConnected && !P2PManager.isHost) {
+                        P2PManager.updateUI('client_waiting_offer');
+                    }
+                }
+            }
+            
+            // Si le scan est arrêté manuellement, réinitialiser le bouton et l'action
+            startScanBtn.textContent = "Scanner l'Offer";
+            startScanBtn.onclick = startQRScan;
+        }
 
 
         // --- Fonctions utilitaires ---
@@ -1508,7 +1620,6 @@
         // --- 2. Logique de sélection Pax (Standard et Libre) ---
         
         function handleColorSwatchClick() {
-             // ... (Logique non modifiée, laissée pour le contexte)
             Array.from(document.getElementById('free_color_palette').querySelectorAll('.color-swatch')).forEach(s => s.classList.remove('selected'));
             this.classList.add('selected');
             const selectedColor = this.dataset.color;
@@ -1528,7 +1639,6 @@
         }
 
         function initPaxModeAndColors() {
-             // ... (Logique non modifiée, laissée pour le contexte)
             const paletteContainer = document.getElementById('free_color_palette');
             paletteContainer.innerHTML = '';
             FREE_MODE_COLORS.forEach((color, index) => {
@@ -1566,7 +1676,6 @@
         }
         
         function setPaxMode(mode) {
-             // ... (Logique non modifiée, laissée pour le contexte)
             const isStandard = mode === 'standard';
             
             document.getElementById('pax_select_wrapper_standard').style.display = isStandard ? 'block' : 'none';
@@ -1596,15 +1705,16 @@
             }
         }
         
-        freePaxInput.addEventListener('input', (e) => {
-             // ... (Logique non modifiée, laissée pour le contexte)
-            const paxName = e.target.value.trim();
+        // CORRECTION DU BUG 3: Encapsuler la logique de mise à jour du PAX libre.
+        function handleFreePaxInput() {
+            const paxName = freePaxInput.value.trim();
             const currentColor = paxCustomColorInput.value; 
             
             if (paxModeInput.value === 'free') {
                  paxInput.value = paxName; 
             }
             
+             // Tenter de retrouver la couleur du PAX si déjà utilisé
              if (paxColorMap[paxName]) {
                  const savedColor = paxColorMap[paxName];
                  paxCustomColorInput.value = savedColor;
@@ -1613,18 +1723,18 @@
                      s.classList.toggle('selected', s.dataset.color === savedColor);
                  });
              } else {
+                 // Si le PAX n'est pas connu, on garde la couleur sélectionnée ou la première par défaut
                  paxCustomColorInput.value = currentColor;
                  Array.from(document.getElementById('free_color_palette').querySelectorAll('.color-swatch')).forEach(s => {
                      s.classList.toggle('selected', s.dataset.color === currentColor);
                  });
              }
-        });
+        }
 
 
         // --- Mise à jour de l'heure en temps réel ---
 
         function updateTimeInput() {
-             // ... (Logique non modifiée, laissée pour le contexte)
             if (!isTimeInputManuallyChanged) {
                 const now = new Date();
                 const hours = String(now.getHours()).padStart(2, '0');
@@ -1638,7 +1748,6 @@
         let dragSrcEl = null;
 
         function handleDragStart(e) {
-             // ... (Logique non modifiée, laissée pour le contexte)
             dragSrcEl = this;
             e.dataTransfer.effectAllowed = 'move';
             e.dataTransfer.setData('text/plain', this.dataset.id);
@@ -1646,7 +1755,6 @@
         }
 
         function handleDragOver(e) {
-             // ... (Logique non modifiée, laissée pour le contexte)
             e.preventDefault();
             e.dataTransfer.dropEffect = 'move';
             const targetRow = this;
@@ -1666,7 +1774,6 @@
         }
 
         function handleDrop(e) {
-             // ... (Logique non modifiée, laissée pour le contexte)
             e.stopPropagation();
             e.preventDefault(); 
             
@@ -1677,14 +1784,12 @@
         }
 
         function handleDragEnd(e) {
-             // ... (Logique non modifiée, laissée pour le contexte)
             this.classList.remove('dragging');
         }
         
         // --- 4. Gestion JSON (Export/Import) ---
         
         function exportJson() {
-             // ... (Logique non modifiée, laissée pour le contexte)
              const logData = getLogData();
              const title = interventionTitleInput.value.trim() || "Sans Titre";
 
@@ -1731,7 +1836,6 @@
         }
         
         async function handleJsonFileImport(event) {
-             // ... (Logique non modifiée, laissée pour le contexte)
             const file = event.target.files[0];
             if (!file) return;
 
@@ -1776,12 +1880,10 @@
         // --- 6. Logique Dock et Divers ---
 
         function isFullscreen() {
-             // ... (Logique non modifiée, laissée pour le contexte)
             return document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement;
         }
 
         function toggleFullscreen() {
-             // ... (Logique non modifiée, laissée pour le contexte)
             const icon = document.getElementById('fullscreenIcon');
             if (!isFullscreen()) {
                 if (document.documentElement.requestFullscreen) {
@@ -1807,7 +1909,6 @@
         }
         
         function updateFullscreenIcon() {
-             // ... (Logique non modifiée, laissée pour le contexte)
             const icon = document.getElementById('fullscreenIcon');
             if (icon) {
                  icon.textContent = isFullscreen() ? 'fullscreen_exit' : 'fullscreen';
@@ -1816,7 +1917,6 @@
         }
 
         function handleThemeToggle() {
-             // ... (Logique non modifiée, laissée pour le contexte)
             document.body.classList.toggle('light-mode'); 
             document.body.classList.toggle('dark-mode');
             const isDarkMode = document.body.classList.contains('dark-mode');
@@ -1825,7 +1925,6 @@
         }
 
         function toggleDock() {
-             // ... (Logique non modifiée, laissée pour le contexte)
             const dock = document.getElementById('dockMenu');
             const dockCollapsed = dock.classList.toggle('collapsed');
             localStorage.setItem('dockCollapsed', dockCollapsed);
@@ -1836,20 +1935,17 @@
         }
         
         function showResetModal() {
-             // ... (Logique non modifiée, laissée pour le contexte)
             document.getElementById('modalBackdrop').style.display = 'block';
             document.getElementById('resetModal').style.display = 'block';
         }
 
         function hideResetModal() {
-             // ... (Logique non modifiée, laissée pour le contexte)
             document.getElementById('modalBackdrop').style.display = 'none';
             document.getElementById('resetModal').style.display = 'none';
         }
 
 
         function handleResetData() {
-             // ... (Logique non modifiée, laissée pour le contexte)
             localStorage.removeItem(LOCAL_STORAGE_KEY);
             localStorage.removeItem(HISTORY_STORAGE_KEY);
             localStorage.removeItem(TITLE_STORAGE_KEY);
@@ -1877,7 +1973,6 @@
         }
 
         function handleDeleteButtonClick(e) {
-             // ... (Logique non modifiée, laissée pour le contexte)
              if (e.target.closest('.delete-btn')) {
                  const id = e.target.closest('.delete-btn').dataset.id;
                  deleteLogEntry(id);
@@ -2252,6 +2347,9 @@
             
             initPaxModeAndColors();
 
+            // CORRECTION BUG 3: Rattacher correctement l'écouteur
+            freePaxInput.addEventListener('input', handleFreePaxInput);
+
             // 8.4 Logique Drag & Drop sur le corps du tableau
             logTableBody.addEventListener('dragstart', handleDragStart, true);
             logTableBody.addEventListener('dragover', (e) => handleDragOver.call(e.target.closest('tr') || logTableBody, e));
@@ -2294,6 +2392,7 @@
             p2pDisconnectBtn.addEventListener('click', P2PManager.disconnect.bind(P2PManager));
             startHostBtn.addEventListener('click', P2PManager.startHost.bind(P2PManager));
             startClientBtn.addEventListener('click', P2PManager.startClient.bind(P2PManager));
+            startScanBtn.addEventListener('click', startQRScan); // Ajout de l'écouteur pour le scan
             
             // L'entrée de texte sert pour l'échange de signalisation dans les deux rôles.
             signalingInput.addEventListener('input', P2PManager.handleSignalingExchange.bind(P2PManager));
