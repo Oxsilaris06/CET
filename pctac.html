@@ -916,11 +916,15 @@
             }
         }
         
+        // CORRECTION CRITIQUE: Assurer que les données lues du DOM (via dataset) sont bien des chaînes
         function getLogData() {
             // Récupère l'ordre actuel du DOM (important pour le Drag & Drop)
             return Array.from(logTableBody.querySelectorAll('tr')).map(row => {
+                
+                // Fonction sécurisée pour lire les dataset
                 const getSafeDataset = (key) => {
-                    const value = row.dataset[key] || '';
+                    // Utiliser String() pour garantir que c'est une chaîne
+                    const value = String(row.dataset[key] || ''); 
                     // Pour éviter les chaînes 'undefined' littérales
                     return value === 'undefined' ? '' : value; 
                 };
@@ -934,7 +938,7 @@
                 }
 
                 return {
-                    id: row.dataset.id,
+                    id: getSafeDataset('id'), // Utiliser le getter sécurisé pour tous
                     heure: row.querySelector('.heure-cell-text').textContent,
                     pax: paxValue,
                     paxMode: paxMode, 
@@ -1052,14 +1056,15 @@
 
                 const row = logTableBody.insertRow();
                 row.dataset.id = entry.id;
-                row.dataset.lieu = entry.lieu || '';
-                row.dataset.fenetreporte = entry.fenetrePorte || '';
-                row.dataset.remarques = entry.remarques || '';
+                // S'assurer que les valeurs stockées dans le DOM sont des chaînes propres
+                row.dataset.lieu = String(entry.lieu || ''); 
+                row.dataset.fenetreporte = String(entry.fenetrePorte || '');
+                row.dataset.remarques = String(entry.remarques || '');
                 // pax (standard) ou Libre (free)
                 row.dataset.pax = isFreeMode ? 'Libre' : entry.pax; 
                 // Le nom du pax libre est stocké séparément pour le DOM/PDF
-                row.dataset.freepaxname = isFreeMode ? entry.pax : ''; 
-                row.dataset.paxmode = entry.paxMode; 
+                row.dataset.freepaxname = isFreeMode ? String(entry.pax) : ''; 
+                row.dataset.paxmode = paxMode; 
                 // paxColor n'est stocké que si c'est du mode libre
                 row.dataset.paxcolor = isFreeMode ? paxColor : ''; 
                 
