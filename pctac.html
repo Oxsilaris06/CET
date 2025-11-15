@@ -536,16 +536,20 @@
             cursor: pointer;
         }
 
-        #confirmResetBtn, #closeMessageModalBtn {
+        #confirmResetBtn, #closeMessageModalBtn, #cancelConnectBtn {
             background-color: var(--danger-red);
             color: white;
             border: none;
         }
 
-        #cancelResetBtn, #modalMessageBtn {
+        #cancelResetBtn, #modalMessageBtn, #startConnectBtn {
             background-color: var(--bg-interactive);
             color: var(--text-primary);
             border: 1px solid var(--border-color);
+        }
+        #startConnectBtn {
+            background-color: var(--accent-blue);
+            color: white;
         }
         
     </style>
@@ -572,6 +576,24 @@
         <div class="modal-buttons">
             <!-- Renommé pour plus de clarté -->
             <button id="closeMessageModalBtn">OK</button> 
+        </div>
+    </div>
+
+    <!-- NOUVEAU: Modale de Saisie de Connexion Bluetooth (Client) -->
+    <div class="custom-modal" id="connectModal">
+        <h3 style="color: var(--accent-blue); margin-bottom: 10px;">Connexion à l'Hôte Bluetooth</h3>
+        <p style="color: var(--text-secondary); margin-bottom: 10px;">Saisissez l'UUID du service pour forcer la recherche (par défaut: Service PC Tac).</p>
+        
+        <label for="uuid_input" style="margin-top: 10px;">UUID du Service GATT (Optionnel)</label>
+        <input type="text" id="uuid_input" placeholder="Ex: b936d0c2-9a5c-444a-995f-9e8c46d32890" value="">
+        
+        <p style="color: var(--text-primary); margin-top: 20px;">
+            **Note:** Si le champ est vide, l'UUID par défaut du PC Tac sera utilisé. Cliquer sur "Démarrer la Recherche" affichera la liste des appareils Bluetooth compatibles.
+        </p>
+
+        <div class="modal-buttons">
+            <button id="startConnectBtn">Démarrer la Recherche</button>
+            <button id="cancelConnectBtn">Annuler</button>
         </div>
     </div>
     
@@ -621,7 +643,7 @@
                                  <!-- Les swatches de couleur sont générés par JS -->
                              </div>
                              <input type="text" id="free_pax_input" placeholder="Nom du TP (Ex: TP Alpha)" value="" />
-                             <input type="hidden" id="free_color_input" value="#800000" />
+                             <input type="hidden" id="free_color_input" value="#800000">
                          </div>
                      </div>
                      
@@ -741,7 +763,7 @@
         const HISTORY_STORAGE_KEY = 'pcTacHistory';
         const TITLE_STORAGE_KEY = 'pcTacTitle';
         
-        // UUIDs pour le Service et la Caractéristique de synchronisation (Doivent être uniques)
+        // UUIDs par défaut
         const PCTAC_SERVICE_UUID = 'b936d0c2-9a5c-444a-995f-9e8c46d32890'; // Service de log PC Tac
         const PCTAC_CHAR_UUID = 'e729a43a-23d5-452f-83e8-5807986063f1';      // Caractéristique de données de log
 
@@ -796,6 +818,10 @@
         
         // Modales
         const modalBackdrop = document.getElementById('modalBackdrop');
+        const connectModal = document.getElementById('connectModal');
+        const uuidInput = document.getElementById('uuid_input');
+        const startConnectBtn = document.getElementById('startConnectBtn');
+        const cancelConnectBtn = document.getElementById('cancelConnectBtn');
         
         // Variables pour suivre l'état
         let isTimeInputManuallyChanged = false;
@@ -1522,25 +1548,27 @@
 
             /**
              * Démarre la connexion en tant que Client Bluetooth.
+             * @param {string} customServiceUuid - UUID du service à rechercher.
              */
-            async connectAsClient() {
+            async connectAsClient(customServiceUuid) {
                 if (typeof navigator.bluetooth === 'undefined') {
                     showMessageModal("Erreur Bluetooth", "L'API Web Bluetooth n'est pas prise en charge sur ce navigateur/appareil.", true);
                     return;
                 }
                 
-                // Mettre l'icône en mode connexion
+                // Fermer la modale et mettre l'icône en mode connexion
+                hideConnectModal();
                 this.updateDockIconStatus('connecting');
                 this.isConnected = false;
 
+                const serviceToSearch = customServiceUuid || PCTAC_SERVICE_UUID;
+
                 try {
                     // Étape 1: Demander l'appareil
-                    // CORRECTION: Rétablit le filtre de service strict pour satisfaire l'exigence de sécurité/restriction
-                    // du navigateur ('A filter must restrict the devices in some way').
                     const device = await navigator.bluetooth.requestDevice({
-                        // Rétablit le filtre par service. Seuls les appareils diffusant cet UUID seront affichés.
-                        filters: [{ services: [PCTAC_SERVICE_UUID] }],
-                        optionalServices: [PCTAC_SERVICE_UUID] 
+                        // Filtre par le service fourni.
+                        filters: [{ services: [serviceToSearch] }],
+                        optionalServices: [serviceToSearch] 
                     });
                     this.device = device;
 
@@ -1552,12 +1580,14 @@
                     // Étape 2: Se connecter au serveur GATT
                     const server = await device.gatt.connect();
 
-                    // Étape 3: Obtenir le service et la caractéristique
-                    const service = await server.getPrimaryService(PCTAC_SERVICE_UUID);
-                    this.characteristic = await service.getCharacteristic(PCTAC_CHAR_UUID);
+                    // Étape 3: Obtenir le service et la caractéristique (doit utiliser l'UUID correct du service)
+                    const service = await server.getPrimaryService(serviceToSearch);
+                    
+                    // La caractéristique DOIT toujours être celle définie, car elle est codée en dur dans l'Hôte simulé
+                    // et attendue par le client pour les notifications/lecture.
+                    this.characteristic = await service.getCharacteristic(PCTAC_CHAR_UUID); 
                     
                     // Étape 4: S'abonner aux notifications pour les mises à jour en temps réel
-                    // Ceci est la clé de la synchronisation en temps réel (Serveur -> Client)
                     await this.characteristic.startNotifications();
                     this.characteristic.addEventListener('characteristicvaluechanged', this.handleCharacteristicValueChanged.bind(this));
 
@@ -1579,9 +1609,7 @@
                         message = "L'appareil cible n'est plus à portée.";
                     } else if (error.message.includes("NotFound")) {
                         // Ce message peut signifier que l'appareil n'a pas été trouvé OU que le service GATT n'est pas diffusé.
-                        message = "Aucun appareil compatible PC Tac trouvé. Assurez-vous que l'Hôte diffuse le service PC Tac (UUID: " + PCTAC_SERVICE_UUID + ").";
-                    } else if (error.message.includes("TypeError")) {
-                         message = "Erreur du navigateur: La requête de périphérique est invalide. Filtre non conforme. (Problème résolu dans le code, veuillez retester)";
+                        message = `Aucun appareil compatible PC Tac trouvé. Assurez-vous que l'Hôte diffuse le service (UUID: ${serviceToSearch}).`;
                     }
                     showMessageModal("Échec de la connexion", message, true);
                 }
@@ -1604,7 +1632,7 @@
                 
                 // Utiliser le nom de l'intervention pour l'identification
                 const title = interventionTitleInput.value.trim() || "PC TAC HOTE";
-                showMessageModal("Partage Bluetooth Actif (Hôte)", `Ce PC est l'autorité des données. Les clients doivent chercher **${title}** dans leur liste de connexion Bluetooth. (UUID du Service: ${PCTAC_SERVICE_UUID})`, false);
+                showMessageModal("Partage Bluetooth Actif (Hôte)", `Ce PC est l'autorité des données. Les clients doivent chercher **${title}** et se connecter à l'UUID du Service par défaut: **${PCTAC_SERVICE_UUID}**`, false);
                 
                 // Envoyez les données actuelles immédiatement (simule l'état initial pour les clients futurs)
                 this.broadcastData(getLogData());
@@ -2158,6 +2186,21 @@
             document.getElementById('modalBackdrop').style.display = 'none';
             document.getElementById('resetModal').style.display = 'none';
         }
+        
+        function showConnectModal() {
+             // Afficher la modale de connexion
+             modalBackdrop.style.display = 'block';
+             connectModal.style.display = 'block';
+             // Remplir l'UUID par défaut pour aider l'utilisateur
+             uuidInput.value = PCTAC_SERVICE_UUID;
+        }
+
+        function hideConnectModal() {
+             // Cacher la modale de connexion
+             modalBackdrop.style.display = 'none';
+             connectModal.style.display = 'none';
+        }
+
 
         function handleResetData() {
             localStorage.removeItem(LOCAL_STORAGE_KEY);
@@ -2225,9 +2268,28 @@
                  if (BluetoothManager.isServer) {
                      BluetoothManager.disconnect();
                  }
-                 // Démarrer la connexion en tant que client
-                 BluetoothManager.connectAsClient();
+                 // Afficher la modale de connexion
+                 showConnectModal();
              }
+        }
+        
+        /**
+         * Gère le clic sur le bouton Démarrer la Recherche dans la modale.
+         */
+        function handleStartConnect() {
+            const customUuid = uuidInput.value.trim();
+            let serviceUuid = PCTAC_SERVICE_UUID;
+            
+            if (customUuid) {
+                 // Valider le format de l'UUID (simple vérification pour s'assurer que c'est une chaîne de caractères)
+                 if (customUuid.length < 4) { // Un UUID court ou long doit avoir une certaine longueur
+                      showMessageModal("Erreur UUID", "L'UUID saisi semble invalide. Veuillez vérifier le format (ex: 180D ou un long UUID).", true);
+                      return;
+                 }
+                 serviceUuid = customUuid;
+            }
+            
+            BluetoothManager.connectAsClient(serviceUuid);
         }
 
 
@@ -2306,10 +2368,15 @@
                 document.getElementById('messageModal').style.display = 'none';
             });
             
+            // Listeners pour la modale de connexion
+            startConnectBtn.addEventListener('click', handleStartConnect);
+            cancelConnectBtn.addEventListener('click', hideConnectModal);
+            
             document.getElementById('modalBackdrop').addEventListener('click', (e) => {
                  // Cacher les modales seulement si on clique sur le fond et si aucune autre modale n'est ouverte
                  if (e.target.id === 'modalBackdrop') {
                      hideResetModal();
+                     hideConnectModal();
                  }
             });
             
