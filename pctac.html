@@ -568,11 +568,21 @@
         }
 
         /* Styles HTML5-QRCODE */
+        /* Ceci force l'interface utilisateur de html5-qrcode à s'adapter */
         #reader__dashboard_section_csr, #reader__dashboard_section_fsr,
-        #reader__dashboard_section_csr > div:first-child,
-        #reader > div:first-child {
+        #reader > div:first-child,
+        #reader * {
             max-width: 100% !important;
+            box-sizing: border-box;
         }
+        #reader table {
+             width: 100% !important;
+        }
+        #reader img {
+             max-width: 100% !important;
+             height: auto !important;
+        }
+
 
     </style>
 </head>
@@ -780,7 +790,7 @@
     <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
     <!-- Bibliothèques pour le QR Code -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    <!-- NOUVELLE LIBRAIRIE : html5-qrcode (version la plus stable) -->
+    <!-- UTILISATION DE html5-qrcode (PLUS STABLE) -->
     <script src="https://unpkg.com/html5-qrcode/minified/html5-qrcode.min.js"></script>
     <script>
         const LOCAL_STORAGE_KEY = 'pcTacLogData';
@@ -1650,33 +1660,23 @@
             // Fonction d'échec de scan (appelée si le décodage échoue, mais pas nécessairement une erreur critique)
             const onScanError = (errorMessage) => {
                 // Typiquement ignoré pour éviter les popups inutiles pendant le scan
-                // console.warn(`Code scan error: ${errorMessage}`);
+                // On pourrait utiliser ceci pour signaler une erreur spécifique à l'utilisateur
             };
-
-            // Fonction d'erreur critique (problème de caméra/permission)
-            const onReady = (error) => {
-                 if (error) {
-                     console.error("Erreur d'accès à la caméra:", error);
-                     // Cette erreur peut se produire si la permission est refusée
-                     if (error.includes("NotAllowedError")) {
-                         showMessageModal("Accès Caméra Refusé", `Veuillez autoriser l'accès à la caméra pour utiliser le scan QR.`, true);
-                     } else {
-                         showMessageModal("Erreur Caméra", `Erreur d'initialisation de la caméra: ${error}`, true);
-                     }
-                     handleQRScanStop(); // Tenter de stopper au cas où
-                 }
-            }
-
-            // Démarre le scan. Le `render` gère l'accès à la caméra.
-            // On utilise setTimeout car on a besoin de `clear()` dans `onScanSuccess`, ce qui nécessite que l'objet soit complètement initialisé.
+            
+            // Démarrage avec gestion des erreurs de permission/initialisation
+            html5QrcodeScanner.render(onScanSuccess, onScanError);
+            
+            // Note: html5-qrcode ne fournit pas de callback "onReady" pour les erreurs
+            // C'est pourquoi la gestion des erreurs de permission est souvent déportée vers le catch de `clear()` ou dans les logs du navigateur.
+            // On peut ajouter un petit délai pour vérifier si le scanner s'est initialisé correctement
             setTimeout(() => {
-                if (html5QrcodeScanner) {
-                    html5QrcodeScanner.render(onScanSuccess, onScanError);
-                } else {
-                    onReady("Scanner non initialisé (erreur interne).");
+                const readerElement = document.getElementById('reader');
+                // Si la div est vide après un délai, c'est que la caméra n'a pas pu être démarrée
+                if (scannerModal.style.display === 'block' && readerElement && readerElement.childElementCount === 0) {
+                     showMessageModal("Erreur Caméra", "Impossible d'initialiser la caméra. Vérifiez les permissions du navigateur (Chrome, Firefox, etc.) pour ce site.", true);
+                     handleQRScanStop();
                 }
-            }, 100);
-
+            }, 5000);
         }
 
         /**
@@ -1685,11 +1685,11 @@
         function handleQRScanStop() {
             if (html5QrcodeScanner) {
                 // html5-qrcode utilise une méthode `clear` pour arrêter la caméra
+                // Le catch permet de gérer l'erreur si le scanner n'a pas pu être démarré ou a déjà été arrêté
                 html5QrcodeScanner.clear().then(() => {
                     console.log("Scanner html5-qrcode arrêté.");
                 }).catch(error => {
-                    // C'est normal d'avoir une erreur si le scanner n'a jamais été démarré ou est déjà arrêté
-                    console.warn("Erreur lors de l'arrêt de html5-qrcode (peut-être déjà arrêté):", error);
+                    console.warn("Erreur lors de l'arrêt de html5-qrcode (peut-être déjà arrêté ou permission refusée):", error);
                 }).finally(() => {
                     html5QrcodeScanner = null;
                 });
