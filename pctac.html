@@ -771,7 +771,9 @@
         const LOCAL_STORAGE_KEY = 'pcTacLogData';
         const HISTORY_STORAGE_KEY = 'pcTacHistory';
         const TITLE_STORAGE_KEY = 'pcTacTitle';
-        const QR_MAX_CHAR_LIMIT = 1000; // Limite pratique pour un scan facile en conditions réelles
+        // CORRECTION: Abaissement drastique de la limite pour garantir qu'elle ne dépasse pas la capacité du QR Code (environ 3000)
+        // 2800 caractères pour laisser une marge pour les métadonnées et la compression JSON.
+        const QR_MAX_CHAR_LIMIT = 2800; 
         
         // --- COULEURS ÉTENDUES ---
         const FREE_MODE_COLORS = [
@@ -1466,41 +1468,45 @@
 
 
         // --- 5. Fonctions QR Code (Nouveau Bloc) ---
-
+        
         /**
-         * Calcule le nombre maximal d'entrées qui tiennent dans la limite de caractères QR.
-         * La limite est définie par QR_MAX_CHAR_LIMIT.
+         * Calcule le nombre maximal d'entrées qui tiennent DANS la limite de caractères QR (limite totale du JSON).
+         * @param {Array} logData - Les données de log actuelles.
+         * @returns {number} Le nombre d'entrées maximum à exporter.
          */
         function calculateMaxQrEntries(logData) {
-            let entriesToExport = [];
-            let currentSize = 0;
-            // Structure minimaliste de l'objet d'exportation pour le calcul de base
-            const metadataTemplate = { m: { a: "PC Tac Log QR", v: "1.0" }, l: [] };
-            const baseSize = JSON.stringify(metadataTemplate).length;
-
-            // Estimation conservatrice de l'espace restant pour les logs
-            let maxAvailableSpace = QR_MAX_CHAR_LIMIT - baseSize - 20; // -20 pour marges/crochets
-
             if (logData.length === 0) return 0;
             
             // Prendre les entrées les plus récentes (à la fin du tableau)
             const reversedLogData = [...logData].reverse();
+            let entriesToExport = [];
 
+            // Créer l'objet d'exportation minimaliste pour le test de taille
+            const exportObjectTemplate = {
+                m: { a: "PC Tac Log QR", v: "1.0" }, 
+                l: []
+            };
+            
+            let exportEntries = [];
+            
             for (const entry of reversedLogData) {
                 // Créer une version minimaliste de l'entrée pour le QR Code
-                const minimalEntry = { h: entry.heure, p: entry.paxMode === 'standard' ? entry.pax : entry.pax, d: entry.paxMode, c: entry.paxColor, l: entry.lieu, f: entry.fenetrePorte, r: entry.remarques };
-                // La taille de l'entrée sérialisée plus la virgule et les crochets (approximativement)
-                const entrySize = JSON.stringify(minimalEntry).length + 2; 
+                const minimalEntry = { h: entry.heure, p: entry.pax, d: entry.paxMode, c: entry.paxColor, l: entry.lieu, f: entry.fenetrePorte, r: entry.remarques };
+                
+                // Tester la taille totale si cette entrée est ajoutée
+                exportEntries.unshift(minimalEntry); // Ajoute au début pour garder l'ordre chronologique des logs
 
-                if (currentSize + entrySize < maxAvailableSpace) {
-                    currentSize += entrySize;
-                    entriesToExport.push(entry);
-                } else {
+                exportObjectTemplate.l = exportEntries;
+                const currentSize = JSON.stringify(exportObjectTemplate).length;
+
+                if (currentSize > QR_MAX_CHAR_LIMIT) {
+                    // Si l'ajout de cette entrée dépasse la limite, l'enlever et s'arrêter.
+                    exportEntries.shift(); 
                     break;
                 }
             }
 
-            return entriesToExport.length;
+            return exportEntries.length;
         }
 
         /**
@@ -1520,13 +1526,16 @@
                  return;
             }
 
+            // Utiliser la nouvelle fonction de calcul qui garantit la taille
             const maxEntries = calculateMaxQrEntries(logData);
-            const entriesToExport = logData.slice(logData.length - maxEntries);
-
+            
             if (maxEntries === 0) {
-                 showMessageModal("Erreur de taille", `Même l'entrée la plus récente dépasse la limite de ${QR_MAX_CHAR_LIMIT} caractères.`, true);
+                 showMessageModal("Erreur de taille", `La taille des entrées dépasse la limite de ${QR_MAX_CHAR_LIMIT} caractères par QR Code. Le journal est trop long pour être partagé.`, true);
                  return;
             }
+
+            // On prend les dernières 'maxEntries' du logData original (qui est déjà trié par heure)
+            const entriesToExport = logData.slice(logData.length - maxEntries); 
 
             // Créer l'objet d'exportation minimaliste
             const exportObject = {
@@ -1564,8 +1573,7 @@
                 document.getElementById('qrInfo').textContent = `${entriesToExport.length} entrée(s) transférée(s). Taille: ${qrData.length} / ${QR_MAX_CHAR_LIMIT} caractères.`;
 
             } catch(e) {
-                 console.error("Erreur de génération QR Code:", e);
-                 // Afficher le message de bug générique si l'erreur n'est pas corrigée par l'ajout de la vérification de dépendance.
+                 console.error("Erreur de génération QR Code (après correction de taille):", e);
                  showMessageModal("Erreur QR Code", "Impossible de générer le QR Code.", true);
                  hideQRModal();
             }
