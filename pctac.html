@@ -736,16 +736,12 @@
         // Définition des UUIDs spécifiques au service PC Tac
         // NOTE: Web Bluetooth ne permet pas la création de services GATT (Advertising) dans les navigateurs standard.
         // Cette implémentation se concentre uniquement sur le CÔTÉ CLIENT (se connecter à un PC Tac Hôte).
-        // L'implémentation du CÔTÉ SERVEUR est basée sur l'Advertising Web (non standard/obsolète) ou nécessite
-        // un autre appareil hôte pour simuler le service GATT que le navigateur CLIENT va lire.
-        // Pour répondre à la demande, le code implémentera une fonction de lecture CLIENT (qui scanne et se connecte).
 
         const LOCAL_STORAGE_KEY = 'pcTacLogData';
         const HISTORY_STORAGE_KEY = 'pcTacHistory';
         const TITLE_STORAGE_KEY = 'pcTacTitle';
         
         // UUIDs pour le Service et la Caractéristique de synchronisation (Doivent être uniques)
-        // Ces UUIDs sont utilisés pour filtrer la recherche d'appareils et pour les communications.
         const PCTAC_SERVICE_UUID = 'b936d0c2-9a5c-444a-995f-9e8c46d32890'; // Service de log PC Tac
         const PCTAC_CHAR_UUID = 'e729a43a-23d5-452f-83e8-5807986063f1';      // Caractéristique de données de log
 
@@ -1539,10 +1535,12 @@
 
                 try {
                     // Étape 1: Demander l'appareil
-                    // On filtre par le service PCTAC_SERVICE_UUID pour ne trouver que les hôtes PC Tac.
+                    // CHANGEMENT CRITIQUE: Retire le filtre de service strict pour permettre
+                    // la connexion à n'importe quel appareil BLE (qui pourrait être l'hôte PC renommé)
                     const device = await navigator.bluetooth.requestDevice({
-                        filters: [{ services: [PCTAC_SERVICE_UUID] }],
-                        optionalServices: [PCTAC_SERVICE_UUID]
+                        // Ancien filtre: filters: [{ services: [PCTAC_SERVICE_UUID] }],
+                        filters: [{ acceptAllDevices: true }], // Accepter tous les appareils BLE
+                        optionalServices: [PCTAC_SERVICE_UUID] // Toujours demander le service pour la communication
                     });
                     this.device = device;
 
@@ -1579,6 +1577,8 @@
                         message = "Connexion Bluetooth annulée par l'utilisateur.";
                     } else if (error.message.includes("no longer in range")) {
                         message = "L'appareil cible n'est plus à portée.";
+                    } else if (error.message.includes("NotFound")) {
+                        message = "Connexion annulée ou service PC Tac non trouvé sur l'appareil sélectionné. Assurez-vous que l'Hôte est en mode partage.";
                     }
                     showMessageModal("Échec de la connexion", message, true);
                 }
@@ -1590,8 +1590,6 @@
              */
             startShareAsServer() {
                 // NOTE: La fonction réelle d'Advertising Web Bluetooth est absente/obsolète.
-                // Nous définissons l'état "Server" localement pour que cet appareil commence à "broadcaster" (simulé)
-                // lorsqu'une mise à jour se produit (via saveLogData).
                 
                 if (this.isConnected) {
                     this.disconnect();
@@ -1600,8 +1598,10 @@
                 this.isServer = true;
                 this.isConnected = true;
                 this.updateDockIconStatus('server');
-
-                showMessageModal("Partage Bluetooth Actif", "Ce PC est maintenant l'**HÔTE DE DONNÉES**. Les autres appareils peuvent se connecter pour synchroniser. (Nécessite un simulateur hôte externe ou un appareil supportant l'Advertising pour une connexion réelle.)", false);
+                
+                // Utiliser le nom de l'intervention pour l'identification
+                const title = interventionTitleInput.value.trim() || "PC TAC HOTE";
+                showMessageModal("Partage Bluetooth Actif (Hôte)", `Ce PC est l'autorité des données. Les clients doivent chercher **${title}** dans leur liste de connexion Bluetooth.`, false);
                 
                 // Envoyez les données actuelles immédiatement (simule l'état initial pour les clients futurs)
                 this.broadcastData(getLogData());
@@ -1653,10 +1653,11 @@
                  
                  // NOTE: Dans une implémentation réelle, cette lecture tirerait toutes les données.
                  // Pour la simulation, nous supposons que l'hôte renvoie l'intégralité du log.
-                 const value = await this.characteristic.readValue();
-                 const dataJson = new TextDecoder().decode(value);
-                 
+                 // Cette étape peut échouer si l'Hôte n'est pas un vrai serveur GATT, même si la connexion passe.
                  try {
+                     const value = await this.characteristic.readValue();
+                     const dataJson = new TextDecoder().decode(value);
+                     
                      const parsedData = JSON.parse(dataJson);
                      const logData = parsedData.logEntries;
                      const title = parsedData.title;
@@ -1666,7 +1667,8 @@
                      
                  } catch (e) {
                      console.error("Erreur de lecture des données initiales Bluetooth:", e);
-                     // C'est une erreur attendue si l'hôte ne renvoie pas de données formatées.
+                     // Cette erreur est fréquente si le client se connecte à un faux hôte (PC)
+                     showMessageModal("Avertissement de synchronisation", "La lecture initiale des données a échoué. Cela peut être normal si l'hôte est un navigateur simulant le partage. La réception des futures mises à jour en temps réel (notifications) est le principal objectif.", false);
                  }
             },
 
