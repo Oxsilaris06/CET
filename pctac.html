@@ -1598,9 +1598,9 @@
          * Démarre le scanner de QR Code.
          */
         function handleQRScanStart() {
-            // Assurer que Instascan est défini
+            // Assurer que Instascan est défini AVANT de continuer (check du CDN)
             if (typeof Instascan === 'undefined' || typeof Instascan.Scanner === 'undefined') {
-                 showMessageModal("Erreur de dépendance", "La bibliothèque de scan n'est pas chargée. Vérifiez votre connexion CDN.", true);
+                 showMessageModal("Erreur de dépendance", "La bibliothèque de scan n'est pas chargée. Vérifiez votre connexion CDN (https://cdnjs.cloudflare.com/ajax/libs/instascan/1.0.0/instascan.min.js).", true);
                  return;
             }
 
@@ -1631,7 +1631,12 @@
                 }
             }).catch(function (e) {
                 console.error("Erreur de caméra/permissions:", e);
-                showMessageModal("Erreur Caméra", `Erreur d'accès à la caméra : ${e.name}. Vérifiez les permissions du navigateur.`, true);
+                // Si l'accès est refusé, on prévient l'utilisateur
+                if (e.name === 'NotAllowedError' || e.name === 'NotReadableError') {
+                    showMessageModal("Accès Caméra Refusé", `Veuillez autoriser l'accès à la caméra dans les paramètres de votre navigateur ou de votre appareil pour utiliser le scan QR.`, true);
+                } else {
+                    showMessageModal("Erreur Caméra", `Erreur d'accès à la caméra : ${e.name}. Consultez la console pour plus de détails.`, true);
+                }
                 handleQRScanStop();
             });
         }
