@@ -582,13 +582,13 @@
     <!-- NOUVEAU: Modale de Saisie de Connexion Bluetooth (Client) -->
     <div class="custom-modal" id="connectModal">
         <h3 style="color: var(--accent-blue); margin-bottom: 10px;">Connexion à l'Hôte Bluetooth</h3>
-        <p style="color: var(--text-secondary); margin-bottom: 10px;">Saisissez l'UUID du service pour forcer la recherche (par défaut: Service PC Tac).</p>
+        <p style="color: var(--text-secondary); margin-bottom: 10px;">Saisissez l'UUID du service pour forcer la recherche.</p>
         
-        <label for="uuid_input" style="margin-top: 10px;">UUID du Service GATT (Optionnel)</label>
+        <label for="uuid_input" style="margin-top: 10px;">UUID du Service GATT</label>
         <input type="text" id="uuid_input" placeholder="Ex: b936d0c2-9a5c-444a-995f-9e8c46d32890" value="">
         
         <p style="color: var(--text-primary); margin-top: 20px;">
-            **Note:** Si le champ est vide, l'UUID par défaut du PC Tac sera utilisé. Cliquer sur "Démarrer la Recherche" affichera la liste des appareils Bluetooth compatibles.
+            **Note:** Le filtre de recherche utilisera cet UUID. Assurez-vous que l'Hôte diffuse bien ce service, sinon il ne sera pas trouvé dans la liste.
         </p>
 
         <div class="modal-buttons">
@@ -1608,8 +1608,8 @@
                     } else if (error.message.includes("no longer in range")) {
                         message = "L'appareil cible n'est plus à portée.";
                     } else if (error.message.includes("NotFound")) {
-                        // Ce message peut signifier que l'appareil n'a pas été trouvé OU que le service GATT n'est pas diffusé.
-                        message = `Aucun appareil compatible PC Tac trouvé. Assurez-vous que l'Hôte diffuse le service (UUID: ${serviceToSearch}).`;
+                        // Le message exact est : 'No Services matching UUID ... found in Device.'
+                        message = `Aucun service (UUID: ${serviceToSearch}) trouvé. Assurez-vous que l'Hôte diffuse ce service GATT, ou tentez un autre UUID.`;
                     }
                     showMessageModal("Échec de la connexion", message, true);
                 }
@@ -1683,11 +1683,16 @@
                  if (!this.characteristic || this.isServer) return;
                  
                  // NOTE: Dans une implémentation réelle, cette lecture tirerait toutes les données.
-                 // Pour la simulation, nous supposons que l'hôte renvoie l'intégralité du log.
-                 // Cette étape peut échouer si l'Hôte n'est pas un vrai serveur GATT, même si la connexion passe.
                  try {
                      const value = await this.characteristic.readValue();
                      const dataJson = new TextDecoder().decode(value);
+                     
+                     // CORRECTION: Vérifier si dataJson est une chaîne JSON valide avant de la parser.
+                     if (!dataJson || dataJson.trim().length === 0) {
+                         console.error("Erreur de lecture des données initiales Bluetooth: Chaîne JSON vide.");
+                         showMessageModal("Avertissement de synchronisation", "La lecture initiale des données a échoué (réception vide). Cela peut être normal si l'hôte est un navigateur simulant le partage. La réception des futures mises à jour en temps réel (notifications) est le principal objectif.", false);
+                         return; // Sortir proprement sans erreur
+                     }
                      
                      const parsedData = JSON.parse(dataJson);
                      const logData = parsedData.logEntries;
@@ -1697,9 +1702,9 @@
                      importLogData(logData, title);
                      
                  } catch (e) {
-                     console.error("Erreur de lecture des données initiales Bluetooth:", e);
+                     console.error("Erreur de lecture des données initiales Bluetooth: SyntaxError lors du JSON.parse()", e);
                      // Cette erreur est fréquente si le client se connecte à un faux hôte (PC)
-                     showMessageModal("Avertissement de synchronisation", "La lecture initiale des données a échoué. Cela peut être normal si l'hôte est un navigateur simulant le partage. La réception des futures mises à jour en temps réel (notifications) est le principal objectif.", false);
+                     showMessageModal("Avertissement de synchronisation", "La lecture initiale des données a échoué (Erreur JSON). Cela signifie que l'Hôte n'a pas pu écrire les données correctement. La réception des futures mises à jour est prioritaire.", false);
                  }
             },
 
@@ -1712,6 +1717,12 @@
 
                 const value = event.target.value;
                 const dataJson = new TextDecoder().decode(value);
+                
+                // CORRECTION: Vérifier si dataJson est une chaîne JSON valide avant de la parser.
+                if (!dataJson || dataJson.trim().length === 0) {
+                     console.warn("Notification Bluetooth reçue mais vide (ignorée).");
+                     return; 
+                }
 
                 try {
                     const parsedData = JSON.parse(dataJson);
@@ -1722,7 +1733,7 @@
                     importLogData(logData, title);
 
                 } catch (e) {
-                    console.error("Erreur de réception de données Bluetooth:", e);
+                    console.error("Erreur de réception de données Bluetooth: SyntaxError lors du JSON.parse()", e);
                     // Ignorer l'erreur pour continuer à écouter
                 }
             },
