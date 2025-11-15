@@ -426,12 +426,12 @@
              box-shadow: 0 0 20px rgba(0,0,0,0.1);
         }
         
-        /* Style pour les boutons Bluetooth selon l'état */
-        .dock-menu-item.bluetooth-active {
+        /* Style pour les boutons P2P selon l'état */
+        .dock-menu-item.p2p-active {
             box-shadow: 0 0 15px 3px var(--ao-green); /* Bordure verte brillante si actif */
             color: var(--ao-green);
         }
-        .dock-menu-item.bluetooth-connecting {
+        .dock-menu-item.p2p-connecting {
             box-shadow: 0 0 15px 3px var(--accent-blue);
             color: var(--accent-blue);
             animation: pulse 1.5s infinite;
@@ -488,7 +488,7 @@
             }
         }
 
-        /* Modale de confirmation (pour la réinitialisation) et Modale de message*/
+        /* Modales */
         .custom-modal {
             position: fixed;
             top: 50%;
@@ -536,22 +536,54 @@
             cursor: pointer;
         }
 
-        #confirmResetBtn, #closeMessageModalBtn, #cancelConnectBtn {
+        #confirmResetBtn, #closeMessageModalBtn {
             background-color: var(--danger-red);
             color: white;
             border: none;
         }
 
-        #cancelResetBtn, #modalMessageBtn, #startConnectBtn {
+        #cancelResetBtn, #modalMessageBtn {
             background-color: var(--bg-interactive);
             color: var(--text-primary);
             border: 1px solid var(--border-color);
         }
-        #startConnectBtn {
-            background-color: var(--accent-blue);
-            color: white;
-        }
         
+        /* Styles spécifiques à la modale P2P */
+        #p2pModal {
+            width: 450px;
+            max-width: 95vw;
+        }
+        #qrCodeContainer {
+             padding: 10px;
+             background-color: white;
+             border-radius: 4px;
+             display: flex;
+             justify-content: center;
+             margin-bottom: 10px;
+        }
+        #qrCodeContainer canvas {
+             max-width: 100%;
+             height: auto;
+        }
+        #p2pStatus {
+            font-weight: bold;
+            text-align: center;
+            margin-top: 15px;
+        }
+        #signalingInput {
+            width: 100%;
+            margin-top: 10px;
+            min-height: 100px;
+            font-size: 0.8em;
+            font-family: monospace;
+            resize: vertical;
+        }
+        #p2pModal .role-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
     </style>
 </head>
 <body class="dark-mode">
@@ -574,26 +606,30 @@
         <h3 id="modalMessageTitle" style="margin-bottom: 10px;">Message</h3>
         <p id="modalMessageContent" style="color: var(--text-primary);"></p>
         <div class="modal-buttons">
-            <!-- Renommé pour plus de clarté -->
             <button id="closeMessageModalBtn">OK</button> 
         </div>
     </div>
 
-    <!-- NOUVEAU: Modale de Saisie de Connexion Bluetooth (Client) -->
-    <div class="custom-modal" id="connectModal">
-        <h3 style="color: var(--accent-blue); margin-bottom: 10px;">Connexion à l'Hôte Bluetooth</h3>
-        <p style="color: var(--text-secondary); margin-bottom: 10px;">Saisissez l'UUID du service pour forcer la recherche.</p>
+    <!-- NOUVEAU: Modale de Synchronisation P2P (WebRTC) -->
+    <div class="custom-modal" id="p2pModal">
+        <h3 style="color: var(--accent-blue); margin-bottom: 10px;">Synchronisation P2P (WebRTC)</h3>
         
-        <label for="uuid_input" style="margin-top: 10px;">UUID du Service GATT</label>
-        <input type="text" id="uuid_input" placeholder="Ex: b936d0c2-9a5c-444a-995f-9e8c46d32890" value="">
-        
-        <p style="color: var(--text-primary); margin-top: 20px;">
-            **Note:** Le filtre de recherche utilisera cet UUID. Assurez-vous que l'Hôte diffuse bien ce service, sinon il ne sera pas trouvé dans la liste.
-        </p>
+        <p id="p2pInstructions" style="color: var(--text-secondary); margin-bottom: 10px;"></p>
 
+        <div id="qrCodeContainer" style="display: none;"></div>
+        
+        <textarea id="signalingInput" placeholder="Collez ici le code de signalisation du pair (Hôte ou Client)..." style="display: none;"></textarea>
+
+        <p id="p2pStatus" class="p2p-connecting" style="display: none;">Démarrage...</p>
+
+        <div class="modal-buttons role-buttons">
+            <button id="startHostBtn" style="background-color: var(--ao-green); color: white;">Démarrer Hôte (Offer)</button>
+            <button id="startClientBtn" style="background-color: var(--accent-blue); color: white;">Démarrer Client (Answer)</button>
+        </div>
+        
         <div class="modal-buttons">
-            <button id="startConnectBtn">Démarrer la Recherche</button>
-            <button id="cancelConnectBtn">Annuler</button>
+            <button id="p2pDisconnectBtn" style="display: none;">Déconnecter</button>
+            <button id="p2pCloseModalBtn" style="background-color: var(--danger-red); color: white;">Fermer</button>
         </div>
     </div>
     
@@ -727,13 +763,9 @@
               <span class="material-symbols-outlined">upload_file</span>
           </div>
         
-        <!-- NOUVEAU: Bouton Démarrer le Partage Bluetooth (Serveur) -->
-        <div class="dock-menu-item" id="bluetoothShareDockBtn" title="Démarrer le partage Bluetooth (Hôte)">
-            <span class="material-symbols-outlined">bluetooth</span>
-        </div>
-        <!-- NOUVEAU: Bouton Se Connecter Bluetooth (Client) -->
-        <div class="dock-menu-item" id="bluetoothConnectDockBtn" title="Se connecter à l'hôte Bluetooth (Client)">
-            <span class="material-symbols-outlined">sync</span>
+        <!-- NOUVEAU: Bouton Démarrer la Synchronisation P2P -->
+        <div class="dock-menu-item" id="p2pToggleBtn" title="Synchronisation P2P (WebRTC)">
+            <span class="material-symbols-outlined">wifi_tethering</span>
         </div>
 
         <div class="dock-menu-item" id="darkModeToggle" title="Changer le thème">
@@ -753,20 +785,15 @@
     </div>
 
     <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
-    <!-- Les librairies QR code ont été supprimées -->
+    <!-- Bibliothèques pour la nouvelle logique P2P (WebRTC et QR Code) -->
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+    <!-- simple-peer est une bibliothèque légère pour simplifier l'API WebRTC P2P -->
+    <script src="https://cdn.jsdelivr.net/npm/simple-peer@9.11.0/simplepeer.min.js"></script>
     <script>
-        // Définition des UUIDs spécifiques au service PC Tac
-        // NOTE: Web Bluetooth ne permet pas la création de services GATT (Advertising) dans les navigateurs standard.
-        // Cette implémentation se concentre uniquement sur le CÔTÉ CLIENT (se connecter à un PC Tac Hôte).
-
         const LOCAL_STORAGE_KEY = 'pcTacLogData';
         const HISTORY_STORAGE_KEY = 'pcTacHistory';
         const TITLE_STORAGE_KEY = 'pcTacTitle';
         
-        // UUIDs par défaut
-        const PCTAC_SERVICE_UUID = 'b936d0c2-9a5c-444a-995f-9e8c46d32890'; // Service de log PC Tac
-        const PCTAC_CHAR_UUID = 'e729a43a-23d5-452f-83e8-5807986063f1';      // Caractéristique de données de log
-
         // --- COULEURS ÉTENDUES ---
         const FREE_MODE_COLORS = [
             { hex: '#800000', name: 'Bordeaux' },      
@@ -812,22 +839,312 @@
         const fpHistorDatalist = document.getElementById('fp_history');
         const interventionTitleInput = document.getElementById('intervention_title_input');
         const sortTimeBtn = document.getElementById('sortTimeBtn');
-        // NOUVEAUX ÉLÉMENTS BLUETOOTH
-        const bluetoothShareDockBtn = document.getElementById('bluetoothShareDockBtn');
-        const bluetoothConnectDockBtn = document.getElementById('bluetoothConnectDockBtn');
+        // NOUVEAUX ÉLÉMENTS P2P
+        const p2pToggleBtn = document.getElementById('p2pToggleBtn');
         
-        // Modales
+        // Modales P2P
         const modalBackdrop = document.getElementById('modalBackdrop');
-        const connectModal = document.getElementById('connectModal');
-        const uuidInput = document.getElementById('uuid_input');
-        const startConnectBtn = document.getElementById('startConnectBtn');
-        const cancelConnectBtn = document.getElementById('cancelConnectBtn');
+        const p2pModal = document.getElementById('p2pModal');
+        const p2pInstructions = document.getElementById('p2pInstructions');
+        const qrCodeContainer = document.getElementById('qrCodeContainer');
+        const signalingInput = document.getElementById('signalingInput');
+        const p2pStatus = document.getElementById('p2pStatus');
+        const startHostBtn = document.getElementById('startHostBtn');
+        const startClientBtn = document.getElementById('startClientBtn');
+        const p2pDisconnectBtn = document.getElementById('p2pDisconnectBtn');
+        const p2pCloseModalBtn = document.getElementById('p2pCloseModalBtn');
         
         // Variables pour suivre l'état
         let isTimeInputManuallyChanged = false;
         let paxColorMap = {}; // Map pour lier PAX libre à sa couleur
         let colorPaxMap = {}; // Map inversée pour lier Couleur -> dernier Nom de PAX libre
         
+        // --- P2P Manager ---
+        const P2PManager = {
+            peer: null,
+            isHost: false,
+            isConnected: false,
+            // Configuration WebRTC STUN/TURN (utilise des serveurs publics pour la traversée NAT)
+            config: {
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:global.stun.twilio.com:3478' }
+                ]
+            },
+
+            /**
+             * Démarre la connexion en tant qu'Hôte (crée l'Offer).
+             */
+            startHost() {
+                this.disconnect();
+                this.isHost = true;
+                
+                // 1. Créer le Peer (initiator: true pour générer l'Offer)
+                this.peer = new SimplePeer({ initiator: true, trickle: false, config: this.config });
+                this.setupPeerEvents();
+                
+                this.updateUI('host_waiting');
+            },
+
+            /**
+             * Démarre la connexion en tant que Client (attend l'Offer, puis génère l'Answer).
+             */
+            startClient() {
+                this.disconnect();
+                this.isHost = false;
+                
+                // 1. Créer le Peer (initiator: false pour attendre l'Offer)
+                this.peer = new SimplePeer({ initiator: false, trickle: false, config: this.config });
+                this.setupPeerEvents();
+                
+                this.updateUI('client_waiting_offer');
+            },
+
+            /**
+             * Configure les événements Peer commun (Hôte et Client).
+             */
+            setupPeerEvents() {
+                this.peer.on('error', (err) => {
+                    console.error('Erreur P2P:', err);
+                    this.updateUI('error', `Erreur de connexion: ${err.message || 'Voir console.'}`);
+                    this.disconnect();
+                });
+
+                this.peer.on('signal', (data) => {
+                    // Événement Signal: Ceci est le message de signalisation (Offer/Answer/ICE) à échanger.
+                    const signalingData = JSON.stringify(data);
+                    
+                    if (this.isHost) {
+                        if (data.type === 'offer') {
+                            // Hôte envoie l'Offer
+                            this.updateUI('host_show_offer', signalingData);
+                        } else if (data.type === 'answer') {
+                            // Hôte reçoit l'Answer (non nécessaire ici, simple-peer gère l'échange complet)
+                        }
+                    } else {
+                        if (data.type === 'answer') {
+                            // Client envoie l'Answer (à coller dans l'Hôte)
+                            this.updateUI('client_show_answer', signalingData);
+                        }
+                    }
+                });
+
+                this.peer.on('connect', () => {
+                    this.isConnected = true;
+                    this.updateUI('connected');
+                    
+                    // Après la connexion, l'Hôte envoie immédiatement l'état complet du Log.
+                    if (this.isHost) {
+                        this.sendData(getLogData());
+                    }
+                });
+
+                this.peer.on('data', (data) => {
+                    // Réception des données (toujours JSON stringifié)
+                    try {
+                        const jsonString = new TextDecoder().decode(data);
+                        const parsedData = JSON.parse(jsonString);
+                        
+                        if (parsedData.type === 'log_update') {
+                            // Mettre à jour le log et le titre
+                            importLogData(parsedData.logEntries, parsedData.title);
+                            showMessageModal("Synchronisation P2P", "Log mis à jour par l'Hôte.", false);
+                        }
+                    } catch (e) {
+                        console.error("Erreur de réception de données P2P:", e);
+                    }
+                });
+                
+                this.peer.on('close', () => {
+                    this.disconnect();
+                });
+            },
+
+            /**
+             * Envoie l'état du Log via le Data Channel (Hôte seulement).
+             * @param {Array} logData - Les données de log à envoyer.
+             */
+            sendData(logData) {
+                if (!this.isConnected || !this.isHost) return;
+                
+                const dataToSend = {
+                    type: 'log_update',
+                    title: interventionTitleInput.value.trim(),
+                    logEntries: logData
+                };
+                const jsonString = JSON.stringify(dataToSend);
+                
+                try {
+                    this.peer.send(jsonString);
+                    console.log(`[P2P HÔTE] ${logData.length} entrées envoyées (${jsonString.length} octets)`);
+                } catch (e) {
+                    console.error("Échec de l'envoi P2P:", e);
+                }
+            },
+
+            /**
+             * Déconnecte le Peer WebRTC.
+             */
+            disconnect() {
+                if (this.peer) {
+                    this.peer.destroy();
+                    this.peer = null;
+                }
+                this.isConnected = false;
+                this.isHost = false;
+                this.updateUI('disconnected');
+            },
+
+            /**
+             * Gère l'affichage de la modale P2P.
+             * @param {string} status - État courant de la connexion.
+             * @param {string} payload - Données à afficher (Offer/Answer/Message).
+             */
+            updateUI(status, payload = '') {
+                // Rendre les éléments invisibles par défaut
+                qrCodeContainer.style.display = 'none';
+                signalingInput.style.display = 'none';
+                p2pStatus.style.display = 'block';
+                p2pDisconnectBtn.style.display = 'none';
+                startHostBtn.style.display = 'block';
+                startClientBtn.style.display = 'block';
+                p2pToggleBtn.classList.remove('p2p-active', 'p2p-connecting');
+                
+                p2pModal.style.borderColor = 'var(--accent-blue)';
+                
+                qrCodeContainer.innerHTML = '';
+                signalingInput.value = '';
+                
+                let title = "Synchronisation P2P (WebRTC)";
+
+                switch (status) {
+                    case 'host_waiting':
+                        title = "HÔTE : Échanger l'Offer (Étape 1/2)";
+                        qrCodeContainer.style.display = 'flex';
+                        p2pStatus.textContent = "1. Scannez le QR Code (Offer). 2. Collez l'Answer du Client ci-dessous.";
+                        signalingInput.style.display = 'block';
+                        signalingInput.placeholder = "Collez ici le code 'Answer' du Client...";
+                        p2pStatus.classList.add('p2p-connecting');
+                        startHostBtn.style.display = 'none';
+                        startClientBtn.style.display = 'none';
+                        p2pDisconnectBtn.style.display = 'block';
+                        p2pModal.style.borderColor = 'var(--ao-green)';
+                        
+                        // Afficher l'Offer générée par simple-peer
+                        if (payload) {
+                            new QRCode(qrCodeContainer, {
+                                text: payload,
+                                width: 250,
+                                height: 250,
+                                correctLevel: QRCode.CorrectLevel.L 
+                            });
+                            p2pInstructions.textContent = "Scannez l'Offer, puis collez l'Answer générée par le Client ci-dessous pour démarrer la connexion.";
+                            signalingInput.value = payload; // Afficher l'Offer aussi en texte
+                        }
+                        break;
+                    
+                    case 'client_waiting_offer':
+                        title = "CLIENT : Échanger l'Answer (Étape 1/2)";
+                        p2pStatus.textContent = "Collez l'Offer scannée (QR Code de l'Hôte) pour générer l'Answer.";
+                        signalingInput.style.display = 'block';
+                        signalingInput.placeholder = "Collez ici le code 'Offer' de l'Hôte...";
+                        p2pStatus.classList.add('p2p-connecting');
+                        startHostBtn.style.display = 'none';
+                        startClientBtn.style.display = 'none';
+                        p2pDisconnectBtn.style.display = 'block';
+                        p2pModal.style.borderColor = 'var(--accent-blue)';
+                        p2pInstructions.textContent = "Collez l'Offer de l'Hôte ci-dessous et appuyez sur 'Générer Answer'.";
+                        break;
+                        
+                    case 'client_show_answer':
+                        title = "CLIENT : Échanger l'Answer (Étape 2/2)";
+                        qrCodeContainer.style.display = 'flex';
+                        p2pStatus.textContent = "Connexion en cours... (Scannez le code ou copiez le Answer)";
+                        signalingInput.style.display = 'block';
+                        p2pStatus.classList.add('p2p-connecting');
+                        
+                        new QRCode(qrCodeContainer, {
+                            text: payload,
+                            width: 250,
+                            height: 250,
+                            correctLevel: QRCode.CorrectLevel.L 
+                        });
+                        signalingInput.value = payload; // Afficher l'Answer en texte
+                        p2pInstructions.textContent = "Scannez/copiez ce code (Answer) et donnez-le à l'Hôte pour finaliser la connexion.";
+                        break;
+
+                    case 'connected':
+                        p2pStatus.textContent = this.isHost ? "HÔTE CONNECTÉ (Autorité des données)" : "CLIENT CONNECTÉ (Synchronisé)";
+                        p2pStatus.classList.remove('p2p-connecting');
+                        p2pStatus.classList.add('p2p-active');
+                        p2pToggleBtn.classList.add('p2p-active');
+                        p2pModal.style.borderColor = 'var(--ao-green)';
+                        startHostBtn.style.display = 'none';
+                        startClientBtn.style.display = 'none';
+                        p2pDisconnectBtn.style.display = 'block';
+                        p2pInstructions.textContent = "La connexion est établie. Le Log se synchronise en temps réel depuis l'Hôte.";
+                        break;
+                        
+                    case 'disconnected':
+                        p2pStatus.textContent = "Déconnecté.";
+                        p2pStatus.classList.remove('p2p-connecting', 'p2p-active');
+                        p2pToggleBtn.classList.remove('p2p-active', 'p2p-connecting');
+                        p2pInstructions.textContent = "Choisissez votre rôle pour démarrer une nouvelle session de synchronisation.";
+                        break;
+                        
+                    case 'error':
+                        p2pStatus.textContent = payload || "Erreur de connexion P2P.";
+                        p2pStatus.classList.remove('p2p-connecting', 'p2p-active');
+                        p2pModal.style.borderColor = 'var(--danger-red)';
+                        p2pInstructions.textContent = "La connexion a échoué. Assurez-vous d'être sur le même réseau et réessayez.";
+                        break;
+                }
+                
+                document.querySelector('#p2pModal h3').textContent = title;
+            },
+            
+            /**
+             * Gère l'action de l'utilisateur après avoir copié/scanné le code.
+             */
+            handleSignalingExchange() {
+                if (!this.peer) return;
+
+                const signalCode = signalingInput.value.trim();
+                if (!signalCode) {
+                    // Si l'utilisateur efface le champ, ne rien faire, sauf si c'est la fin du processus Host
+                    if (this.isHost) {
+                        this.updateUI('host_show_offer', this.peer._offer || ""); // Réafficher l'Offer si elle existe
+                    }
+                    return;
+                }
+                
+                try {
+                    const data = JSON.parse(signalCode);
+                    
+                    if (this.isHost) {
+                        // L'Hôte s'attend à recevoir l'Answer du Client
+                        if (data.type === 'answer') {
+                            this.peer.signal(data);
+                            // Le changement d'état vers 'connected' se fera via l'événement 'connect' du peer
+                        } else {
+                            showMessageModal("Erreur d'échange", "L'Hôte attend un code 'Answer' du Client.", true);
+                        }
+                    } else {
+                        // Le Client s'attend à recevoir l'Offer de l'Hôte (pour générer l'Answer)
+                        if (data.type === 'offer') {
+                            this.peer.signal(data);
+                            // Le changement d'état vers 'client_show_answer' se fera via l'événement 'signal' du peer
+                        } else {
+                            showMessageModal("Erreur d'échange", "Le Client attend un code 'Offer' de l'Hôte.", true);
+                        }
+                    }
+                } catch (e) {
+                    showMessageModal("Erreur de décodage", "Le code copié n'est pas un JSON valide. Veuillez vérifier le scan/copier.", true);
+                }
+            }
+        };
+
+
         // --- Fonctions utilitaires ---
         
         function getHexToRgb(hex) {
@@ -838,10 +1155,8 @@
              return { r: r / 255, g: g / 255, b: b / 255 };
         }
         
-        // Factorisation du calcul de couleur de texte
         function calculateTextColor(hexColor) {
             const {r, g, b} = getHexToRgb(hexColor); 
-            // Formule de luminosité (perçue)
             const luminosity = (0.299 * r + 0.587 * g + 0.114 * b);
             return luminosity > 0.5 ? '#000000' : '#ffffff';
         }
@@ -850,7 +1165,6 @@
              return Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
         }
         
-        // Affichage de la modale de message non bloquante (REMPLACE ALERT)
         function showMessageModal(title, content, isError = false) {
             const modal = document.getElementById('messageModal');
             const backdrop = document.getElementById('modalBackdrop');
@@ -858,18 +1172,16 @@
             document.getElementById('modalMessageTitle').textContent = title;
             document.getElementById('modalMessageContent').textContent = content;
             
-            // Appliquer la couleur appropriée
             const titleElement = document.getElementById('modalMessageTitle');
             if (isError) {
                 titleElement.style.color = 'var(--danger-red)';
             } else {
-                 titleElement.style.color = 'var(--accent-blue)'; // Utilisé pour le succès/info
+                 titleElement.style.color = 'var(--accent-blue)'; 
             }
 
             backdrop.style.display = 'block';
             modal.style.display = 'block';
             
-            // Clic sur OK masque la modale
             document.getElementById('closeMessageModalBtn').onclick = () => {
                 backdrop.style.display = 'none';
                 modal.style.display = 'none';
@@ -879,11 +1191,6 @@
 
         // --- 1. Gestion des Données et Stockage ---
         
-        /**
-         * Enregistre les données du log dans le stockage local et met à jour l'historique.
-         * Envoie les données synchronisées si l'appareil est l'hôte Bluetooth.
-         * @param {Array} logData - Les données de log à sauvegarder.
-         */
         function saveLogData(logData) {
             try {
                 // Tri par heure avant de sauvegarder (maintient l'ordre pour l'ajout standard)
@@ -895,12 +1202,11 @@
                 });
                 localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(logData));
                 
-                // Mettre à jour l'historique et la map de couleurs
                 updateHistoryAndColorMap(logData);
                 
-                // NOUVEAU: Tenter d'envoyer les données par Bluetooth si en mode Serveur/Hôte
-                if (BluetoothManager.isServer) {
-                    BluetoothManager.broadcastData(logData);
+                // NOUVEAU: Tenter d'envoyer les données par P2P si en mode Hôte
+                if (P2PManager.isHost) {
+                    P2PManager.sendData(logData);
                 }
 
             } catch (e) {
@@ -919,16 +1225,10 @@
             }
         }
         
-        // CORRECTION CRITIQUE: Assurer que les données lues du DOM (via dataset) sont bien des chaînes
         function getLogData() {
-            // Récupère l'ordre actuel du DOM (important pour le Drag & Drop)
             return Array.from(logTableBody.querySelectorAll('tr')).map(row => {
-                
-                // Fonction sécurisée pour lire les dataset
                 const getSafeDataset = (key) => {
-                    // Utiliser String() pour garantir que c'est une chaîne
                     const value = String(row.dataset[key] || ''); 
-                    // Pour éviter les chaînes 'undefined' littérales
                     return value === 'undefined' ? '' : value; 
                 };
                 
@@ -936,17 +1236,14 @@
                 let paxValue = getSafeDataset('pax');
 
                 if (paxMode === 'free') {
-                    // En mode libre, le vrai nom est dans freepaxname
                     paxValue = getSafeDataset('freepaxname') || 'Pax Libre';
                 }
 
                 return {
-                    // Les entrées doivent TOUJOURS avoir un ID unique, y compris celles importées via DOM
                     id: getSafeDataset('id'), 
                     heure: row.querySelector('.heure-cell-text').textContent,
                     pax: paxValue,
                     paxMode: paxMode, 
-                    // paxColor est seulement pertinent si le mode est 'free'
                     paxColor: getSafeDataset('paxcolor') || (paxMode === 'free' ? FREE_MODE_COLORS[0].hex : undefined), 
                     lieu: getSafeDataset('lieu'),
                     fenetrePorte: getSafeDataset('fenetreporte'),
@@ -959,11 +1256,9 @@
             try {
                 const dataString = localStorage.getItem(HISTORY_STORAGE_KEY);
                 const history = dataString ? JSON.parse(dataString) : { lieux: [], fp: [], paxColorMap: {} };
-                // NOUVEAU: Construire la map inversée lors du chargement
                 colorPaxMap = {};
                 for (const paxName in history.paxColorMap) {
                     const color = history.paxColorMap[paxName];
-                    // Stocker la dernière personne à avoir utilisé cette couleur
                     colorPaxMap[color] = paxName; 
                 }
                 return history;
@@ -981,32 +1276,28 @@
             }
         }
 
-        // Mettre à jour l'historique et la map de couleurs
         function updateHistoryAndColorMap(logData) {
             const lieux = new Set();
             const fp = new Set();
             const newPaxColorMap = {};
-            const newColorPaxMap = {}; // Réinitialiser la map inversée
+            const newColorPaxMap = {}; 
 
             logData.forEach(entry => {
                 if (entry.lieu) lieux.add(entry.lieu.trim());
                 if (entry.fenetrePorte) fp.add(entry.fenetrePorte.trim());
 
                 if (entry.paxMode === 'free' && entry.paxColor) {
-                    // Mettre à jour la map PAX -> Couleur
                     newPaxColorMap[entry.pax] = entry.paxColor;
-                    // Mettre à jour la map Couleur -> PAX (le dernier vu gagne)
                     newColorPaxMap[entry.paxColor] = entry.pax;
                 }
             });
 
             const history = {
-                lieux: Array.from(lieux).slice(0, 20), // Limiter à 20 entrées
+                lieux: Array.from(lieux).slice(0, 20), 
                 fp: Array.from(fp).slice(0, 20),
                 paxColorMap: newPaxColorMap
             };
             
-            // Mise à jour des maps globales pour le mode libre
             paxColorMap = newPaxColorMap; 
             colorPaxMap = newColorPaxMap; 
 
@@ -1037,9 +1328,9 @@
 
         function saveTitle() {
             localStorage.setItem(TITLE_STORAGE_KEY, interventionTitleInput.value.trim());
-            // NOUVEAU: Broadcast du titre si en mode serveur
-            if (BluetoothManager.isServer) {
-                BluetoothManager.broadcastTitle(interventionTitleInput.value.trim());
+            // Si hôte, envoi des données complettes avec le nouveau titre
+            if (P2PManager.isHost) {
+                 P2PManager.sendData(getLogData());
             }
         }
 
@@ -1049,7 +1340,6 @@
             logData.forEach(entry => {
                 
                 let paxColor, paxText, paxFontColor;
-                // CORRECTION: Utiliser entry.paxMode au lieu de paxMode
                 const isFreeMode = entry.paxMode === 'free'; 
 
                 if (isFreeMode) {
@@ -1069,23 +1359,17 @@
                 row.dataset.lieu = String(entry.lieu || ''); 
                 row.dataset.fenetreporte = String(entry.fenetrePorte || '');
                 row.dataset.remarques = String(entry.remarques || '');
-                // pax (standard) ou Libre (free)
                 row.dataset.pax = isFreeMode ? 'Libre' : entry.pax; 
-                // Le nom du pax libre est stocké séparément pour le DOM/PDF
                 row.dataset.freepaxname = isFreeMode ? String(entry.pax) : ''; 
                 row.dataset.paxmode = entry.paxMode; 
-                // paxColor n'est stocké que si c'est du mode libre
                 row.dataset.paxcolor = isFreeMode ? paxColor : ''; 
                 
-                // Mise en évidence de la nouvelle ligne
                 if (entry.id === newEntryId) {
                     row.classList.add('just-added');
                 }
                 
-                // Rendre la ligne déplaçable
                 row.draggable = true;
                 row.classList.add('draggable-row');
-                // Les événements dragstart, dragover, drop et dragend sont attachés dans l'initialisation globale
 
                 const heureCell = row.insertCell();
                 heureCell.style.width = '15%';
@@ -1114,8 +1398,7 @@
                 remarquesCell.textContent = entry.remarques;
             });
             
-             // Mettre à jour les données dans localStorage après le rendu trié (l'ordre DOM est prioritaire)
-             // NOTE: Utilisation de la fonction saveLogData qui gère aussi le broadcast Bluetooth
+             // La sauvegarde appelle P2PManager.sendData si Hôte
              saveLogData(getLogData());
         }
         
@@ -1136,7 +1419,6 @@
                 paxName = freePaxInput.value.trim();
                 paxColorHex = paxCustomColorInput.value;
                 
-                // Le champ PAX libre DOIT être non vide
                 if (!paxName) {
                      showMessageModal("Erreur de saisie", "Veuillez donner un nom à l'intervenant TP.", true);
                      return;
@@ -1162,38 +1444,31 @@
                 remarques: remarquesInput.value.trim(),
             };
 
-            const logData = getLogData(); // Récupère l'ordre actuel
+            const logData = getLogData(); 
             logData.push(newEntry);
 
-            // Mettre à jour le flag et le temps
             isTimeInputManuallyChanged = false;
 
-            // Rendu avec l'ID pour le flash
             renderLogTable(logData, newId); 
             
-            // Si c'est un PAX libre, mettre à jour la map PAX -> Couleur et la map inversée
             if (mode === 'free') {
                  paxColorMap[paxName] = paxColorHex; 
-                 colorPaxMap[paxColorHex] = paxName; // Mettre à jour la map inversée
+                 colorPaxMap[paxColorHex] = paxName; 
             }
 
-            // Réinitialisation des champs pour la prochaine entrée
             updateTimeInput();
             lieuInput.value = '';
             fenetrePorteInput.value = '';
             remarquesInput.value = '';
             
-            // OPTIMISATION MOBILE : Placer le focus sur le champ des remarques pour la saisie rapide
             remarquesInput.focus();
         }
         
         function deleteLogEntry(id) {
             const logData = getLogData().filter(entry => entry.id !== id);
             renderLogTable(logData);
-            // La sauvegarde (et le broadcast si Server) est gérée par renderLogTable -> saveLogData
         }
 
-        // Fonction de tri (non implémentée avant)
         function sortLogTableByTime() {
              const logData = getLogData();
              logData.sort((a, b) => {
@@ -1205,10 +1480,6 @@
              showMessageModal("Tri terminé", "Le journal a été trié par ordre chronologique de l'heure.", false);
         }
 
-        /**
-         * Logique d'importation des logs (utilisée par JSON Import et Bluetooth Sync).
-         * Elle fusionne les nouvelles entrées dans le log existant.
-         */
         function importLogData(newEntries, newTitle = null) {
              if (!Array.isArray(newEntries)) {
                  showMessageModal("Erreur d'importation", "Format de données invalide : la liste des entrées est manquante.", true);
@@ -1216,73 +1487,48 @@
              }
 
              if (newEntries.length === 0) {
-                 showMessageModal("Importation terminée", "Aucune entrée à ajouter.", false);
                  return;
              }
              
-             // Créer un set d'IDs existants pour éviter la duplication des entrées déjà présentes
-             // lors de la synchronisation (même si generateUniqueId() est utilisé lors de la création initiale)
-             const currentIds = new Set(getLogData().map(e => e.id));
-
-             const validatedEntries = newEntries
-                 .filter(entry => entry.id && !currentIds.has(entry.id)) // Filtrer les doublons par ID
-                 .map(entry => ({
-                 ...entry, 
-                 // Sécurité : S'assurer que les chaînes vides sont bien traitées
-                 lieu: entry.lieu || '',
-                 fenetrePorte: entry.fenetrePorte || '',
-                 remarques: entry.remarques || '',
-                 paxMode: entry.paxMode || (PDF_PAX_COLORS[entry.pax] ? 'standard' : 'free'),
-             }));
-
-             if (validatedEntries.length === 0) {
-                 showMessageModal("Synchronisation", "Aucune nouvelle entrée à fusionner.", false);
-                 return;
-             }
-
-
+             // Utilise l'ID existant dans le log entrant comme source de vérité
              const currentData = getLogData();
-             const mergedData = [...currentData, ...validatedEntries];
-             
+             const mergedData = [...newEntries]; 
+
              if (newTitle !== null) {
                  interventionTitleInput.value = newTitle;
                  saveTitle(); // Sauvegarde locale du titre
              }
              
-             // Le renderLogTable appellera saveLogData, qui gérera aussi l'update Bluetooth si nécessaire
+             // Rendre le log complet et écraser le log actuel
              renderLogTable(mergedData);
-             showMessageModal("Synchronisation réussie", `${validatedEntries.length} entrée(s) fusionnée(s) au journal existant.`, false);
+             showMessageModal("Synchronisation P2P", `Log mis à jour par l'Hôte. ${newEntries.length} entrées reçues.`, false);
         }
         
         
         // --- 2. Logique de sélection Pax (Standard et Libre) ---
         
         function handleColorSwatchClick() {
-            // Mettre à jour le sélecteur visuel et l'input couleur
+             // ... (Logique non modifiée, laissée pour le contexte)
             Array.from(document.getElementById('free_color_palette').querySelectorAll('.color-swatch')).forEach(s => s.classList.remove('selected'));
             this.classList.add('selected');
             const selectedColor = this.dataset.color;
             paxCustomColorInput.value = selectedColor;
 
-            // Remplissage automatique du PAX libre si la couleur est déjà associée à un nom
             if (paxModeInput.value === 'free') {
                 if (colorPaxMap[selectedColor]) {
-                    // Couleur enregistrée : pré-remplir le champ
                     const lastPaxName = colorPaxMap[selectedColor];
                     freePaxInput.value = lastPaxName;
-                    paxInput.value = lastPaxName; // Mettre à jour la valeur cachée du formulaire
+                    paxInput.value = lastPaxName;
                 } else {
-                    // Couleur non enregistrée : vider le champ 
                     freePaxInput.value = ''; 
                     paxInput.value = ''; 
                 }
-                freePaxInput.focus(); // Focus pour saisie/modification rapide
+                freePaxInput.focus(); 
             }
         }
 
-        // Initialisation du mode PAX et de la palette de couleurs
         function initPaxModeAndColors() {
-            // Initialisation de la palette de couleurs libre
+             // ... (Logique non modifiée, laissée pour le contexte)
             const paletteContainer = document.getElementById('free_color_palette');
             paletteContainer.innerHTML = '';
             FREE_MODE_COLORS.forEach((color, index) => {
@@ -1290,35 +1536,28 @@
                 swatch.className = `color-swatch swatch-${index + 1}`;
                 swatch.dataset.color = color.hex;
                 swatch.style.backgroundColor = color.hex;
-                // Si la couleur est très claire (comme le blanc), ajouter une bordure noire
                 if (color.hex === '#ffffff') {
                     swatch.style.borderColor = '#000000';
                 }
 
-                // Utiliser le nouvel écouteur
                 swatch.addEventListener('click', handleColorSwatchClick);
                 paletteContainer.appendChild(swatch);
             });
             
-            // Sélectionner la première couleur par défaut
             paletteContainer.querySelector('.color-swatch').classList.add('selected');
             paxCustomColorInput.value = FREE_MODE_COLORS[0].hex;
 
-            // Initialisation de l'heure et du PAX standard sélectionné par défaut
             setPaxMode('standard');
 
-            // Initialisation de la sélection PAX standard
             Array.from(paxSelectContainer.querySelectorAll('.pax-select-option')).forEach(option => {
                 option.addEventListener('click', function() {
                     Array.from(paxSelectContainer.querySelectorAll('.pax-select-option')).forEach(o => o.classList.remove('selected'));
                     this.classList.add('selected');
                     paxInput.value = this.dataset.pax;
-                    // OPTIMISATION MOBILE: Mettre le focus sur Lieu après sélection PAX
                     lieuInput.focus();
                 });
             });
 
-            // Sélectionner Adversaire par défaut
             paxInput.value = 'Adversaire';
             const initialOption = paxSelectContainer.querySelector(`[data-pax="Adversaire"]`);
             if (initialOption) {
@@ -1326,14 +1565,13 @@
             }
         }
         
-        // Fonction pour basculer entre les modes PAX
         function setPaxMode(mode) {
+             // ... (Logique non modifiée, laissée pour le contexte)
             const isStandard = mode === 'standard';
             
             document.getElementById('pax_select_wrapper_standard').style.display = isStandard ? 'block' : 'none';
             document.getElementById('pax_select_wrapper_free').style.display = isStandard ? 'none' : 'block';
             
-            // Mettre à jour l'état du toggle
             document.querySelectorAll('#pax_mode_toggle_container .mode-toggle-btn').forEach(btn => {
                 btn.classList.toggle('active', btn.dataset.mode === mode);
             });
@@ -1341,55 +1579,40 @@
             paxModeInput.value = mode;
 
             if (isStandard) {
-                 // S'assurer que le PAX standard est à nouveau sélectionné
                  const selectedOption = paxSelectContainer.querySelector('.pax-select-option.selected');
                  paxInput.value = selectedOption ? selectedOption.dataset.pax : 'Adversaire';
             } else {
-                 // Vider le champ de saisie du PAX libre à l'activation du mode
                  freePaxInput.value = ''; 
                  paxInput.value = ''; 
 
-                 // Déterminer la couleur par défaut (la première couleur)
                  const defaultColor = FREE_MODE_COLORS[0].hex;
                  paxCustomColorInput.value = defaultColor;
                  
-                 // Mettre à jour le sélecteur visuel à la première couleur (puisque le champ est vide)
                  Array.from(document.getElementById('free_color_palette').querySelectorAll('.color-swatch')).forEach((s, index) => {
                      s.classList.toggle('selected', index === 0);
                  });
                  
-                 // OPTIMISATION TP: Mettre le focus sur le champ de texte en mode libre pour saisie rapide
                  freePaxInput.focus();
             }
         }
         
-        // Événement d'écoute pour les boutons toggle PAX
-        document.querySelectorAll('#pax_mode_toggle_container .mode-toggle-btn').forEach(btn => {
-            btn.addEventListener('click', () => setPaxMode(btn.dataset.mode));
-        });
-        
-        // Événement d'écoute pour le PAX libre
         freePaxInput.addEventListener('input', (e) => {
+             // ... (Logique non modifiée, laissée pour le contexte)
             const paxName = e.target.value.trim();
-            const currentColor = paxCustomColorInput.value; // Couleur actuellement sélectionnée
+            const currentColor = paxCustomColorInput.value; 
             
             if (paxModeInput.value === 'free') {
-                 // CHANGEMENT: paxInput prend la valeur exacte de paxName (vide si vide)
                  paxInput.value = paxName; 
             }
             
-             // Mettre à jour la couleur du Pax libre en fonction du nom déjà entré
              if (paxColorMap[paxName]) {
                  const savedColor = paxColorMap[paxName];
                  paxCustomColorInput.value = savedColor;
                  
-                 // Mettre à jour le sélecteur visuel
                  Array.from(document.getElementById('free_color_palette').querySelectorAll('.color-swatch')).forEach(s => {
                      s.classList.toggle('selected', s.dataset.color === savedColor);
                  });
              } else {
-                 // CORRECTION BUG: Ne pas réinitialiser la couleur à la première si le nom n'est pas trouvé.
-                 // On conserve la couleur CLIQUEE par l'utilisateur (currentColor) et on met à jour le sélecteur visuel.
                  paxCustomColorInput.value = currentColor;
                  Array.from(document.getElementById('free_color_palette').querySelectorAll('.color-swatch')).forEach(s => {
                      s.classList.toggle('selected', s.dataset.color === currentColor);
@@ -1401,6 +1624,7 @@
         // --- Mise à jour de l'heure en temps réel ---
 
         function updateTimeInput() {
+             // ... (Logique non modifiée, laissée pour le contexte)
             if (!isTimeInputManuallyChanged) {
                 const now = new Date();
                 const hours = String(now.getHours()).padStart(2, '0');
@@ -1414,6 +1638,7 @@
         let dragSrcEl = null;
 
         function handleDragStart(e) {
+             // ... (Logique non modifiée, laissée pour le contexte)
             dragSrcEl = this;
             e.dataTransfer.effectAllowed = 'move';
             e.dataTransfer.setData('text/plain', this.dataset.id);
@@ -1421,6 +1646,7 @@
         }
 
         function handleDragOver(e) {
+             // ... (Logique non modifiée, laissée pour le contexte)
             e.preventDefault();
             e.dataTransfer.dropEffect = 'move';
             const targetRow = this;
@@ -1440,25 +1666,25 @@
         }
 
         function handleDrop(e) {
+             // ... (Logique non modifiée, laissée pour le contexte)
             e.stopPropagation();
             e.preventDefault(); 
             
-            // Sauvegarder l'ordre DOM
-            // NOTE: Utilisation de saveLogData qui gère aussi le broadcast Bluetooth
             saveLogData(getLogData()); 
-            // Re-render pour s'assurer que le DOM et les données sont synchronisés
             renderLogTable(loadLogData());
 
             return false;
         }
 
         function handleDragEnd(e) {
+             // ... (Logique non modifiée, laissée pour le contexte)
             this.classList.remove('dragging');
         }
         
         // --- 4. Gestion JSON (Export/Import) ---
         
         function exportJson() {
+             // ... (Logique non modifiée, laissée pour le contexte)
              const logData = getLogData();
              const title = interventionTitleInput.value.trim() || "Sans Titre";
 
@@ -1467,7 +1693,6 @@
                  return;
              }
              
-             // LOGIQUE DE NOMMAGE DU FICHIER (AAAA-MM-JJ_HH-MM_Titre.json) 
              const now = new Date();
              const year = now.getFullYear();
              const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -1487,7 +1712,6 @@
                      timestamp: now.toISOString(),
                      title: title
                  },
-                 // Utilise les données du tableau, propres et prêtes à l'emploi
                  logEntries: logData
              };
 
@@ -1506,11 +1730,8 @@
              showMessageModal("Exportation réussie", `Les données ont été exportées sous le nom : ${fileName}`, false);
         }
         
-        /**
-         * Gère la lecture du fichier JSON et appelle la fonction d'importation des données.
-         * @param {Event} event - L'événement de changement de fichier.
-         */
         async function handleJsonFileImport(event) {
+             // ... (Logique non modifiée, laissée pour le contexte)
             const file = event.target.files[0];
             if (!file) return;
 
@@ -1524,288 +1745,147 @@
                     }
                     
                     const title = jsonContent.metadata.title || null;
-                    // Importe les entrées, en passant le titre si présent
                     importLogData(jsonContent.logEntries, title); 
                     
                 } catch (error) {
                     console.error("Erreur lors de l'importation JSON:", error);
                     showMessageModal("Erreur d'importation", `Erreur : ${error.message}`, true);
                 } finally {
-                    jsonImportInput.value = ''; // Réinitialiser le champ de fichier
-                    initPaxModeAndColors(); // Réinitialiser le mode PAX du formulaire
+                    jsonImportInput.value = ''; 
+                    initPaxModeAndColors(); 
                 }
             };
             reader.readAsText(file);
         }
 
-        // --- 5. Logique Web Bluetooth (Synchronisation) ---
+        // --- 5. Logique P2P (WebRTC) ---
         
-        const BluetoothManager = {
-            device: null,
-            characteristic: null,
-            isServer: false, // Indique si l'appareil est l'hôte (Web Bluetooth Server non standard)
-            isConnected: false,
+        function showP2PModal() {
+             modalBackdrop.style.display = 'block';
+             p2pModal.style.display = 'block';
+             P2PManager.updateUI('disconnected');
+        }
 
-            /**
-             * Démarre la connexion en tant que Client Bluetooth.
-             * @param {string} customServiceUuid - UUID du service à rechercher.
-             */
-            async connectAsClient(customServiceUuid) {
-                if (typeof navigator.bluetooth === 'undefined') {
-                    showMessageModal("Erreur Bluetooth", "L'API Web Bluetooth n'est pas prise en charge sur ce navigateur/appareil.", true);
-                    return;
+        function hideP2PModal() {
+             modalBackdrop.style.display = 'none';
+             p2pModal.style.display = 'none';
+             // S'assurer de déconnecter proprement
+             P2PManager.disconnect();
+        }
+
+        // --- 6. Logique Dock et Divers ---
+
+        function isFullscreen() {
+             // ... (Logique non modifiée, laissée pour le contexte)
+            return document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement;
+        }
+
+        function toggleFullscreen() {
+             // ... (Logique non modifiée, laissée pour le contexte)
+            const icon = document.getElementById('fullscreenIcon');
+            if (!isFullscreen()) {
+                if (document.documentElement.requestFullscreen) {
+                    document.documentElement.requestFullscreen();
+                } else if (document.documentElement.mozRequestFullScreen) {
+                    document.documentElement.mozRequestFullScreen();
+                } else if (document.documentElement.webkitRequestFullscreen) {
+                    document.documentElement.webkitRequestFullscreen();
+                } else if (document.documentElement.msRequestFullscreen) {
+                    document.documentElement.msRequestFullscreen();
                 }
-                
-                // Fermer la modale et mettre l'icône en mode connexion
-                hideConnectModal();
-                this.updateDockIconStatus('connecting');
-                this.isConnected = false;
-
-                const serviceToSearch = customServiceUuid || PCTAC_SERVICE_UUID;
-
-                try {
-                    // Étape 1: Demander l'appareil
-                    const device = await navigator.bluetooth.requestDevice({
-                        // Filtre par le service fourni.
-                        filters: [{ services: [serviceToSearch] }],
-                        optionalServices: [serviceToSearch] 
-                    });
-                    this.device = device;
-
-                    // Gérer la déconnexion inopinée
-                    this.device.addEventListener('gattserverdisconnected', this.onDisconnected.bind(this));
-                    
-                    showMessageModal("Connexion...", `Connexion à l'appareil : ${device.name || 'Appareil Inconnu'}...`, false);
-
-                    // Étape 2: Se connecter au serveur GATT
-                    const server = await device.gatt.connect();
-
-                    // Étape 3: Obtenir le service et la caractéristique (doit utiliser l'UUID correct du service)
-                    const service = await server.getPrimaryService(serviceToSearch);
-                    
-                    // La caractéristique DOIT toujours être celle définie, car elle est codée en dur dans l'Hôte simulé
-                    // et attendue par le client pour les notifications/lecture.
-                    this.characteristic = await service.getCharacteristic(PCTAC_CHAR_UUID); 
-                    
-                    // Étape 4: S'abonner aux notifications pour les mises à jour en temps réel
-                    await this.characteristic.startNotifications();
-                    this.characteristic.addEventListener('characteristicvaluechanged', this.handleCharacteristicValueChanged.bind(this));
-
-                    this.isConnected = true;
-                    this.isServer = false;
-                    this.updateDockIconStatus('active');
-                    showMessageModal("Synchronisation Bluetooth", `Connecté à ${device.name || 'l\'hôte Bluetooth'}. Synchronisation des données en cours.`, false);
-                    
-                    // Après la connexion, lire les données initiales
-                    await this.readInitialData();
-
-                } catch (error) {
-                    this.disconnect();
-                    console.error('Erreur de connexion Bluetooth:', error);
-                    let message = "Erreur de connexion Bluetooth. Assurez-vous que l'appareil hôte a démarré le partage et se trouve à proximité.";
-                    if (error.message.includes("cancelled")) {
-                        message = "Connexion Bluetooth annulée par l'utilisateur.";
-                    } else if (error.message.includes("no longer in range")) {
-                        message = "L'appareil cible n'est plus à portée.";
-                    } else if (error.message.includes("NotFound")) {
-                        // Le message exact est : 'No Services matching UUID ... found in Device.'
-                        message = `Aucun service (UUID: ${serviceToSearch}) trouvé. Assurez-vous que l'Hôte diffuse ce service GATT, ou tentez un autre UUID.`;
-                    }
-                    showMessageModal("Échec de la connexion", message, true);
-                }
-            },
-
-            /**
-             * Simule le mode serveur (non standard sur le Web).
-             * Cet appareil devient l'autorité des données et envoie un broadcast (simulé).
-             */
-            startShareAsServer() {
-                // NOTE: La fonction réelle d'Advertising Web Bluetooth est absente/obsolète.
-                
-                if (this.isConnected) {
-                    this.disconnect();
-                }
-
-                this.isServer = true;
-                this.isConnected = true;
-                this.updateDockIconStatus('server');
-                
-                // Utiliser le nom de l'intervention pour l'identification
-                const title = interventionTitleInput.value.trim() || "PC TAC HOTE";
-                showMessageModal("Partage Bluetooth Actif (Hôte)", `Ce PC est l'autorité des données. Les clients doivent chercher **${title}** et se connecter à l'UUID du Service par défaut: **${PCTAC_SERVICE_UUID}**`, false);
-                
-                // Envoyez les données actuelles immédiatement (simule l'état initial pour les clients futurs)
-                this.broadcastData(getLogData());
-            },
-
-            /**
-             * Déconnecte l'appareil Bluetooth et réinitialise l'état.
-             */
-            disconnect() {
-                // Si l'appareil est un client connecté, déconnecter du GATT Server
-                if (this.device && this.device.gatt.connected) {
-                    this.device.gatt.disconnect();
-                }
-                
-                // Si l'appareil était en mode Server, réinitialiser l'état
-                const wasServer = this.isServer;
-
-                this.device = null;
-                this.characteristic = null;
-                this.isConnected = false;
-                this.isServer = false;
-                this.updateDockIconStatus('inactive');
-                
-                if (!wasServer) {
-                    showMessageModal("Déconnexion Bluetooth", "La connexion Bluetooth a été coupée.", false);
-                } else {
-                    showMessageModal("Arrêt du Partage", "Le mode Hôte (Serveur) a été désactivé.", false);
-                }
-            },
-            
-            /**
-             * Gère l'événement de déconnexion.
-             */
-            onDisconnected(event) {
-                 console.log(`Périphérique déconnecté : ${event.target.name}`);
-                 // Ne pas afficher de message d'erreur si la déconnexion est intentionnelle (appel à disconnect())
-                 if (this.isConnected) { 
-                    showMessageModal("Déconnexion", `Le périphérique **${event.target.name}** a été déconnecté. Tentative de reconnexion manuelle requise.`, true);
-                 }
-                 this.disconnect(); // Réinitialise l'état local
-            },
-
-            /**
-             * Lit les données initiales du caractéristique (Client seulement).
-             * En pratique, ceci serait l'initial payload.
-             */
-            async readInitialData() {
-                 if (!this.characteristic || this.isServer) return;
-                 
-                 // NOTE: Dans une implémentation réelle, cette lecture tirerait toutes les données.
-                 try {
-                     const value = await this.characteristic.readValue();
-                     const dataJson = new TextDecoder().decode(value);
-                     
-                     // CORRECTION: Vérifier si dataJson est une chaîne JSON valide avant de la parser.
-                     if (!dataJson || dataJson.trim().length === 0) {
-                         console.error("Erreur de lecture des données initiales Bluetooth: Chaîne JSON vide.");
-                         showMessageModal("Avertissement de synchronisation", "La lecture initiale des données a échoué (réception vide). Cela peut être normal si l'hôte est un navigateur simulant le partage. La réception des futures mises à jour en temps réel (notifications) est le principal objectif.", false);
-                         return; // Sortir proprement sans erreur
-                     }
-                     
-                     const parsedData = JSON.parse(dataJson);
-                     const logData = parsedData.logEntries;
-                     const title = parsedData.title;
-                     
-                     // Fusionner les données dans le log existant
-                     importLogData(logData, title);
-                     
-                 } catch (e) {
-                     console.error("Erreur de lecture des données initiales Bluetooth: SyntaxError lors du JSON.parse()", e);
-                     // Cette erreur est fréquente si le client se connecte à un faux hôte (PC)
-                     showMessageModal("Avertissement de synchronisation", "La lecture initiale des données a échoué (Erreur JSON). Cela signifie que l'Hôte n'a pas pu écrire les données correctement. La réception des futures mises à jour est prioritaire.", false);
-                 }
-            },
-
-            /**
-             * Gère la notification de changement de valeur du caractéristique (Client seulement).
-             * C'est le mécanisme de mise à jour en temps réel.
-             */
-            handleCharacteristicValueChanged(event) {
-                if (this.isServer) return;
-
-                const value = event.target.value;
-                const dataJson = new TextDecoder().decode(value);
-                
-                // CORRECTION: Vérifier si dataJson est une chaîne JSON valide avant de la parser.
-                if (!dataJson || dataJson.trim().length === 0) {
-                     console.warn("Notification Bluetooth reçue mais vide (ignorée).");
-                     return; 
-                }
-
-                try {
-                    const parsedData = JSON.parse(dataJson);
-                    const logData = parsedData.logEntries;
-                    const title = parsedData.title;
-                    
-                    // Fusionner les données reçues
-                    importLogData(logData, title);
-
-                } catch (e) {
-                    console.error("Erreur de réception de données Bluetooth: SyntaxError lors du JSON.parse()", e);
-                    // Ignorer l'erreur pour continuer à écouter
-                }
-            },
-
-            /**
-             * Simule l'envoi des données à tous les clients connectés (Serveur seulement).
-             * Cette fonction est appelée par saveLogData à chaque modification.
-             * @param {Array} logData - Les données de log à envoyer.
-             */
-            broadcastData(logData) {
-                 if (!this.isServer) return; // Si pas hôte, ne rien faire
-                 
-                 const dataToSend = {
-                     title: interventionTitleInput.value.trim(),
-                     logEntries: logData
-                 };
-                 const jsonString = JSON.stringify(dataToSend);
-                 
-                 // Envoi Simulé : Dans une implémentation réelle, ceci provoquerait
-                 // l'écriture de la caractéristique (qui notifie les clients).
-                 console.log(`[BLUETOOTH BROADCAST - SERVEUR] Envoi de ${logData.length} entrées (${jsonString.length} octets) aux clients connectés.`);
-            },
-            
-            /**
-             * Envoie la mise à jour du titre (Serveur seulement).
-             * @param {string} title - Le nouveau titre.
-             */
-            broadcastTitle(title) {
-                if (!this.isServer) return;
-                // Le broadcast des données complètes dans saveLogData() couvre déjà le titre.
-                console.log(`[BLUETOOTH BROADCAST - SERVEUR] Mise à jour du titre : ${title}`);
-            },
-            
-            /**
-             * Met à jour les icônes du dock en fonction de l'état.
-             * @param {string} status - 'active', 'inactive', 'connecting', 'server'.
-             */
-            updateDockIconStatus(status) {
-                const clientBtn = bluetoothConnectDockBtn;
-                const serverBtn = bluetoothShareDockBtn;
-                
-                clientBtn.classList.remove('bluetooth-active', 'bluetooth-connecting');
-                serverBtn.classList.remove('bluetooth-active', 'bluetooth-connecting');
-                
-                switch (status) {
-                    case 'active': // Client connecté
-                        clientBtn.classList.add('bluetooth-active');
-                        clientBtn.title = "Connecté (Client) - Cliquer pour déconnexion";
-                        serverBtn.title = "Démarrer le partage Bluetooth (Hôte)";
-                        break;
-                    case 'server': // Serveur actif (Broadcast local)
-                        serverBtn.classList.add('bluetooth-active');
-                        serverBtn.title = "Partage actif (Hôte) - Cliquer pour arrêter";
-                        clientBtn.title = "Se connecter à l'hôte Bluetooth (Client)";
-                        break;
-                    case 'connecting':
-                        clientBtn.classList.add('bluetooth-connecting');
-                        clientBtn.title = "Recherche de l'hôte...";
-                        serverBtn.title = "Démarrer le partage Bluetooth (Hôte)";
-                        break;
-                    case 'inactive':
-                    default:
-                        clientBtn.title = "Se connecter à l'hôte Bluetooth (Client)";
-                        serverBtn.title = "Démarrer le partage Bluetooth (Hôte)";
-                        break;
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                } else if (document.mozCancelFullScreen) {
+                    document.mozCancelFullScreen();
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                } else if (document.documentElement.msExitFullscreen) {
+                    document.documentElement.msExitFullscreen();
                 }
             }
-        };
-
-
-        // --- 6. Génération PDF (Non Modifié dans le fond) ---
+        }
         
+        function updateFullscreenIcon() {
+             // ... (Logique non modifiée, laissée pour le contexte)
+            const icon = document.getElementById('fullscreenIcon');
+            if (icon) {
+                 icon.textContent = isFullscreen() ? 'fullscreen_exit' : 'fullscreen';
+                 icon.title = isFullscreen() ? 'Quitter le plein écran' : 'Plein écran';
+            }
+        }
+
+        function handleThemeToggle() {
+             // ... (Logique non modifiée, laissée pour le contexte)
+            document.body.classList.toggle('light-mode'); 
+            document.body.classList.toggle('dark-mode');
+            const isDarkMode = document.body.classList.contains('dark-mode');
+            localStorage.setItem('theme', isDarkMode ? 'dark' : 'light');
+            document.getElementById('darkModeIcon').textContent = isDarkMode ? 'nightlight' : 'clear_day';
+        }
+
+        function toggleDock() {
+             // ... (Logique non modifiée, laissée pour le contexte)
+            const dock = document.getElementById('dockMenu');
+            const dockCollapsed = dock.classList.toggle('collapsed');
+            localStorage.setItem('dockCollapsed', dockCollapsed);
+            const icon = document.querySelector('#dockToggleBtn .material-symbols-outlined');
+            if (icon) {
+                icon.textContent = dockCollapsed ? 'expand_less' : 'expand_more';
+            }
+        }
+        
+        function showResetModal() {
+             // ... (Logique non modifiée, laissée pour le contexte)
+            document.getElementById('modalBackdrop').style.display = 'block';
+            document.getElementById('resetModal').style.display = 'block';
+        }
+
+        function hideResetModal() {
+             // ... (Logique non modifiée, laissée pour le contexte)
+            document.getElementById('modalBackdrop').style.display = 'none';
+            document.getElementById('resetModal').style.display = 'none';
+        }
+
+
+        function handleResetData() {
+             // ... (Logique non modifiée, laissée pour le contexte)
+            localStorage.removeItem(LOCAL_STORAGE_KEY);
+            localStorage.removeItem(HISTORY_STORAGE_KEY);
+            localStorage.removeItem(TITLE_STORAGE_KEY);
+
+            paxColorMap = {};
+            colorPaxMap = {}; 
+            
+            renderLogTable([]);
+            hideResetModal();
+            
+            heureInput.value = new Date().toTimeString().split(' ')[0].substring(0, 5);
+            interventionTitleInput.value = '';
+
+            setPaxMode('standard');
+            
+            lieuInput.value = '';
+            fenetrePorteInput.value = '';
+            remarquesInput.value = '';
+            
+            updateDatalists([], []);
+            
+            P2PManager.disconnect();
+            
+            showMessageModal("Réinitialisation réussie", "Toutes les données du Log PC Tac (journal, historique et titre) ont été réinitialisées.", false);
+        }
+
+        function handleDeleteButtonClick(e) {
+             // ... (Logique non modifiée, laissée pour le contexte)
+             if (e.target.closest('.delete-btn')) {
+                 const id = e.target.closest('.delete-btn').dataset.id;
+                 deleteLogEntry(id);
+             }
+        }
+        
+        // --- Fonctions de Génération PDF ---
+
         function wrapTextForPdf(font, fontSize, text, maxWidth) {
             text = String(text || ''); 
             const token = ' \n ';
@@ -2130,181 +2210,8 @@
             }
         }
 
-        
-        // --- 7. Logique du Dock et Divers ---
 
-        function isFullscreen() {
-            return document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement;
-        }
-
-        function toggleFullscreen() {
-            const icon = document.getElementById('fullscreenIcon');
-            if (!isFullscreen()) {
-                if (document.documentElement.requestFullscreen) {
-                    document.documentElement.requestFullscreen();
-                } else if (document.documentElement.mozRequestFullScreen) {
-                    document.documentElement.mozRequestFullScreen();
-                } else if (document.documentElement.webkitRequestFullscreen) {
-                    document.documentElement.webkitRequestFullscreen();
-                } else if (document.documentElement.msRequestFullscreen) {
-                    document.documentElement.msRequestFullscreen();
-                }
-            } else {
-                if (document.exitFullscreen) {
-                    document.exitFullscreen();
-                } else if (document.mozCancelFullScreen) {
-                    document.mozCancelFullScreen();
-                } else if (document.webkitExitFullscreen) {
-                    document.webkitExitFullscreen();
-                } else if (document.documentElement.msExitFullscreen) {
-                    document.documentElement.msExitFullscreen();
-                }
-            }
-        }
-        
-        function updateFullscreenIcon() {
-            const icon = document.getElementById('fullscreenIcon');
-            if (icon) {
-                 icon.textContent = isFullscreen() ? 'fullscreen_exit' : 'fullscreen';
-                 icon.title = isFullscreen() ? 'Quitter le plein écran' : 'Plein écran';
-            }
-        }
-
-        function handleThemeToggle() {
-            document.body.classList.toggle('light-mode'); 
-            document.body.classList.toggle('dark-mode');
-            const isDarkMode = document.body.classList.contains('dark-mode');
-            localStorage.setItem('theme', isDarkMode ? 'dark' : 'light');
-            document.getElementById('darkModeIcon').textContent = isDarkMode ? 'nightlight' : 'clear_day';
-        }
-
-        function toggleDock() {
-            const dock = document.getElementById('dockMenu');
-            const dockCollapsed = dock.classList.toggle('collapsed');
-            localStorage.setItem('dockCollapsed', dockCollapsed);
-            const icon = document.querySelector('#dockToggleBtn .material-symbols-outlined');
-            if (icon) {
-                icon.textContent = dockCollapsed ? 'expand_less' : 'expand_more';
-            }
-        }
-        
-        function showResetModal() {
-            document.getElementById('modalBackdrop').style.display = 'block';
-            document.getElementById('resetModal').style.display = 'block';
-        }
-
-        function hideResetModal() {
-            document.getElementById('modalBackdrop').style.display = 'none';
-            document.getElementById('resetModal').style.display = 'none';
-        }
-        
-        function showConnectModal() {
-             // Afficher la modale de connexion
-             modalBackdrop.style.display = 'block';
-             connectModal.style.display = 'block';
-             // Remplir l'UUID par défaut pour aider l'utilisateur
-             uuidInput.value = PCTAC_SERVICE_UUID;
-        }
-
-        function hideConnectModal() {
-             // Cacher la modale de connexion
-             modalBackdrop.style.display = 'none';
-             connectModal.style.display = 'none';
-        }
-
-
-        function handleResetData() {
-            localStorage.removeItem(LOCAL_STORAGE_KEY);
-            localStorage.removeItem(HISTORY_STORAGE_KEY);
-            localStorage.removeItem(TITLE_STORAGE_KEY);
-
-            paxColorMap = {};
-            colorPaxMap = {}; // Réinitialiser la map inversée
-            
-            renderLogTable([]);
-            hideResetModal();
-            
-            heureInput.value = new Date().toTimeString().split(' ')[0].substring(0, 5);
-            interventionTitleInput.value = '';
-
-            // Réinitialiser correctement le mode PAX
-            setPaxMode('standard');
-            
-            lieuInput.value = '';
-            fenetrePorteInput.value = '';
-            remarquesInput.value = '';
-            
-            // Recharger l'historique et les datalists (qui seront vides)
-            updateDatalists([], []);
-            
-            // Déconnecter si Bluetooth actif
-            BluetoothManager.disconnect();
-            
-            showMessageModal("Réinitialisation réussie", "Toutes les données du Log PC Tac (journal, historique et titre) ont été réinitialisées.", false);
-        }
-
-        function handleDeleteButtonClick(e) {
-             if (e.target.closest('.delete-btn')) {
-                 const id = e.target.closest('.delete-btn').dataset.id;
-                 deleteLogEntry(id);
-             }
-        }
-        
-        /**
-         * Logique de bascule pour le mode hôte/serveur Bluetooth.
-         */
-        function handleBluetoothShareToggle() {
-             if (BluetoothManager.isServer) {
-                 // Si hôte, déconnecter (ceci désactivera isServer)
-                 BluetoothManager.disconnect();
-             } else {
-                 // Si client connecté, déconnecter d'abord
-                 if (BluetoothManager.isConnected) {
-                     BluetoothManager.disconnect();
-                 }
-                 // Démarrer comme hôte
-                 BluetoothManager.startShareAsServer();
-             }
-        }
-        
-        /**
-         * Logique de bascule pour la connexion client Bluetooth.
-         */
-        function handleBluetoothConnectToggle() {
-             if (BluetoothManager.isConnected && !BluetoothManager.isServer) {
-                 // Si client connecté, déconnecter
-                 BluetoothManager.disconnect();
-             } else {
-                 // Si hôte actif, arrêter l'hôte d'abord
-                 if (BluetoothManager.isServer) {
-                     BluetoothManager.disconnect();
-                 }
-                 // Afficher la modale de connexion
-                 showConnectModal();
-             }
-        }
-        
-        /**
-         * Gère le clic sur le bouton Démarrer la Recherche dans la modale.
-         */
-        function handleStartConnect() {
-            const customUuid = uuidInput.value.trim();
-            let serviceUuid = PCTAC_SERVICE_UUID;
-            
-            if (customUuid) {
-                 // Valider le format de l'UUID (simple vérification pour s'assurer que c'est une chaîne de caractères)
-                 if (customUuid.length < 4) { // Un UUID court ou long doit avoir une certaine longueur
-                      showMessageModal("Erreur UUID", "L'UUID saisi semble invalide. Veuillez vérifier le format (ex: 180D ou un long UUID).", true);
-                      return;
-                 }
-                 serviceUuid = customUuid;
-            }
-            
-            BluetoothManager.connectAsClient(serviceUuid);
-        }
-
-
-        // --- 8. Initialisation ---
+        // --- 7. Initialisation ---
 
         document.addEventListener('DOMContentLoaded', () => {
             
@@ -2315,7 +2222,6 @@
             
             const isDockCollapsed = localStorage.getItem('dockCollapsed') === 'true';
             if (!isDockCollapsed) {
-                 // Si c'est la première fois ou si l'utilisateur ne l'a pas réduit, le dock est par défaut ouvert
                  document.getElementById('dockMenu').classList.remove('collapsed');
             }
             document.querySelector('#dockToggleBtn .material-symbols-outlined').textContent = isDockCollapsed ? 'expand_less' : 'expand_more';
@@ -2328,11 +2234,9 @@
             document.addEventListener('fullscreenchange', updateFullscreenIcon);
             updateFullscreenIcon(); 
             
-            // Démarrer la mise à jour de l'heure
             updateTimeInput();
-            setInterval(updateTimeInput, 60000); // Mise à jour chaque minute
+            setInterval(updateTimeInput, 60000); 
 
-            // Détecter la modification manuelle de l'heure
             heureInput.addEventListener('change', () => {
                 isTimeInputManuallyChanged = true;
             });
@@ -2340,15 +2244,12 @@
             // 8.3 Initialisation du formulaire et des données
             logForm.addEventListener('submit', handleAddLogEntry);
             
-            // Chargement de l'historique et du titre
             const history = loadHistory();
             paxColorMap = history.paxColorMap;
-            // La map inversée colorPaxMap est construite dans loadHistory()
             updateDatalists(history.lieux, history.fp);
             loadTitle();
             interventionTitleInput.addEventListener('input', saveTitle);
             
-            // Initialisation des modes PAX (à exécuter APRÈS le chargement de l'historique pour l'autocomplétion)
             initPaxModeAndColors();
 
             // 8.4 Logique Drag & Drop sur le corps du tableau
@@ -2356,50 +2257,46 @@
             logTableBody.addEventListener('dragover', (e) => handleDragOver.call(e.target.closest('tr') || logTableBody, e));
             logTableBody.addEventListener('drop', handleDrop);
             logTableBody.addEventListener('dragend', handleDragEnd); 
-            // Événement DÉLÉGUÉ pour la suppression (écoute sur le corps du tableau)
             logTableBody.addEventListener('click', handleDeleteButtonClick);
 
             // 8.5 Rendu initial
             renderLogTable(loadLogData());
 
-            // 8.6 Événements PDF/JSON/Réinitialisation
+            // 8.6 Événements Dock
+            
+            // Événements PDF/JSON/Réinitialisation
             previewPdfDockBtn.addEventListener('click', downloadPdf);
             exportJsonDockBtn.addEventListener('click', exportJson);
             importJsonDockBtn.addEventListener('click', () => jsonImportInput.click());
-            // CORRECTION: Utilisation de la fonction de gestion du fichier
             jsonImportInput.addEventListener('change', handleJsonFileImport); 
             
             resetDataDockBtn.addEventListener('click', showResetModal);
             document.getElementById('confirmResetBtn').addEventListener('click', handleResetData);
             document.getElementById('cancelResetBtn').addEventListener('click', hideResetModal);
             
-            // Listener pour la modale de message
             document.getElementById('closeMessageModalBtn').addEventListener('click', () => {
                 document.getElementById('modalBackdrop').style.display = 'none';
                 document.getElementById('messageModal').style.display = 'none';
             });
             
-            // Listeners pour la modale de connexion
-            startConnectBtn.addEventListener('click', handleStartConnect);
-            cancelConnectBtn.addEventListener('click', hideConnectModal);
-            
             document.getElementById('modalBackdrop').addEventListener('click', (e) => {
-                 // Cacher les modales seulement si on clique sur le fond et si aucune autre modale n'est ouverte
                  if (e.target.id === 'modalBackdrop') {
                      hideResetModal();
-                     hideConnectModal();
+                     hideP2PModal();
                  }
             });
             
-            // Bouton Trier
             sortTimeBtn.addEventListener('click', sortLogTableByTime);
 
-            // NOUVEAU: Événements Bluetooth
-            bluetoothShareDockBtn.addEventListener('click', handleBluetoothShareToggle);
-            bluetoothConnectDockBtn.addEventListener('click', handleBluetoothConnectToggle);
+            // NOUVEAU: Événements P2P
+            p2pToggleBtn.addEventListener('click', showP2PModal);
+            p2pCloseModalBtn.addEventListener('click', hideP2PModal);
+            p2pDisconnectBtn.addEventListener('click', P2PManager.disconnect.bind(P2PManager));
+            startHostBtn.addEventListener('click', P2PManager.startHost.bind(P2PManager));
+            startClientBtn.addEventListener('click', P2PManager.startClient.bind(P2PManager));
             
-            // Initialiser l'état des icônes Bluetooth
-            BluetoothManager.updateDockIconStatus('inactive');
+            // L'entrée de texte sert pour l'échange de signalisation dans les deux rôles.
+            signalingInput.addEventListener('input', P2PManager.handleSignalingExchange.bind(P2PManager));
         });
     </script>
 </body>
