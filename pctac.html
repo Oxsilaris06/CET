@@ -771,8 +771,8 @@
         const LOCAL_STORAGE_KEY = 'pcTacLogData';
         const HISTORY_STORAGE_KEY = 'pcTacHistory';
         const TITLE_STORAGE_KEY = 'pcTacTitle';
-        // CORRECTION: Abaissement drastique de la limite pour garantir qu'elle ne dépasse pas la capacité du QR Code (environ 3000)
-        // 2800 caractères pour laisser une marge pour les métadonnées et la compression JSON.
+        // Limite du QR Code pour la génération d'un tableau JSON d'entrées.
+        // 2800 caractères pour laisser une marge de sécurité par rapport à la capacité max (~3000).
         const QR_MAX_CHAR_LIMIT = 2800; 
         
         // --- COULEURS ÉTENDUES ---
@@ -1279,7 +1279,7 @@
                  const selectedOption = paxSelectContainer.querySelector('.pax-select-option.selected');
                  paxInput.value = selectedOption ? selectedOption.dataset.pax : 'Adversaire';
             } else {
-                 // CHANGEMENT: Vider le champ de saisie du PAX libre à l'activation du mode
+                 // Vider le champ de saisie du PAX libre à l'activation du mode
                  freePaxInput.value = ''; 
                  paxInput.value = ''; 
 
@@ -1477,35 +1477,42 @@
         function calculateMaxQrEntries(logData) {
             if (logData.length === 0) return 0;
             
-            // Prendre les entrées les plus récentes (à la fin du tableau)
-            const reversedLogData = [...logData].reverse();
-            let entriesToExport = [];
-
-            // Créer l'objet d'exportation minimaliste pour le test de taille
-            const exportObjectTemplate = {
-                m: { a: "PC Tac Log QR", v: "1.0" }, 
-                l: []
-            };
+            // Transformer les logs en format minimaliste (h, p, d, c, l, f, r)
+            const logDataMinimal = logData.map(entry => ({
+                h: entry.heure,
+                p: entry.pax, 
+                d: entry.paxMode, 
+                c: entry.paxColor, 
+                l: entry.lieu,
+                f: entry.fenetrePorte,
+                r: entry.remarques,
+            }));
             
+            // Prendre les entrées les plus récentes (à la fin du tableau)
+            const reversedLogDataMinimal = logDataMinimal.reverse();
+            let entriesToExportMinimal = [];
+
             let exportEntries = [];
             
-            for (const entry of reversedLogData) {
-                // Créer une version minimaliste de l'entrée pour le QR Code
-                const minimalEntry = { h: entry.heure, p: entry.pax, d: entry.paxMode, c: entry.paxColor, l: entry.lieu, f: entry.fenetrePorte, r: entry.remarques };
+            for (const minimalEntry of reversedLogDataMinimal) {
                 
                 // Tester la taille totale si cette entrée est ajoutée
-                exportEntries.unshift(minimalEntry); // Ajoute au début pour garder l'ordre chronologique des logs
+                // On clone le tableau et on ajoute l'élément pour calculer la taille totale
+                const testArray = [minimalEntry, ...exportEntries]; 
+                
+                const currentSize = JSON.stringify(testArray).length;
 
-                exportObjectTemplate.l = exportEntries;
-                const currentSize = JSON.stringify(exportObjectTemplate).length;
-
-                if (currentSize > QR_MAX_CHAR_LIMIT) {
-                    // Si l'ajout de cette entrée dépasse la limite, l'enlever et s'arrêter.
-                    exportEntries.shift(); 
+                if (currentSize <= QR_MAX_CHAR_LIMIT) {
+                    // Si l'ajout de cette entrée NE DÉPASSE PAS la limite, on la garde.
+                    exportEntries.unshift(minimalEntry); // Ajoute au début pour garder l'ordre chronologique
+                } else {
+                    // Si l'ajout de la première entrée dépasse déjà la limite, on s'arrête ici.
+                    // Si ce n'est pas la première entrée, on s'arrête car la limite est atteinte.
                     break;
                 }
             }
-
+            
+            // Le nombre d'entrées exportées est la taille du tableau final (exportEntries)
             return exportEntries.length;
         }
 
@@ -1513,7 +1520,7 @@
          * Affiche le QR Code pour le partage des dernières entrées.
          */
         function handleQRShare() {
-            // CORRECTION: Assurer que QRCode est défini avant d'accéder à ses propriétés statiques
+            // Assurer que QRCode est défini avant d'accéder à ses propriétés statiques
             if (typeof QRCode === 'undefined' || typeof QRCode.CorrectLevel === 'undefined') {
                 showMessageModal("Erreur de dépendance", "La bibliothèque QRCode n'est pas chargée. Vérifiez votre connexion CDN.", true);
                 return;
@@ -1526,7 +1533,7 @@
                  return;
             }
 
-            // Utiliser la nouvelle fonction de calcul qui garantit la taille
+            // Calculer le nombre d'entrées maximum à exporter
             const maxEntries = calculateMaxQrEntries(logData);
             
             if (maxEntries === 0) {
@@ -1534,25 +1541,23 @@
                  return;
             }
 
-            // On prend les dernières 'maxEntries' du logData original (qui est déjà trié par heure)
+            // On prend les dernières 'maxEntries' du logData original
             const entriesToExport = logData.slice(logData.length - maxEntries); 
 
-            // Créer l'objet d'exportation minimaliste
-            const exportObject = {
-                m: { a: "PC Tac Log QR", v: "1.0" }, // Metadata minimaliste
-                l: entriesToExport.map(entry => ({
-                    h: entry.heure,
-                    p: entry.pax, 
-                    d: entry.paxMode, // mode: standard/free
-                    c: entry.paxColor, // couleur (si libre)
-                    l: entry.lieu,
-                    f: entry.fenetrePorte,
-                    r: entry.remarques,
-                }))
-            };
+            // Créer le tableau d'exportation minimaliste (format attendu par l'importateur)
+            const exportArrayMinimal = entriesToExport.map(entry => ({
+                h: entry.heure,
+                p: entry.pax, 
+                d: entry.paxMode, // mode: standard/free
+                c: entry.paxColor, // couleur (si libre)
+                l: entry.lieu,
+                f: entry.fenetrePorte,
+                r: entry.remarques,
+            }));
             
-            const qrData = JSON.stringify(exportObject);
-
+            // La donnée QR est le tableau JSON lui-même, sans métadonnées d'encapsulation.
+            const qrData = JSON.stringify(exportArrayMinimal);
+            
             // Afficher la modale
             modalBackdrop.style.display = 'block';
             qrModal.style.display = 'block';
@@ -1561,12 +1566,10 @@
             qrContainer.innerHTML = ''; // Nettoyer l'ancien QR
             
             try {
-                // Générer le QR Code (la bibliothèque qrcode.min.js est chargée)
                 new QRCode(qrContainer, {
                     text: qrData,
                     width: 250,
                     height: 250,
-                    // Utilisation sécurisée de QRCode.CorrectLevel.H
                     correctLevel: QRCode.CorrectLevel.H
                 });
 
@@ -1589,7 +1592,7 @@
          * Démarre le scanner de QR Code.
          */
         function handleQRScanStart() {
-            // CORRECTION: Assurer que Instascan est défini
+            // Assurer que Instascan est défini
             if (typeof Instascan === 'undefined' || typeof Instascan.Scanner === 'undefined') {
                  showMessageModal("Erreur de dépendance", "La bibliothèque de scan n'est pas chargée. Vérifiez votre connexion CDN.", true);
                  return;
@@ -1599,9 +1602,7 @@
             scannerModal.style.display = 'block';
             
             // Initialiser le scanner
-            // Vérification si qrScanner existe déjà et est en cours d'exécution
             if (qrScanner) {
-                // Arrêter l'ancien scanner si un existe
                 qrScanner.stop(); 
                 qrScanner = null;
             }
@@ -1647,21 +1648,23 @@
         }
 
         /**
-         * Traite les données reçues du QR Code.
+         * Traite les données reçues du QR Code (qui est un tableau JSON d'entrées minimalistes).
          */
         function importLogFromQR(qrData) {
-            let jsonContent;
+            let logEntriesMinimal;
             try {
-                jsonContent = JSON.parse(qrData);
+                // Le QR Code doit être un tableau JSON d'entrées minimalistes
+                logEntriesMinimal = JSON.parse(qrData);
             } catch (e) {
                 showMessageModal("Erreur de données", "Le QR Code scanné ne contient pas de données JSON valides.", true);
                 return;
             }
 
-            if (jsonContent.m && jsonContent.m.a === "PC Tac Log QR" && Array.isArray(jsonContent.l)) {
+            if (Array.isArray(logEntriesMinimal) && logEntriesMinimal.length > 0 && 
+                logEntriesMinimal[0].h && logEntriesMinimal[0].p) { // Vérification de base (heure et pax)
                  
-                 // Reconstruire la structure d'entrée complète pour la validation
-                 const logEntries = jsonContent.l.map(minEntry => ({
+                 // Reconstruire la structure d'entrée complète à partir du format minimaliste
+                 const logEntries = logEntriesMinimal.map(minEntry => ({
                     // Utilisation de generateUniqueId() pour garantir l'unicité
                     id: generateUniqueId(), 
                     heure: minEntry.h || '00:00',
@@ -1673,11 +1676,11 @@
                     remarques: minEntry.r || '',
                  }));
 
-                 // L'import QR ne contient pas de titre, donc titre = null
+                 // L'import QR ne contient pas de titre (newTitle = null)
                  importLogData(logEntries, null);
 
             } else {
-                showMessageModal("Erreur de format", "Le QR Code ne correspond pas au format de partage PC Tac.", true);
+                showMessageModal("Erreur de format", "Le QR Code ne contient pas le format de données PC Tac attendu.", true);
             }
         }
 
