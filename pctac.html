@@ -602,7 +602,7 @@
     <!-- NOUVEAU: Modale de Scan QR Code -->
     <div class="custom-modal" id="scannerModal">
         <h3 style="color: var(--accent-blue); margin-bottom: 10px;">Scanner QR Code</h3>
-        <!-- La vidéo sera injectée ici par Instascan -->
+        <!-- L'élément vidéo sera utilisé par InstaCam -->
         <video id="preview" style="width: 100%; border-radius: 8px;"></video>
         <p class="scan-info">Veuillez pointer la caméra vers le QR Code du PC-Tac partenaire.</p>
         <div class="modal-buttons" style="width: 100%;">
@@ -764,9 +764,10 @@
     </div>
 
     <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
-    <!-- Bibliothèques pour le QR Code (Cloudflare CDN) -->
+    <!-- Bibliothèques pour le QR Code -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/instascan/1.0.0/instascan.min.js"></script>
+    <!-- Remplacement d'Instascan par InstaCam (plus moderne et stable) -->
+    <script src="https://unpkg.com/instacam/dist/instacam.min.js"></script>
     <script>
         const LOCAL_STORAGE_KEY = 'pcTacLogData';
         const HISTORY_STORAGE_KEY = 'pcTacHistory';
@@ -832,7 +833,7 @@
         let isTimeInputManuallyChanged = false;
         let paxColorMap = {}; // Map pour lier PAX libre à sa couleur
         let colorPaxMap = {}; // Map inversée pour lier Couleur -> dernier Nom de PAX libre
-        let qrScanner = null; // Instance du scanner
+        let qrScanner = null; // Instance du scanner (InstaCam)
 
         // --- Fonctions utilitaires ---
         
@@ -1595,50 +1596,61 @@
         }
 
         /**
-         * Démarre le scanner de QR Code.
+         * Démarre le scanner de QR Code avec InstaCam.
          */
         function handleQRScanStart() {
-            // Assurer que Instascan est défini AVANT de continuer (check du CDN)
-            if (typeof Instascan === 'undefined' || typeof Instascan.Scanner === 'undefined') {
-                 showMessageModal("Erreur de dépendance", "La bibliothèque de scan n'est pas chargée. Vérifiez votre connexion CDN (https://cdnjs.cloudflare.com/ajax/libs/instascan/1.0.0/instascan.min.js).", true);
+            // Assurer que InstaCam est défini
+            if (typeof InstaCam === 'undefined') {
+                 showMessageModal("Erreur de dépendance", "La bibliothèque de scan (InstaCam) n'est pas chargée. Vérifiez votre connexion CDN (https://unpkg.com/instacam/dist/instacam.min.js).", true);
                  return;
             }
 
             modalBackdrop.style.display = 'block';
             scannerModal.style.display = 'block';
             
-            // Initialiser le scanner
+            // Arrêter l'ancien scanner si nécessaire
             if (qrScanner) {
                 qrScanner.stop(); 
                 qrScanner = null;
             }
 
-            qrScanner = new Instascan.Scanner({ video: previewVideo, scanPeriod: 5 });
+            try {
+                // Initialiser InstaCam
+                qrScanner = new InstaCam({
+                    video: previewVideo,
+                    // Utiliser le détecteur zxing par défaut pour la compatibilité QR code
+                    detector: 'zxing' 
+                });
 
-            qrScanner.addListener('scan', function (content) {
-                // Données reçues! Arrêter le scanner et importer.
-                handleQRScanStop(); 
-                importLogFromQR(content);
-            });
-            
-            Instascan.Camera.getCameras().then(function (cameras) {
-                if (cameras.length > 0) {
-                    // Utiliser la caméra arrière par défaut si disponible
-                    qrScanner.start(cameras[cameras.length - 1]); 
-                } else {
-                    showMessageModal("Erreur Caméra", "Aucune caméra n'a été détectée. Le scan QR est impossible.", true);
+                // Écouteur pour les données scannées
+                qrScanner.on('scan', (results) => {
+                    if (results.length > 0) {
+                        const content = results[0].code;
+                        // Données reçues! Arrêter le scanner et importer.
+                        handleQRScanStop(); 
+                        importLogFromQR(content);
+                    }
+                });
+
+                // Démarre le scanner et sélectionne la caméra arrière par défaut
+                qrScanner.start(qrScanner.cameras[qrScanner.cameras.length - 1]).then(() => {
+                    console.log('InstaCam démarré.');
+                }).catch(e => {
+                    console.error("Erreur de caméra/permissions InstaCam:", e);
+                    // Si l'accès est refusé, on prévient l'utilisateur
+                    if (e.name === 'NotAllowedError' || e.name === 'NotReadableError') {
+                        showMessageModal("Accès Caméra Refusé", `Veuillez autoriser l'accès à la caméra dans les paramètres de votre navigateur ou de votre appareil pour utiliser le scan QR.`, true);
+                    } else {
+                        showMessageModal("Erreur Caméra", `Erreur d'accès à la caméra : ${e.name}. Consultez la console pour plus de détails.`, true);
+                    }
                     handleQRScanStop();
-                }
-            }).catch(function (e) {
-                console.error("Erreur de caméra/permissions:", e);
-                // Si l'accès est refusé, on prévient l'utilisateur
-                if (e.name === 'NotAllowedError' || e.name === 'NotReadableError') {
-                    showMessageModal("Accès Caméra Refusé", `Veuillez autoriser l'accès à la caméra dans les paramètres de votre navigateur ou de votre appareil pour utiliser le scan QR.`, true);
-                } else {
-                    showMessageModal("Erreur Caméra", `Erreur d'accès à la caméra : ${e.name}. Consultez la console pour plus de détails.`, true);
-                }
+                });
+
+            } catch (e) {
+                console.error("Erreur critique lors de l'initialisation InstaCam:", e);
+                showMessageModal("Erreur Critique Scan", `Impossible d'initialiser le scanner de caméra : ${e.message}.`, true);
                 handleQRScanStop();
-            });
+            }
         }
 
         /**
@@ -1646,11 +1658,12 @@
          */
         function handleQRScanStop() {
             if (qrScanner) {
-                // Tenter d'arrêter le scanner même en cas d'erreur de caméra antérieure
+                // Tenter d'arrêter le scanner
                 try {
                     qrScanner.stop();
+                    qrScanner.off('scan'); // Supprimer l'écouteur
                 } catch (e) {
-                    console.warn("Erreur à l'arrêt du scanner (probablement déjà arrêté ou erreur caméra initiale):", e);
+                    console.warn("Erreur à l'arrêt du scanner (InstaCam):", e);
                 }
                 qrScanner = null;
             }
