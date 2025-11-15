@@ -842,7 +842,7 @@
             { hex: '#A3D900', name: 'Vert Lime' },      
             { hex: '#00FFFF', name: 'Cyan' },          
             { hex: '#000080', name: 'Bleu Marine' },    
-            { hex: '#FF69B4', name: 'Rose Vif' },      
+            { hex: '#FF69B4', name: 'Rose Vif (Hot Pink)' },      
             { hex: '#FF8C00', name: 'Orange Foncée' },  
             { hex: '#8A2BE2', name: 'Bleu Violet' },    
             { hex: '#008080', name: 'Sarcelle' },      
@@ -1238,22 +1238,35 @@
                 { 
                     fps: 10, 
                     qrbox: {width: 250, height: 250}, 
+                    // Utiliser la caméra arrière sur mobile si disponible
                     facingMode: "environment" 
                 },
                 false
             );
 
+            // LOGIQUE DE SUCCÈS DU SCAN ADAPTÉE AU P2P
             const onScanSuccess = (decodedText, decodedResult) => {
                 // Arrêter le scanner
-                stopQRScan();
-                // Injecter la donnée scannée dans le champ de saisie
-                signalingInput.value = decodedText;
-                // Exécuter l'échange de signalisation
-                P2PManager.handleSignalingExchange(); 
+                stopQRScan(); 
+                
+                // Vérifier si le code scanné ressemble à une Offer WebRTC
+                try {
+                    const data = JSON.parse(decodedText);
+                    if (data.type === 'offer') {
+                        // Injecter la donnée scannée dans le champ de saisie
+                        signalingInput.value = decodedText;
+                        // Appeler l'échange pour générer l'Answer
+                        P2PManager.handleSignalingExchange();
+                    } else {
+                        showMessageModal("Scan réussi, mais...", "Le code scanné n'est pas une 'Offer' WebRTC valide. Veuillez vérifier le code de l'Hôte.", true);
+                    }
+                } catch (e) {
+                    showMessageModal("Erreur de décodage", "Le QR Code ne contient pas de données JSON WebRTC valides.", true);
+                }
             };
 
             const onScanError = (errorMessage) => {
-                // Erreur de scan (laissez vide pour éviter les popups intempestifs)
+                // Laissez vide pour éviter les popups intempestifs. Les erreurs critiques de caméra sont souvent gérées par le timeout.
             };
             
             html5QrcodeScanner.render(onScanSuccess, onScanError);
@@ -1264,7 +1277,7 @@
 
         function stopQRScan() {
             if (html5QrcodeScanner) {
-                // Vérifier si clear est une promesse et la gérer pour éviter les erreurs non gérées
+                // Tente d'arrêter la caméra et efface le scanner
                 const clearResult = html5QrcodeScanner.clear();
                 if (clearResult && typeof clearResult.then === 'function') {
                     clearResult.then(() => {
@@ -1278,7 +1291,6 @@
                         }
                     }).catch(error => {
                         console.warn("Erreur lors de l'arrêt du scanner:", error);
-                        // Forcer la réinitialisation de l'état même en cas d'erreur d'arrêt
                         html5QrcodeScanner = null;
                         qrScannerContainer.innerHTML = '';
                         qrScannerContainer.style.display = 'none';
@@ -1287,7 +1299,7 @@
                         }
                     });
                 } else {
-                    // Cas synchrone ou si clear ne retourne rien
+                    // Cas synchrone (pour la robustesse)
                     html5QrcodeScanner = null;
                     qrScannerContainer.innerHTML = '';
                     qrScannerContainer.style.display = 'none';
@@ -1297,7 +1309,7 @@
                 }
             }
             
-            // Si le scan est arrêté manuellement, réinitialiser le bouton et l'action
+            // Réinitialiser l'état du bouton Scan
             startScanBtn.textContent = "Scanner l'Offer";
             startScanBtn.onclick = startQRScan;
         }
