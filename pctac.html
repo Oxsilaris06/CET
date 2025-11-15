@@ -27,6 +27,7 @@
             --inter-blue: #3498db; /* Inter */
             --ao-green: #2ecc71; /* AO */
             --trash-color: #6c757d;
+            --success-green: #2ecc71;
             
             /* NOUVEAU: Couleurs pour le mode libre (12 couleurs DISTINCTES du mode standard) */
             --free-color-1: #800000; /* Bordeaux (Maroon) */
@@ -73,6 +74,28 @@
             letter-spacing: 2px; font-weight: 400; 
         }
         
+        /* Titre d'intervention */
+        #intervention-title-container {
+            margin-bottom: 20px;
+            padding: 10px 15px;
+            background-color: var(--bg-interactive);
+            border-radius: 8px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+        #intervention_title_input {
+            border: none;
+            background-color: transparent;
+            font-size: 1.2em;
+            font-weight: 500;
+            padding: 5px 0;
+            color: var(--accent-blue);
+        }
+        #intervention-title-container label {
+             color: var(--text-secondary);
+        }
+
         /* Formulaire */
         .log-entry-form {
             display: flex;
@@ -124,6 +147,16 @@
             .form-row.main-fields > div:nth-child(2) { order: 2; } /* Pax */
             .form-row.main-fields > div:nth-child(3) { order: 3; } /* Lieu */
             .form-row.main-fields > div:nth-child(4) { order: 4; } /* Fenetre/Porte */
+            
+            /* Sur mobile, on enlève la position absolue pour que le toggle se place sous le titre */
+             #pax_mode_toggle_container {
+                position: static; 
+                margin-bottom: 10px;
+                justify-content: center;
+            }
+            .log-entry-form h3 {
+                padding-right: 0; 
+            }
         }
 
         label { 
@@ -283,6 +316,16 @@
             cursor: grabbing !important;
         }
         
+        /* NOUVEAU: Style pour la ligne ajoutée */
+        #logTable tbody tr.just-added {
+            animation: flash-row 1.5s ease-out;
+        }
+        @keyframes flash-row {
+            0% { background-color: var(--accent-blue); }
+            50% { background-color: var(--bg-body); }
+            100% { background-color: transparent; }
+        }
+
         .pax-cell {
             font-weight: bold;
             padding: 5px;
@@ -350,7 +393,24 @@
         .add-log-btn:hover {
             background-color: var(--accent-hover);
         }
-        
+
+        .sort-button {
+            background-color: var(--bg-interactive);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+            padding: 8px 15px;
+            border-radius: 5px;
+            font-size: 0.9em;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .sort-button:hover {
+            background-color: var(--bg-body);
+        }
+
         /* Dock Flottant */
        .dock-menu { 
             position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); 
@@ -405,17 +465,9 @@
              .dock-menu.collapsed {
                 width: 38px; 
              }
-            /* Sur mobile, on enlève la position absolue pour que le toggle se place sous le titre */
-             #pax_mode_toggle_container {
-                position: static; 
-                margin-bottom: 10px;
-            }
-            .log-entry-form h3 {
-                padding-right: 0; 
-            }
         }
 
-         /* Modale de confirmation (pour la réinitialisation) */
+         /* Modale de confirmation (pour la réinitialisation) et Modale de message*/
         .custom-modal {
             position: fixed;
             top: 50%;
@@ -430,6 +482,7 @@
             max-width: 90vw;
             width: 400px;
             display: none;
+            animation: fadeIn 0.3s ease-out;
         }
 
         .custom-modal-backdrop {
@@ -441,6 +494,10 @@
             background-color: rgba(0, 0, 0, 0.7);
             z-index: 1000;
             display: none;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
         }
 
         .modal-buttons {
@@ -464,7 +521,7 @@
             border: none;
         }
 
-        #cancelResetBtn {
+        #cancelResetBtn, #modalMessageBtn {
             background-color: var(--bg-interactive);
             color: var(--text-primary);
             border: 1px solid var(--border-color);
@@ -475,7 +532,7 @@
     <!-- Champ de fichier caché pour l'importation de JSON -->
     <input type="file" id="jsonImportInput" accept=".json" style="display: none;">
 
-    <!-- Modale de Confirmation -->
+    <!-- Modale de Confirmation de Réinitialisation -->
     <div class="custom-modal-backdrop" id="modalBackdrop"></div>
     <div class="custom-modal" id="resetModal">
         <h3 style="color: var(--accent-blue); margin-bottom: 10px;">Confirmer la Réinitialisation</h3>
@@ -486,8 +543,23 @@
         </div>
     </div>
     
+    <!-- Modale de Message (pour remplacer alert()) -->
+    <div class="custom-modal" id="messageModal">
+        <h3 id="modalMessageTitle" style="margin-bottom: 10px;">Message</h3>
+        <p id="modalMessageContent" style="color: var(--text-primary);"></p>
+        <div class="modal-buttons">
+            <button id="modalMessageBtn">OK</button>
+        </div>
+    </div>
+    
     <div class="container">
         <h1>PC Tac</h1>
+
+        <!-- NOUVEAU: Titre de l'intervention pour le PDF -->
+        <div id="intervention-title-container">
+            <label for="intervention_title_input">Nom de l'intervention :</label>
+            <input type="text" id="intervention_title_input" placeholder="Ex: Exercice Alpha / Prise d'otage" value="">
+        </div>
         
         <!-- Formulaire d'ajout de ligne -->
         <form id="log-form" class="log-entry-form">
@@ -495,8 +567,8 @@
             
             <!-- NOUVEL EMPLACEMENT du toggle : Haut à droite du formulaire -->
             <div id="pax_mode_toggle_container">
-                <button type="button" class="mode-toggle-btn active" data-mode="standard" onclick="setPaxMode('standard')">Forcené</button>
-                <button type="button" class="mode-toggle-btn" data-mode="free" onclick="setPaxMode('free')">TP</button>
+                <button type="button" class="mode-toggle-btn active" data-mode="standard">Forcené</button>
+                <button type="button" class="mode-toggle-btn" data-mode="free">TP</button>
             </div>
             <!-- Fin NOUVEL EMPLACEMENT -->
             
@@ -511,8 +583,6 @@
                  <div>
                     <label>Pax</label>
                     
-                    <!-- L'élément #pax_mode_toggle_container a été déplacé -->
-
                     <div id="pax_select_wrapper_standard" class="pax-select-wrapper">
                         <div class="pax-select" id="pax_select_container">
                             <span class="pax-select-option" data-pax="Adversaire">Adversaire</span>
@@ -527,7 +597,7 @@
                             <div class="color-palette" id="free_color_palette">
                                 <!-- Les swatches de couleur sont générés par JS -->
                             </div>
-                            <input type="text" id="free_pax_input" placeholder="Intervenant/Adversaire" value="" />
+                            <input type="text" id="free_pax_input" placeholder="Nom du TP (Ex: TP Alpha)" value="" />
                             <input type="hidden" id="free_color_input" value="#800000" />
                         </div>
                     </div>
@@ -539,12 +609,16 @@
                  
                  <div>
                     <label for="lieu_input">Lieu</label>
-                    <input type="text" id="lieu_input" placeholder="Baptême terrain (A,B...)" value="">
+                    <!-- NOUVEAU: Ajout de datalist pour l'autocomplétion -->
+                    <input type="text" id="lieu_input" list="lieu_history" placeholder="Baptême terrain (A,B...)" value="">
+                    <datalist id="lieu_history"></datalist>
                  </div>
 
                  <div>
                     <label for="fenetre_porte_input">Fenêtre/Porte</label>
-                    <input type="text" id="fenetre_porte_input" placeholder="Ex: B1,A102" value="">
+                    <!-- NOUVEAU: Ajout de datalist pour l'autocomplétion -->
+                    <input type="text" id="fenetre_porte_input" list="fp_history" placeholder="Ex: B1,A102" value="">
+                    <datalist id="fp_history"></datalist>
                  </div>
                  
             </div>
@@ -564,6 +638,9 @@
 
         <!-- Tableau des entrées -->
         <div id="logTableContainer">
+            <button type="button" class="sort-button" id="sortTimeBtn">
+                <span class="material-symbols-outlined">sort</span> Trier par Heure
+            </button>
             <table id="logTable">
                 <thead>
                     <tr>
@@ -624,6 +701,8 @@
     <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
     <script>
         const LOCAL_STORAGE_KEY = 'pcTacLogData';
+        const HISTORY_STORAGE_KEY = 'pcTacHistory';
+        const TITLE_STORAGE_KEY = 'pcTacTitle';
         
         // --- COULEURS ÉTENDUES ---
         const FREE_MODE_COLORS = [
@@ -666,9 +745,63 @@
         const jsonImportInput = document.getElementById('jsonImportInput'); 
         const exportJsonDockBtn = document.getElementById('exportJsonDockBtn'); 
         const importJsonDockBtn = document.getElementById('importJsonDockBtn'); 
+        const lieuHistoryDatalist = document.getElementById('lieu_history');
+        const fpHistorDatalist = document.getElementById('fp_history');
+        const interventionTitleInput = document.getElementById('intervention_title_input');
+        const sortTimeBtn = document.getElementById('sortTimeBtn');
         
-        // Variable pour suivre si l'utilisateur a modifié l'heure manuellement
+        // Variables pour suivre l'état
         let isTimeInputManuallyChanged = false;
+        let paxColorMap = {}; // Map pour lier PAX libre à sa couleur
+
+        // --- Fonctions utilitaires ---
+        
+        function getHexToRgb(hex) {
+             const bigint = parseInt(hex.slice(1), 16);
+             const r = (bigint >> 16) & 255;
+             const g = (bigint >> 8) & 255;
+             const b = bigint & 255;
+             return { r: r / 255, g: g / 255, b: b / 255 };
+        }
+        
+        // NOUVEAU: Factorisation du calcul de couleur de texte
+        function calculateTextColor(hexColor) {
+            const {r, g, b} = getHexToRgb(hexColor); 
+            // Formule de luminosité (perçue)
+            const luminosity = (0.299 * r + 0.587 * g + 0.114 * b);
+            return luminosity > 0.5 ? '#000000' : '#ffffff';
+        }
+        
+        function generateUniqueId() {
+             return Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+        }
+        
+        // NOUVEAU: Affichage de la modale de message non bloquante
+        function showMessageModal(title, content, isError = false) {
+            const modal = document.getElementById('messageModal');
+            const backdrop = document.getElementById('modalBackdrop');
+            
+            document.getElementById('modalMessageTitle').textContent = title;
+            document.getElementById('modalMessageContent').textContent = content;
+            
+            // Appliquer la couleur appropriée
+            const titleElement = document.getElementById('modalMessageTitle');
+            if (isError) {
+                titleElement.style.color = 'var(--danger-red)';
+            } else {
+                 titleElement.style.color = 'var(--success-green)';
+            }
+
+            backdrop.style.display = 'block';
+            modal.style.display = 'block';
+            
+            // Clic sur OK masque la modale
+            document.getElementById('modalMessageBtn').onclick = () => {
+                backdrop.style.display = 'none';
+                modal.style.display = 'none';
+            };
+        }
+
 
         // --- 1. Gestion des Données et Stockage ---
 
@@ -682,8 +815,13 @@
                     return 0; 
                 });
                 localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(logData));
+                
+                // Mettre à jour l'historique et la map de couleurs
+                updateHistoryAndColorMap(logData);
+
             } catch (e) {
                 console.error("Erreur de sauvegarde des données:", e);
+                showMessageModal("Erreur de sauvegarde", "Impossible de sauvegarder les données dans le stockage local.", true);
             }
         }
 
@@ -702,6 +840,7 @@
             return Array.from(logTableBody.querySelectorAll('tr')).map(row => {
                 const getSafeDataset = (key) => {
                     const value = row.dataset[key] || '';
+                    // Pour éviter les chaînes 'undefined' littérales
                     return value === 'undefined' ? '' : value; 
                 };
                 
@@ -709,6 +848,7 @@
                 let paxValue = getSafeDataset('pax');
 
                 if (paxMode === 'free') {
+                    // En mode libre, le vrai nom est dans freepaxname
                     paxValue = getSafeDataset('freepaxname') || 'Pax Libre';
                 }
 
@@ -717,6 +857,7 @@
                     heure: row.querySelector('.heure-cell-text').textContent,
                     pax: paxValue,
                     paxMode: paxMode, 
+                    // paxColor est seulement pertinent si le mode est 'free'
                     paxColor: getSafeDataset('paxcolor') || (paxMode === 'free' ? FREE_MODE_COLORS[0].hex : undefined), 
                     lieu: getSafeDataset('lieu'),
                     fenetrePorte: getSafeDataset('fenetreporte'),
@@ -724,34 +865,95 @@
                 };
             });
         }
-        
-        function renderLogTable(logData) {
-            // Tri par heure pour le rendu initial et après une réinitialisation
-            logData.sort((a, b) => {
-                if (a.heure < b.heure) return -1;
-                if (a.heure > b.heure) return 1;
-                return 0; 
+
+        function loadHistory() {
+            try {
+                const dataString = localStorage.getItem(HISTORY_STORAGE_KEY);
+                return dataString ? JSON.parse(dataString) : { lieux: [], fp: [], paxColorMap: {} };
+            } catch (e) {
+                console.error("Erreur de chargement de l'historique:", e);
+                return { lieux: [], fp: [], paxColorMap: {} };
+            }
+        }
+
+        function saveHistory(history) {
+            try {
+                 localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history));
+            } catch (e) {
+                console.error("Erreur de sauvegarde de l'historique:", e);
+            }
+        }
+
+        // NOUVEAU: Mettre à jour l'historique et la map de couleurs
+        function updateHistoryAndColorMap(logData) {
+            const lieux = new Set();
+            const fp = new Set();
+            const newPaxColorMap = {};
+
+            logData.forEach(entry => {
+                if (entry.lieu) lieux.add(entry.lieu.trim());
+                if (entry.fenetrePorte) fp.add(entry.fenetrePorte.trim());
+
+                if (entry.paxMode === 'free' && entry.paxColor) {
+                    newPaxColorMap[entry.pax] = entry.paxColor;
+                }
             });
 
+            const history = {
+                lieux: Array.from(lieux).slice(0, 20), // Limiter à 20 entrées
+                fp: Array.from(fp).slice(0, 20),
+                paxColorMap: newPaxColorMap
+            };
+            
+            // Mise à jour de la map globale pour le mode libre
+            paxColorMap = newPaxColorMap; 
+
+            saveHistory(history);
+            updateDatalists(history.lieux, history.fp);
+        }
+        
+        function updateDatalists(lieux, fp) {
+             lieuHistoryDatalist.innerHTML = '';
+             fpHistorDatalist.innerHTML = '';
+
+             lieux.forEach(item => {
+                 const option = document.createElement('option');
+                 option.value = item;
+                 lieuHistoryDatalist.appendChild(option);
+             });
+
+             fp.forEach(item => {
+                 const option = document.createElement('option');
+                 option.value = item;
+                 fpHistorDatalist.appendChild(option);
+             });
+        }
+        
+        function loadTitle() {
+            interventionTitleInput.value = localStorage.getItem(TITLE_STORAGE_KEY) || '';
+        }
+
+        function saveTitle() {
+            localStorage.setItem(TITLE_STORAGE_KEY, interventionTitleInput.value.trim());
+        }
+
+        function renderLogTable(logData, newEntryId = null) {
             logTableBody.innerHTML = '';
             
             logData.forEach(entry => {
                 
                 let paxColor, paxText, paxFontColor;
+                const isFreeMode = entry.paxMode === 'free';
 
-                if (entry.paxMode === 'standard') {
+                if (isFreeMode) {
+                    paxColor = entry.paxColor || FREE_MODE_COLORS[0].hex;
+                    paxText = entry.pax;
+                    paxFontColor = calculateTextColor(paxColor);
+                } else {
                     const paxInfo = PDF_PAX_COLORS[entry.pax] || PDF_PAX_COLORS['Adversaire'];
                     paxColor = paxInfo.color;
                     paxText = paxInfo.text;
                     paxFontColor = paxInfo.fontColor;
-                } else {
-                    paxColor = entry.paxColor || FREE_MODE_COLORS[0].hex;
-                    paxText = entry.pax;
-                    const r = parseInt(paxColor.slice(1, 3), 16);
-                    const g = parseInt(paxColor.slice(3, 5), 16);
-                    const b = parseInt(paxColor.slice(5, 7), 16);
-                    const luminosity = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-                    paxFontColor = luminosity > 0.5 ? '#000000' : '#ffffff';
                 }
 
                 const row = logTableBody.insertRow();
@@ -759,22 +961,30 @@
                 row.dataset.lieu = entry.lieu || '';
                 row.dataset.fenetreporte = entry.fenetrePorte || '';
                 row.dataset.remarques = entry.remarques || '';
-                row.dataset.pax = entry.paxMode === 'standard' ? entry.pax : 'Libre'; 
-                row.dataset.freepaxname = entry.paxMode === 'free' ? entry.pax : ''; 
+                // pax (standard) ou Libre (free)
+                row.dataset.pax = isFreeMode ? 'Libre' : entry.pax; 
+                // Le nom du pax libre est stocké séparément pour le DOM/PDF
+                row.dataset.freepaxname = isFreeMode ? entry.pax : ''; 
                 row.dataset.paxmode = entry.paxMode; 
-                row.dataset.paxcolor = entry.paxMode === 'free' ? paxColor : ''; 
+                // paxColor n'est stocké que si c'est du mode libre
+                row.dataset.paxcolor = isFreeMode ? paxColor : ''; 
+                
+                // NOUVEAU: Mise en évidence de la nouvelle ligne
+                if (entry.id === newEntryId) {
+                    row.classList.add('just-added');
+                }
                 
                 // Rendre la ligne déplaçable
                 row.draggable = true;
                 row.classList.add('draggable-row');
-                row.addEventListener('dragstart', handleDragStart);
+                // Les événements dragstart, dragover, drop et dragend sont attachés dans l'initialisation globale
 
                 const heureCell = row.insertCell();
                 heureCell.style.width = '15%';
                 heureCell.innerHTML = `
                     <div class="heure-action-cell">
                         <span class="heure-cell-text">${entry.heure}</span>
-                        <button type="button" class="delete-btn" onclick="deleteLogEntry('${entry.id}')">
+                        <button type="button" class="delete-btn" data-id="${entry.id}">
                             <span class="material-symbols-outlined">close</span>
                         </button>
                     </div>`;
@@ -796,11 +1006,11 @@
                 remarquesCell.textContent = entry.remarques;
             });
             
-             // Mettre à jour les données dans localStorage après le rendu trié
+             // Mettre à jour les données dans localStorage après le rendu trié (l'ordre DOM est prioritaire)
              saveLogData(getLogData());
         }
         
-        function addLogEntry(e) {
+        function handleAddLogEntry(e) {
             e.preventDefault();
 
             const mode = paxModeInput.value;
@@ -810,29 +1020,28 @@
                 paxName = paxInput.value;
                 paxColorHex = ''; 
                 if (!paxName) {
-                    // Utiliser une alerte personnalisée ou une validation visuelle en production, mais ici on garde alert pour la simplicité
-                    alert("Veuillez sélectionner un type de PAX standard.");
+                    showMessageModal("Erreur de saisie", "Veuillez sélectionner un type de PAX standard.", true);
                     return;
                 }
             } else {
-                paxName = freePaxInput.value.trim() || 'Pax Libre';
+                paxName = freePaxInput.value.trim();
                 paxColorHex = paxCustomColorInput.value;
-                if (!freePaxInput.value.trim()) {
-                     alert("Veuillez donner un nom a l'intervenant.");
+                if (!paxName) {
+                     showMessageModal("Erreur de saisie", "Veuillez donner un nom à l'intervenant TP.", true);
                      return;
                 }
             }
 
             if (!heureInput.value) {
-                alert("Veuillez renseigner l'heure.");
+                showMessageModal("Erreur de saisie", "Veuillez renseigner l'heure.", true);
                 return;
             }
             
-            // L'heure de l'entrée est l'heure ACTUELLE de l'input
             const currentHeure = heureInput.value;
+            const newId = generateUniqueId();
 
             const newEntry = {
-                id: Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
+                id: newId,
                 heure: currentHeure,
                 pax: paxName, 
                 paxMode: mode,
@@ -842,23 +1051,26 @@
                 remarques: remarquesInput.value.trim(),
             };
 
-            const logData = loadLogData();
+            const logData = getLogData(); // Récupère l'ordre actuel
             logData.push(newEntry);
 
-            // Remettre le flag de modification manuelle à false après l'ajout
+            // Mettre à jour le flag et le temps
             isTimeInputManuallyChanged = false;
 
-            renderLogTable(logData);
+            // Rendu avec l'ID pour le flash
+            renderLogTable(logData, newId); 
+            
+            // Si c'est un PAX libre, sélectionner la couleur utilisée dans le picker pour la prochaine entrée
+            if (mode === 'free') {
+                 // Met à jour l'historique des couleurs
+                 paxColorMap[paxName] = paxColorHex; 
+            }
 
-            // --- PAS DE MISE EN MÉMOIRE : Réinitialisation des champs pour la prochaine entrée ---
-            updateTimeInput(); // Met à jour l'heure pour la prochaine entrée
+            // Réinitialisation des champs pour la prochaine entrée
+            updateTimeInput();
             lieuInput.value = '';
             fenetrePorteInput.value = '';
             remarquesInput.value = '';
-            // On ne réinitialise pas le nom en mode TP/Libre pour des logs consécutifs du même intervenant,
-            // car cela représente un seul PAX.
-            // Si le PAX doit être changé, l'utilisateur le fait via le champ de texte ou le toggle.
-            // freePaxInput.value = ''; 
             
             // OPTIMISATION MOBILE : Placer le focus sur le champ des remarques pour la saisie rapide
             remarquesInput.focus();
@@ -869,16 +1081,20 @@
             renderLogTable(logData);
         }
 
-        // --- 2. Logique de sélection Pax (Standard et Libre) ---
-        
-        function getHexToRgb(hex) {
-             const bigint = parseInt(hex.slice(1), 16);
-             const r = (bigint >> 16) & 255;
-             const g = (bigint >> 8) & 255;
-             const b = bigint & 255;
-             return { r: r / 255, g: g / 255, b: b / 255 };
+        // NOUVEAU: Fonction de tri (non implémentée avant)
+        function sortLogTableByTime() {
+             const logData = getLogData();
+             logData.sort((a, b) => {
+                if (a.heure < b.heure) return -1;
+                if (a.heure > b.heure) return 1;
+                return 0; 
+             });
+             renderLogTable(logData);
+             showMessageModal("Tri terminé", "Le journal a été trié par ordre chronologique de l'heure.", false);
         }
 
+        // --- 2. Logique de sélection Pax (Standard et Libre) ---
+        
         // Initialisation du mode PAX et de la palette de couleurs
         function initPaxModeAndColors() {
             // Initialisation de la palette de couleurs libre
@@ -951,8 +1167,51 @@
                  paxInput.value = freePaxInput.value.trim() || 'Pax Libre';
                  // OPTIMISATION TP: Mettre le focus sur le champ de texte en mode libre pour saisie rapide
                  freePaxInput.focus();
+                 
+                 // NOUVEAU: Mettre à jour la couleur du Pax libre en fonction du nom déjà entré
+                 const currentPaxName = freePaxInput.value.trim();
+                 if (currentPaxName && paxColorMap[currentPaxName]) {
+                    const savedColor = paxColorMap[currentPaxName];
+                    paxCustomColorInput.value = savedColor;
+                    
+                    // Mettre à jour le sélecteur visuel
+                    Array.from(document.getElementById('free_color_palette').querySelectorAll('.color-swatch')).forEach(s => {
+                        s.classList.toggle('selected', s.dataset.color === savedColor);
+                    });
+                 }
             }
         }
+        
+        // Événement d'écoute pour les boutons toggle PAX
+        document.querySelectorAll('#pax_mode_toggle_container .mode-toggle-btn').forEach(btn => {
+            btn.addEventListener('click', () => setPaxMode(btn.dataset.mode));
+        });
+        
+        // Événement d'écoute pour le PAX libre
+        freePaxInput.addEventListener('input', (e) => {
+            const paxName = e.target.value.trim();
+            if (paxModeInput.value === 'free') {
+                 paxInput.value = paxName || 'Pax Libre';
+            }
+            
+            // NOUVEAU: Mettre à jour la couleur du Pax libre en fonction du nom déjà entré
+             if (paxColorMap[paxName]) {
+                const savedColor = paxColorMap[paxName];
+                paxCustomColorInput.value = savedColor;
+                
+                // Mettre à jour le sélecteur visuel
+                Array.from(document.getElementById('free_color_palette').querySelectorAll('.color-swatch')).forEach(s => {
+                    s.classList.toggle('selected', s.dataset.color === savedColor);
+                });
+             } else {
+                 // Réinitialiser la couleur à la première si le nom n'a jamais été vu (et sélectionner visuellement)
+                 paxCustomColorInput.value = FREE_MODE_COLORS[0].hex;
+                 Array.from(document.getElementById('free_color_palette').querySelectorAll('.color-swatch')).forEach((s, index) => {
+                    s.classList.toggle('selected', index === 0);
+                 });
+             }
+        });
+
 
         // --- Mise à jour de l'heure en temps réel ---
 
@@ -965,11 +1224,6 @@
             }
         }
 
-        // Détecter la modification manuelle
-        heureInput.addEventListener('change', () => {
-            isTimeInputManuallyChanged = true;
-        });
-        
         // --- 3. Logique Drag & Drop ---
         
         let dragSrcEl = null;
@@ -1004,6 +1258,7 @@
             e.stopPropagation();
             e.preventDefault(); 
             
+            // Sauvegarder l'ordre DOM
             saveLogData(getLogData()); 
             // Re-render pour s'assurer que le DOM et les données sont synchronisés
             renderLogTable(loadLogData());
@@ -1019,12 +1274,14 @@
         
         function exportJson() {
              const logData = getLogData();
+             const title = interventionTitleInput.value.trim() || "Sans Titre";
+
              if (logData.length === 0) {
-                 alert("Le journal est vide. Rien à exporter.");
+                 showMessageModal("Exportation impossible", "Le journal est vide. Rien à exporter.", true);
                  return;
              }
              
-             // LOGIQUE DE NOMMAGE DU FICHIER (AAAA-MM-JJ_HH-MM.json) 
+             // LOGIQUE DE NOMMAGE DU FICHIER (AAAA-MM-JJ_HH-MM_Titre.json) 
              const now = new Date();
              const year = now.getFullYear();
              const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -1033,13 +1290,16 @@
              const hours = String(now.getHours()).padStart(2, '0');
              const minutes = String(now.getMinutes()).padStart(2, '0');
              const timePart = `${hours}-${minutes}`; 
-             const fileName = `PC_Tac_Session_${datePart}_${timePart}.json`;
+             
+             const sanitizedTitle = title.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+             const fileName = `PC_Tac_Session_${datePart}_${timePart}_${sanitizedTitle}.json`;
 
              const exportObject = {
                  metadata: {
                      appName: "PC Tac Log",
                      version: "1.0",
-                     timestamp: now.toISOString()
+                     timestamp: now.toISOString(),
+                     title: title
                  },
                  logEntries: logData
              };
@@ -1056,6 +1316,7 @@
              link.click();
              document.body.removeChild(link);
              URL.revokeObjectURL(url);
+             showMessageModal("Exportation réussie", `Les données ont été exportées sous le nom : ${fileName}`, false);
         }
         
         async function importJson(event) {
@@ -1069,28 +1330,53 @@
                     
                     if (jsonContent.metadata && jsonContent.metadata.appName === "PC Tac Log" && Array.isArray(jsonContent.logEntries)) {
                         
-                        const validatedEntries = jsonContent.logEntries.map(entry => ({
-                            id: entry.id || Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
-                            heure: entry.heure || '00:00',
-                            
-                            pax: entry.pax,
-                            paxMode: entry.paxMode || (PDF_PAX_COLORS[entry.pax] ? 'standard' : 'free'),
-                            paxColor: entry.paxColor || (entry.paxMode === 'free' ? FREE_MODE_COLORS[0].hex : undefined),
-
-                            lieu: entry.lieu || '',
-                            fenetrePorte: entry.fenetrePorte || '',
-                            remarques: entry.remarques || '',
-                        }));
+                        const currentIds = new Set(getLogData().map(e => e.id));
                         
-                        renderLogTable(validatedEntries);
-                        alert(`Importation JSON réussie : ${validatedEntries.length} entrées chargées.`);
+                        const validatedEntries = jsonContent.logEntries.map(entry => {
+                            let newId = entry.id;
+                            
+                            // NOUVEAU: Vérifier et générer un nouvel ID si l'ID existe déjà
+                            if (currentIds.has(entry.id)) {
+                                console.warn(`ID en conflit trouvé: ${entry.id}. Génération d'un nouvel ID.`);
+                                newId = generateUniqueId();
+                            }
+                            
+                            const paxMode = entry.paxMode || (PDF_PAX_COLORS[entry.pax] ? 'standard' : 'free');
+
+                            return {
+                                // Utiliser le nouvel ID (ou l'original si pas de conflit)
+                                id: newId, 
+                                heure: entry.heure || '00:00',
+                                
+                                pax: entry.pax,
+                                paxMode: paxMode,
+                                paxColor: entry.paxColor || (paxMode === 'free' ? FREE_MODE_COLORS[0].hex : undefined),
+
+                                lieu: entry.lieu || '',
+                                fenetrePorte: entry.fenetrePorte || '',
+                                remarques: entry.remarques || '',
+                            };
+                        });
+                        
+                        // Si le fichier contient un titre, le charger
+                        if (jsonContent.metadata.title) {
+                            interventionTitleInput.value = jsonContent.metadata.title;
+                            saveTitle();
+                        }
+
+                        // Ajout des entrées importées aux données actuelles
+                        const currentData = getLogData();
+                        const mergedData = [...currentData, ...validatedEntries];
+                        
+                        renderLogTable(mergedData);
+                        showMessageModal("Importation réussie", `${validatedEntries.length} entrées ont été chargées et ajoutées au journal existant.`, false);
                         
                     } else {
-                        throw new Error("Fichier JSON invalide. Assurez-vous qu'il provient d'une exportation PC Tac.");
+                        throw new Error("Fichier JSON invalide ou structure de données manquante. Assurez-vous qu'il provient d'une exportation PC Tac.");
                     }
                 } catch (error) {
                     console.error("Erreur lors de l'importation JSON:", error);
-                    alert(`Erreur d'importation : ${error.message}`);
+                    showMessageModal("Erreur d'importation", `Erreur : ${error.message}`, true);
                 } finally {
                     jsonImportInput.value = ''; 
                     initPaxModeAndColors(); // Réinitialiser le mode PAX du formulaire
@@ -1099,7 +1385,7 @@
             reader.readAsText(file);
         }
         
-        // --- 5. Génération PDF (Aucun changement) ---
+        // --- 5. Génération PDF ---
         
         function wrapTextForPdf(font, fontSize, text, maxWidth) {
             text = String(text || ''); 
@@ -1164,6 +1450,7 @@
             }
             
             const logData = getLogData();
+            const interventionTitle = interventionTitleInput.value.trim() || "Journal d'intervention";
             const isDarkMode = document.body.classList.contains('dark-mode');
             const pdfThemeColors = getPdfColors(isDarkMode, rgb); 
             
@@ -1193,7 +1480,8 @@
                     otage: rgb(0xf1/255, 0xc4/255, 0x0f/255), 
                     inter: rgb(0x34/255, 0x98/255, 0xdb/255), 
                     ao: rgb(0x2e/255, 0xcc/255, 0x71/255) 
-                }
+                },
+                interventionTitle: interventionTitle
             };
             
             const drawFooter = () => {
@@ -1220,7 +1508,8 @@
                 
                 context.currentPage.drawRectangle({ x: 0, y: 0, width: context.pageWidth, height: context.pageHeight, color: context.colors.background });
                 
-                context.currentPage.drawText("PC TAC - Journal d'intervention", {
+                // NOUVEAU: Affichage du titre d'intervention
+                context.currentPage.drawText(`PC TAC - ${context.interventionTitle}`, {
                     x: context.margin, y: context.pageHeight - context.margin / 2,
                     font: context.helveticaBoldFont, size: 14, color: context.colors.text
                 });
@@ -1266,19 +1555,17 @@
             const drawLogEntry = (entry) => {
                 
                 let paxColorHex, paxText, paxTextColor;
+                const isFreeMode = entry.paxMode === 'free';
 
-                if (entry.paxMode === 'standard') {
+                if (isFreeMode) {
+                    paxColorHex = entry.paxColor || FREE_MODE_COLORS[0].hex;
+                    paxText = entry.pax;
+                    paxTextColor = calculateTextColor(paxColorHex) === '#000000' ? pdfRgb(0, 0, 0) : pdfRgb(1, 1, 1);
+                } else {
                     const paxInfo = PDF_PAX_COLORS[entry.pax] || PDF_PAX_COLORS['Adversaire'];
                     paxColorHex = paxInfo.color;
                     paxText = paxInfo.text;
                     paxTextColor = paxInfo.fontColor === '#000000' ? pdfRgb(0, 0, 0) : pdfRgb(1, 1, 1);
-                } else {
-                    paxColorHex = entry.paxColor || FREE_MODE_COLORS[0].hex;
-                    paxText = entry.pax;
-                    
-                    const {r, g, b} = getHexToRgb(paxColorHex); 
-                    const luminosity = (0.299 * r + 0.587 * g + 0.114 * b);
-                    paxTextColor = luminosity > 0.5 ? pdfRgb(0, 0, 0) : pdfRgb(1, 1, 1);
                 }
                 
                 const { r, g, b } = getHexToRgb(paxColorHex); 
@@ -1386,13 +1673,16 @@
             try {
                 const pdfBytes = await buildPdf();
                 if (!pdfBytes) { 
-                    alert("La génération a échoué. Vérifiez la console (F12).");
+                    showMessageModal("Erreur de PDF", "La génération du PDF a échoué. Vérifiez la console (F12).", true);
                     return; 
                 }
 
                 const blob = new Blob([pdfBytes], { type: 'application/pdf' });
                 const today = new Date().toLocaleDateString('fr-FR').replace(/\//g, '-');
-                const fileName = `PC_Tac_Log_${today}.pdf`;
+                const title = interventionTitleInput.value.trim() || "Journal_Intervention";
+                const sanitizedTitle = title.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+
+                const fileName = `PC_Tac_Log_${sanitizedTitle}_${today}.pdf`;
 
                 if (navigator.msSaveBlob) {
                     navigator.msSaveBlob(blob, fileName);
@@ -1413,7 +1703,7 @@
                 
             } catch (error) {
                 console.error("Erreur critique lors de la génération du PDF:", error);
-                alert("Une erreur critique est survenue lors de la génération du PDF. Consultez la console (F12).");
+                showMessageModal("Erreur critique", "Une erreur critique est survenue lors de la génération du PDF. Consultez la console (F12).", true);
             } finally {
                 btn.querySelector('.material-symbols-outlined').textContent = originalIcon;
                 btn.disabled = false;
@@ -1474,7 +1764,6 @@
             localStorage.setItem('dockCollapsed', dockCollapsed);
             const icon = document.querySelector('#dockToggleBtn .material-symbols-outlined');
             if (icon) {
-                // Si le dock est réduit, l'icône pointe vers le haut (expand_less), sinon vers le bas (expand_more)
                 icon.textContent = dockCollapsed ? 'expand_less' : 'expand_more';
             }
         }
@@ -1491,18 +1780,35 @@
 
         function handleResetData() {
             localStorage.removeItem(LOCAL_STORAGE_KEY);
+            localStorage.removeItem(HISTORY_STORAGE_KEY);
+            localStorage.removeItem(TITLE_STORAGE_KEY);
+
+            paxColorMap = {};
+            
             renderLogTable([]);
             hideResetModal();
             
             heureInput.value = new Date().toTimeString().split(' ')[0].substring(0, 5);
-            paxInput.value = 'Adversaire';
+            interventionTitleInput.value = '';
+
             // Réinitialiser correctement le mode PAX
             setPaxMode('standard');
             
             lieuInput.value = '';
             fenetrePorteInput.value = '';
             remarquesInput.value = '';
-            alert("Toutes les données du Log PC Tac ont été réinitialisées.");
+            
+            // Recharger l'historique et les datalists (qui seront vides)
+            updateDatalists([], []);
+            
+            showMessageModal("Réinitialisation réussie", "Toutes les données du Log PC Tac (journal, historique et titre) ont été réinitialisées.", false);
+        }
+
+        function handleDeleteButtonClick(e) {
+             if (e.target.closest('.delete-btn')) {
+                const id = e.target.closest('.delete-btn').dataset.id;
+                deleteLogEntry(id);
+             }
         }
 
 
@@ -1510,57 +1816,75 @@
 
         document.addEventListener('DOMContentLoaded', () => {
             
+            // 7.1 Initialisation du thème et du dock
             const isDarkMode = localStorage.getItem('theme') === 'dark' || !localStorage.getItem('theme');
             if (!isDarkMode) { document.body.classList.replace('dark-mode', 'light-mode'); }
             document.getElementById('darkModeIcon').textContent = isDarkMode ? 'nightlight' : 'clear_day';
+            
+            const isDockCollapsed = localStorage.getItem('dockCollapsed') === 'true';
+            if (!isDockCollapsed) {
+                 // Si c'est la première fois ou si l'utilisateur ne l'a pas réduit, le dock est par défaut ouvert
+                 document.getElementById('dockMenu').classList.remove('collapsed');
+            }
+            document.querySelector('#dockToggleBtn .material-symbols-outlined').textContent = isDockCollapsed ? 'expand_less' : 'expand_more';
 
+
+            // 7.2 Événements globaux
             document.getElementById('fullscreenToggle').addEventListener('click', toggleFullscreen);
             document.getElementById('darkModeToggle').addEventListener('click', handleThemeToggle);
             document.getElementById('dockToggleBtn').addEventListener('click', toggleDock);
             document.addEventListener('fullscreenchange', updateFullscreenIcon);
             updateFullscreenIcon(); 
             
-            document.querySelector('#dockToggleBtn .material-symbols-outlined').textContent = 'expand_less'; 
-
             // Démarrer la mise à jour de l'heure
             updateTimeInput();
             setInterval(updateTimeInput, 60000); // Mise à jour chaque minute
 
-            logForm.addEventListener('submit', addLogEntry);
-            initPaxModeAndColors(); // Utiliser la nouvelle fonction d'initialisation
-            
-            // Ajout des listeners Drag & Drop sur le corps du tableau pour les événements de glissement.
-            logTableBody.addEventListener('dragover', handleDragOver);
-            logTableBody.addEventListener('drop', handleDrop);
-            logTableBody.addEventListener('dragend', handleDragEnd); // S'assurer que dragend est sur le corps pour attraper tous les cas
-            
-            // Rendu initial
-            renderLogTable(loadLogData());
-            
-            // Écouteur pour le champ libre pour mettre à jour l'input pax_input en temps réel
-            document.getElementById('free_pax_input').addEventListener('input', (e) => {
-                 if (paxModeInput.value === 'free') {
-                     paxInput.value = e.target.value.trim() || 'Pax Libre';
-                 }
+            // Détecter la modification manuelle de l'heure
+            heureInput.addEventListener('change', () => {
+                isTimeInputManuallyChanged = true;
             });
 
-            previewPdfDockBtn.addEventListener('click', downloadPdf);
+            // 7.3 Initialisation du formulaire et des données
+            logForm.addEventListener('submit', handleAddLogEntry);
+            initPaxModeAndColors(); // Utiliser la nouvelle fonction d'initialisation
+            
+            // Chargement de l'historique et du titre
+            const history = loadHistory();
+            paxColorMap = history.paxColorMap;
+            updateDatalists(history.lieux, history.fp);
+            loadTitle();
+            interventionTitleInput.addEventListener('input', saveTitle);
+            
+            // 7.4 Logique Drag & Drop sur le corps du tableau
+            logTableBody.addEventListener('dragover', (e) => handleDragOver.call(e.target.closest('tr') || logTableBody, e));
+            logTableBody.addEventListener('drop', handleDrop);
+            logTableBody.addEventListener('dragend', handleDragEnd); 
+            // Événement DÉLÉGUÉ pour la suppression (écoute sur le corps du tableau)
+            logTableBody.addEventListener('click', handleDeleteButtonClick);
 
-            // Événements Import/Export JSON
+            // 7.5 Rendu initial
+            renderLogTable(loadLogData());
+
+            // 7.6 Événements PDF/JSON/Réinitialisation
+            previewPdfDockBtn.addEventListener('click', downloadPdf);
             exportJsonDockBtn.addEventListener('click', exportJson);
             importJsonDockBtn.addEventListener('click', () => jsonImportInput.click());
             jsonImportInput.addEventListener('change', importJson);
             
-            // Événements Réinitialisation
             resetDataDockBtn.addEventListener('click', showResetModal);
             document.getElementById('confirmResetBtn').addEventListener('click', handleResetData);
             document.getElementById('cancelResetBtn').addEventListener('click', hideResetModal);
-            document.getElementById('modalBackdrop').addEventListener('click', hideResetModal);
+            document.getElementById('modalBackdrop').addEventListener('click', (e) => {
+                 // Cacher les modales seulement si on clique sur le fond et pas sur la modale elle-même
+                 if (e.target.id === 'modalBackdrop') {
+                    hideResetModal();
+                 }
+            });
+            
+            // NOUVEAU: Bouton Trier
+            sortTimeBtn.addEventListener('click', sortLogTableByTime);
         });
-        
-        // Exposer les fonctions pour les événements onclick (HTML inline)
-        window.setPaxMode = setPaxMode;
-        window.deleteLogEntry = deleteLogEntry;
     </script>
 </body>
 </html>
