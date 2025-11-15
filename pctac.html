@@ -1535,12 +1535,12 @@
 
                 try {
                     // Étape 1: Demander l'appareil
-                    // CHANGEMENT CRITIQUE: Retire le filtre de service strict pour permettre
-                    // la connexion à n'importe quel appareil BLE (qui pourrait être l'hôte PC renommé)
+                    // CORRECTION: Rétablit le filtre de service strict pour satisfaire l'exigence de sécurité/restriction
+                    // du navigateur ('A filter must restrict the devices in some way').
                     const device = await navigator.bluetooth.requestDevice({
-                        // Ancien filtre: filters: [{ services: [PCTAC_SERVICE_UUID] }],
-                        filters: [{ acceptAllDevices: true }], // Accepter tous les appareils BLE
-                        optionalServices: [PCTAC_SERVICE_UUID] // Toujours demander le service pour la communication
+                        // Rétablit le filtre par service. Seuls les appareils diffusant cet UUID seront affichés.
+                        filters: [{ services: [PCTAC_SERVICE_UUID] }],
+                        optionalServices: [PCTAC_SERVICE_UUID] 
                     });
                     this.device = device;
 
@@ -1578,7 +1578,10 @@
                     } else if (error.message.includes("no longer in range")) {
                         message = "L'appareil cible n'est plus à portée.";
                     } else if (error.message.includes("NotFound")) {
-                        message = "Connexion annulée ou service PC Tac non trouvé sur l'appareil sélectionné. Assurez-vous que l'Hôte est en mode partage.";
+                        // Ce message peut signifier que l'appareil n'a pas été trouvé OU que le service GATT n'est pas diffusé.
+                        message = "Aucun appareil compatible PC Tac trouvé. Assurez-vous que l'Hôte diffuse le service PC Tac (UUID: " + PCTAC_SERVICE_UUID + ").";
+                    } else if (error.message.includes("TypeError")) {
+                         message = "Erreur du navigateur: La requête de périphérique est invalide. Filtre non conforme. (Problème résolu dans le code, veuillez retester)";
                     }
                     showMessageModal("Échec de la connexion", message, true);
                 }
@@ -1601,7 +1604,7 @@
                 
                 // Utiliser le nom de l'intervention pour l'identification
                 const title = interventionTitleInput.value.trim() || "PC TAC HOTE";
-                showMessageModal("Partage Bluetooth Actif (Hôte)", `Ce PC est l'autorité des données. Les clients doivent chercher **${title}** dans leur liste de connexion Bluetooth.`, false);
+                showMessageModal("Partage Bluetooth Actif (Hôte)", `Ce PC est l'autorité des données. Les clients doivent chercher **${title}** dans leur liste de connexion Bluetooth. (UUID du Service: ${PCTAC_SERVICE_UUID})`, false);
                 
                 // Envoyez les données actuelles immédiatement (simule l'état initial pour les clients futurs)
                 this.broadcastData(getLogData());
