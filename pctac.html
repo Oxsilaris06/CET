@@ -797,8 +797,8 @@
         const HISTORY_STORAGE_KEY = 'pcTacHistory';
         const TITLE_STORAGE_KEY = 'pcTacTitle';
         // Limite de caractères de sécurité pour l'encodage QR Code.
-        // Augmenté à 3000 pour maximiser le volume tout en restant lisible.
-        const QR_MAX_CHAR_LIMIT = 3000; 
+        // Réduit à 1200 pour garantir une LECTURE FIABLE avec le niveau de correction H.
+        const QR_MAX_CHAR_LIMIT = 1200; 
         
         // --- COULEURS ÉTENDUES ---
         const FREE_MODE_COLORS = [
@@ -1238,7 +1238,7 @@
                     freePaxInput.value = lastPaxName;
                     paxInput.value = lastPaxName; // Mettre à jour la valeur cachée du formulaire
                 } else {
-                    // Couleur non enregistrée : vider le champ (NOUVEAU COMPORTEMENT)
+                    // Couleur non enregistrée : vider le champ 
                     freePaxInput.value = ''; 
                     paxInput.value = ''; 
                 }
@@ -1337,6 +1337,8 @@
         // Événement d'écoute pour le PAX libre
         freePaxInput.addEventListener('input', (e) => {
             const paxName = e.target.value.trim();
+            const currentColor = paxCustomColorInput.value; // Couleur actuellement sélectionnée
+            
             if (paxModeInput.value === 'free') {
                  // CHANGEMENT: paxInput prend la valeur exacte de paxName (vide si vide)
                  paxInput.value = paxName; 
@@ -1352,10 +1354,11 @@
                      s.classList.toggle('selected', s.dataset.color === savedColor);
                  });
              } else {
-                 // Réinitialiser la couleur à la première si le nom n'a jamais été vu (et sélectionner visuellement)
-                 paxCustomColorInput.value = FREE_MODE_COLORS[0].hex;
-                 Array.from(document.getElementById('free_color_palette').querySelectorAll('.color-swatch')).forEach((s, index) => {
-                     s.classList.toggle('selected', index === 0);
+                 // CORRECTION BUG: Ne pas réinitialiser la couleur à la première si le nom n'est pas trouvé.
+                 // On conserve la couleur CLIQUEE par l'utilisateur (currentColor) et on met à jour le sélecteur visuel.
+                 paxCustomColorInput.value = currentColor;
+                 Array.from(document.getElementById('free_color_palette').querySelectorAll('.color-swatch')).forEach(s => {
+                     s.classList.toggle('selected', s.dataset.color === currentColor);
                  });
              }
         });
@@ -1601,8 +1604,8 @@
                     text: qrData,
                     width: 250,
                     height: 250,
-                    // Utiliser le niveau de correction d'erreur le plus bas (L) pour la capacité maximale
-                    correctLevel: QRCode.CorrectLevel.L 
+                    // CHANGEMENT CRITIQUE: Utiliser le niveau de correction H (Haut) pour améliorer la lisibilité des téléphones
+                    correctLevel: QRCode.CorrectLevel.H 
                 });
 
                 document.getElementById('qrInfo').textContent = `${entriesToExport.length} entrée(s) transférée(s). Taille: ${qrData.length} / ${QR_MAX_CHAR_LIMIT} caractères.`;
