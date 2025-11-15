@@ -563,7 +563,7 @@
         
         <!-- Formulaire d'ajout de ligne -->
         <form id="log-form" class="log-entry-form">
-            <h3 style="color: var(--accent-blue); margin-top: 0;">Ajouter une entrée</h3>
+            <h3 style="color: var(--accent-blue); margin-top: 0;">Fil</h3>
             
             <!-- NOUVEL EMPLACEMENT du toggle : Haut à droite du formulaire -->
             <div id="pax_mode_toggle_container">
@@ -753,6 +753,7 @@
         // Variables pour suivre l'état
         let isTimeInputManuallyChanged = false;
         let paxColorMap = {}; // Map pour lier PAX libre à sa couleur
+        let colorPaxMap = {}; // Map inversée pour lier Couleur -> dernier Nom de PAX libre
 
         // --- Fonctions utilitaires ---
         
@@ -764,7 +765,7 @@
              return { r: r / 255, g: g / 255, b: b / 255 };
         }
         
-        // NOUVEAU: Factorisation du calcul de couleur de texte
+        // Factorisation du calcul de couleur de texte
         function calculateTextColor(hexColor) {
             const {r, g, b} = getHexToRgb(hexColor); 
             // Formule de luminosité (perçue)
@@ -776,7 +777,7 @@
              return Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
         }
         
-        // NOUVEAU: Affichage de la modale de message non bloquante
+        // Affichage de la modale de message non bloquante
         function showMessageModal(title, content, isError = false) {
             const modal = document.getElementById('messageModal');
             const backdrop = document.getElementById('modalBackdrop');
@@ -869,7 +870,15 @@
         function loadHistory() {
             try {
                 const dataString = localStorage.getItem(HISTORY_STORAGE_KEY);
-                return dataString ? JSON.parse(dataString) : { lieux: [], fp: [], paxColorMap: {} };
+                const history = dataString ? JSON.parse(dataString) : { lieux: [], fp: [], paxColorMap: {} };
+                // NOUVEAU: Construire la map inversée lors du chargement
+                colorPaxMap = {};
+                for (const paxName in history.paxColorMap) {
+                    const color = history.paxColorMap[paxName];
+                    // Stocker la dernière personne à avoir utilisé cette couleur
+                    colorPaxMap[color] = paxName; 
+                }
+                return history;
             } catch (e) {
                 console.error("Erreur de chargement de l'historique:", e);
                 return { lieux: [], fp: [], paxColorMap: {} };
@@ -884,18 +893,22 @@
             }
         }
 
-        // NOUVEAU: Mettre à jour l'historique et la map de couleurs
+        // Mettre à jour l'historique et la map de couleurs
         function updateHistoryAndColorMap(logData) {
             const lieux = new Set();
             const fp = new Set();
             const newPaxColorMap = {};
+            const newColorPaxMap = {}; // Réinitialiser la map inversée
 
             logData.forEach(entry => {
                 if (entry.lieu) lieux.add(entry.lieu.trim());
                 if (entry.fenetrePorte) fp.add(entry.fenetrePorte.trim());
 
                 if (entry.paxMode === 'free' && entry.paxColor) {
+                    // Mettre à jour la map PAX -> Couleur
                     newPaxColorMap[entry.pax] = entry.paxColor;
+                    // Mettre à jour la map Couleur -> PAX (le dernier vu gagne)
+                    newColorPaxMap[entry.paxColor] = entry.pax;
                 }
             });
 
@@ -905,8 +918,9 @@
                 paxColorMap: newPaxColorMap
             };
             
-            // Mise à jour de la map globale pour le mode libre
+            // Mise à jour des maps globales pour le mode libre
             paxColorMap = newPaxColorMap; 
+            colorPaxMap = newColorPaxMap; 
 
             saveHistory(history);
             updateDatalists(history.lieux, history.fp);
@@ -969,7 +983,7 @@
                 // paxColor n'est stocké que si c'est du mode libre
                 row.dataset.paxcolor = isFreeMode ? paxColor : ''; 
                 
-                // NOUVEAU: Mise en évidence de la nouvelle ligne
+                // Mise en évidence de la nouvelle ligne
                 if (entry.id === newEntryId) {
                     row.classList.add('just-added');
                 }
@@ -1026,6 +1040,8 @@
             } else {
                 paxName = freePaxInput.value.trim();
                 paxColorHex = paxCustomColorInput.value;
+                
+                // Le champ PAX libre DOIT être non vide
                 if (!paxName) {
                      showMessageModal("Erreur de saisie", "Veuillez donner un nom à l'intervenant TP.", true);
                      return;
@@ -1060,10 +1076,10 @@
             // Rendu avec l'ID pour le flash
             renderLogTable(logData, newId); 
             
-            // Si c'est un PAX libre, sélectionner la couleur utilisée dans le picker pour la prochaine entrée
+            // Si c'est un PAX libre, mettre à jour la map PAX -> Couleur et la map inversée
             if (mode === 'free') {
-                 // Met à jour l'historique des couleurs
                  paxColorMap[paxName] = paxColorHex; 
+                 colorPaxMap[paxColorHex] = paxName; // Mettre à jour la map inversée
             }
 
             // Réinitialisation des champs pour la prochaine entrée
@@ -1081,7 +1097,7 @@
             renderLogTable(logData);
         }
 
-        // NOUVEAU: Fonction de tri (non implémentée avant)
+        // Fonction de tri (non implémentée avant)
         function sortLogTableByTime() {
              const logData = getLogData();
              logData.sort((a, b) => {
@@ -1095,6 +1111,29 @@
 
         // --- 2. Logique de sélection Pax (Standard et Libre) ---
         
+        function handleColorSwatchClick() {
+            // Mettre à jour le sélecteur visuel et l'input couleur
+            Array.from(document.getElementById('free_color_palette').querySelectorAll('.color-swatch')).forEach(s => s.classList.remove('selected'));
+            this.classList.add('selected');
+            const selectedColor = this.dataset.color;
+            paxCustomColorInput.value = selectedColor;
+
+            // Remplissage automatique du PAX libre si la couleur est déjà associée à un nom
+            if (paxModeInput.value === 'free') {
+                if (colorPaxMap[selectedColor]) {
+                    // Couleur enregistrée : pré-remplir le champ
+                    const lastPaxName = colorPaxMap[selectedColor];
+                    freePaxInput.value = lastPaxName;
+                    paxInput.value = lastPaxName; // Mettre à jour la valeur cachée du formulaire
+                } else {
+                    // Couleur non enregistrée : vider le champ (NOUVEAU COMPORTEMENT)
+                    freePaxInput.value = ''; 
+                    paxInput.value = ''; 
+                }
+                freePaxInput.focus(); // Focus pour saisie/modification rapide
+            }
+        }
+
         // Initialisation du mode PAX et de la palette de couleurs
         function initPaxModeAndColors() {
             // Initialisation de la palette de couleurs libre
@@ -1110,11 +1149,8 @@
                     swatch.style.borderColor = '#000000';
                 }
 
-                swatch.addEventListener('click', function() {
-                    Array.from(paletteContainer.querySelectorAll('.color-swatch')).forEach(s => s.classList.remove('selected'));
-                    this.classList.add('selected');
-                    paxCustomColorInput.value = this.dataset.color;
-                });
+                // Utiliser le nouvel écouteur
+                swatch.addEventListener('click', handleColorSwatchClick);
                 paletteContainer.appendChild(swatch);
             });
             
@@ -1163,22 +1199,21 @@
                  const selectedOption = paxSelectContainer.querySelector('.pax-select-option.selected');
                  paxInput.value = selectedOption ? selectedOption.dataset.pax : 'Adversaire';
             } else {
-                 // En mode libre, le champ libre gère la valeur de pax_input
-                 paxInput.value = freePaxInput.value.trim() || 'Pax Libre';
+                 // CHANGEMENT: Vider le champ de saisie du PAX libre à l'activation du mode
+                 freePaxInput.value = ''; 
+                 paxInput.value = ''; 
+
+                 // Déterminer la couleur par défaut (la première couleur)
+                 const defaultColor = FREE_MODE_COLORS[0].hex;
+                 paxCustomColorInput.value = defaultColor;
+                 
+                 // Mettre à jour le sélecteur visuel à la première couleur (puisque le champ est vide)
+                 Array.from(document.getElementById('free_color_palette').querySelectorAll('.color-swatch')).forEach((s, index) => {
+                    s.classList.toggle('selected', index === 0);
+                 });
+                 
                  // OPTIMISATION TP: Mettre le focus sur le champ de texte en mode libre pour saisie rapide
                  freePaxInput.focus();
-                 
-                 // NOUVEAU: Mettre à jour la couleur du Pax libre en fonction du nom déjà entré
-                 const currentPaxName = freePaxInput.value.trim();
-                 if (currentPaxName && paxColorMap[currentPaxName]) {
-                    const savedColor = paxColorMap[currentPaxName];
-                    paxCustomColorInput.value = savedColor;
-                    
-                    // Mettre à jour le sélecteur visuel
-                    Array.from(document.getElementById('free_color_palette').querySelectorAll('.color-swatch')).forEach(s => {
-                        s.classList.toggle('selected', s.dataset.color === savedColor);
-                    });
-                 }
             }
         }
         
@@ -1191,10 +1226,11 @@
         freePaxInput.addEventListener('input', (e) => {
             const paxName = e.target.value.trim();
             if (paxModeInput.value === 'free') {
-                 paxInput.value = paxName || 'Pax Libre';
+                 // CHANGEMENT: paxInput prend la valeur exacte de paxName (vide si vide)
+                 paxInput.value = paxName; 
             }
             
-            // NOUVEAU: Mettre à jour la couleur du Pax libre en fonction du nom déjà entré
+            // Mettre à jour la couleur du Pax libre en fonction du nom déjà entré
              if (paxColorMap[paxName]) {
                 const savedColor = paxColorMap[paxName];
                 paxCustomColorInput.value = savedColor;
@@ -1335,7 +1371,7 @@
                         const validatedEntries = jsonContent.logEntries.map(entry => {
                             let newId = entry.id;
                             
-                            // NOUVEAU: Vérifier et générer un nouvel ID si l'ID existe déjà
+                            // Vérifier et générer un nouvel ID si l'ID existe déjà
                             if (currentIds.has(entry.id)) {
                                 console.warn(`ID en conflit trouvé: ${entry.id}. Génération d'un nouvel ID.`);
                                 newId = generateUniqueId();
@@ -1508,7 +1544,7 @@
                 
                 context.currentPage.drawRectangle({ x: 0, y: 0, width: context.pageWidth, height: context.pageHeight, color: context.colors.background });
                 
-                // NOUVEAU: Affichage du titre d'intervention
+                // Affichage du titre d'intervention
                 context.currentPage.drawText(`PC TAC - ${context.interventionTitle}`, {
                     x: context.margin, y: context.pageHeight - context.margin / 2,
                     font: context.helveticaBoldFont, size: 14, color: context.colors.text
@@ -1784,6 +1820,7 @@
             localStorage.removeItem(TITLE_STORAGE_KEY);
 
             paxColorMap = {};
+            colorPaxMap = {}; // Réinitialiser la map inversée
             
             renderLogTable([]);
             hideResetModal();
@@ -1847,15 +1884,18 @@
 
             // 7.3 Initialisation du formulaire et des données
             logForm.addEventListener('submit', handleAddLogEntry);
-            initPaxModeAndColors(); // Utiliser la nouvelle fonction d'initialisation
             
             // Chargement de l'historique et du titre
             const history = loadHistory();
             paxColorMap = history.paxColorMap;
+            // La map inversée colorPaxMap est construite dans loadHistory()
             updateDatalists(history.lieux, history.fp);
             loadTitle();
             interventionTitleInput.addEventListener('input', saveTitle);
             
+            // Initialisation des modes PAX (à exécuter APRÈS le chargement de l'historique pour l'autocomplétion)
+            initPaxModeAndColors();
+
             // 7.4 Logique Drag & Drop sur le corps du tableau
             logTableBody.addEventListener('dragover', (e) => handleDragOver.call(e.target.closest('tr') || logTableBody, e));
             logTableBody.addEventListener('drop', handleDrop);
@@ -1882,7 +1922,7 @@
                  }
             });
             
-            // NOUVEAU: Bouton Trier
+            // Bouton Trier
             sortTimeBtn.addEventListener('click', sortLogTableByTime);
         });
     </script>
