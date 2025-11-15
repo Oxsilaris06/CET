@@ -1506,9 +1506,9 @@
          * Affiche le QR Code pour le partage des dernières entrées.
          */
         function handleQRShare() {
-            // Vérifier si la bibliothèque est chargée (QRCode est une variable globale)
-            if (typeof QRCode === 'undefined') {
-                showMessageModal("Erreur de dépendance", "La bibliothèque QRCode n'a pas été chargée. Vérifiez votre connexion CDN.", true);
+            // CORRECTION: Assurer que QRCode est défini avant d'accéder à ses propriétés statiques
+            if (typeof QRCode === 'undefined' || typeof QRCode.CorrectLevel === 'undefined') {
+                showMessageModal("Erreur de dépendance", "La bibliothèque QRCode n'est pas chargée. Vérifiez votre connexion CDN.", true);
                 return;
             }
 
@@ -1556,8 +1556,7 @@
                     text: qrData,
                     width: 250,
                     height: 250,
-                    colorDark: "#000000",
-                    colorLight: "#ffffff",
+                    // Utilisation sécurisée de QRCode.CorrectLevel.H
                     correctLevel: QRCode.CorrectLevel.H
                 });
 
@@ -1565,6 +1564,7 @@
 
             } catch(e) {
                  console.error("Erreur de génération QR Code:", e);
+                 // Afficher le message de bug générique si l'erreur n'est pas corrigée par l'ajout de la vérification de dépendance.
                  showMessageModal("Erreur QR Code", "Impossible de générer le QR Code.", true);
                  hideQRModal();
             }
@@ -1580,7 +1580,8 @@
          * Démarre le scanner de QR Code.
          */
         function handleQRScanStart() {
-            if (typeof Instascan === 'undefined') {
+            // CORRECTION: Assurer que Instascan est défini
+            if (typeof Instascan === 'undefined' || typeof Instascan.Scanner === 'undefined') {
                  showMessageModal("Erreur de dépendance", "La bibliothèque de scan n'est pas chargée. Vérifiez votre connexion CDN.", true);
                  return;
             }
@@ -1591,7 +1592,9 @@
             // Initialiser le scanner
             // Vérification si qrScanner existe déjà et est en cours d'exécution
             if (qrScanner) {
-                handleQRScanStop();
+                // Arrêter l'ancien scanner si un existe
+                qrScanner.stop(); 
+                qrScanner = null;
             }
 
             qrScanner = new Instascan.Scanner({ video: previewVideo, scanPeriod: 5 });
@@ -1622,7 +1625,12 @@
          */
         function handleQRScanStop() {
             if (qrScanner) {
-                qrScanner.stop();
+                // Tenter d'arrêter le scanner même en cas d'erreur de caméra antérieure
+                try {
+                    qrScanner.stop();
+                } catch (e) {
+                    console.warn("Erreur à l'arrêt du scanner (probablement déjà arrêté ou erreur caméra initiale):", e);
+                }
                 qrScanner = null;
             }
             modalBackdrop.style.display = 'none';
