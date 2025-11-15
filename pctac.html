@@ -451,19 +451,23 @@
         @media (max-width: 600px) {
             body { padding-bottom: 70px; } 
             .dock-menu {
-                width: auto; 
+                /* Permet de déborder mais maintient le centrage et la zone de clic */
+                width: 95vw; 
                 padding: 6px; 
-                gap: 8px; 
+                gap: 5px; /* Réduit l'espacement pour plus d'items */
                 justify-content: center; 
                 min-width: unset;
+                overflow-x: auto; /* Autorise le défilement horizontal si nécessaire */
             }
             .dock-menu-item {
                 width: 38px; 
                 height: 38px; 
                 font-size: 20px; 
+                flex-shrink: 0; /* Empêche les items de rétrécir */
             }
              .dock-menu.collapsed {
                 width: 38px; 
+                overflow: hidden; /* Cache le débordement quand réduit */
              }
         }
 
@@ -759,7 +763,7 @@
     </div>
 
     <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
-    <!-- Bibliothèques pour le QR Code -->
+    <!-- Bibliothèques pour le QR Code (chargement global nécessaire pour l'accès) -->
     <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/instascan@1.0.0/instascan.min.js"></script>
     <script>
@@ -1428,7 +1432,11 @@
              showMessageModal("Exportation réussie", `Les données ont été exportées sous le nom : ${fileName}`, false);
         }
         
-        async function importJson(event) {
+        /**
+         * Gère la lecture du fichier JSON et appelle la fonction d'importation des données.
+         * @param {Event} event - L'événement de changement de fichier.
+         */
+        async function handleJsonFileImport(event) {
             const file = event.target.files[0];
             if (!file) return;
 
@@ -1437,18 +1445,24 @@
                 try {
                     const jsonContent = JSON.parse(e.target.result);
                     
-                    importLogData(jsonContent.logEntries, jsonContent.metadata.title);
+                    if (!jsonContent.metadata || jsonContent.metadata.appName !== "PC Tac Log" || !Array.isArray(jsonContent.logEntries)) {
+                        throw new Error("Fichier JSON invalide. Assurez-vous qu'il provient d'une exportation PC Tac.");
+                    }
+                    
+                    const title = jsonContent.metadata.title || null;
+                    importLogData(jsonContent.logEntries, title);
                     
                 } catch (error) {
                     console.error("Erreur lors de l'importation JSON:", error);
                     showMessageModal("Erreur d'importation", `Erreur : ${error.message}`, true);
                 } finally {
-                    jsonImportInput.value = ''; 
+                    jsonImportInput.value = ''; // Réinitialiser le champ de fichier
                     initPaxModeAndColors(); // Réinitialiser le mode PAX du formulaire
                 }
             };
             reader.readAsText(file);
         }
+
 
         // --- 5. Fonctions QR Code (Nouveau Bloc) ---
 
@@ -1459,7 +1473,8 @@
         function calculateMaxQrEntries(logData) {
             let entriesToExport = [];
             let currentSize = 0;
-            const metadataTemplate = { metadata: { appName: "PC Tac Log QR", version: "1.0" }, logEntries: [] };
+            // Structure minimaliste de l'objet d'exportation pour le calcul de base
+            const metadataTemplate = { m: { a: "PC Tac Log QR", v: "1.0" }, l: [] };
             const baseSize = JSON.stringify(metadataTemplate).length;
 
             // Estimation conservatrice de l'espace restant pour les logs
@@ -1472,8 +1487,9 @@
 
             for (const entry of reversedLogData) {
                 // Créer une version minimaliste de l'entrée pour le QR Code
-                const minimalEntry = { h: entry.heure, p: entry.pax, m: entry.paxMode, c: entry.paxColor, l: entry.lieu, f: entry.fenetrePorte, r: entry.remarques };
-                const entrySize = JSON.stringify(minimalEntry).length;
+                const minimalEntry = { h: entry.heure, p: entry.paxMode === 'standard' ? entry.pax : entry.pax, d: entry.paxMode, c: entry.paxColor, l: entry.lieu, f: entry.fenetrePorte, r: entry.remarques };
+                // La taille de l'entrée sérialisée plus la virgule et les crochets (approximativement)
+                const entrySize = JSON.stringify(minimalEntry).length + 2; 
 
                 if (currentSize + entrySize < maxAvailableSpace) {
                     currentSize += entrySize;
@@ -1483,7 +1499,6 @@
                 }
             }
 
-            // Retourner le nombre d'entrées (triées à l'origine)
             return entriesToExport.length;
         }
 
@@ -1491,6 +1506,12 @@
          * Affiche le QR Code pour le partage des dernières entrées.
          */
         function handleQRShare() {
+            // Vérifier si la bibliothèque est chargée (QRCode est une variable globale)
+            if (typeof QRCode === 'undefined') {
+                showMessageModal("Erreur de dépendance", "La bibliothèque QRCode n'a pas été chargée. Vérifiez votre connexion CDN.", true);
+                return;
+            }
+
             const logData = getLogData();
 
             if (logData.length === 0) {
@@ -1502,7 +1523,7 @@
             const entriesToExport = logData.slice(logData.length - maxEntries);
 
             if (maxEntries === 0) {
-                 showMessageModal("Erreur de taille", "Les données sont trop volumineuses pour tenir dans un QR code. Essayez de réinitialiser le journal.", true);
+                 showMessageModal("Erreur de taille", `Même l'entrée la plus récente dépasse la limite de ${QR_MAX_CHAR_LIMIT} caractères.`, true);
                  return;
             }
 
@@ -1511,7 +1532,7 @@
                 m: { a: "PC Tac Log QR", v: "1.0" }, // Metadata minimaliste
                 l: entriesToExport.map(entry => ({
                     h: entry.heure,
-                    p: entry.paxMode === 'standard' ? entry.pax : entry.pax, // Garder le nom pour libre
+                    p: entry.pax, 
                     d: entry.paxMode, // mode: standard/free
                     c: entry.paxColor, // couleur (si libre)
                     l: entry.lieu,
@@ -1560,7 +1581,7 @@
          */
         function handleQRScanStart() {
             if (typeof Instascan === 'undefined') {
-                 showMessageModal("Erreur de Scan", "La bibliothèque de scan n'est pas chargée. Vérifiez votre connexion.", true);
+                 showMessageModal("Erreur de dépendance", "La bibliothèque de scan n'est pas chargée. Vérifiez votre connexion CDN.", true);
                  return;
             }
 
@@ -1568,6 +1589,11 @@
             scannerModal.style.display = 'block';
             
             // Initialiser le scanner
+            // Vérification si qrScanner existe déjà et est en cours d'exécution
+            if (qrScanner) {
+                handleQRScanStop();
+            }
+
             qrScanner = new Instascan.Scanner({ video: previewVideo, scanPeriod: 5 });
 
             qrScanner.addListener('scan', function (content) {
@@ -1578,14 +1604,15 @@
             
             Instascan.Camera.getCameras().then(function (cameras) {
                 if (cameras.length > 0) {
-                    qrScanner.start(cameras[0]);
+                    // Utiliser la caméra arrière par défaut si disponible
+                    qrScanner.start(cameras[cameras.length - 1]); 
                 } else {
                     showMessageModal("Erreur Caméra", "Aucune caméra n'a été détectée. Le scan QR est impossible.", true);
                     handleQRScanStop();
                 }
             }).catch(function (e) {
                 console.error("Erreur de caméra/permissions:", e);
-                showMessageModal("Erreur Caméra", `Erreur d'accès à la caméra : ${e.name}`, true);
+                showMessageModal("Erreur Caméra", `Erreur d'accès à la caméra : ${e.name}. Vérifiez les permissions du navigateur.`, true);
                 handleQRScanStop();
             });
         }
@@ -1618,7 +1645,8 @@
                  
                  // Reconstruire la structure d'entrée complète pour la validation
                  const logEntries = jsonContent.l.map(minEntry => ({
-                    id: generateUniqueId(), // Toujours générer de nouveaux IDs pour l'import QR
+                    // Utilisation de generateUniqueId() pour garantir l'unicité
+                    id: generateUniqueId(), 
                     heure: minEntry.h || '00:00',
                     pax: minEntry.p,
                     paxMode: minEntry.d || (PDF_PAX_COLORS[minEntry.p] ? 'standard' : 'free'),
@@ -1628,7 +1656,8 @@
                     remarques: minEntry.r || '',
                  }));
 
-                 importLogData(logEntries);
+                 // L'import QR ne contient pas de titre, donc titre = null
+                 importLogData(logEntries, null);
 
             } else {
                 showMessageModal("Erreur de format", "Le QR Code ne correspond pas au format de partage PC Tac.", true);
@@ -1652,7 +1681,8 @@
              // Ajouter un ID unique si l'entrée n'en a pas (pour le JSON file import)
              const validatedEntries = newEntries.map(entry => ({
                  ...entry, 
-                 id: entry.id || generateUniqueId()
+                 // Sécurité: assure que les entrées importées ont un nouvel ID pour éviter les conflits
+                 id: generateUniqueId()
              }));
 
              const currentData = getLogData();
@@ -1669,236 +1699,279 @@
         
         // --- 6. Génération PDF (Non Modifié) ---
         
-        // ... (fonctions buildPdf, downloadPdf, etc. non modifiées)
-        // [Contenu des fonctions PDF omis pour concision]
+        function wrapTextForPdf(font, fontSize, text, maxWidth) {
+            text = String(text || ''); 
+            const token = ' \n ';
+            const chunks = text.replace(/\r?\n/g, token).split(' ');
+            let lines = []; 
+            let currentLine = '';
+
+            for (const chunk of chunks) {
+                if (chunk === '\n') { 
+                    lines.push(currentLine.trim()); 
+                    currentLine = ''; 
+                    continue; 
+                }
+                
+                const lineWithChunk = currentLine === '' ? chunk : `${currentLine} ${chunk}`;
+                
+                if (font.widthOfTextAtSize(lineWithChunk, fontSize) > maxWidth && currentLine !== '') { 
+                    lines.push(currentLine.trim()); 
+                    currentLine = chunk; 
+                } else { 
+                    currentLine = lineWithChunk; 
+                }
+            }
+            
+            lines.push(currentLine.trim()); 
+            return lines.filter(line => line.length > 0);
+        }
+        
+        function getPdfColors(isDarkMode, rgb) {
+            if (isDarkMode) {
+                return {
+                    background: rgb(0, 0, 0),
+                    text: rgb(1, 1, 1),
+                    line: rgb(1, 1, 1),
+                };
+            } else {
+                return {
+                    background: rgb(1, 1, 1),
+                    text: rgb(0, 0, 0),
+                    line: rgb(0, 0, 0),
+                };
+            }
+        }
+
+        let pdfRgb; 
 
         async function buildPdf() {
-             if (typeof PDFLib === 'undefined') { throw new Error("PDFLib non chargé."); }
+            if (typeof PDFLib === 'undefined') { throw new Error("PDFLib non chargé."); }
 
-             const { PDFDocument, StandardFonts, rgb, PageSizes } = PDFLib;
-             pdfRgb = rgb; 
-             
-             const pdfDoc = await PDFDocument.create();
-             let helveticaFont, helveticaBoldFont;
-             try {
-                 helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
-                 helveticaBoldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-             } catch (e) {
-                 console.error("Erreur de chargement des polices PDF standard:", e);
-                 return null;
-             }
-             
-             const logData = getLogData();
-             const interventionTitle = interventionTitleInput.value.trim() || "Journal d'intervention";
-             const isDarkMode = document.body.classList.contains('dark-mode');
-             const pdfThemeColors = getPdfColors(isDarkMode, rgb); 
-             
-             const pageConfig = { 
-                 width: PageSizes.A4[1], 
-                 height: PageSizes.A4[0],
-                 margin: 30,
-                 fontSize: 10,
-                 lineHeight: 14
-             };
-             const colWidths = [0.10, 0.15, 0.20, 0.20, 0.35]; 
-             
-             const context = {
-                 pdfDoc, helveticaFont, helveticaBoldFont,
-                 currentPage: null, 
-                 y: 0, 
-                 pageNumber: 0,
-                 pageWidth: pageConfig.width,
-                 pageHeight: pageConfig.height,
-                 margin: pageConfig.margin,
-                 fontSize: pageConfig.fontSize,
-                 lineHeight: pageConfig.lineHeight,
-                 colors: {
-                     ...pdfThemeColors, 
-                     // Couleurs PAX Standard (RGB)
-                     adversaire: rgb(0xbe/255, 0x1b/255, 0x09/255), 
-                     otage: rgb(0xf1/255, 0xc4/255, 0x0f/255), 
-                     inter: rgb(0x34/255, 0x98/255, 0xdb/255), 
-                     ao: rgb(0x2e/255, 0xcc/255, 0x71/255) 
-                 },
-                 interventionTitle: interventionTitle
-             };
-             
-             const drawFooter = () => {
-                 const footerText = `Page ${context.pageNumber}`;
-                 const textWidth = context.helveticaFont.widthOfTextAtSize(footerText, context.fontSize);
-                 
-                 context.currentPage.drawText(footerText, {
-                     x: (context.pageWidth / 2) - (textWidth / 2), 
-                     y: context.margin / 2, 
-                     font: context.helveticaFont, 
-                     size: context.fontSize, 
-                     color: context.colors.text
-                 });
-             };
+            const { PDFDocument, StandardFonts, rgb, PageSizes } = PDFLib;
+            pdfRgb = rgb; 
+            
+            const pdfDoc = await PDFDocument.create();
+            let helveticaFont, helveticaBoldFont;
+            try {
+                helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
+                helveticaBoldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+            } catch (e) {
+                console.error("Erreur de chargement des polices PDF standard:", e);
+                return null;
+            }
+            
+            const logData = getLogData();
+            const interventionTitle = interventionTitleInput.value.trim() || "Journal d'intervention";
+            const isDarkMode = document.body.classList.contains('dark-mode');
+            const pdfThemeColors = getPdfColors(isDarkMode, rgb); 
+            
+            const pageConfig = { 
+                width: PageSizes.A4[1], 
+                height: PageSizes.A4[0],
+                margin: 30,
+                fontSize: 10,
+                lineHeight: 14
+            };
+            const colWidths = [0.10, 0.15, 0.20, 0.20, 0.35]; 
+            
+            const context = {
+                pdfDoc, helveticaFont, helveticaBoldFont,
+                currentPage: null, 
+                y: 0, 
+                pageNumber: 0,
+                pageWidth: pageConfig.width,
+                pageHeight: pageConfig.height,
+                margin: pageConfig.margin,
+                fontSize: pageConfig.fontSize,
+                lineHeight: pageConfig.lineHeight,
+                colors: {
+                    ...pdfThemeColors, 
+                    // Couleurs PAX Standard (RGB)
+                    adversaire: rgb(0xbe/255, 0x1b/255, 0x09/255), 
+                    otage: rgb(0xf1/255, 0xc4/255, 0x0f/255), 
+                    inter: rgb(0x34/255, 0x98/255, 0xdb/255), 
+                    ao: rgb(0x2e/255, 0xcc/255, 0x71/255) 
+                },
+                interventionTitle: interventionTitle
+            };
+            
+            const drawFooter = () => {
+                const footerText = `Page ${context.pageNumber}`;
+                const textWidth = context.helveticaFont.widthOfTextAtSize(footerText, context.fontSize);
+                
+                context.currentPage.drawText(footerText, {
+                    x: (context.pageWidth / 2) - (textWidth / 2), 
+                    y: context.margin / 2, 
+                    font: context.helveticaFont, 
+                    size: context.fontSize, 
+                    color: context.colors.text
+                });
+            };
 
-             const addNewPage = () => {
-                 if (context.currentPage) { drawFooter(); }
+            const addNewPage = () => {
+                if (context.currentPage) { drawFooter(); }
 
-                 context.currentPage = context.pdfDoc.addPage([PageSizes.A4[1], PageSizes.A4[0]]); 
-                 context.pageNumber++;
-                 context.pageWidth = context.currentPage.getWidth();
-                 context.pageHeight = context.currentPage.getHeight();
-                 context.y = context.pageHeight - context.margin;
-                 
-                 context.currentPage.drawRectangle({ x: 0, y: 0, width: context.pageWidth, height: context.pageHeight, color: context.colors.background });
-                 
-                 // Affichage du titre d'intervention
-                 context.currentPage.drawText(`PC TAC - ${context.interventionTitle}`, {
-                     x: context.margin, y: context.pageHeight - context.margin / 2,
-                     font: context.helveticaBoldFont, size: 14, color: context.colors.text
-                 });
-                 
-                 context.y = context.pageHeight - context.margin - 20; 
-             };
+                context.currentPage = context.pdfDoc.addPage([PageSizes.A4[1], PageSizes.A4[0]]); 
+                context.pageNumber++;
+                context.pageWidth = context.currentPage.getWidth();
+                context.pageHeight = context.currentPage.getHeight();
+                context.y = context.pageHeight - context.margin;
+                
+                context.currentPage.drawRectangle({ x: 0, y: 0, width: context.pageWidth, height: context.pageHeight, color: context.colors.background });
+                
+                // Affichage du titre d'intervention
+                context.currentPage.drawText(`PC TAC - ${context.interventionTitle}`, {
+                    x: context.margin, y: context.pageHeight - context.margin / 2,
+                    font: context.helveticaBoldFont, size: 14, color: context.colors.text
+                });
+                
+                context.y = context.pageHeight - context.margin - 20; 
+            };
 
-             const checkY = (spaceNeeded) => { 
-                 if (context.y - spaceNeeded < context.margin * 1.5) { 
-                     addNewPage(); 
-                     drawTableHeader();
-                     return true; 
-                 } 
-                 return false; 
-             };
-             
-             const drawTableHeader = () => {
-                  const headers = ["Heure", "Pax", "Lieu", "Fenêtre/Porte", "Remarques"];
-                  let currentX = context.margin;
-                  const tableY = context.y;
-                  const headerHeight = context.lineHeight + 5;
-                  
-                  context.currentPage.drawLine({
-                     start: { x: context.margin, y: tableY - 1 },
-                     end: { x: context.pageWidth - context.margin, y: tableY - 1 },
-                     color: context.colors.line, thickness: 1
-                  });
-
-                  headers.forEach((header, i) => {
-                      const colWidth = context.pageWidth * colWidths[i];
-                      const x = currentX;
-                      
-                      context.currentPage.drawText(header, {
-                          x: x + 2, y: tableY - headerHeight + 5,
-                          font: context.helveticaBoldFont, size: context.fontSize, color: context.colors.text
-                      });
-                      
-                      currentX += colWidth;
-                  });
-                  context.y -= headerHeight;
-             };
-
-             const drawLogEntry = (entry) => {
-                 
-                 let paxColorHex, paxText, paxTextColor;
-                 const isFreeMode = entry.paxMode === 'free';
-
-                 if (isFreeMode) {
-                     paxColorHex = entry.paxColor || FREE_MODE_COLORS[0].hex;
-                     paxText = entry.pax;
-                     paxTextColor = calculateTextColor(paxColorHex) === '#000000' ? pdfRgb(0, 0, 0) : pdfRgb(1, 1, 1);
-                 } else {
-                     const paxInfo = PDF_PAX_COLORS[entry.pax] || PDF_PAX_COLORS['Adversaire'];
-                     paxColorHex = paxInfo.color;
-                     paxText = paxInfo.text;
-                     paxTextColor = paxInfo.fontColor === '#000000' ? pdfRgb(0, 0, 0) : pdfRgb(1, 1, 1);
-                 }
-                 
-                 const { r, g, b } = getHexToRgb(paxColorHex); 
-                 const paxPdfColor = pdfRgb(r, g, b); 
-                 
-                 const colWidthsPx = colWidths.map(ratio => context.pageWidth * ratio - 4);
-
-                 const parts = [
-                     { text: entry.heure, colIndex: 0, font: context.helveticaFont, size: context.fontSize, color: context.colors.text },
-                     { text: paxText, colIndex: 1, font: context.helveticaBoldFont, size: context.fontSize, color: paxTextColor, isPax: true }, 
-                     { text: entry.lieu, colIndex: 2, font: context.helveticaFont, size: context.fontSize, color: context.colors.text }, 
-                     { text: entry.fenetrePorte, colIndex: 3, font: context.helveticaFont, size: context.fontSize, color: context.colors.text },
-                     { text: entry.remarques, colIndex: 4, font: context.helveticaFont, size: context.fontSize, color: context.colors.text },
-                 ];
-                 
-                 let allLines = parts.map((part, i) => {
-                     part.text = String(part.text || '').trim();
-                     if (!part.text) return ['']; 
-                     return wrapTextForPdf(part.font, part.size, part.text, colWidthsPx[i]);
-                 });
-
-                 const maxLines = allLines.reduce((max, lines) => Math.max(max, lines.length), 1);
-                 const rowHeight = maxLines * context.lineHeight + 5;
-                 if (checkY(rowHeight)) return;
-
+            const checkY = (spaceNeeded) => { 
+                if (context.y - spaceNeeded < context.margin * 1.5) { 
+                    addNewPage(); 
+                    drawTableHeader();
+                    return true; 
+                } 
+                return false; 
+            };
+            
+            const drawTableHeader = () => {
+                 const headers = ["Heure", "Pax", "Lieu", "Fenêtre/Porte", "Remarques"];
                  let currentX = context.margin;
                  const tableY = context.y;
+                 const headerHeight = context.lineHeight + 5;
+                 
+                 context.currentPage.drawLine({
+                    start: { x: context.margin, y: tableY - 1 },
+                    end: { x: context.pageWidth - context.margin, y: tableY - 1 },
+                    color: context.colors.line, thickness: 1
+                 });
 
-                 parts.forEach((part, i) => {
+                 headers.forEach((header, i) => {
                      const colWidth = context.pageWidth * colWidths[i];
                      const x = currentX;
-                     const textLines = allLines[i];
                      
-                     if (i === 1) { // Colonne PAX
-                         const bgX = x + 1;
-                         const paxBlockHeight = context.lineHeight + 4; 
-                         const paxBlockY = tableY - rowHeight + (rowHeight - paxBlockHeight) / 2;
-                         
-                         context.currentPage.drawRectangle({
-                             x: bgX,
-                             y: paxBlockY, 
-                             width: colWidthsPx[i] - 2, 
-                             height: paxBlockHeight,
-                             color: paxPdfColor, 
-                             opacity: 1,
-                             borderWidth: 0
-                         });
-                         
-                         const text = textLines[0] || '';
-                         const textWidth = part.font.widthOfTextAtSize(text, part.size);
-                         const textX = bgX + (colWidthsPx[i] - textWidth) / 2;
-                         const textY = paxBlockY + (paxBlockHeight - part.size) / 2 + 1; 
-                         
-                         context.currentPage.drawText(text, {
-                             x: textX, y: textY, 
-                             font: part.font, size: part.size, color: part.color
-                         });
-
-                     } else { // Autres colonnes (multi-lignes)
-                         textLines.forEach((line, lineIndex) => {
-                             const textY = tableY - context.lineHeight - (lineIndex * context.lineHeight) - 2;
-                             
-                             if (line) {
-                                 context.currentPage.drawText(line, {
-                                     x: x + 2, y: textY, 
-                                     font: part.font, size: part.size, color: part.color
-                                 });
-                             }
-                         });
-                     }
+                     context.currentPage.drawText(header, {
+                         x: x + 2, y: tableY - headerHeight + 5,
+                         font: context.helveticaBoldFont, size: context.fontSize, color: context.colors.text
+                     });
                      
                      currentX += colWidth;
                  });
-                 
-                 context.currentPage.drawLine({
-                     start: { x: context.margin, y: tableY - rowHeight + 1 },
-                     end: { x: context.pageWidth - context.margin, y: tableY - rowHeight + 1 },
-                     color: context.colors.line, thickness: 0.5, opacity: 0.5
-                 });
+                 context.y -= headerHeight;
+            };
 
-                 context.y -= rowHeight;
-             };
+            const drawLogEntry = (entry) => {
+                
+                let paxColorHex, paxText, paxTextColor;
+                const isFreeMode = entry.paxMode === 'free';
 
-             addNewPage();
-             drawTableHeader();
-             
-             logData.forEach(entry => {
-                 drawLogEntry(entry);
-             });
-             
-             drawFooter();
+                if (isFreeMode) {
+                    paxColorHex = entry.paxColor || FREE_MODE_COLORS[0].hex;
+                    paxText = entry.pax;
+                    paxTextColor = calculateTextColor(paxColorHex) === '#000000' ? pdfRgb(0, 0, 0) : pdfRgb(1, 1, 1);
+                } else {
+                    const paxInfo = PDF_PAX_COLORS[entry.pax] || PDF_PAX_COLORS['Adversaire'];
+                    paxColorHex = paxInfo.color;
+                    paxText = paxInfo.text;
+                    paxTextColor = paxInfo.fontColor === '#000000' ? pdfRgb(0, 0, 0) : pdfRgb(1, 1, 1);
+                }
+                
+                const { r, g, b } = getHexToRgb(paxColorHex); 
+                const paxPdfColor = pdfRgb(r, g, b); 
+                
+                const colWidthsPx = colWidths.map(ratio => context.pageWidth * ratio - 4);
 
-             const pdfBytes = await pdfDoc.save();
-             return pdfBytes;
+                const parts = [
+                    { text: entry.heure, colIndex: 0, font: context.helveticaFont, size: context.fontSize, color: context.colors.text },
+                    { text: paxText, colIndex: 1, font: context.helveticaBoldFont, size: context.fontSize, color: paxTextColor, isPax: true }, 
+                    { text: entry.lieu, colIndex: 2, font: context.helveticaFont, size: context.fontSize, color: context.colors.text }, 
+                    { text: entry.fenetrePorte, colIndex: 3, font: context.helveticaFont, size: context.fontSize, color: context.colors.text },
+                    { text: entry.remarques, colIndex: 4, font: context.helveticaFont, size: context.fontSize, color: context.colors.text },
+                ];
+                
+                let allLines = parts.map((part, i) => {
+                    part.text = String(part.text || '').trim();
+                    if (!part.text) return ['']; 
+                    return wrapTextForPdf(part.font, part.size, part.text, colWidthsPx[i]);
+                });
+
+                const maxLines = allLines.reduce((max, lines) => Math.max(max, lines.length), 1);
+                const rowHeight = maxLines * context.lineHeight + 5;
+                if (checkY(rowHeight)) return;
+
+                let currentX = context.margin;
+                const tableY = context.y;
+
+                parts.forEach((part, i) => {
+                    const colWidth = context.pageWidth * colWidths[i];
+                    const x = currentX;
+                    const textLines = allLines[i];
+                    
+                    if (i === 1) { // Colonne PAX
+                        const bgX = x + 1;
+                        const paxBlockHeight = context.lineHeight + 4; 
+                        const paxBlockY = tableY - rowHeight + (rowHeight - paxBlockHeight) / 2;
+                        
+                        context.currentPage.drawRectangle({
+                            x: bgX,
+                            y: paxBlockY, 
+                            width: colWidthsPx[i] - 2, 
+                            height: paxBlockHeight,
+                            color: paxPdfColor, 
+                            opacity: 1,
+                            borderWidth: 0
+                        });
+                        
+                        const text = textLines[0] || '';
+                        const textWidth = part.font.widthOfTextAtSize(text, part.size);
+                        const textX = bgX + (colWidthsPx[i] - textWidth) / 2;
+                        const textY = paxBlockY + (paxBlockHeight - part.size) / 2 + 1; 
+                        
+                        context.currentPage.drawText(text, {
+                            x: textX, y: textY, 
+                            font: part.font, size: part.size, color: part.color
+                        });
+
+                    } else { // Autres colonnes (multi-lignes)
+                        textLines.forEach((line, lineIndex) => {
+                            const textY = tableY - context.lineHeight - (lineIndex * context.lineHeight) - 2;
+                            
+                            if (line) {
+                                context.currentPage.drawText(line, {
+                                    x: x + 2, y: textY, 
+                                    font: part.font, size: part.size, color: part.color
+                                });
+                            }
+                        });
+                    }
+                    
+                    currentX += colWidth;
+                });
+                
+                context.currentPage.drawLine({
+                    start: { x: context.margin, y: tableY - rowHeight + 1 },
+                    end: { x: context.pageWidth - context.margin, y: tableY - rowHeight + 1 },
+                    color: context.colors.line, thickness: 0.5, opacity: 0.5
+                });
+
+                context.y -= rowHeight;
+            };
+
+            addNewPage();
+            drawTableHeader();
+            
+            logData.forEach(entry => {
+                drawLogEntry(entry);
+            });
+            
+            drawFooter();
+
+            const pdfBytes = await pdfDoc.save();
+            return pdfBytes;
         }
 
         async function downloadPdf() {
@@ -2101,6 +2174,7 @@
             initPaxModeAndColors();
 
             // 8.4 Logique Drag & Drop sur le corps du tableau
+            logTableBody.addEventListener('dragstart', handleDragStart, true);
             logTableBody.addEventListener('dragover', (e) => handleDragOver.call(e.target.closest('tr') || logTableBody, e));
             logTableBody.addEventListener('drop', handleDrop);
             logTableBody.addEventListener('dragend', handleDragEnd); 
@@ -2114,14 +2188,15 @@
             previewPdfDockBtn.addEventListener('click', downloadPdf);
             exportJsonDockBtn.addEventListener('click', exportJson);
             importJsonDockBtn.addEventListener('click', () => jsonImportInput.click());
-            jsonImportInput.addEventListener('change', (e) => importLogData(e.target.files[0])); // Utiliser la nouvelle fonction
-
+            // CORRECTION: Utilisation de la fonction de gestion du fichier
+            jsonImportInput.addEventListener('change', handleJsonFileImport); 
+            
             resetDataDockBtn.addEventListener('click', showResetModal);
             document.getElementById('confirmResetBtn').addEventListener('click', handleResetData);
             document.getElementById('cancelResetBtn').addEventListener('click', hideResetModal);
             document.getElementById('modalBackdrop').addEventListener('click', (e) => {
-                 // Cacher les modales seulement si on clique sur le fond et pas sur la modale elle-même
-                 if (e.target.id === 'modalBackdrop' && qrModal.style.display !== 'block' && scannerModal.style.display !== 'block') {
+                 // Cacher les modales seulement si on clique sur le fond
+                 if (e.target.id === 'modalBackdrop') {
                     hideResetModal();
                  }
             });
