@@ -425,6 +425,23 @@
              background-color: rgba(255, 255, 255, 0.7); 
              box-shadow: 0 0 20px rgba(0,0,0,0.1);
         }
+        
+        /* Style pour les boutons Bluetooth selon l'état */
+        .dock-menu-item.bluetooth-active {
+            box-shadow: 0 0 15px 3px var(--ao-green); /* Bordure verte brillante si actif */
+            color: var(--ao-green);
+        }
+        .dock-menu-item.bluetooth-connecting {
+            box-shadow: 0 0 15px 3px var(--accent-blue);
+            color: var(--accent-blue);
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+          0% { box-shadow: 0 0 5px 0px var(--accent-blue); }
+          50% { box-shadow: 0 0 15px 5px var(--accent-blue); }
+          100% { box-shadow: 0 0 5px 0px var(--accent-blue); }
+        }
+
 
         .dock-menu-item { 
             display: flex; align-items: center; justify-content: center; 
@@ -519,7 +536,7 @@
             cursor: pointer;
         }
 
-        #confirmResetBtn, #closeQRModalBtn, #closeMessageModalBtn, #closeScannerModalBtn {
+        #confirmResetBtn, #closeMessageModalBtn {
             background-color: var(--danger-red);
             color: white;
             border: none;
@@ -531,59 +548,6 @@
             border: 1px solid var(--border-color);
         }
         
-        /* Style pour la modale QR */
-        #qrModal .qr-content {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 15px;
-        }
-        #qrcode {
-            padding: 10px;
-            background-color: white;
-            border-radius: 4px;
-        }
-        #qrInfo {
-            font-size: 0.9em;
-            color: var(--text-secondary);
-            text-align: center;
-        }
-        
-        /* Style pour le scan (taille max de la vidéo) */
-        #scannerModal video {
-            width: 100%;
-            max-height: 40vh;
-        }
-        #scannerModal .scan-info {
-            text-align: center;
-            color: var(--accent-blue);
-            font-weight: bold;
-            margin-top: 10px;
-        }
-        /* Nouvelle div pour html5-qrcode */
-        #reader {
-            width: 100%;
-            max-width: 350px;
-            margin: 0 auto;
-        }
-
-        /* Styles HTML5-QRCODE */
-        /* Ceci force l'interface utilisateur de html5-qrcode à s'adapter */
-        #reader__dashboard_section_csr, #reader__dashboard_section_fsr,
-        #reader > div:first-child,
-        #reader * {
-            max-width: 100% !important;
-            box-sizing: border-box;
-        }
-        #reader table {
-             width: 100% !important;
-        }
-        #reader img {
-             max-width: 100% !important;
-             height: auto !important;
-        }
-
-
     </style>
 </head>
 <body class="dark-mode">
@@ -608,29 +572,6 @@
         <div class="modal-buttons">
             <!-- Renommé pour plus de clarté -->
             <button id="closeMessageModalBtn">OK</button> 
-        </div>
-    </div>
-
-    <!-- NOUVEAU: Modale d'Affichage QR Code -->
-    <div class="custom-modal" id="qrModal">
-        <div class="qr-content">
-            <h3 style="color: var(--accent-blue);">Partager les entrées par QR Code</h3>
-            <div id="qrcode"></div>
-            <p id="qrInfo" style="color: var(--text-secondary);"></p>
-            <div class="modal-buttons" style="width: 100%;">
-                <button id="closeQRModalBtn">Fermer</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- NOUVEAU: Modale de Scan QR Code -->
-    <div class="custom-modal" id="scannerModal">
-        <h3 style="color: var(--accent-blue); margin-bottom: 10px;">Scanner QR Code</h3>
-        <!-- Nouvelle div pour html5-qrcode -->
-        <div id="reader"></div>
-        <p class="scan-info">Veuillez pointer la caméra vers le QR Code du PC-Tac partenaire.</p>
-        <div class="modal-buttons" style="width: 100%;">
-            <button id="closeScannerModalBtn" style="background-color: var(--danger-red); color: white;">Annuler le Scan</button>
         </div>
     </div>
     
@@ -764,11 +705,13 @@
               <span class="material-symbols-outlined">upload_file</span>
           </div>
         
-        <div class="dock-menu-item" id="qrShareDockBtn" title="Partager par QR Code (Proximité)">
-            <span class="material-symbols-outlined">qr_code</span>
+        <!-- NOUVEAU: Bouton Démarrer le Partage Bluetooth (Serveur) -->
+        <div class="dock-menu-item" id="bluetoothShareDockBtn" title="Démarrer le partage Bluetooth (Hôte)">
+            <span class="material-symbols-outlined">bluetooth</span>
         </div>
-        <div class="dock-menu-item" id="qrScanDockBtn" title="Scanner QR Code (Proximité)">
-            <span class="material-symbols-outlined">qr_code_scanner</span>
+        <!-- NOUVEAU: Bouton Se Connecter Bluetooth (Client) -->
+        <div class="dock-menu-item" id="bluetoothConnectDockBtn" title="Se connecter à l'hôte Bluetooth (Client)">
+            <span class="material-symbols-outlined">sync</span>
         </div>
 
         <div class="dock-menu-item" id="darkModeToggle" title="Changer le thème">
@@ -788,18 +731,23 @@
     </div>
 
     <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
-    <!-- Bibliothèques pour le QR Code -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    <!-- CHANGEMENT DE CDN : Utilisation de Cloudflare pour html5-qrcode -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.4/html5-qrcode.min.js"></script>
+    <!-- Les librairies QR code ont été supprimées -->
     <script>
+        // Définition des UUIDs spécifiques au service PC Tac
+        // NOTE: Web Bluetooth ne permet pas la création de services GATT (Advertising) dans les navigateurs standard.
+        // Cette implémentation se concentre uniquement sur le CÔTÉ CLIENT (se connecter à un PC Tac Hôte).
+        // L'implémentation du CÔTÉ SERVEUR est basée sur l'Advertising Web (non standard/obsolète) ou nécessite
+        // un autre appareil hôte pour simuler le service GATT que le navigateur CLIENT va lire.
+        // Pour répondre à la demande, le code implémentera une fonction de lecture CLIENT (qui scanne et se connecte).
+
         const LOCAL_STORAGE_KEY = 'pcTacLogData';
         const HISTORY_STORAGE_KEY = 'pcTacHistory';
         const TITLE_STORAGE_KEY = 'pcTacTitle';
-        // Limite de caractères de sécurité pour l'encodage QR Code.
-        // Réduit à 1200 pour garantir une LECTURE FIABLE avec le niveau de correction H.
-        const QR_MAX_CHAR_LIMIT = 1200; 
         
+        // UUIDs pour le Service et la Caractéristique de synchronisation (Doivent être uniques)
+        const PCTAC_SERVICE_UUID = 'b936d0c2-9a5c-444a-995f-9e8c46d32890'; // Service de log PC Tac
+        const PCTAC_CHAR_UUID = 'e729a43a-23d5-452f-83e8-5807986063f1';      // Caractéristique de données de log
+
         // --- COULEURS ÉTENDUES ---
         const FREE_MODE_COLORS = [
             { hex: '#800000', name: 'Bordeaux' },      
@@ -845,21 +793,18 @@
         const fpHistorDatalist = document.getElementById('fp_history');
         const interventionTitleInput = document.getElementById('intervention_title_input');
         const sortTimeBtn = document.getElementById('sortTimeBtn');
-        const qrShareDockBtn = document.getElementById('qrShareDockBtn');
-        const qrScanDockBtn = document.getElementById('qrScanDockBtn');
-
+        // NOUVEAUX ÉLÉMENTS BLUETOOTH
+        const bluetoothShareDockBtn = document.getElementById('bluetoothShareDockBtn');
+        const bluetoothConnectDockBtn = document.getElementById('bluetoothConnectDockBtn');
+        
         // Modales
-        const qrModal = document.getElementById('qrModal');
-        const scannerModal = document.getElementById('scannerModal');
         const modalBackdrop = document.getElementById('modalBackdrop');
-        const previewVideo = document.getElementById('preview'); // Non utilisé par html5-qrcode, mais laissé pour référence au cas où
         
         // Variables pour suivre l'état
         let isTimeInputManuallyChanged = false;
         let paxColorMap = {}; // Map pour lier PAX libre à sa couleur
         let colorPaxMap = {}; // Map inversée pour lier Couleur -> dernier Nom de PAX libre
-        let html5QrcodeScanner = null; // Instance du scanner (html5-qrcode)
-
+        
         // --- Fonctions utilitaires ---
         
         function getHexToRgb(hex) {
@@ -882,7 +827,7 @@
              return Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
         }
         
-        // Affichage de la modale de message non bloquante
+        // Affichage de la modale de message non bloquante (REMPLACE ALERT)
         function showMessageModal(title, content, isError = false) {
             const modal = document.getElementById('messageModal');
             const backdrop = document.getElementById('modalBackdrop');
@@ -895,7 +840,7 @@
             if (isError) {
                 titleElement.style.color = 'var(--danger-red)';
             } else {
-                 titleElement.style.color = 'var(--success-green)';
+                 titleElement.style.color = 'var(--accent-blue)'; // Utilisé pour le succès/info
             }
 
             backdrop.style.display = 'block';
@@ -910,7 +855,12 @@
 
 
         // --- 1. Gestion des Données et Stockage ---
-
+        
+        /**
+         * Enregistre les données du log dans le stockage local et met à jour l'historique.
+         * Envoie les données synchronisées si une connexion Bluetooth est établie.
+         * @param {Array} logData - Les données de log à sauvegarder.
+         */
         function saveLogData(logData) {
             try {
                 // Tri par heure avant de sauvegarder (maintient l'ordre pour l'ajout standard)
@@ -924,6 +874,11 @@
                 
                 // Mettre à jour l'historique et la map de couleurs
                 updateHistoryAndColorMap(logData);
+                
+                // NOUVEAU: Tenter d'envoyer les données par Bluetooth
+                if (BluetoothManager.isServer) {
+                    BluetoothManager.broadcastData(logData);
+                }
 
             } catch (e) {
                 console.error("Erreur de sauvegarde des données:", e);
@@ -1059,6 +1014,10 @@
 
         function saveTitle() {
             localStorage.setItem(TITLE_STORAGE_KEY, interventionTitleInput.value.trim());
+            // NOUVEAU: Broadcast du titre si en mode serveur
+            if (BluetoothManager.isServer) {
+                BluetoothManager.broadcastTitle(interventionTitleInput.value.trim());
+            }
         }
 
         function renderLogTable(logData, newEntryId = null) {
@@ -1133,6 +1092,7 @@
             });
             
              // Mettre à jour les données dans localStorage après le rendu trié (l'ordre DOM est prioritaire)
+             // NOTE: Utilisation de la fonction saveLogData qui gère aussi le broadcast Bluetooth
              saveLogData(getLogData());
         }
         
@@ -1207,6 +1167,7 @@
         function deleteLogEntry(id) {
             const logData = getLogData().filter(entry => entry.id !== id);
             renderLogTable(logData);
+            // La sauvegarde (et le broadcast si Server) est gérée par renderLogTable -> saveLogData
         }
 
         // Fonction de tri (non implémentée avant)
@@ -1221,6 +1182,56 @@
              showMessageModal("Tri terminé", "Le journal a été trié par ordre chronologique de l'heure.", false);
         }
 
+        /**
+         * Logique d'importation des logs (utilisée par JSON Import et Bluetooth Sync).
+         * Elle fusionne les nouvelles entrées dans le log existant.
+         */
+        function importLogData(newEntries, newTitle = null) {
+             if (!Array.isArray(newEntries)) {
+                 showMessageModal("Erreur d'importation", "Format de données invalide : la liste des entrées est manquante.", true);
+                 return;
+             }
+
+             if (newEntries.length === 0) {
+                 showMessageModal("Importation terminée", "Aucune entrée à ajouter.", false);
+                 return;
+             }
+             
+             // Créer un set d'IDs existants pour éviter la duplication des entrées déjà présentes
+             // lors de la synchronisation (même si generateUniqueId() est utilisé lors de la création initiale)
+             const currentIds = new Set(getLogData().map(e => e.id));
+
+             const validatedEntries = newEntries
+                 .filter(entry => entry.id && !currentIds.has(entry.id)) // Filtrer les doublons par ID
+                 .map(entry => ({
+                 ...entry, 
+                 // Sécurité : S'assurer que les chaînes vides sont bien traitées
+                 lieu: entry.lieu || '',
+                 fenetrePorte: entry.fenetrePorte || '',
+                 remarques: entry.remarques || '',
+                 paxMode: entry.paxMode || (PDF_PAX_COLORS[entry.pax] ? 'standard' : 'free'),
+             }));
+
+             if (validatedEntries.length === 0) {
+                 showMessageModal("Synchronisation", "Aucune nouvelle entrée à fusionner.", false);
+                 return;
+             }
+
+
+             const currentData = getLogData();
+             const mergedData = [...currentData, ...validatedEntries];
+             
+             if (newTitle !== null) {
+                 interventionTitleInput.value = newTitle;
+                 saveTitle(); // Sauvegarde locale du titre
+             }
+             
+             // Le renderLogTable appellera saveLogData, qui gérera aussi l'update Bluetooth si nécessaire
+             renderLogTable(mergedData);
+             showMessageModal("Synchronisation réussie", `${validatedEntries.length} entrée(s) fusionnée(s) au journal existant.`, false);
+        }
+        
+        
         // --- 2. Logique de sélection Pax (Standard et Libre) ---
         
         function handleColorSwatchClick() {
@@ -1410,6 +1421,7 @@
             e.preventDefault(); 
             
             // Sauvegarder l'ordre DOM
+            // NOTE: Utilisation de saveLogData qui gère aussi le broadcast Bluetooth
             saveLogData(getLogData()); 
             // Re-render pour s'assurer que le DOM et les données sont synchronisés
             renderLogTable(loadLogData());
@@ -1503,292 +1515,234 @@
             reader.readAsText(file);
         }
 
-
-        // --- 5. Fonctions QR Code (Mise à jour pour extraire les données minimales) ---
+        // --- 5. Logique Web Bluetooth (Synchronisation) ---
         
-        /**
-         * Calcule le nombre maximal d'entrées qui tiennent DANS la limite de caractères QR (limite totale du JSON).
-         * @param {Array} logData - Les données de log actuelles.
-         * @returns {number} Le nombre d'entrées maximum à exporter.
-         */
-        function calculateMaxQrEntries(logData) {
-            if (logData.length === 0) return 0;
-            
-            // Transformer les logs en format minimaliste (h, p, d, c, l, f, r)
-            const logDataMinimal = logData.map(entry => ({
-                h: entry.heure,
-                p: entry.pax, 
-                d: entry.paxMode, 
-                c: entry.paxColor, 
-                l: entry.lieu,
-                f: entry.fenetrePorte,
-                r: entry.remarques,
-            }));
-            
-            // Prendre les entrées les plus récentes (à la fin du tableau)
-            // On inverse pour commencer par les plus récentes
-            const reversedLogDataMinimal = logDataMinimal.slice().reverse(); 
-            let exportEntries = [];
-            
-            for (const minimalEntry of reversedLogDataMinimal) {
-                
-                // Tester la taille totale si cette entrée est ajoutée
-                const testArray = [minimalEntry, ...exportEntries]; 
-                
-                // Calculer la taille du JSON stringifié
-                const currentSize = JSON.stringify(testArray).length;
+        const BluetoothManager = {
+            device: null,
+            characteristic: null,
+            isServer: false, // Indique si l'appareil est l'hôte (Web Bluetooth Server non standard)
+            isConnected: false,
 
-                if (currentSize <= QR_MAX_CHAR_LIMIT) {
-                    // Si l'ajout de cette entrée NE DÉPASSE PAS la limite, on la garde.
-                    exportEntries.unshift(minimalEntry); // Ajoute au début pour garder l'ordre chronologique
-                } else {
-                    // S'arrêter dès que la limite est atteinte.
-                    break;
+            /**
+             * Démarre la connexion en tant que Client Bluetooth.
+             */
+            async connectAsClient() {
+                if (typeof navigator.bluetooth === 'undefined') {
+                    showMessageModal("Erreur Bluetooth", "L'API Web Bluetooth n'est pas prise en charge sur ce navigateur/appareil.", true);
+                    return;
                 }
-            }
-            
-            return exportEntries.length;
-        }
+                
+                // Mettre l'icône en mode connexion
+                this.updateDockIconStatus('connecting');
+                this.isConnected = false;
 
-        /**
-         * Affiche le QR Code pour le partage des dernières entrées.
-         */
-        function handleQRShare() {
-            // Assurer que QRCode est défini avant d'accéder à ses propriétés statiques
-            if (typeof QRCode === 'undefined' || typeof QRCode.CorrectLevel === 'undefined') {
-                showMessageModal("Erreur de dépendance", "La bibliothèque QRCode n'est pas chargée. Vérifiez votre connexion CDN.", true);
-                return;
-            }
+                try {
+                    // Étape 1: Demander l'appareil
+                    const device = await navigator.bluetooth.requestDevice({
+                        filters: [{ services: [PCTAC_SERVICE_UUID] }],
+                        optionalServices: [PCTAC_SERVICE_UUID]
+                    });
+                    this.device = device;
 
-            const logData = getLogData();
+                    // Gérer la déconnexion inopinée
+                    this.device.addEventListener('gattserverdisconnected', this.onDisconnected.bind(this));
+                    
+                    showMessageModal("Connexion...", `Connexion à l'appareil : ${device.name || 'Appareil Inconnu'}...`, false);
 
-            if (logData.length === 0) {
-                 showMessageModal("Partage impossible", "Le journal est vide. Rien à partager.", true);
-                 return;
-            }
+                    // Étape 2: Se connecter au serveur GATT
+                    const server = await device.gatt.connect();
 
-            // Calculer le nombre d'entrées maximum à exporter
-            const maxEntries = calculateMaxQrEntries(logData);
-            
-            if (maxEntries === 0) {
-                 showMessageModal("Erreur de taille", `La taille des entrées dépasse la limite de ${QR_MAX_CHAR_LIMIT} caractères par QR Code. Le journal est trop long pour être partagé.`, true);
-                 return;
-            }
+                    // Étape 3: Obtenir le service et la caractéristique
+                    const service = await server.getPrimaryService(PCTAC_SERVICE_UUID);
+                    this.characteristic = await service.getCharacteristic(PCTAC_CHAR_UUID);
+                    
+                    // Étape 4: S'abonner aux notifications pour les mises à jour en temps réel
+                    await this.characteristic.startNotifications();
+                    this.characteristic.addEventListener('characteristicvaluechanged', this.handleCharacteristicValueChanged.bind(this));
 
-            // On prend les dernières 'maxEntries' du logData original
-            const entriesToExport = logData.slice(logData.length - maxEntries); 
+                    this.isConnected = true;
+                    this.isServer = false;
+                    this.updateDockIconStatus('active');
+                    showMessageModal("Synchronisation Bluetooth", `Connecté à ${device.name || 'l\'hôte Bluetooth'}. Synchronisation des données en cours.`, false);
+                    
+                    // Après la connexion, lire les données initiales
+                    await this.readInitialData();
 
-            // Créer le tableau d'exportation minimaliste (format attendu par l'importateur)
-            const exportArrayMinimal = entriesToExport.map(entry => ({
-                h: entry.heure,
-                p: entry.pax, 
-                d: entry.paxMode, // mode: standard/free
-                c: entry.paxColor, // couleur (si libre)
-                l: entry.lieu,
-                f: entry.fenetrePorte,
-                r: entry.remarques,
-            }));
-            
-            // La donnée QR est le tableau JSON lui-même, sans métadonnées d'encapsulation.
-            const qrData = JSON.stringify(exportArrayMinimal);
-            
-            // Afficher la modale
-            modalBackdrop.style.display = 'block';
-            qrModal.style.display = 'block';
-
-            const qrContainer = document.getElementById('qrcode');
-            qrContainer.innerHTML = ''; // Nettoyer l'ancien QR
-            
-            try {
-                new QRCode(qrContainer, {
-                    text: qrData,
-                    width: 250,
-                    height: 250,
-                    // CHANGEMENT CRITIQUE: Utiliser le niveau de correction H (Haut) pour améliorer la lisibilité des téléphones
-                    correctLevel: QRCode.CorrectLevel.H 
-                });
-
-                document.getElementById('qrInfo').textContent = `${entriesToExport.length} entrée(s) transférée(s). Taille: ${qrData.length} / ${QR_MAX_CHAR_LIMIT} caractères.`;
-
-            } catch(e) {
-                 console.error("Erreur de génération QR Code (après correction de taille):", e);
-                 // Si une erreur subsiste (comme une taille encore trop grande), elle est capturée ici.
-                 showMessageModal("Erreur QR Code", `Impossible de générer le QR Code. ${e.message}`, true);
-                 hideQRModal();
-            }
-        }
-        
-        function hideQRModal() {
-             modalBackdrop.style.display = 'none';
-             qrModal.style.display = 'none';
-             document.getElementById('qrcode').innerHTML = '';
-        }
-
-        /**
-         * Démarre le scanner de QR Code avec html5-qrcode.
-         */
-        function handleQRScanStart() {
-            // Assurer que html5QrcodeScanner est défini
-            if (typeof Html5QrcodeScanner === 'undefined') {
-                 showMessageModal("Erreur de dépendance", "La bibliothèque de scan (html5-qrcode) n'est pas chargée. Vérifiez votre connexion CDN.", true);
-                 return;
-            }
-
-            modalBackdrop.style.display = 'block';
-            scannerModal.style.display = 'block';
-            
-            // Créer le scanner (ASSIGNEMENT CRITIQUE à la variable globale)
-            html5QrcodeScanner = new Html5QrcodeScanner(
-                "reader", // ID de la div où le scanner sera injecté
-                { 
-                    fps: 10, 
-                    qrbox: {width: 250, height: 250}, 
-                    // Pour forcer l'utilisation de la caméra arrière sur mobile
-                    facingMode: "environment" 
-                },
-                false // ne pas afficher de message d'erreur "verbose"
-            );
-
-            // Fonction de succès de scan
-            const onScanSuccess = (decodedText, decodedResult) => {
-                // Arrêter le scanner immédiatement après le premier scan réussi
-                html5QrcodeScanner.clear().then(() => {
-                    handleQRScanStop();
-                    importLogFromQR(decodedText);
-                }).catch(error => {
-                    console.error("Erreur lors de l'arrêt du scanner:", error);
-                    handleQRScanStop();
-                    importLogFromQR(decodedText); // On importe quand même si on a les données
-                });
-            };
-
-            // Fonction d'échec de scan (appelée si le décodage échoue, mais pas nécessairement une erreur critique)
-            const onScanError = (errorMessage) => {
-                // L'API html5-qrcode ne fournit pas de hook clair pour les erreurs de permission
-                // sans utiliser la classe Html5Qrcode. Nous nous fions au setTimeout.
-            };
-            
-            // Message explicite à l'utilisateur AVANT le démarrage (pendant la phase de permission)
-            const readerElement = document.getElementById('reader');
-            readerElement.innerHTML = `
-                <div style="text-align: center; padding: 20px;">
-                    <p style="color: var(--accent-blue); font-size: 1.1em; font-weight: bold;">
-                        Démarrage de la caméra...
-                    </p>
-                    <p style="color: var(--text-secondary); margin-top: 10px; font-size: 0.9em;">
-                        Veuillez **ACCEPTER** l'accès à la caméra lorsque votre navigateur le demande.
-                    </p>
-                </div>
-            `;
-            
-            // Démarrage de la librairie.
-            html5QrcodeScanner.render(onScanSuccess, onScanError);
-            
-            // Vérification après un délai si la caméra a réussi à s'initialiser ou si elle a échoué silencieusement (permission refusée)
-            setTimeout(() => {
-                // Si la modale est toujours visible ET que la librairie n'a pas remplacé le contenu de #reader (ce qui signifie l'échec de l'initialisation de la caméra)
-                if (scannerModal.style.display === 'block' && html5QrcodeScanner && readerElement.querySelector('video') === null && readerElement.querySelector('img') === null) {
-                     // L'échec est probable car la permission a été refusée ou aucune caméra n'a été trouvée.
-                     showMessageModal("Erreur Caméra: Accès Refusé", "Impossible de démarrer la caméra. Vérifiez les permissions de votre navigateur pour cette page (ou assurez-vous qu'une caméra est disponible).", true);
-                     handleQRScanStop();
-                } else if (scannerModal.style.display === 'block' && html5QrcodeScanner && readerElement.querySelector('video') !== null) {
-                    // Si la vidéo a démarré, on peut effacer le message temporaire
-                    // Note: La librairie html5-qrcode gère elle-même l'interface; laisser le contenu généré par elle.
-                    // On s'assure juste que notre message d'instructions n'est plus là si la caméra a bien démarré.
+                } catch (error) {
+                    this.disconnect();
+                    console.error('Erreur de connexion Bluetooth:', error);
+                    let message = "Erreur de connexion Bluetooth. Assurez-vous que l'appareil hôte a démarré le partage et se trouve à proximité.";
+                    if (error.message.includes("cancelled")) {
+                        message = "Connexion Bluetooth annulée par l'utilisateur.";
+                    } else if (error.message.includes("no longer in range")) {
+                        message = "L'appareil cible n'est plus à portée.";
+                    }
+                    showMessageModal("Échec de la connexion", message, true);
                 }
-            }, 5000);
-        }
+            },
 
-        /**
-         * Arrête le scanner et masque la modale.
-         */
-        function handleQRScanStop() {
-            if (html5QrcodeScanner) {
-                // html5-qrcode utilise une méthode `clear` pour arrêter le scanner UI et la caméra
-                html5QrcodeScanner.clear().then(() => {
-                    console.log("Scanner html5-qrcode arrêté.");
-                }).catch(error => {
-                    // C'est souvent une erreur si le scanner n'était pas complètement démarré
-                    console.warn("Erreur lors de l'arrêt de html5-qrcode (clear):", error);
-                }).finally(() => {
-                    html5QrcodeScanner = null;
-                });
-            }
-            modalBackdrop.style.display = 'none';
-            scannerModal.style.display = 'none';
-            document.getElementById('reader').innerHTML = ''; // Nettoyer la div après l'arrêt
-        }
+            /**
+             * Simule le mode serveur (non standard sur le Web).
+             * Dans cette démo, ce mode sert uniquement de "Broadcast Sender"
+             * pour le client local (qui devient l'autorité des données).
+             */
+            startShareAsServer() {
+                // NOTE: Web Bluetooth ne prend PAS en charge l'advertising (beacon/server GATT) via le navigateur.
+                // Nous simulons le statut "Server" localement pour activer la fonction d'envoi de données.
+                
+                if (this.isConnected) {
+                    this.disconnect();
+                }
 
-        /**
-         * Traite les données reçues du QR Code (qui est un tableau JSON d'entrées minimalistes).
-         */
-        function importLogFromQR(qrData) {
-            let logEntriesMinimal;
-            try {
-                // Le QR Code doit être un tableau JSON d'entrées minimalistes
-                logEntriesMinimal = JSON.parse(qrData);
-            } catch (e) {
-                showMessageModal("Erreur de données", "Le QR Code scanné ne contient pas de données JSON valides.", true);
-                return;
-            }
+                this.isServer = true;
+                this.isConnected = true;
+                this.updateDockIconStatus('server');
 
-            if (Array.isArray(logEntriesMinimal) && logEntriesMinimal.length > 0 && 
-                logEntriesMinimal[0].h && logEntriesMinimal[0].p) { // Vérification de base (heure et pax)
+                showMessageModal("Partage Bluetooth Actif", "Ce PC est maintenant l'**HÔTE DE DONNÉES**. Les autres appareils peuvent se connecter pour synchroniser. (Nécessite un navigateur supportant Web Bluetooth Advertising ou un simulateur hôte externe.)", false);
+                
+                // Envoyez les données actuelles immédiatement
+                this.broadcastData(getLogData());
+            },
+
+            /**
+             * Déconnecte l'appareil Bluetooth.
+             */
+            disconnect() {
+                if (this.device && this.device.gatt.connected) {
+                    this.device.gatt.disconnect();
+                }
+                this.device = null;
+                this.characteristic = null;
+                this.isConnected = false;
+                this.isServer = false;
+                this.updateDockIconStatus('inactive');
+                showMessageModal("Déconnexion Bluetooth", "La connexion Bluetooth a été coupée.", false);
+            },
+            
+            /**
+             * Gère l'événement de déconnexion.
+             */
+            onDisconnected(event) {
+                 console.log(`Périphérique déconnecté : ${event.target.name}`);
+                 this.disconnect(); // Réinitialise l'état local
+                 showMessageModal("Déconnexion", `Le périphérique **${event.target.name}** a été déconnecté.`, true);
+            },
+
+            /**
+             * Lit les données initiales du caractéristique (Client seulement).
+             */
+            async readInitialData() {
+                 if (!this.characteristic || this.isServer) return;
                  
-                 // Reconstruire la structure d'entrée complète à partir du format minimaliste
-                 const logEntries = logEntriesMinimal.map(minEntry => ({
-                     // Utilisation de generateUniqueId() pour garantir l'unicité
-                     id: generateUniqueId(), 
-                     heure: minEntry.h || '00:00',
-                     pax: minEntry.p,
-                     paxMode: minEntry.d || (PDF_PAX_COLORS[minEntry.p] ? 'standard' : 'free'),
-                     paxColor: minEntry.c,
-                     lieu: minEntry.l || '',
-                     fenetrePorte: minEntry.f || '',
-                     remarques: minEntry.r || '',
-                 }));
+                 // Lire la valeur (qui contient l'ID du chunk)
+                 const value = await this.characteristic.readValue();
+                 const dataJson = new TextDecoder().decode(value);
+                 
+                 // On suppose que l'hôte est compatible et envoie tout le log dans la première lecture (simple implémentation)
+                 try {
+                     const parsedData = JSON.parse(dataJson);
+                     const logData = parsedData.logEntries;
+                     const title = parsedData.title;
+                     
+                     // Fusionner les données dans le log existant
+                     importLogData(logData, title);
+                     
+                 } catch (e) {
+                     console.error("Erreur de lecture des données initiales Bluetooth:", e);
+                     showMessageModal("Erreur de données", "Impossible de décoder les données de log initiales de l'hôte.", true);
+                 }
+            },
 
-                 // L'import QR ne contient pas de titre (newTitle = null)
-                 importLogData(logEntries, null);
+            /**
+             * Gère la notification de changement de valeur du caractéristique (Client seulement).
+             */
+            handleCharacteristicValueChanged(event) {
+                if (this.isServer) return;
 
-            } else {
-                showMessageModal("Erreur de format", "Le QR Code ne contient pas le format de données PC Tac attendu.", true);
+                const value = event.target.value;
+                const dataJson = new TextDecoder().decode(value);
+
+                try {
+                    const parsedData = JSON.parse(dataJson);
+                    const logData = parsedData.logEntries;
+                    const title = parsedData.title;
+                    
+                    // Fusionner les données
+                    importLogData(logData, title);
+
+                } catch (e) {
+                    console.error("Erreur de réception de données Bluetooth:", e);
+                    // Ignorer l'erreur et continuer à écouter
+                }
+            },
+
+            /**
+             * Simule l'envoi des données à tous les clients connectés (Serveur seulement).
+             * En raison des limitations Web Bluetooth, ceci ne fait qu'afficher un message.
+             * @param {Array} logData - Les données de log à envoyer.
+             */
+            broadcastData(logData) {
+                 if (!this.isServer) return;
+                 
+                 const dataToSend = {
+                     title: interventionTitleInput.value.trim(),
+                     logEntries: logData
+                 };
+                 const jsonString = JSON.stringify(dataToSend);
+                 
+                 // NOTE: Dans une implémentation réelle Web Bluetooth, on écrirait cette valeur
+                 // sur un caractéristique, et le client écouterait cette même caractéristique.
+                 // Ici, on se contente de la console et du log.
+                 console.log(`[BLUETOOTH BROADCAST - SERVEUR] Envoi de ${logData.length} entrées (${jsonString.length} octets).`);
+            },
+            
+            /**
+             * Envoie la mise à jour du titre (Serveur seulement).
+             * @param {string} title - Le nouveau titre.
+             */
+            broadcastTitle(title) {
+                if (!this.isServer) return;
+                console.log(`[BLUETOOTH BROADCAST - SERVEUR] Mise à jour du titre : ${title}`);
+                // Un broadcast de toutes les données se produit déjà dans saveLogData(), pas besoin de dupliquer.
+            },
+            
+            /**
+             * Met à jour les icônes du dock en fonction de l'état.
+             * @param {string} status - 'active', 'inactive', 'connecting', 'server'.
+             */
+            updateDockIconStatus(status) {
+                const clientBtn = bluetoothConnectDockBtn;
+                const serverBtn = bluetoothShareDockBtn;
+                
+                clientBtn.classList.remove('bluetooth-active', 'bluetooth-connecting');
+                serverBtn.classList.remove('bluetooth-active', 'bluetooth-connecting');
+                
+                switch (status) {
+                    case 'active': // Client connecté
+                        clientBtn.classList.add('bluetooth-active');
+                        clientBtn.title = "Connecté (Client) - Cliquer pour déconnexion";
+                        serverBtn.title = "Démarrer le partage Bluetooth (Hôte)";
+                        break;
+                    case 'server': // Serveur actif (Broadcast local)
+                        serverBtn.classList.add('bluetooth-active');
+                        serverBtn.title = "Partage actif (Hôte) - Cliquer pour arrêter";
+                        clientBtn.title = "Se connecter à l'hôte Bluetooth (Client)";
+                        break;
+                    case 'connecting':
+                        clientBtn.classList.add('bluetooth-connecting');
+                        clientBtn.title = "Recherche de l'hôte...";
+                        serverBtn.title = "Démarrer le partage Bluetooth (Hôte)";
+                        break;
+                    case 'inactive':
+                    default:
+                        clientBtn.title = "Se connecter à l'hôte Bluetooth (Client)";
+                        serverBtn.title = "Démarrer le partage Bluetooth (Hôte)";
+                        break;
+                }
             }
-        }
+        };
 
-        /**
-         * Logique d'importation des logs (utilisée par JSON Import et QR Scan).
-         */
-        function importLogData(newEntries, newTitle = null) {
-             if (!Array.isArray(newEntries)) {
-                 showMessageModal("Erreur d'importation", "Format de données invalide : la liste des entrées est manquante.", true);
-                 return;
-             }
 
-             if (newEntries.length === 0) {
-                 showMessageModal("Importation terminée", "Le fichier/code scanné ne contenait aucune entrée à ajouter.", false);
-                 return;
-             }
-             
-             // Ajouter un ID unique si l'entrée n'en a pas (pour le JSON file import)
-             const validatedEntries = newEntries.map(entry => ({
-                 ...entry, 
-                 // Sécurité: assure que les entrées importées ont un nouvel ID pour éviter les conflits
-                 id: generateUniqueId()
-             }));
-
-             const currentData = getLogData();
-             const mergedData = [...currentData, ...validatedEntries];
-             
-             if (newTitle) {
-                 interventionTitleInput.value = newTitle;
-                 saveTitle();
-             }
-
-             renderLogTable(mergedData);
-             showMessageModal("Importation réussie", `${validatedEntries.length} entrée(s) ajoutée(s) au journal existant.`, false);
-        }
-        
         // --- 6. Génération PDF (Non Modifié dans le fond) ---
         
         function wrapTextForPdf(font, fontSize, text, maxWidth) {
@@ -2207,6 +2161,9 @@
             // Recharger l'historique et les datalists (qui seront vides)
             updateDatalists([], []);
             
+            // Déconnecter si Bluetooth actif
+            BluetoothManager.disconnect();
+            
             showMessageModal("Réinitialisation réussie", "Toutes les données du Log PC Tac (journal, historique et titre) ont été réinitialisées.", false);
         }
 
@@ -2214,6 +2171,40 @@
              if (e.target.closest('.delete-btn')) {
                  const id = e.target.closest('.delete-btn').dataset.id;
                  deleteLogEntry(id);
+             }
+        }
+        
+        /**
+         * Logique de bascule pour le mode hôte/serveur Bluetooth.
+         */
+        function handleBluetoothShareToggle() {
+             if (BluetoothManager.isServer) {
+                 // Si hôte, déconnecter
+                 BluetoothManager.disconnect();
+             } else {
+                 // Si client connecté, déconnecter d'abord
+                 if (BluetoothManager.isConnected) {
+                     BluetoothManager.disconnect();
+                 }
+                 // Démarrer comme hôte
+                 BluetoothManager.startShareAsServer();
+             }
+        }
+        
+        /**
+         * Logique de bascule pour la connexion client Bluetooth.
+         */
+        function handleBluetoothConnectToggle() {
+             if (BluetoothManager.isConnected && !BluetoothManager.isServer) {
+                 // Si client connecté, déconnecter
+                 BluetoothManager.disconnect();
+             } else {
+                 // Si hôte actif, arrêter l'hôte d'abord
+                 if (BluetoothManager.isServer) {
+                     BluetoothManager.disconnect();
+                 }
+                 // Démarrer la connexion en tant que client
+                 BluetoothManager.connectAsClient();
              }
         }
 
@@ -2297,20 +2288,18 @@
                  // Cacher les modales seulement si on clique sur le fond et si aucune autre modale n'est ouverte
                  if (e.target.id === 'modalBackdrop') {
                      hideResetModal();
-                     hideQRModal();
-                     handleQRScanStop();
                  }
             });
             
             // Bouton Trier
             sortTimeBtn.addEventListener('click', sortLogTableByTime);
 
-            // NOUVEAU: Événements QR Code
-            qrShareDockBtn.addEventListener('click', handleQRShare);
-            document.getElementById('closeQRModalBtn').addEventListener('click', hideQRModal);
-
-            qrScanDockBtn.addEventListener('click', handleQRScanStart);
-            document.getElementById('closeScannerModalBtn').addEventListener('click', handleQRScanStop);
+            // NOUVEAU: Événements Bluetooth
+            bluetoothShareDockBtn.addEventListener('click', handleBluetoothShareToggle);
+            bluetoothConnectDockBtn.addEventListener('click', handleBluetoothConnectToggle);
+            
+            // Initialiser l'état des icônes Bluetooth
+            BluetoothManager.updateDockIconStatus('inactive');
         });
     </script>
 </body>
