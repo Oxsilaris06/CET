@@ -771,9 +771,9 @@
         const LOCAL_STORAGE_KEY = 'pcTacLogData';
         const HISTORY_STORAGE_KEY = 'pcTacHistory';
         const TITLE_STORAGE_KEY = 'pcTacTitle';
-        // Limite de caractères de sécurité pour l'encodage QR Code (basé sur la limite réelle de ~3000)
-        // Réduit à 1800 pour une marge de sécurité maximale et une fiabilité d'encodage.
-        const QR_MAX_CHAR_LIMIT = 1800; 
+        // Limite de caractères de sécurité pour l'encodage QR Code.
+        // Abaissé à 1500 pour garantir un encodage robuste et éviter le 'code length overflow' avec des remarques longues.
+        const QR_MAX_CHAR_LIMIT = 1500; 
         
         // --- COULEURS ÉTENDUES ---
         const FREE_MODE_COLORS = [
@@ -1489,7 +1489,8 @@
             }));
             
             // Prendre les entrées les plus récentes (à la fin du tableau)
-            const reversedLogDataMinimal = logDataMinimal.reverse();
+            // On inverse pour commencer par les plus récentes (taille LogData - 1)
+            const reversedLogDataMinimal = logDataMinimal.reverse(); 
             let exportEntries = [];
             
             for (const minimalEntry of reversedLogDataMinimal) {
@@ -1497,19 +1498,18 @@
                 // Tester la taille totale si cette entrée est ajoutée
                 const testArray = [minimalEntry, ...exportEntries]; 
                 
+                // Calculer la taille du JSON stringifié
                 const currentSize = JSON.stringify(testArray).length;
 
                 if (currentSize <= QR_MAX_CHAR_LIMIT) {
                     // Si l'ajout de cette entrée NE DÉPASSE PAS la limite, on la garde.
                     exportEntries.unshift(minimalEntry); // Ajoute au début pour garder l'ordre chronologique
                 } else {
-                    // Si l'ajout de la première entrée dépasse déjà la limite, on s'arrête ici.
-                    // Si ce n'est pas la première entrée, on s'arrête car la limite est atteinte.
+                    // S'arrêter dès que la limite est atteinte.
                     break;
                 }
             }
             
-            // Le nombre d'entrées exportées est la taille du tableau final (exportEntries)
             return exportEntries.length;
         }
 
@@ -1574,7 +1574,8 @@
 
             } catch(e) {
                  console.error("Erreur de génération QR Code (après correction de taille):", e);
-                 showMessageModal("Erreur QR Code", "Impossible de générer le QR Code.", true);
+                 // Si une erreur subsiste (comme une taille encore trop grande), elle est capturée ici.
+                 showMessageModal("Erreur QR Code", `Impossible de générer le QR Code. ${e.message}`, true);
                  hideQRModal();
             }
         }
