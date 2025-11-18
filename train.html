@@ -6,7 +6,7 @@
     <title>Programmes Personnalisés Course à Pied</title>
     <!-- Chargement de Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
     <style>
         /* Styles pour le thème sombre */
         body {
@@ -46,24 +46,57 @@
         .progress-bar-fill {
             transition: width 1s ease-in-out;
         }
+        .tab-button {
+            transition: background-color 0.3s, color 0.3s;
+        }
+        .tab-button.active {
+            background-color: #4F46E5;
+            color: white;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+        }
     </style>
 </head>
 <body class="p-4 sm:p-8">
 
     <div class="max-w-4xl mx-auto">
         <header class="text-center mb-6 p-4 sm:p-6 header-bg rounded-xl shadow-2xl">
-            <h1 class="text-3xl sm:text-4xl font-extrabold text-white mb-2" id="main-title">Programme d'Entraînement</h1>
+            <h1 class="text-3xl sm:text-4xl font-extrabold text-white mb-2" id="main-title">Programme d'Entraînement Combiné</h1>
             
-            <!-- Sélecteur de Programme : Mieux centré et plus grand pour le tactile -->
-            <div class="mb-4 flex flex-col sm:flex-row justify-center items-center space-y-2 sm:space-y-0 sm:space-x-4">
-                <label for="program-selector" class="text-base sm:text-lg text-gray-300 font-medium">Sélectionner l'Objectif :</label>
-                <select id="program-selector" onchange="switchProgram()" class="w-full sm:w-auto bg-gray-700 text-white p-3 rounded-lg border border-indigo-500 focus:ring-indigo-500 text-base">
-                    <option value="3km">3 km en 13 min (8 Semaines)</option>
-                    <option value="8km">8 km en 40 min (8 Semaines)</option>
-                </select>
+            <!-- Onglets de sélection du type de sport -->
+            <div class="flex justify-center mb-6 border-b border-gray-700">
+                <button id="tab-running" onclick="selectSport('running')" class="tab-button active flex-1 py-3 px-4 rounded-t-lg bg-indigo-600 text-white font-bold text-sm sm:text-base">
+                    Course à Pied
+                </button>
+                <button id="tab-crossops" onclick="selectSport('crossops')" class="tab-button flex-1 py-3 px-4 rounded-t-lg bg-gray-700 text-gray-300 font-bold text-sm sm:text-base">
+                    WODs Fonctionnels
+                </button>
             </div>
 
-            <p class="text-lg sm:text-xl text-indigo-400 font-semibold" id="program-subtitle">Objectif : 3 km en 13 minutes (8 Semaines)</p>
+
+            <!-- Sélecteur de Programme (Visible uniquement pour la course à pied) -->
+            <div id="running-selector-container">
+                <div class="mb-4 flex flex-col sm:flex-row justify-center items-center space-y-2 sm:space-y-0 sm:space-x-4">
+                    <label for="program-selector" class="text-base sm:text-lg text-gray-300 font-medium">Sélectionner l'Objectif :</label>
+                    <select id="program-selector" onchange="switchProgram()" class="w-full sm:w-auto bg-gray-700 text-white p-3 rounded-lg border border-indigo-500 focus:ring-indigo-500 text-base">
+                        <option value="3km">3 km en 13 min (8 Semaines)</option>
+                        <option value="8km">8 km en 40 min (8 Semaines)</option>
+                    </select>
+                </div>
+            </div>
+            
+            <!-- Sélecteur de Difficulté WOD (Visible uniquement pour les WODs) -->
+            <div id="crossops-selector-container" class="hidden">
+                <div class="mb-4 flex flex-col sm:flex-row justify-center items-center space-y-2 sm:space-y-0 sm:space-x-4">
+                    <label for="wod-selector" class="text-base sm:text-lg text-gray-300 font-medium">Sélectionner la Difficulté :</label>
+                    <select id="wod-selector" onchange="switchWODDifficulty()" class="w-full sm:w-auto bg-gray-700 text-white p-3 rounded-lg border border-indigo-500 focus:ring-indigo-500 text-base">
+                        <option value="easy">Facile (Débutant)</option>
+                        <option value="intermediate" selected>Intermédiaire</option>
+                        <option value="advanced">Avancé</option>
+                    </select>
+                </div>
+            </div>
+
+            <p class="text-lg sm:text-xl text-indigo-400 font-semibold" id="program-subtitle"></p>
             <div class="mt-4">
                 <div class="text-base sm:text-lg font-medium text-gray-300 mb-2">Progression Globale : <span id="progress-text" class="text-indigo-400">0%</span></div>
                 <div class="w-full bg-gray-700 rounded-full h-3">
@@ -84,34 +117,36 @@
                     <h2 id="modal-title" class="text-xl sm:text-2xl font-bold text-white mb-2"></h2>
                     <p id="modal-week" class="text-xs sm:text-sm text-indigo-400 mb-4"></p>
                     <div class="space-y-3 mb-6 p-3 bg-gray-700 rounded-lg text-sm sm:text-base">
-                        <p id="modal-details" class="text-gray-200 leading-relaxed"></p>
+                        <div id="modal-details" class="text-gray-200 leading-relaxed"></div>
                         <p id="modal-reco" class="text-xs sm:text-sm font-semibold text-yellow-300"></p>
                     </div>
 
-                    <h3 class="text-lg sm:text-xl font-semibold text-gray-300 mb-2">Mon Journal de Course</h3>
+                    <!-- Titre Dynamique pour les Notes -->
+                    <h3 id="notes-title" class="text-lg sm:text-xl font-semibold text-gray-300 mb-2"></h3>
                     <textarea id="modal-notes" rows="4" class="w-full p-3 border border-gray-600 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 mb-4 bg-gray-900 text-white text-base" placeholder="Votre ressenti, vos notes, les difficultés ou la facilité de la séance..."></textarea>
                     
-                    <!-- Champ de saisie pour le temps final (visible uniquement pour la course J-J du 3km) -->
-                    <div id="final-time-input-container" class="mt-4 hidden">
-                        <label for="final-time-input" class="text-gray-300 mb-1 block text-base">Temps final 3 km (ex: 13:15):</label>
-                        <input id="final-time-input" type="text" class="w-full p-3 border border-gray-600 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 bg-gray-900 text-white text-base" placeholder="Min:Sec (ex: 13:15)">
-                        <p class="text-xs text-gray-500 mt-1">Saisir le temps réel réalisé pour mettre à jour la VMA.</p>
+                    <!-- Champ de saisie du score/temps (Adapté pour Course J-J ou WOD) -->
+                    <div id="session-score-input-container" class="mt-4 hidden">
+                        <label for="session-score-input" class="text-gray-300 mb-1 block text-base" id="session-score-label">Temps final (Min:Sec) :</label>
+                        <input id="session-score-input" type="text" class="w-full p-3 border border-gray-600 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 bg-gray-900 text-white text-base" placeholder="Min:Sec (ex: 13:15)">
+                        <p class="text-xs text-gray-500 mt-1" id="session-score-tip">Saisir le temps réel réalisé.</p>
                     </div>
 
-                    <div class="flex flex-col sm:flex-row justify-between items-center mt-4 space-y-3 sm:space-y-0">
+                    <!-- Actions combinées pour une meilleure accessibilité -->
+                    <div class="flex flex-col sm:flex-row justify-between items-center mt-6 pt-4 border-t border-gray-600 space-y-3 sm:space-y-0">
                         <label class="flex items-center space-x-2">
                             <input id="modal-checkbox" type="checkbox" class="form-checkbox h-6 w-6 text-indigo-500 rounded focus:ring-indigo-500 bg-gray-700 border-gray-600">
                             <span class="text-gray-300 font-medium text-base">Séance Terminée</span>
                         </label>
-                        <button onclick="saveSessionDetails()" class="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-6 rounded-lg transition duration-200 shadow-md text-base">
-                            Sauvegarder
-                        </button>
+                        <div class="flex space-x-3 w-full sm:w-auto">
+                            <button onclick="closeModal()" class="flex-1 sm:flex-none text-gray-400 hover:text-white font-medium py-3 px-4 rounded-lg transition duration-200 text-base border border-gray-700 hover:bg-gray-700">
+                                Fermer
+                            </button>
+                            <button onclick="saveSessionDetails()" class="flex-1 sm:flex-none bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-4 rounded-lg transition duration-200 shadow-md text-base">
+                                Sauvegarder
+                            </button>
+                        </div>
                     </div>
-                </div>
-                <div class="p-3 bg-gray-700 flex justify-end">
-                    <button onclick="closeModal()" class="text-gray-400 hover:text-white font-medium text-sm">
-                        Fermer
-                    </button>
                 </div>
             </div>
         </div>
@@ -124,6 +159,12 @@
         const VMA_INITIAL = 13.5; 
         const PROGRAM_3KM_ID = '3km';
         const PROGRAM_8KM_ID = '8km';
+        const PROGRAM_CROSSOPS_ID = 'crossops'; // Maintenant WODs Fonctionnels
+        // Séparateur utilisé pour distinguer le WOD (Titre) des détails (Exercices) pour les WODs
+        const WOD_SEPARATOR = '|||'; 
+
+        let activeSport = 'running'; // 'running' or 'crossops'
+        let currentWODDifficulty = 'intermediate'; // Difficulté WOD par défaut
 
         /**
          * Convertit les minutes:secondes (string) en km/h.
@@ -173,18 +214,107 @@
             return `${minutes}'${String(seconds).padStart(2, '0')} au ${unit}`;
         }
 
-        // --- DÉFINITIONS DES PROGRAMMES DE BASE (Non modifiables) ---
+        // --- DÉFINITIONS DES WODS ET DES PROGRAMMES (Adaptées pour la difficulté) ---
+
+        // Nouvelle structure de données pour les WODs avec 3 niveaux de difficulté
+        const wodVariations = {
+            1: {
+                s1: {
+                    easy: `WOD PHOENIX (Facile) ||| Force & Core : <ul class="list-disc list-inside mt-1 space-y-1"><li>30-20-10 répétitions de Sit-ups (Abdos)</li><li>10-8-6 répétitions de Burpees (avec step-up)</li><li>10-8-6 répétitions de Pompes (sur les genoux)</li></ul><p class="mt-2 text-sm text-yellow-300">Format: Pour le temps (For Time), Repos si nécessaire. Diminution des répétitions chaque tour.</p>`,
+                    intermediate: `WOD PHOENIX (Inter.) ||| Force & Core : <ul class="list-disc list-inside mt-1 space-y-1"><li>50-40-30-20-10 répétitions de Sit-ups (Abdos)</li><li>15-12-9-6-3 répétitions de Burpees</li><li>15-12-9-6-3 répétitions de Pompes</li></ul><p class="mt-2 text-sm text-yellow-300">Format: Pour le temps (For Time), Viser un temps sous 20 minutes.</p>`,
+                    advanced: `WOD PHOENIX (Avancé) ||| Force & Core : <ul class="list-disc list-inside mt-1 space-y-1"><li>75-60-45-30-15 répétitions de Sit-ups (Abdos)</li><li>20-15-10-5-3 répétitions de Burpees</li><li>20-15-10-5-3 répétitions de Pompes (Pieds surélevés)</li></ul><p class="mt-2 text-sm text-yellow-300">Format: Pour le temps (For Time), Viser un temps sous 15 min.</p>`
+                },
+                s2: {
+                    easy: `WOD BÉLIER (Facile) ||| Cardio-Résistance : <ul class="list-disc list-inside mt-1 space-y-1"><li>Max de tours en 15 minutes (AMRAP)</li><li>8 Squats Classiques</li><li>8 Pompes (mains surélevées)</li><li>8 Montées de Genoux (par jambe)</li></ul><p class="mt-2 text-sm text-yellow-300">Objectif: Maintenir un rythme constant et fluide.</p>`,
+                    intermediate: `WOD BÉLIER (Inter.) ||| Cardio-Résistance : <ul class="list-disc list-inside mt-1 space-y-1"><li>Max de tours en 20 minutes (AMRAP)</li><li>10 Squats Sautés</li><li>10 Pompes (avec mains surélevées)</li><li>10 Montées de Genoux (par jambe)</li></ul><p class="mt-2 text-sm text-yellow-300">Objectif: Maintenir un effort élevé pendant 20 minutes.</p>`,
+                    advanced: `WOD BÉLIER (Avancé) ||| Cardio-Résistance : <ul class="list-disc list-inside mt-1 space-y-1"><li>Max de tours en 25 minutes (AMRAP)</li><li>15 Squats Sautés (avec touche-sol)</li><li>15 Pompes (normales ou explosives)</li><li>15 Montées de Genoux (par jambe)</li></ul><p class="mt-2 text-sm text-yellow-300">Objectif: Pousser l'endurance au maximum.</p>`
+                }
+            },
+            2: {
+                s1: {
+                    easy: `WOD ARMOR (Facile) ||| Force & Puissance : <ul class="list-disc list-inside mt-1 space-y-1"><li>À chaque minute pendant 12 minutes (EMOM)</li><li>3 Tractions Verticales (ou tirage horizontal)</li><li>6 Dips (sur chaise)</li><li>Max de Mountain Climbers dans le temps restant</li></ul>`,
+                    intermediate: `WOD ARMOR (Inter.) ||| Force & Puissance : <ul class="list-disc list-inside mt-1 space-y-1"><li>À chaque minute pendant 16 minutes (EMOM)</li><li>5 Tractions Verticales (ou tirage horizontal)</li><li>10 Dips (ou dips sur chaise)</li><li>Max de Burpees Restants</li></ul>`,
+                    advanced: `WOD ARMOR (Avancé) ||| Force & Puissance : <ul class="list-disc list-inside mt-1 space-y-1"><li>À chaque minute pendant 20 minutes (EMOM)</li><li>8 Tractions (avec bande)</li><li>15 Dips (sur barres parallèles)</li><li>Max de Burpees Box Jump dans le temps restant</li></ul>`
+                },
+                s2: {
+                    easy: `WOD ARES (Facile) ||| Endurance Core : <ul class="list-disc list-inside mt-1 space-y-1"><li>2 Rounds le plus rapidement possible (For Time)</li><li>15 Fentes (par jambe)</li><li>15 Crunches</li><li>15 secondes de Gainage Planche</li></ul><p class="mt-2 text-sm text-yellow-300">Repos 1 min 30 sec entre les tours.</p>`,
+                    intermediate: `WOD ARES (Inter.) ||| Endurance Core : <ul class="list-disc list-inside mt-1 space-y-1"><li>3 Rounds le plus rapidement possible (For Time)</li><li>20 Fentes (par jambe)</li><li>20 V-Ups (Abdos)</li><li>20 secondes de Gainage Planche</li></ul><p class="mt-2 text-sm text-yellow-300">Repos 1 min entre les tours.</p>`,
+                    advanced: `WOD ARES (Avancé) ||| Endurance Core : <ul class="list-disc list-inside mt-1 space-y-1"><li>4 Rounds le plus rapidement possible (For Time)</li><li>25 Fentes Sautées (par jambe)</li><li>25 V-Ups avec poids léger</li><li>30 secondes de Gainage Planche (avec levée de jambe alternée)</li></ul><p class="mt-2 text-sm text-yellow-300">Repos 45 secondes entre les tours.</p>`
+                }
+            },
+            3: {
+                s1: {
+                    easy: `WOD SPARTAN (Facile) ||| Force & Core : <ul class="list-disc list-inside mt-1 space-y-1"><li>50 Pompes (sur les genoux)</li><li>50 Montées de Genoux (total)</li><li>50 Sit-ups</li></ul><p class="mt-2 text-sm text-yellow-300">Diviser en séries courtes de 10-15 répétitions.</p>`,
+                    intermediate: `WOD SPARTAN (Inter.) ||| Force & Core : <ul class="list-disc list-inside mt-1 space-y-1"><li>100 Pompes</li><li>100 Montées de Genoux (total)</li><li>100 Sit-ups</li></ul><p class="mt-2 text-sm text-yellow-300">Diviser en séries courtes pour maintenir l'intensité.</p>`,
+                    advanced: `WOD SPARTAN (Avancé) ||| Force & Core : <ul class="list-disc list-inside mt-1 space-y-1"><li>150 Pompes Diamant</li><li>150 Montées de Genoux (total)</li><li>150 Sit-ups lestés</li></ul><p class="mt-2 text-sm text-yellow-300">Visez 5 sets de 30 répétitions pour chaque exercice.</p>`
+                },
+                s2: {
+                    easy: `WOD THUNDER (Facile) ||| Cardio-Résistance : <ul class="list-disc list-inside mt-1 space-y-1"><li>Max de tours en 18 minutes (AMRAP)</li><li>10 Squats Classiques</li><li>10 Fentes Marchées (par jambe)</li><li>5 Burpees (avec step-up)</li></ul>`,
+                    intermediate: `WOD THUNDER (Inter.) ||| Cardio-Résistance : <ul class="list-disc list-inside mt-1 space-y-1"><li>Max de tours en 25 minutes (AMRAP)</li><li>10 Squats Classiques</li><li>15 Fentes Marchées (par jambe)</li><li>10 Burpees</li></ul>`,
+                    advanced: `WOD THUNDER (Avancé) ||| Cardio-Résistance : <ul class="list-disc list-inside mt-1 space-y-1"><li>Max de tours en 30 minutes (AMRAP)</li><li>15 Squats Sautés</li><li>20 Fentes Marchées (par jambe, lestées)</li><li>15 Burpees</li></ul>`
+                }
+            },
+            4: {
+                s1: {
+                    easy: `WOD ATHENA (Facile) ||| Test de Vitesse-Force : <ul class="list-disc list-inside mt-1 space-y-1"><li>Max de répétitions en 4 minutes</li><li>Burpees-Pompes (sur les genoux)</li></ul><p class="mt-2 text-sm text-yellow-300">Objectif: Effectuer au moins 25 répétitions.</p>`,
+                    intermediate: `WOD ATHENA (Inter.) ||| Test de Vitesse-Force : <ul class="list-disc list-inside mt-1 space-y-1"><li>Max de répétitions en 5 minutes</li><li>Burpees-Pompes (enchaînés)</li></ul><p class="mt-2 text-sm text-yellow-300">Objectif: Effectuer au moins 40 répétitions.</p>`,
+                    advanced: `WOD ATHENA (Avancé) ||| Test de Vitesse-Force : <ul class="list-disc list-inside mt-1 space-y-1"><li>Max de répétitions en 6 minutes</li><li>Burpees-Pompes Explosives</li></ul><p class="mt-2 text-sm text-yellow-300">Objectif: Effectuer plus de 55 répétitions.</p>`
+                },
+                s2: { easy: `Repos Total`, intermediate: `Repos Total`, advanced: `Repos Total` }
+            },
+            5: {
+                s1: {
+                    easy: `WOD TITAN (Facile) ||| Force & Puissance : <ul class="list-disc list-inside mt-1 space-y-1"><li>À chaque minute pendant 15 minutes (EMOM)</li><li>5 Pompes (surélevées)</li><li>5 Tractions Verticales (ou tirage)</li><li>10 Secondes de Gainage Latéral (droite/gauche)</li></ul>`,
+                    intermediate: `WOD TITAN (Inter.) ||| Force & Puissance : <ul class="list-disc list-inside mt-1 space-y-1"><li>À chaque minute pendant 20 minutes (EMOM)</li><li>8 Pompes Diamant</li><li>8 Tractions (ou tirage)</li><li>15 Secondes de Gainage Latéral (droite/gauche)</li></ul>`,
+                    advanced: `WOD TITAN (Avancé) ||| Force & Puissance : <ul class="list-disc list-inside mt-1 space-y-1"><li>À chaque minute pendant 25 minutes (EMOM)</li><li>10 Pompes Explosives</li><li>10 Tractions (strictes)</li><li>20 Secondes de Gainage Latéral (droite/gauche)</li></ul>`
+                },
+                s2: {
+                    easy: `WOD HERCULE (Facile) ||| Endurance Core : <ul class="list-disc list-inside mt-1 space-y-1"><li>3 Rounds le plus rapidement possible (For Time)</li><li>15 Squats Classiques</li><li>10 Sit-Ups</li><li>5 Burpees (avec step-up)</li></ul>`,
+                    intermediate: `WOD HERCULE (Inter.) ||| Endurance Core : <ul class="list-disc list-inside mt-1 space-y-1"><li>5 Rounds le plus rapidement possible (For Time)</li><li>20 Squats Sautés</li><li>15 Sit-Ups</li><li>10 Burpees</li></ul>`,
+                    advanced: `WOD HERCULE (Avancé) ||| Endurance Core : <ul class="list-disc list-inside mt-1 space-y-1"><li>7 Rounds le plus rapidement possible (For Time)</li><li>25 Squats Sautés</li><li>20 Sit-Ups lestés</li><li>15 Burpees</li></ul>`
+                }
+            },
+            6: {
+                s1: {
+                    easy: `WOD GAÏA (Facile) ||| Force & Core : <ul class="list-disc list-inside mt-1 space-y-1"><li>Max de tours en 12 minutes (AMRAP)</li><li>8 Push-ups (Pompes sur genoux)</li><li>8 Step-ups (Montée sur chaise)</li><li>8 Squats Classiques</li></ul>`,
+                    intermediate: `WOD GAÏA (Inter.) ||| Force & Core : <ul class="list-disc list-inside mt-1 space-y-1"><li>Max de tours en 15 minutes (AMRAP)</li><li>10 Push-ups (Pompes)</li><li>10 Step-ups (Montée sur Box ou chaise)</li><li>10 Tirs (Squat Jump)</li></ul>`,
+                    advanced: `WOD GAÏA (Avancé) ||| Force & Core : <ul class="list-disc list-inside mt-1 space-y-1"><li>Max de tours en 20 minutes (AMRAP)</li><li>15 Push-ups (Pompes)</li><li>15 Pistol Squats (alternés)</li><li>15 Tirs (Squat Jump explosif)</li></ul>`
+                },
+                s2: {
+                    easy: `WOD ZEUS (Facile) ||| Cardio-Résistance : <ul class="list-disc list-inside mt-1 space-y-1"><li>2 Rounds le plus rapidement possible (For Time)</li><li>20 Jumping Jacks</li><li>15 Fentes avant (par jambe)</li><li>5 Burpees (avec step-up)</li></ul><p class="mt-2 text-sm text-yellow-300">Repos 45s entre chaque tour.</p>`,
+                    intermediate: `WOD ZEUS (Inter.) ||| Cardio-Résistance : <ul class="list-disc list-inside mt-1 space-y-1"><li>3 Rounds le plus rapidement possible (For Time)</li><li>30 Jumping Jacks</li><li>20 Fentes avant (par jambe)</li><li>10 Burpees</li></ul><p class="mt-2 text-sm text-yellow-300">Repos 30s entre chaque tour.</p>`,
+                    advanced: `WOD ZEUS (Avancé) ||| Cardio-Résistance : <ul class="list-disc list-inside mt-1 space-y-1"><li>4 Rounds le plus rapidement possible (For Time)</li><li>40 Jumping Jacks</li><li>25 Fentes Sautées (par jambe)</li><li>15 Burpees</li></ul><p class="mt-2 text-sm text-yellow-300">Repos 15s entre chaque tour (ou aucun repos).</p>`
+                }
+            },
+            7: {
+                s1: {
+                    easy: `WOD APOLLO (Facile) ||| Affûtage Force : <ul class="list-disc list-inside mt-1 space-y-1"><li>2 Rounds</li><li>8 Pompes (sur genoux)</li><li>8 Squats</li><li>8 Tractions Verticales (ou tirage)</li></ul><p class="mt-2 text-sm text-yellow-300">Récupération complète (3 min) entre les tours.</p>`,
+                    intermediate: `WOD APOLLO (Inter.) ||| Affûtage Force : <ul class="list-disc list-inside mt-1 space-y-1"><li>3 Rounds</li><li>10 Pompes Explosives</li><li>10 Squats</li><li>10 Tractions (ou tirage)</li></ul><p class="mt-2 text-sm text-yellow-300">Récupération complète (3 min) entre les tours.</p>`,
+                    advanced: `WOD APOLLO (Avancé) ||| Affûtage Force : <ul class="list-disc list-inside mt-1 space-y-1"><li>4 Rounds</li><li>15 Pompes Explosives</li><li>15 Squats Sautés lestés</li><li>15 Tractions (strictes)</li></ul><p class="mt-2 text-sm text-yellow-300">Récupération complète (2 min 30 sec) entre les tours.</p>`
+                },
+                s2: {
+                    easy: `WOD MARS (Facile) ||| Rappel Fonctionnel : <ul class="list-disc list-inside mt-1 space-y-1"><li>À chaque minute pendant 8 minutes (EMOM)</li><li>5 Burpees (avec step-up)</li><li>Max de Sit-ups dans le temps restant</li></ul>`,
+                    intermediate: `WOD MARS (Inter.) ||| Rappel Fonctionnel : <ul class="list-disc list-inside mt-1 space-y-1"><li>À chaque minute pendant 10 minutes (EMOM)</li><li>10 Burpees</li><li>Max de Sit-ups dans le temps restant</li></ul>`,
+                    advanced: `WOD MARS (Avancé) ||| Rappel Fonctionnel : <ul class="list-disc list-inside mt-1 space-y-1"><li>À chaque minute pendant 12 minutes (EMOM)</li><li>12 Burpees</li><li>Max de Sit-ups lestés dans le temps restant</li></ul>`
+                }
+            },
+            8: {
+                s1: { easy: `Repos Total`, intermediate: `Repos Total`, advanced: `Repos Total` },
+                s2: { easy: `Repos Total`, intermediate: `Repos Total`, advanced: `Repos Total` }
+            }
+        };
+        
+        // La structure basePrograms doit être adaptée pour utiliser wodVariations
         const basePrograms = {
             [PROGRAM_3KM_ID]: {
                 title: "3 km en 13 min",
                 subtitle: (vma) => `VMA Estimée: ${vma.toFixed(1)} km/h | Allure Cible: 4 min 20 sec/km (8 Semaines)`,
                 plan: [
-                    // S1-S3 : Construction VMA vers 14.0 km/h (basé sur VMA_INITIAL)
+                    // Course à Pied (CP) - Reste inchangé
                     { week: 1, s1: (vma) => `VMA Courte: 10 x 300m (à 13.8 km/h / ${VMAtoPaceTime(VMA_INITIAL, 300, 1.02)}) avec 1 min récup. trottée.`, s2: (vma) => `Résistance Seuil: 3 x 8 min au Seuil (4'50/km) avec 2 min 30 sec récup. trottée.` },
                     { week: 2, s1: (vma) => `VMA Courte: 12 x 300m (à 13.8 km/h / ${VMAtoPaceTime(VMA_INITIAL, 300, 1.02)}) avec 1 min récup. trottée.`, s2: (vma) => `Résistance Seuil: 4 x 6 min au Seuil (4'50/km) avec 2 min récup. trottée.` },
                     { week: 3, s1: (vma) => `VMA Courte: 8 x 400m (à 14.0 km/h / ${VMAtoPaceTime(VMA_INITIAL, 400, 1.04)}) avec 1 min 15 sec récup. trottée.`, s2: (vma) => `Résistance Seuil: 3 x 10 min au Seuil (4'45/km) avec 3 min récup. trottée.` },
-                    { week: 4, s1: (vma) => `Test VMA/Allure: 3 x 1000m (Allure 4'30/km) avec 2 min 30 sec récup.`, s2: (vma) => `Repos Total (ou footing très lent 20 min).` },
-                    // S5-S7 : Augmentation VMA vers 15 km/h (basé sur des allures légèrement plus hautes que l'initial)
+                    { week: 4, s1: (vma) => `Test VMA/Allure: 3 x 1000m (Allure 4'30/km) avec 2 min 30 sec récup.`, s2: (vma) => `Repos Total.` },
                     { week: 5, s1: (vma) => `Mixte VMA: 10 x 200m (sprint max / ${VMAtoPaceTime(14.5, 200, 1.05)}) / 45 sec récup. + 4 x 400m (à 14.5 km/h / ${VMAtoPaceTime(14.5, 400, 1.0)}) / 1 min 15 sec récup.`, s2: (vma) => `Allure Spécifique: 2 x 1500m à Allure Cible (4'20/km) avec 3 min récup. trottée.` },
                     { week: 6, s1: (vma) => `VMA Moyenne: 6 x 500m (à 14.8 km/h / ${VMAtoPaceTime(14.8, 500, 1.0)}) avec 1 min 30 sec récup. trottée.`, s2: (vma) => `Pyramide Courte: 1000m + 800m + 600m + 400m à Allure Cible (4'20/km), avec 2 min 30 sec récup.` },
                     { week: 7, s1: (vma) => `Affûtage Vitesse: 6 x 150m (sprint max / ${VMAtoPaceTime(15.0, 150, 1.05)}) avec 1 min récup. marche.`, s2: (vma) => `Rappel Allure: 1 x 1500m à Allure Cible (4'20/km).` },
@@ -194,25 +324,30 @@
             [PROGRAM_8KM_ID]: {
                 title: "8 km en 40 min",
                 subtitle: (vma) => `VMA Actuelle: ${vma.toFixed(1)} km/h | Allure Cible: 5 min 0 sec/km (8 Semaines)`,
-                // Le plan 8km utilise la VMA CALCULÉE/STOCKÉE (vma) pour TOUTES ses allures clés (Seuil et VMA)
                 plan: [
-                    // Seuil à ~92% de la VMA actuelle
-                    { week: 1, s1: (vma) => `Endurance Seuil: 3 x 10 min au Seuil (à ${ (vma * 0.92).toFixed(1) } km/h / ${VMAtoPaceTime(vma, 1000, 0.92)}) avec 3 min récup. trottée.`, s2: (vma) => `VMA Longue: 6 x 500m (à ${ (vma * 0.95).toFixed(1) } km/h / ${VMAtoPaceTime(vma, 500, 0.95)}) avec 1 min 30 sec récup. trottée.` },
-                    { week: 2, s1: (vma) => `Endurance Seuil: 2 x 15 min au Seuil (à ${ (vma * 0.92).toFixed(1) } km/h / ${VMAtoPaceTime(vma, 1000, 0.92)}) avec 4 min récup. trottée.`, s2: (vma) => `VMA Longue: 4 x 800m (à ${ (vma * 0.92).toFixed(1) } km/h / ${VMAtoPaceTime(vma, 800, 0.92)}) avec 2 min récup. trottée.` },
-                    { week: 3, s1: (vma) => `Allure Spécifique: 3 x 12 min à Allure Cible (5'00/km) avec 3 min récup. trottée.`, s2: (vma) => `VMA Longue: 2 x 1500m (à ${ (vma * 0.90).toFixed(1) } km/h / ${VMAtoPaceTime(vma, 1500, 0.90)}) avec 3 min 30 sec récup. trottée.` },
-                    { week: 4, s1: (vma) => `Test Seuil: 20 min à Allure Seuil Maximum (à ${ (vma * 0.92).toFixed(1) } km/h).`, s2: (vma) => `Repos Total (ou footing très lent 20 min).` },
-                    { week: 5, s1: (vma) => `Endurance Seuil: 2 x 20 min au Seuil (à ${ (vma * 0.92).toFixed(1) } km/h / ${VMAtoPaceTime(vma, 1000, 0.92)}) avec 5 min récup. trottée.`, s2: (vma) => `Mixte VMA: 10 x 400m (à ${ (vma * 0.90).toFixed(1) } km/h / ${VMAtoPaceTime(vma, 400, 0.90)}) avec 1 min 30 sec récup. trottée.` },
-                    { week: 6, s1: (vma) => `Allure Spécifique: 4 x 10 min à Allure Cible (5'00/km) avec 2 min 30 sec récup.`, s2: (vma) => `VMA Longue: 3 x 1000m (à ${ (vma * 0.92).toFixed(1) } km/h / ${VMAtoPaceTime(vma, 1000, 0.92)}) avec 2 min 30 sec récup. trottée.` },
-                    { week: 7, s1: (vma) => `Affûtage Seuil: 3 x 5 min à Allure Cible (5'00/km) avec 2 min récup. trottée.`, s2: (vma) => `Rappel Vitesse: 6 x 200m (rapide / ${VMAtoPaceTime(vma, 200, 1.05)}) avec 1 min récup.` },
+                    // Course à Pied (CP) - Reste inchangé
+                    { week: 1, s1: (vma) => `VMA Longue: 3 x 1000m (à ${ (vma * 0.95).toFixed(1) } km/h / ${VMAtoPaceTime(vma, 1000, 0.95)}) avec 2 min récup. trottée.`, s2: (vma) => `Endurance Seuil: 2 x 15 min au Seuil (à ${ (vma * 0.90).toFixed(1) } km/h / ${VMAtoPaceTime(vma, 1000, 0.90)}) avec 4 min récup. trottée.` },
+                    { week: 2, s1: (vma) => `VMA Longue: 4 x 800m (à ${ (vma * 0.95).toFixed(1) } km/h / ${VMAtoPaceTime(vma, 800, 0.95)}) avec 2 min récup. trottée.`, s2: (vma) => `Endurance Seuil: 3 x 12 min au Seuil (à ${ (vma * 0.90).toFixed(1) } km/h / ${VMAtoPaceTime(vma, 1000, 0.90)}) avec 3 min récup. trottée.` },
+                    { week: 3, s1: (vma) => `VMA Longue: 2 x 1500m (à ${ (vma * 0.92).toFixed(1) } km/h / ${VMAtoPaceTime(vma, 1500, 0.92)}) avec 3 min 30 sec récup. trottée.`, s2: (vma) => `Allure Spécifique: 4 x 10 min à Allure Cible (5'00/km) avec 2 min 30 sec récup.` },
+                    { week: 4, s1: (vma) => `Test Seuil: 20 min à Allure Seuil Maximum (à ${ (vma * 0.92).toFixed(1) } km/h).`, s2: (vma) => `Repos Total.` },
+                    { week: 5, s1: (vma) => `Mixte VMA: 10 x 400m (à ${ (vma * 0.95).toFixed(1) } km/h / ${VMAtoPaceTime(vma, 400, 0.95)}) avec 1 min 30 sec récup. trottée.`, s2: (vma) => `Endurance Seuil: 2 x 20 min au Seuil (à ${ (vma * 0.90).toFixed(1) } km/h / ${VMAtoPaceTime(vma, 1000, 0.90)}) avec 5 min récup. trottée.` },
+                    { week: 6, s1: (vma) => `VMA Longue: 3 x 1200m (à ${ (vma * 0.92).toFixed(1) } km/h / ${VMAtoPaceTime(vma, 1200, 0.92)}) avec 2 min 30 sec récup. trottée.`, s2: (vma) => `Allure Spécifique: 3 x 15 min à Allure Cible (5'00/km) avec 3 min récup. trottée.` },
+                    { week: 7, s1: (vma) => `Affûtage Vitesse: 6 x 200m (rapide / ${VMAtoPaceTime(vma, 200, 1.05)}) avec 1 min récup.`, s2: (vma) => `Affûtage Seuil: 3 x 5 min à Allure Cible (5'00/km) avec 2 min récup. trottée.` },
                     { week: 8, s1: (vma) => `Repos Total`, s2: (vma) => `Course 8 km (Jour J) - Objectif 40 min.` },
                 ]
+            },
+            [PROGRAM_CROSSOPS_ID]: {
+                title: "WODs Fonctionnels",
+                subtitle: (vma) => `Force/Cardio au Poids du Corps | Niveau: ${currentWODDifficulty.toUpperCase()} (8 Semaines)`,
+                plan: [] // Le plan sera rempli dynamiquement par getProgramPlan
             }
         };
+
 
         // --- GESTION DE L'ÉTAT ET DU LOCAL STORAGE ---
 
         let currentProgramKey = PROGRAM_3KM_ID; 
-        let currentWorkoutPlan = getProgramPlan(currentProgramKey);
+        let currentWorkoutPlan = getProgramPlan(PROGRAM_3KM_ID); // Initialisation par défaut
         let currentSessionId = null;
 
         // Stockage de la VMA recalculee (persiste entre les sessions)
@@ -236,16 +371,46 @@
         // Renvoie le plan avec les allures calculées dynamiquement
         function getProgramPlan(key) {
             const vma = getStoredVMA();
-            return basePrograms[key].plan.map(week => ({
-                week: week.week,
-                s1: typeof week.s1 === 'function' ? week.s1(vma) : week.s1,
-                s2: typeof week.s2 === 'function' ? week.s2(vma) : week.s2,
-            }));
+            const basePlan = basePrograms[key] || basePrograms[PROGRAM_3KM_ID];
+
+            if (key === PROGRAM_CROSSOPS_ID) {
+                const difficulty = currentWODDifficulty;
+
+                // Génère le plan WOD en utilisant la difficulté sélectionnée
+                return Object.keys(wodVariations).map(weekNumber => {
+                    const weekData = wodVariations[weekNumber];
+                    const s1Content = weekData.s1[difficulty] || 'Repos Total';
+                    const s2Content = weekData.s2[difficulty] || 'Repos Total';
+
+                    return {
+                        week: parseInt(weekNumber),
+                        s1: s1Content,
+                        s2: s2Content,
+                        day1: 'Séance 1 (Force)',
+                        day2: 'Séance 2 (Cardio-Rés.)'
+                    };
+                });
+            }
+            
+            // Pour la Course à Pied
+            return basePlan.plan.map((weekData, index) => {
+                return {
+                    week: weekData.week,
+                    s1: typeof weekData.s1 === 'function' ? weekData.s1(vma) : weekData.s1, // Lundi
+                    s2: typeof weekData.s2 === 'function' ? weekData.s2(vma) : weekData.s2, // Vendredi
+                    day1: 'Séance 1',
+                    day2: 'Séance 2'
+                };
+            });
         }
 
         function loadSessionData() {
             try {
-                const data = localStorage.getItem('runningPlanData_' + currentProgramKey);
+                // Utilise la clé du programme actuel (3km, 8km, ou crossops + difficulté)
+                const storageKey = currentProgramKey === PROGRAM_CROSSOPS_ID ? 
+                                   'runningPlanData_' + currentProgramKey + '_' + currentWODDifficulty : 
+                                   'runningPlanData_' + currentProgramKey;
+                const data = localStorage.getItem(storageKey);
                 return data ? JSON.parse(data) : {};
             } catch (e) {
                 console.error("Erreur de chargement du localStorage:", e);
@@ -255,7 +420,10 @@
 
         function saveSessionData(data) {
              try {
-                localStorage.setItem('runningPlanData_' + currentProgramKey, JSON.stringify(data));
+                const storageKey = currentProgramKey === PROGRAM_CROSSOPS_ID ? 
+                                   'runningPlanData_' + currentProgramKey + '_' + currentWODDifficulty : 
+                                   'runningPlanData_' + currentProgramKey;
+                localStorage.setItem(storageKey, JSON.stringify(data));
             } catch (e) {
                 console.error("Erreur de sauvegarde du localStorage:", e);
             }
@@ -269,6 +437,7 @@
             const totalSessions = currentWorkoutPlan.length * 2;
 
             for (let i = 0; i < totalSessions; i++) {
+                // La clé de la session est toujours 0 à N-1
                 if (data[i] && data[i].completed) {
                     completedCount++;
                 }
@@ -281,17 +450,26 @@
         }
 
         function renderSchedule() {
-            currentWorkoutPlan = getProgramPlan(currentProgramKey); // Réactualise le plan avec la VMA courante
+            // Détermine la clé de programme active
+            if (activeSport === 'crossops') {
+                currentProgramKey = PROGRAM_CROSSOPS_ID;
+                currentWODDifficulty = document.getElementById('wod-selector').value; // S'assure de la bonne difficulté
+            } else {
+                currentProgramKey = document.getElementById('program-selector').value;
+            }
+
+            currentWorkoutPlan = getProgramPlan(currentProgramKey); // Réactualise le plan
             
             const container = document.getElementById('schedule-container');
             container.innerHTML = '';
             const data = loadSessionData();
             let sessionIdCounter = 0;
             
-            // Mise à jour des titres
+            // Mise à jour des titres et sous-titres
             const vma = getStoredVMA();
-            document.getElementById('main-title').textContent = "Programme d'Entraînement";
-            document.getElementById('program-subtitle').textContent = basePrograms[currentProgramKey].subtitle(vma);
+            const programBase = basePrograms[currentProgramKey];
+            document.getElementById('main-title').textContent = activeSport === 'crossops' ? "Programme WODs Fonctionnels - 8 Semaines" : "Programme Course à Pied";
+            document.getElementById('program-subtitle').textContent = typeof programBase.subtitle === 'function' ? programBase.subtitle(vma) : programBase.subtitle;
 
 
             currentWorkoutPlan.forEach(weekData => {
@@ -303,24 +481,36 @@
                     const sessionId = sessionIdCounter++;
                     const sessionInfo = weekData[sessionKey];
                     const isCompleted = data[sessionId] && data[sessionId].completed;
-                    const sessionName = sessionKey === 's1' ? 'Séance 1' : 'Séance 2';
-                    const sessionType = sessionKey === 's1' ? (currentProgramKey === PROGRAM_3KM_ID ? 'Vitesse' : 'Endurance') : (currentProgramKey === PROGRAM_3KM_ID ? 'Spécifique' : 'VMA');
                     
-                    const cardTitle = sessionInfo.split(':')[0].trim();
-                    const cardSubtitle = sessionInfo.split(':')[1] ? sessionInfo.split(':')[1].trim() : '';
+                    const sessionName = sessionKey === 's1' ? `${weekData.day1}` : `${weekData.day2}`;
+                    
+                    // Utilisation du séparateur approprié
+                    const separator = currentProgramKey === PROGRAM_CROSSOPS_ID ? WOD_SEPARATOR : ':';
+                    const parts = sessionInfo.split(separator);
+                    
+                    const cardTitle = parts[0].trim(); // Nom du WOD ou Type de séance CP
+                    
+                    // Pour les WODs, la sous-titre de la carte est le type de WOD + niveau.
+                    let cardSubtitle = '';
+                    if (currentProgramKey === PROGRAM_CROSSOPS_ID && parts[1]) {
+                        cardSubtitle = parts[1].split(':')[0].trim(); // Prend le type (avant le premier :)
+                    } else if (parts[1]) {
+                        cardSubtitle = parts[1].trim(); 
+                    }
+
 
                     const card = document.createElement('div');
                     card.className = `card p-4 rounded-lg shadow-md mb-3 flex justify-between items-center bg-gray-700 hover:bg-gray-600 border-indigo-500 ${isCompleted ? 'completed' : 'border-gray-700'}`;
                     card.setAttribute('data-id', sessionId);
                     card.setAttribute('data-week', weekData.week);
-                    card.setAttribute('data-type', sessionType);
-                    card.setAttribute('data-details', sessionInfo);
+                    card.setAttribute('data-type', sessionKey === 's1' ? 'Vitesse/Force' : 'Résistance/Endurance');
+                    card.setAttribute('data-details', sessionInfo); // Stocke toute l'info
                     card.setAttribute('onclick', 'openModal(this)');
 
                     card.innerHTML = `
                         <div>
                             <p class="font-semibold text-base text-gray-100">${sessionName} : ${cardTitle}</p>
-                            <p class="text-sm text-gray-400">${cardSubtitle}</p>
+                            <p class="text-sm text-gray-400">${cardSubtitle.replace(/<[^>]*>?/gm, '').replace('Format:', '')}</p> <!-- Supprime l'HTML pour le sous-titre de la carte -->
                         </div>
                         ${isCompleted ? '<svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>' : '<div class="h-7 w-7 border-2 border-gray-500 rounded-full"></div>'}
                     `;
@@ -336,10 +526,41 @@
             const selector = document.getElementById('program-selector');
             const newProgramKey = selector.value;
             
+            // Si l'utilisateur change l'objectif CP, on met à jour la clé et on rend le schedule
             if (newProgramKey !== currentProgramKey) {
                 currentProgramKey = newProgramKey;
-                renderSchedule(); // Re-render avec le nouveau programme et la VMA potentiellement mise à jour
+                renderSchedule(); 
             }
+        }
+
+        function switchWODDifficulty() {
+            currentWODDifficulty = document.getElementById('wod-selector').value;
+            renderSchedule(); 
+        }
+
+        function selectSport(sport) {
+            activeSport = sport;
+            const runningSelector = document.getElementById('running-selector-container');
+            const crossopsSelector = document.getElementById('crossops-selector-container');
+            const tabRunning = document.getElementById('tab-running');
+            const tabCrossOps = document.getElementById('tab-crossops');
+
+            if (sport === 'running') {
+                runningSelector.classList.remove('hidden');
+                crossopsSelector.classList.add('hidden');
+                tabRunning.classList.add('active');
+                tabCrossOps.classList.remove('active');
+                currentProgramKey = document.getElementById('program-selector').value;
+            } else {
+                runningSelector.classList.add('hidden');
+                crossopsSelector.classList.remove('hidden');
+                tabRunning.classList.remove('active');
+                tabCrossOps.classList.add('active');
+                currentProgramKey = PROGRAM_CROSSOPS_ID;
+                // S'assurer que la difficulté WOD est définie
+                currentWODDifficulty = document.getElementById('wod-selector').value; 
+            }
+            renderSchedule();
         }
 
 
@@ -351,42 +572,100 @@
             const data = loadSessionData();
             const sessionData = data[currentSessionId] || { completed: false, notes: '', finalTime: '' };
 
-            const [title, detailContent] = details.split(':');
+            const separator = currentProgramKey === PROGRAM_CROSSOPS_ID ? WOD_SEPARATOR : ':';
+            const parts = details.split(separator);
+            const title = parts[0];
+            const content = parts[1]; 
 
             document.getElementById('modal-title').textContent = title.trim();
             document.getElementById('modal-week').textContent = `Semaine ${week} — Type : ${type}`;
             
             const baseReco = "Recommandation : Pensez à l'échauffement (15 min) et au retour au calme (10 min) pour chaque séance intense.";
-            let detailHTML = `<span class="font-bold text-indigo-400">Détails de la séance :</span> ${detailContent ? detailContent.trim() : title.trim()}`;
             
-            // Logique pour afficher le champ de temps final (uniquement pour la course J-J du 3km)
-            const isFinal3KMSession = (currentProgramKey === PROGRAM_3KM_ID && week === '8' && type === 'Spécifique');
-            const finalTimeContainer = document.getElementById('final-time-input-container');
-            const finalTimeInput = document.getElementById('final-time-input');
+            // Mise à jour du titre des notes (Fix pour le WOD)
+            const notesTitle = document.getElementById('notes-title');
+            notesTitle.textContent = currentProgramKey === PROGRAM_CROSSOPS_ID ? 'Mon Journal de WOD' : 'Mon Journal de Course';
+            
+            // Références aux éléments de score génériques
+            const scoreContainer = document.getElementById('session-score-input-container');
+            const scoreInput = document.getElementById('session-score-input');
+            const scoreLabel = document.getElementById('session-score-label');
+            const scoreTip = document.getElementById('session-score-tip');
 
-            if (isFinal3KMSession) {
-                finalTimeContainer.classList.remove('hidden');
-                finalTimeInput.value = sessionData.finalTime || '';
+            // Réinitialisation
+            scoreContainer.classList.add('hidden');
+            scoreInput.value = '';
+            
+            // Logique d'affichage pour les WODs Fonctionnels
+            if (currentProgramKey === PROGRAM_CROSSOPS_ID && content) {
+                // Pour les WODs: on sépare le Type des Exercices (le Type est avant le premier :)
+                const [wodType, exerciseList] = content.split(':');
+                
+                // Affichage des détails WOD
+                let detailHTML = `
+                    <p class="font-bold text-indigo-400 mb-2">Type d'Entraînement : ${wodType.trim()}</p>
+                    <p class="text-gray-200 leading-relaxed text-base"><span class="font-bold text-red-300">Exercices du WOD :</span></p>
+                    ${exerciseList ? exerciseList.trim() : '<p>Détails non spécifiés.</p>'}
+                `;
+                document.getElementById('modal-details').innerHTML = detailHTML;
+
+                // Configuration de l'input de score
+                if (!title.includes('Repos Total')) {
+                    scoreContainer.classList.remove('hidden');
+                    scoreInput.value = sessionData.finalTime || ''; // Réutilisation de finalTime pour le score WOD
+                    
+                    let placeholder = "Ex: 18:30 (min:sec)";
+                    let label = "Temps réalisé (Min:Sec) :";
+                    let tip = "Enregistrez votre temps pour suivre vos progrès (Format: MM:SS).";
+                    
+                    if (title.includes('(AMRAP)')) {
+                        placeholder = "Ex: 12 Rounds + 5 Reps";
+                        label = "Score AMRAP (Rounds/Reps) :";
+                        tip = "Nombre de tours et répétitions complétés.";
+                    } else if (title.includes('(EMOM)')) {
+                        placeholder = "Ex: 16 Rounds (Max 20)";
+                        label = "Score EMOM (Rounds/Reps) :";
+                        tip = "Rounds/Reps où vous avez tenu l'EMOM, ou score max.";
+                    } else if (title.includes('Test')) {
+                        placeholder = "Ex: 42 Reps";
+                        label = "Score du Test (Répétitions) :";
+                        tip = "Nombre maximum de répétitions ou score total.";
+                    }
+                    
+                    scoreLabel.textContent = label;
+                    scoreInput.placeholder = placeholder;
+                    scoreTip.textContent = tip;
+                }
+
             } else {
-                finalTimeContainer.classList.add('hidden');
-                finalTimeInput.value = '';
-            }
+                // Logique pour la Course à Pied (CP)
+                let detailHTML = `<span class="font-bold text-indigo-400">Détails de la séance :</span> ${content ? content.trim() : title.trim()}`;
+
+                 // Ajout d'un encadré pour clarifier les allures
+                if (content && content.includes('/')) {
+                    const [allureKmh, allureTemps] = content.match(/\((.*?)\)/)?.[1]?.split('/') || [];
+                    if (allureKmh && allureTemps) {
+                        detailHTML += `<p class="mt-2 text-sm text-yellow-300">Allures de Référence : Vitesse = ${allureKmh.trim()}, Temps de référence = ${allureTemps.trim()}</p>`;
+                    } else if (allureKmh) {
+                        detailHTML += `<p class="mt-2 text-sm text-yellow-300">Allure de Référence : ${allureKmh.trim()}</p>`;
+                    }
+                }
+                document.getElementById('modal-details').innerHTML = detailHTML;
 
 
-            // Ajout d'un encadré pour clarifier les allures
-            if (detailContent && detailContent.includes('/')) {
-                const [allureKmh, allureTemps] = detailContent.match(/\((.*?)\)/)?.[1]?.split('/') || [];
-                if (allureKmh && allureTemps) {
-                    detailHTML += `<p class="mt-2 text-sm text-yellow-300">Allures de Référence : Vitesse = ${allureKmh.trim()}, Temps de référence = ${allureTemps.trim()}</p>`;
-                } else if (allureKmh) {
-                    detailHTML += `<p class="mt-2 text-sm text-yellow-300">Allure de Référence : ${allureKmh.trim()}</p>`;
+                // Configuration de l'input pour la Course J-J 3KM (uniquement celle-ci)
+                const isFinal3KMSession = (currentProgramKey === PROGRAM_3KM_ID && week === '8' && type === 'Résistance/Endurance');
+                
+                if (isFinal3KMSession) {
+                    scoreContainer.classList.remove('hidden');
+                    scoreLabel.textContent = 'Temps final 3 km (ex: 13:15) :';
+                    scoreInput.placeholder = 'Min:Sec (ex: 13:15)';
+                    scoreTip.textContent = 'Saisir le temps réel réalisé pour mettre à jour la VMA.';
+                    scoreInput.value = sessionData.finalTime || '';
                 }
             }
-
-
-            document.getElementById('modal-details').innerHTML = detailHTML;
+            
             document.getElementById('modal-reco').textContent = baseReco;
-
             document.getElementById('modal-notes').value = sessionData.notes;
             document.getElementById('modal-checkbox').checked = sessionData.completed;
 
@@ -403,30 +682,42 @@
             const data = loadSessionData();
             const notes = document.getElementById('modal-notes').value;
             const completed = document.getElementById('modal-checkbox').checked;
-            const finalTimeInput = document.getElementById('final-time-input');
-            const finalTime = finalTimeInput.value.trim();
+            
+            // On récupère la valeur du champ de score générique
+            const scoreInput = document.getElementById('session-score-input');
+            const sessionScore = scoreInput.value.trim(); // Ce sera le temps de course ou le score WOD
+
             let newVMA = getStoredVMA();
+            
+            // Détermination de la semaine pour la VMA (récupère le plan actuel car il est à jour)
+            const weekIndex = Math.floor(currentSessionId / 2);
 
             // 1. Sauvegarde des données de la séance
             data[currentSessionId] = {
                 notes: notes,
                 completed: completed,
-                finalTime: finalTime,
+                // On utilise finalTime comme propriété générique pour stocker le score (Course ou WOD)
+                finalTime: sessionScore, 
             };
-
-            // 2. Logique de recalcul de la VMA après la course finale 3km (S8)
-            const isFinal3KMSession = (currentProgramKey === PROGRAM_3KM_ID && finalTime && completed);
             
-            if (isFinal3KMSession) {
-                newVMA = calculateNewVMA(finalTime);
-                setStoredVMA(newVMA);
-                // Le programme est rafraîchi dans renderSchedule()
-                alert(`Nouvelle VMA calculée : ${newVMA.toFixed(1)} km/h. Le programme 8 km sera ajusté en conséquence !`);
+            // 2. Logique de recalcul de la VMA (Uniquement si c'est la session finale 3KM)
+            if (currentWorkoutPlan && currentWorkoutPlan[weekIndex]) {
+                 const week = currentWorkoutPlan[weekIndex].week;
+                 const sessionType = currentSessionId % 2 === 1 ? 'Résistance/Endurance' : 'Vitesse/Force';
+                 
+                const isFinal3KMSession = (currentProgramKey === PROGRAM_3KM_ID && week === 8 && sessionType === 'Résistance/Endurance' && sessionScore && completed);
+                
+                if (isFinal3KMSession) {
+                    newVMA = calculateNewVMA(sessionScore);
+                    setStoredVMA(newVMA);
+                    // Utilisation d'une modale personnalisée au lieu de 'alert'
+                    console.log(`Nouvelle VMA calculée : ${newVMA.toFixed(1)} km/h. Le programme 8 km sera ajusté en conséquence !`);
+                }
             }
 
             saveSessionData(data);
             closeModal();
-            renderSchedule(); // Rafraîchir l'affichage (important pour l'ajustement du titre VMA)
+            renderSchedule(); 
         }
 
         // Initialisation de l'application
@@ -439,7 +730,11 @@
             const selector = document.getElementById('program-selector');
             selector.value = currentProgramKey; 
             
-            renderSchedule();
+            // Assurez-vous que le sélecteur de difficulté WOD est initialisé avec la valeur par défaut
+            const wodSelector = document.getElementById('wod-selector');
+            currentWODDifficulty = wodSelector.value;
+            
+            selectSport('running'); // Assure que le mode 'running' est sélectionné au démarrage
         };
 
         // Fermer la modale en cliquant en dehors
