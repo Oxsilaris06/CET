@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Programmes Personnalisés Course à Pied</title>
+    <!-- Chargement de Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* Styles pour le thème sombre */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #111827; /* Gris très foncé */
+            color: #E5E7EB; /* Gris clair pour le texte */
+        }
+        .header-bg {
+             background-color: #1F2937; /* Gris foncé pour les en-têtes */
+        }
+        .card {
+            transition: all 0.3s ease;
+            cursor: pointer;
+            border-left: 4px solid transparent; /* Bordure par défaut */
+        }
+        .card.completed {
+            background-color: #10b98120; /* Vert léger */
+            border-left: 4px solid #10b981; /* Vert vibrant */
+            opacity: 1; /* Retirer l'opacité pour plus de lisibilité */
+        }
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -2px rgba(0, 0, 0, 0.3);
+            background-color: #374151; /* L'ombre est plus visible sur fond sombre */
+        }
+        .modal-overlay {
+            background-color: rgba(0, 0, 0, 0.85);
+        }
+        .modal-content {
+            background-color: #1F2937;
+        }
+        /* Style pour la progression */
+        .progress-bar-fill {
+            transition: width 1s ease-in-out;
+        }
+    </style>
+</head>
+<body class="p-4 sm:p-8">
+
+    <div class="max-w-4xl mx-auto">
+        <header class="text-center mb-10 p-6 header-bg rounded-xl shadow-2xl">
+            <h1 class="text-4xl font-extrabold text-white mb-2" id="main-title">Programme d'Entraînement</h1>
+            
+            <!-- Sélecteur de Programme -->
+            <div class="mb-4 flex justify-center items-center space-x-4">
+                <label for="program-selector" class="text-lg text-gray-300 font-medium">Sélectionner l'Objectif :</label>
+                <select id="program-selector" onchange="switchProgram()" class="bg-gray-700 text-white p-2 rounded-lg border border-indigo-500 focus:ring-indigo-500">
+                    <option value="3km">3 km en 13 min (8 Semaines)</option>
+                    <option value="8km">8 km en 40 min (8 Semaines)</option>
+                </select>
+            </div>
+
+            <p class="text-xl text-indigo-400 font-semibold" id="program-subtitle">Objectif : 3 km en 13 minutes (8 Semaines)</p>
+            <div class="mt-4">
+                <div class="text-lg font-medium text-gray-300 mb-2">Progression Globale : <span id="progress-text" class="text-indigo-400">0%</span></div>
+                <div class="w-full bg-gray-700 rounded-full h-3">
+                    <div id="progress-bar" class="progress-bar-fill h-3 rounded-full bg-indigo-500" style="width: 0%"></div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Conteneur des Semaines -->
+        <div id="schedule-container" class="space-y-6">
+            <!-- Les semaines seront injectées ici par JavaScript -->
+        </div>
+
+        <!-- Modale de Détails de Séance -->
+        <div id="session-modal" class="fixed inset-0 z-50 hidden items-center justify-center modal-overlay p-4">
+            <div class="modal-content rounded-xl shadow-2xl w-full max-w-lg overflow-hidden transform transition-all border border-gray-700">
+                <div class="p-6">
+                    <h2 id="modal-title" class="text-2xl font-bold text-white mb-2"></h2>
+                    <p id="modal-week" class="text-sm text-indigo-400 mb-4"></p>
+                    <div class="space-y-3 mb-6 p-3 bg-gray-700 rounded-lg">
+                        <p id="modal-details" class="text-gray-200 leading-relaxed"></p>
+                        <p id="modal-reco" class="text-sm font-semibold text-yellow-300"></p>
+                    </div>
+
+                    <h3 class="text-xl font-semibold text-gray-300 mb-2">Mon Journal de Course</h3>
+                    <textarea id="modal-notes" rows="4" class="w-full p-3 border border-gray-600 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 mb-4 bg-gray-900 text-white" placeholder="Votre ressenti, vos notes, les difficultés ou la facilité de la séance..."></textarea>
+                    
+                    <!-- Champ de saisie pour le temps final (visible uniquement pour la course J-J du 3km) -->
+                    <div id="final-time-input-container" class="mt-4 hidden">
+                        <label for="final-time-input" class="text-gray-300 mb-1 block">Temps final 3 km (ex: 13:15):</label>
+                        <input id="final-time-input" type="text" class="w-full p-2 border border-gray-600 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 bg-gray-900 text-white" placeholder="Min:Sec (ex: 13:15)">
+                        <p class="text-xs text-gray-500 mt-1">Saisir le temps réel réalisé pour mettre à jour la VMA.</p>
+                    </div>
+
+                    <div class="flex justify-between items-center mt-4">
+                        <label class="flex items-center space-x-2">
+                            <input id="modal-checkbox" type="checkbox" class="form-checkbox h-5 w-5 text-indigo-500 rounded focus:ring-indigo-500 bg-gray-700 border-gray-600">
+                            <span class="text-gray-300 font-medium">Séance Terminée</span>
+                        </label>
+                        <button onclick="saveSessionDetails()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-4 rounded-lg transition duration-200 shadow-md">
+                            Sauvegarder
+                        </button>
+                    </div>
+                </div>
+                <div class="p-4 bg-gray-700 flex justify-end">
+                    <button onclick="closeModal()" class="text-gray-400 hover:text-white font-medium">
+                        Fermer
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- CONSTANTES ET FONCTIONS D'OUTILS ---
+
+        // VMA de base pour le programme 3km initial (estimation basée sur 14:43)
+        const VMA_INITIAL = 13.5; 
+        const PROGRAM_3KM_ID = '3km';
+        const PROGRAM_8KM_ID = '8km';
+
+        /**
+         * Convertit les minutes:secondes (string) en km/h.
+         * Pour 3km.
+         */
+        function timeToKmh(timeStr) {
+            const parts = timeStr.split(':');
+            if (parts.length !== 2) return 0;
+            const minutes = Number(parts[0]);
+            const seconds = Number(parts[1]);
+            if (isNaN(minutes) || isNaN(seconds)) return 0;
+            const totalHours = (minutes * 60 + seconds) / 3600;
+            // Pour 3km
+            return totalHours > 0 ? 3 / totalHours : 0;
+        }
+
+        /**
+         * Calcule la VMA estimée à partir d'un temps sur 3 km (90% de VMA).
+         */
+        function calculateNewVMA(timeStr) {
+            const V_course = timeToKmh(timeStr);
+            // La vitesse de 3km représente environ 90% de la VMA
+            return V_course > 0 ? V_course / 0.90 : VMA_INITIAL;
+        }
+
+        /**
+         * Convertit la VMA (km/h) et la distance (m) en temps (m:s).
+         * @param {number} VMA - VMA en km/h.
+         * @param {number} distanceM - Distance en mètres.
+         * @param {number} pct - Pourcentage de VMA (ex: 1.05 pour 105%).
+         * @returns {string} Temps de passage au format minutes'secondes.
+         */
+        function VMAtoPaceTime(VMA, distanceM, pct = 1.0) {
+            if (VMA === 0) return "--";
+            const speedKmh = VMA * pct;
+            const distanceKm = distanceM / 1000;
+            const totalHours = distanceKm / speedKmh;
+            const totalSeconds = totalHours * 3600;
+            const minutes = Math.floor(totalSeconds / 60);
+            const seconds = Math.round(totalSeconds % 60);
+            
+            let unit = `${distanceM}m`;
+            if (distanceM === 1000) {
+                unit = 'km'; // Pour le Seuil et les allures spécifiques
+            }
+            
+            return `${minutes}'${String(seconds).padStart(2, '0')} au ${unit}`;
+        }
+
+        // --- DÉFINITIONS DES PROGRAMMES DE BASE (Non modifiables) ---
+        const basePrograms = {
+            [PROGRAM_3KM_ID]: {
+                title: "3 km en 13 min",
+                subtitle: (vma) => `VMA Estimée: ${vma.toFixed(1)} km/h | Allure Cible: 4 min 20 sec/km (8 Semaines)`,
+                plan: [
+                    // S1-S3 : Construction VMA vers 14.0 km/h (basé sur VMA_INITIAL)
+                    { week: 1, s1: (vma) => `VMA Courte: 10 x 300m (à 13.8 km/h / ${VMAtoPaceTime(VMA_INITIAL, 300, 1.02)}) avec 1 min récup. trottée.`, s2: (vma) => `Résistance Seuil: 3 x 8 min au Seuil (4'50/km) avec 2 min 30 sec récup. trottée.` },
+                    { week: 2, s1: (vma) => `VMA Courte: 12 x 300m (à 13.8 km/h / ${VMAtoPaceTime(VMA_INITIAL, 300, 1.02)}) avec 1 min récup. trottée.`, s2: (vma) => `Résistance Seuil: 4 x 6 min au Seuil (4'50/km) avec 2 min récup. trottée.` },
+                    { week: 3, s1: (vma) => `VMA Courte: 8 x 400m (à 14.0 km/h / ${VMAtoPaceTime(VMA_INITIAL, 400, 1.04)}) avec 1 min 15 sec récup. trottée.`, s2: (vma) => `Résistance Seuil: 3 x 10 min au Seuil (4'45/km) avec 3 min récup. trottée.` },
+                    { week: 4, s1: (vma) => `Test VMA/Allure: 3 x 1000m (Allure 4'30/km) avec 2 min 30 sec récup.`, s2: (vma) => `Repos Total (ou footing très lent 20 min).` },
+                    // S5-S7 : Augmentation VMA vers 15 km/h (basé sur des allures légèrement plus hautes que l'initial)
+                    { week: 5, s1: (vma) => `Mixte VMA: 10 x 200m (sprint max / ${VMAtoPaceTime(14.5, 200, 1.05)}) / 45 sec récup. + 4 x 400m (à 14.5 km/h / ${VMAtoPaceTime(14.5, 400, 1.0)}) / 1 min 15 sec récup.`, s2: (vma) => `Allure Spécifique: 2 x 1500m à Allure Cible (4'20/km) avec 3 min récup. trottée.` },
+                    { week: 6, s1: (vma) => `VMA Moyenne: 6 x 500m (à 14.8 km/h / ${VMAtoPaceTime(14.8, 500, 1.0)}) avec 1 min 30 sec récup. trottée.`, s2: (vma) => `Pyramide Courte: 1000m + 800m + 600m + 400m à Allure Cible (4'20/km), avec 2 min 30 sec récup.` },
+                    { week: 7, s1: (vma) => `Affûtage Vitesse: 6 x 150m (sprint max / ${VMAtoPaceTime(15.0, 150, 1.05)}) avec 1 min récup. marche.`, s2: (vma) => `Rappel Allure: 1 x 1500m à Allure Cible (4'20/km).` },
+                    { week: 8, s1: (vma) => `Repos Total`, s2: (vma) => `Course 3 km (Jour J) - Objectif 13 min.` },
+                ]
+            },
+            [PROGRAM_8KM_ID]: {
+                title: "8 km en 40 min",
+                subtitle: (vma) => `VMA Actuelle: ${vma.toFixed(1)} km/h | Allure Cible: 5 min 0 sec/km (8 Semaines)`,
+                // Le plan 8km utilise la VMA CALCULÉE/STOCKÉE (vma) pour TOUTES ses allures clés (Seuil et VMA)
+                plan: [
+                    // Seuil à ~92% de la VMA actuelle
+                    { week: 1, s1: (vma) => `Endurance Seuil: 3 x 10 min au Seuil (à ${ (vma * 0.92).toFixed(1) } km/h / ${VMAtoPaceTime(vma, 1000, 0.92)}) avec 3 min récup. trottée.`, s2: (vma) => `VMA Longue: 6 x 500m (à ${ (vma * 0.95).toFixed(1) } km/h / ${VMAtoPaceTime(vma, 500, 0.95)}) avec 1 min 30 sec récup. trottée.` },
+                    { week: 2, s1: (vma) => `Endurance Seuil: 2 x 15 min au Seuil (à ${ (vma * 0.92).toFixed(1) } km/h / ${VMAtoPaceTime(vma, 1000, 0.92)}) avec 4 min récup. trottée.`, s2: (vma) => `VMA Longue: 4 x 800m (à ${ (vma * 0.92).toFixed(1) } km/h / ${VMAtoPaceTime(vma, 800, 0.92)}) avec 2 min récup. trottée.` },
+                    { week: 3, s1: (vma) => `Allure Spécifique: 3 x 12 min à Allure Cible (5'00/km) avec 3 min récup. trottée.`, s2: (vma) => `VMA Longue: 2 x 1500m (à ${ (vma * 0.90).toFixed(1) } km/h / ${VMAtoPaceTime(vma, 1500, 0.90)}) avec 3 min 30 sec récup. trottée.` },
+                    { week: 4, s1: (vma) => `Test Seuil: 20 min à Allure Seuil Maximum (à ${ (vma * 0.92).toFixed(1) } km/h).`, s2: (vma) => `Repos Total (ou footing très lent 20 min).` },
+                    { week: 5, s1: (vma) => `Endurance Seuil: 2 x 20 min au Seuil (à ${ (vma * 0.92).toFixed(1) } km/h / ${VMAtoPaceTime(vma, 1000, 0.92)}) avec 5 min récup. trottée.`, s2: (vma) => `Mixte VMA: 10 x 400m (à ${ (vma * 0.90).toFixed(1) } km/h / ${VMAtoPaceTime(vma, 400, 0.90)}) avec 1 min 30 sec récup. trottée.` },
+                    { week: 6, s1: (vma) => `Allure Spécifique: 4 x 10 min à Allure Cible (5'00/km) avec 2 min 30 sec récup.`, s2: (vma) => `VMA Longue: 3 x 1000m (à ${ (vma * 0.92).toFixed(1) } km/h / ${VMAtoPaceTime(vma, 1000, 0.92)}) avec 2 min 30 sec récup. trottée.` },
+                    { week: 7, s1: (vma) => `Affûtage Seuil: 3 x 5 min à Allure Cible (5'00/km) avec 2 min récup. trottée.`, s2: (vma) => `Rappel Vitesse: 6 x 200m (rapide / ${VMAtoPaceTime(vma, 200, 1.05)}) avec 1 min récup.` },
+                    { week: 8, s1: (vma) => `Repos Total`, s2: (vma) => `Course 8 km (Jour J) - Objectif 40 min.` },
+                ]
+            }
+        };
+
+        // --- GESTION DE L'ÉTAT ET DU LOCAL STORAGE ---
+
+        let currentProgramKey = PROGRAM_3KM_ID; 
+        let currentWorkoutPlan = getProgramPlan(currentProgramKey);
+        let currentSessionId = null;
+
+        // Stockage de la VMA recalculee (persiste entre les sessions)
+        function getStoredVMA() {
+            try {
+                const storedVMA = parseFloat(localStorage.getItem('userNewVMA'));
+                return isNaN(storedVMA) || storedVMA === 0 ? VMA_INITIAL : storedVMA;
+            } catch (e) {
+                return VMA_INITIAL;
+            }
+        }
+
+        function setStoredVMA(vma) {
+            try {
+                localStorage.setItem('userNewVMA', vma.toFixed(2));
+            } catch (e) {
+                console.error("Erreur de sauvegarde de VMA:", e);
+            }
+        }
+
+        // Renvoie le plan avec les allures calculées dynamiquement
+        function getProgramPlan(key) {
+            const vma = getStoredVMA();
+            return basePrograms[key].plan.map(week => ({
+                week: week.week,
+                s1: typeof week.s1 === 'function' ? week.s1(vma) : week.s1,
+                s2: typeof week.s2 === 'function' ? week.s2(vma) : week.s2,
+            }));
+        }
+
+        function loadSessionData() {
+            try {
+                const data = localStorage.getItem('runningPlanData_' + currentProgramKey);
+                return data ? JSON.parse(data) : {};
+            } catch (e) {
+                console.error("Erreur de chargement du localStorage:", e);
+                return {};
+            }
+        }
+
+        function saveSessionData(data) {
+             try {
+                localStorage.setItem('runningPlanData_' + currentProgramKey, JSON.stringify(data));
+            } catch (e) {
+                console.error("Erreur de sauvegarde du localStorage:", e);
+            }
+        }
+
+        // --- RENDU ET LOGIQUE D'INTERACTION ---
+
+        function updateProgress() {
+            const data = loadSessionData();
+            let completedCount = 0;
+            const totalSessions = currentWorkoutPlan.length * 2;
+
+            for (let i = 0; i < totalSessions; i++) {
+                if (data[i] && data[i].completed) {
+                    completedCount++;
+                }
+            }
+
+            const percentage = totalSessions > 0 ? Math.round((completedCount / totalSessions) * 100) : 0;
+
+            document.getElementById('progress-bar').style.width = percentage + '%';
+            document.getElementById('progress-text').textContent = percentage + '%';
+        }
+
+        function renderSchedule() {
+            currentWorkoutPlan = getProgramPlan(currentProgramKey); // Réactualise le plan avec la VMA courante
+            
+            const container = document.getElementById('schedule-container');
+            container.innerHTML = '';
+            const data = loadSessionData();
+            let sessionIdCounter = 0;
+            
+            // Mise à jour des titres
+            const vma = getStoredVMA();
+            document.getElementById('main-title').textContent = "Programme d'Entraînement";
+            document.getElementById('program-subtitle').textContent = basePrograms[currentProgramKey].subtitle(vma);
+
+
+            currentWorkoutPlan.forEach(weekData => {
+                const weekElement = document.createElement('div');
+                weekElement.className = 'header-bg p-6 rounded-xl shadow-lg border border-gray-700';
+                weekElement.innerHTML = `<h2 class="text-2xl font-bold text-white mb-4 border-b pb-2 border-indigo-400">Semaine ${weekData.week}</h2>`;
+
+                ['s1', 's2'].forEach(sessionKey => {
+                    const sessionId = sessionIdCounter++;
+                    const sessionInfo = weekData[sessionKey];
+                    const isCompleted = data[sessionId] && data[sessionId].completed;
+                    const sessionName = sessionKey === 's1' ? 'Séance 1' : 'Séance 2';
+                    const sessionType = sessionKey === 's1' ? (currentProgramKey === PROGRAM_3KM_ID ? 'Vitesse' : 'Endurance') : (currentProgramKey === PROGRAM_3KM_ID ? 'Spécifique' : 'VMA');
+                    
+                    const cardTitle = sessionInfo.split(':')[0].trim();
+                    const cardSubtitle = sessionInfo.split(':')[1] ? sessionInfo.split(':')[1].trim() : '';
+
+                    const card = document.createElement('div');
+                    card.className = `card p-4 rounded-lg shadow-md mb-3 flex justify-between items-center bg-gray-700 hover:bg-gray-600 border-indigo-500 ${isCompleted ? 'completed' : 'border-gray-700'}`;
+                    card.setAttribute('data-id', sessionId);
+                    card.setAttribute('data-week', weekData.week);
+                    card.setAttribute('data-type', sessionType);
+                    card.setAttribute('data-details', sessionInfo);
+                    card.setAttribute('onclick', 'openModal(this)');
+
+                    card.innerHTML = `
+                        <div>
+                            <p class="font-semibold text-gray-100">${sessionName} : ${cardTitle}</p>
+                            <p class="text-sm text-gray-400">${cardSubtitle}</p>
+                        </div>
+                        ${isCompleted ? '<svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>' : '<div class="h-7 w-7 border-2 border-gray-500 rounded-full"></div>'}
+                    `;
+                    weekElement.appendChild(card);
+                });
+
+                container.appendChild(weekElement);
+            });
+            updateProgress();
+        }
+
+        function switchProgram() {
+            const selector = document.getElementById('program-selector');
+            const newProgramKey = selector.value;
+            
+            if (newProgramKey !== currentProgramKey) {
+                currentProgramKey = newProgramKey;
+                renderSchedule(); // Re-render avec le nouveau programme et la VMA potentiellement mise à jour
+            }
+        }
+
+
+        function openModal(element) {
+            currentSessionId = element.getAttribute('data-id');
+            const week = element.getAttribute('data-week');
+            const type = element.getAttribute('data-type');
+            const details = element.getAttribute('data-details');
+            const data = loadSessionData();
+            const sessionData = data[currentSessionId] || { completed: false, notes: '', finalTime: '' };
+
+            const [title, detailContent] = details.split(':');
+
+            document.getElementById('modal-title').textContent = title.trim();
+            document.getElementById('modal-week').textContent = `Semaine ${week} — Type : ${type}`;
+            
+            const baseReco = "Recommandation : Pensez à l'échauffement (15 min) et au retour au calme (10 min) pour chaque séance intense.";
+            let detailHTML = `<span class="font-bold text-indigo-400">Détails de la séance :</span> ${detailContent ? detailContent.trim() : title.trim()}`;
+            
+            // Logique pour afficher le champ de temps final (uniquement pour la course J-J du 3km)
+            const isFinal3KMSession = (currentProgramKey === PROGRAM_3KM_ID && week === '8' && type === 'Spécifique');
+            const finalTimeContainer = document.getElementById('final-time-input-container');
+            const finalTimeInput = document.getElementById('final-time-input');
+
+            if (isFinal3KMSession) {
+                finalTimeContainer.classList.remove('hidden');
+                finalTimeInput.value = sessionData.finalTime || '';
+            } else {
+                finalTimeContainer.classList.add('hidden');
+                finalTimeInput.value = '';
+            }
+
+
+            // Ajout d'un encadré pour clarifier les allures
+            if (detailContent && detailContent.includes('/')) {
+                const [allureKmh, allureTemps] = detailContent.match(/\((.*?)\)/)?.[1]?.split('/') || [];
+                if (allureKmh && allureTemps) {
+                    detailHTML += `<p class="mt-2 text-sm text-yellow-300">Allures de Référence : Vitesse = ${allureKmh.trim()}, Temps de référence = ${allureTemps.trim()}</p>`;
+                } else if (allureKmh) {
+                    detailHTML += `<p class="mt-2 text-sm text-yellow-300">Allure de Référence : ${allureKmh.trim()}</p>`;
+                }
+            }
+
+
+            document.getElementById('modal-details').innerHTML = detailHTML;
+            document.getElementById('modal-reco').textContent = baseReco;
+
+            document.getElementById('modal-notes').value = sessionData.notes;
+            document.getElementById('modal-checkbox').checked = sessionData.completed;
+
+            document.getElementById('session-modal').classList.remove('hidden');
+            document.getElementById('session-modal').classList.add('flex');
+        }
+
+        function closeModal() {
+            document.getElementById('session-modal').classList.remove('flex');
+            document.getElementById('session-modal').classList.add('hidden');
+        }
+
+        function saveSessionDetails() {
+            const data = loadSessionData();
+            const notes = document.getElementById('modal-notes').value;
+            const completed = document.getElementById('modal-checkbox').checked;
+            const finalTimeInput = document.getElementById('final-time-input');
+            const finalTime = finalTimeInput.value.trim();
+            let newVMA = getStoredVMA();
+
+            // 1. Sauvegarde des données de la séance
+            data[currentSessionId] = {
+                notes: notes,
+                completed: completed,
+                finalTime: finalTime,
+            };
+
+            // 2. Logique de recalcul de la VMA après la course finale 3km (S8)
+            const isFinal3KMSession = (currentProgramKey === PROGRAM_3KM_ID && finalTime && completed);
+            
+            if (isFinal3KMSession) {
+                newVMA = calculateNewVMA(finalTime);
+                setStoredVMA(newVMA);
+                // Le programme est rafraîchi dans renderSchedule()
+                alert(`Nouvelle VMA calculée : ${newVMA.toFixed(1)} km/h. Le programme 8 km sera ajusté en conséquence !`);
+            }
+
+            saveSessionData(data);
+            closeModal();
+            renderSchedule(); // Rafraîchir l'affichage (important pour l'ajustement du titre VMA)
+        }
+
+        // Initialisation de l'application
+        window.onload = function() {
+            // S'assurer que l'utilisateur commence avec la VMA initiale si aucune n'est stockée
+            if (getStoredVMA() === VMA_INITIAL) {
+                setStoredVMA(VMA_INITIAL);
+            }
+
+            const selector = document.getElementById('program-selector');
+            selector.value = currentProgramKey; 
+            
+            renderSchedule();
+        };
+
+        // Fermer la modale en cliquant en dehors
+        document.getElementById('session-modal').addEventListener('click', (e) => {
+            if (e.target.id === 'session-modal') {
+                closeModal();
+            }
+        });
+
+    </script>
+</body>
+</html>
