@@ -93,7 +93,7 @@
                     <label for="wod-selector" class="text-base sm:text-lg text-gray-300 font-medium">Sélectionner la Difficulté :</label>
                     <select id="wod-selector" onchange="switchWODDifficulty()" class="w-full sm:w-auto bg-gray-700 text-white p-3 rounded-lg border border-indigo-500 focus:ring-indigo-500 text-base">
                         <option value="easy">Facile (Débutant)</option>
-                        <option value="intermediate" selected>Intermédiaire</option>
+                        <option value="intermediate">Intermédiaire</option>
                         <option value="advanced">Avancé</option>
                     </select>
                 </div>
@@ -166,8 +166,13 @@
         // Séparateur utilisé pour distinguer le WOD (Titre) des détails (Exercices) pour les WODs
         const WOD_SEPARATOR = '|||'; 
 
+        // Variables d'état qui seront initialisées par localStorage
         let activeSport = 'running'; // 'running' or 'crossops'
-        let currentWODDifficulty = 'intermediate'; // Difficulté WOD par défaut
+        let currentWODDifficulty = 'intermediate'; 
+        let currentProgramKey = PROGRAM_3KM_ID; 
+
+        let currentWorkoutPlan = []; // Initialisation à vide, remplie après chargement initial
+        let currentSessionId = null;
 
         /**
          * Convertit les minutes:secondes (string) en km/h.
@@ -349,10 +354,6 @@
 
         // --- GESTION DE L'ÉTAT ET DU LOCAL STORAGE ---
 
-        let currentProgramKey = PROGRAM_3KM_ID; 
-        let currentWorkoutPlan = getProgramPlan(PROGRAM_3KM_ID); // Initialisation par défaut
-        let currentSessionId = null;
-
         // Stockage de la VMA recalculee (persiste entre les sessions)
         function getStoredVMA() {
             try {
@@ -370,6 +371,28 @@
                 console.error("Erreur de sauvegarde de VMA:", e);
             }
         }
+        
+        // --- NOUVELLES FONCTIONS POUR LA GESTION DES PRÉFÉRENCES ---
+        
+        function getPreference(key, defaultValue) {
+            try {
+                return localStorage.getItem(key) || defaultValue;
+            } catch (e) {
+                console.error(`Erreur de lecture de la préférence ${key}:`, e);
+                return defaultValue;
+            }
+        }
+        
+        function setPreference(key, value) {
+            try {
+                localStorage.setItem(key, value);
+            } catch (e) {
+                console.error(`Erreur de sauvegarde de la préférence ${key}:`, e);
+            }
+        }
+        
+        // --- FIN DES NOUVELLES FONCTIONS ---
+
 
         // Renvoie le plan avec les allures calculées dynamiquement
         function getProgramPlan(key) {
@@ -396,23 +419,46 @@
             }
             
             // Pour la Course à Pied
+            // Si le programme 8km est sélectionné, on utilise la VMA réelle (si calculée) pour les allures.
+            const vmaForPace = key === PROGRAM_8KM_ID ? vma : VMA_INITIAL;
+            
             return basePlan.plan.map((weekData, index) => {
+                // Pour le 3km, on garde les allures initiales pour les semaines 1-4 car on ne recalcule
+                // la VMA qu'après la course (Semaine 8). Pour les semaines 5-8, on a des allures spécifiques.
+                // Pour le 8km, on utilise la vma actuelle dès le début.
+                
+                let s1Content = typeof weekData.s1 === 'function' ? weekData.s1(vmaForPace) : weekData.s1;
+                let s2Content = typeof weekData.s2 === 'function' ? weekData.s2(vmaForPace) : weekData.s2;
+                
+                // Correction pour s'assurer que les allures VMA du programme 3km restent sur la VMA_INITIAL
+                // pour les premières semaines si le plan n'est pas "dynamique" (ce qui est le cas ici)
+                // Le template contient déjà VMA_INITIAL pour les S1-S4 du 3km, pas besoin de surcharger.
+                // Le programme 8km utilise VMA calculée.
+
                 return {
                     week: weekData.week,
-                    s1: typeof weekData.s1 === 'function' ? weekData.s1(vma) : weekData.s1, // Lundi
-                    s2: typeof weekData.s2 === 'function' ? weekData.s2(vma) : weekData.s2, // Vendredi
+                    s1: s1Content, // Lundi
+                    s2: s2Content, // Vendredi
                     day1: 'Séance 1',
                     day2: 'Séance 2'
                 };
             });
         }
 
+        // Le programme 8km utilise la VMA actuelle du coureur
+        const initialPrograms = {
+            [PROGRAM_3KM_ID]: basePrograms[PROGRAM_3KM_ID],
+            [PROGRAM_8KM_ID]: basePrograms[PROGRAM_8KM_ID],
+            [PROGRAM_CROSSOPS_ID]: basePrograms[PROGRAM_CROSSOPS_ID]
+        };
+
+
         function loadSessionData() {
             try {
-                // Utilise la clé du programme actuel (3km, 8km, ou crossops + difficulté)
-                const storageKey = currentProgramKey === PROGRAM_CROSSOPS_ID ? 
-                                   'runningPlanData_' + currentProgramKey + '_' + currentWODDifficulty : 
-                                   'runningPlanData_' + currentProgramKey;
+                // Utilise une clé de stockage basée sur le programme et la difficulté (si WOD)
+                const storageKey = activeSport === PROGRAM_CROSSOPS_ID ? 
+                                   'sessionData_' + PROGRAM_CROSSOPS_ID + '_' + currentWODDifficulty : 
+                                   'sessionData_' + currentProgramKey;
                 const data = localStorage.getItem(storageKey);
                 return data ? JSON.parse(data) : {};
             } catch (e) {
@@ -423,9 +469,9 @@
 
         function saveSessionData(data) {
              try {
-                const storageKey = currentProgramKey === PROGRAM_CROSSOPS_ID ? 
-                                   'runningPlanData_' + currentProgramKey + '_' + currentWODDifficulty : 
-                                   'runningPlanData_' + currentProgramKey;
+                const storageKey = activeSport === PROGRAM_CROSSOPS_ID ? 
+                                   'sessionData_' + PROGRAM_CROSSOPS_ID + '_' + currentWODDifficulty : 
+                                   'sessionData_' + currentProgramKey;
                 localStorage.setItem(storageKey, JSON.stringify(data));
             } catch (e) {
                 console.error("Erreur de sauvegarde du localStorage:", e);
@@ -437,7 +483,15 @@
         function updateProgress() {
             const data = loadSessionData();
             let completedCount = 0;
-            const totalSessions = currentWorkoutPlan.length * 2;
+            // On calcule le nombre total de sessions uniquement si le plan est chargé
+            const totalSessions = currentWorkoutPlan.length * 2; 
+            
+            if (totalSessions === 0) {
+                 document.getElementById('progress-bar').style.width = '0%';
+                 document.getElementById('progress-text').textContent = '0%';
+                 return;
+            }
+
 
             for (let i = 0; i < totalSessions; i++) {
                 // La clé de la session est toujours 0 à N-1
@@ -446,20 +500,21 @@
                 }
             }
 
-            const percentage = totalSessions > 0 ? Math.round((completedCount / totalSessions) * 100) : 0;
+            const percentage = Math.round((completedCount / totalSessions) * 100);
 
             document.getElementById('progress-bar').style.width = percentage + '%';
             document.getElementById('progress-text').textContent = percentage + '%';
         }
 
         function renderSchedule() {
-            // Détermine la clé de programme active
+            // Mise à jour de l'état global avant de rendre
             if (activeSport === 'crossops') {
                 currentProgramKey = PROGRAM_CROSSOPS_ID;
-                currentWODDifficulty = document.getElementById('wod-selector').value; // S'assure de la bonne difficulté
             } else {
                 currentProgramKey = document.getElementById('program-selector').value;
             }
+            // S'assure que la difficulté WOD est à jour (important pour la clé de sauvegarde)
+            currentWODDifficulty = document.getElementById('wod-selector').value; 
 
             currentWorkoutPlan = getProgramPlan(currentProgramKey); // Réactualise le plan
             
@@ -471,8 +526,15 @@
             // Mise à jour des titres et sous-titres
             const vma = getStoredVMA();
             const programBase = basePrograms[currentProgramKey];
-            document.getElementById('main-title').textContent = activeSport === 'crossops' ? "Programme WODs Fonctionnels - 8 Semaines" : "Programme Course à Pied";
-            document.getElementById('program-subtitle').textContent = typeof programBase.subtitle === 'function' ? programBase.subtitle(vma) : programBase.subtitle;
+
+            // Pour le WOD, le sous-titre doit être mis à jour avec la difficulté
+            if (currentProgramKey === PROGRAM_CROSSOPS_ID) {
+                 document.getElementById('main-title').textContent = "Programme WODs Fonctionnels - 8 Semaines";
+                 document.getElementById('program-subtitle').textContent = `Force/Cardio au Poids du Corps | Niveau: ${currentWODDifficulty.toUpperCase()} (8 Semaines)`;
+            } else {
+                 document.getElementById('main-title').textContent = "Programme Course à Pied";
+                 document.getElementById('program-subtitle').textContent = typeof programBase.subtitle === 'function' ? programBase.subtitle(vma) : programBase.subtitle;
+            }
 
 
             currentWorkoutPlan.forEach(weekData => {
@@ -529,7 +591,9 @@
             const selector = document.getElementById('program-selector');
             const newProgramKey = selector.value;
             
-            // Si l'utilisateur change l'objectif CP, on met à jour la clé et on rend le schedule
+            // Sauvegarde de la préférence du programme CP
+            setPreference('userProgramKey', newProgramKey);
+
             if (newProgramKey !== currentProgramKey) {
                 currentProgramKey = newProgramKey;
                 renderSchedule(); 
@@ -537,12 +601,22 @@
         }
 
         function switchWODDifficulty() {
-            currentWODDifficulty = document.getElementById('wod-selector').value;
-            renderSchedule(); 
+            const selector = document.getElementById('wod-selector');
+            const newDifficulty = selector.value;
+            
+            // Sauvegarde de la préférence de difficulté WOD
+            setPreference('userWODDifficulty', newDifficulty);
+
+            if (newDifficulty !== currentWODDifficulty) {
+                currentWODDifficulty = newDifficulty;
+                renderSchedule(); 
+            }
         }
 
         function selectSport(sport) {
             activeSport = sport;
+            setPreference('userActiveSport', sport); // Sauvegarde la préférence du sport actif
+
             const runningSelector = document.getElementById('running-selector-container');
             const crossopsSelector = document.getElementById('crossops-selector-container');
             const tabRunning = document.getElementById('tab-running');
@@ -560,7 +634,8 @@
                 tabCrossOps.classList.remove('active', 'bg-indigo-600', 'text-white');
                 tabCrossOps.classList.add('bg-gray-700', 'text-gray-300');
                 
-                currentProgramKey = document.getElementById('program-selector').value;
+                // On s'assure que currentProgramKey est bien le programme running sélectionné
+                currentProgramKey = document.getElementById('program-selector').value; 
             } else {
                 runningSelector.classList.add('hidden');
                 crossopsSelector.classList.remove('hidden');
@@ -744,19 +819,25 @@
 
         // Initialisation de l'application
         window.onload = function() {
-            // S'assurer que l'utilisateur commence avec la VMA initiale si aucune n'est stockée
+            // 1. Initialiser la VMA si elle n'existe pas
             if (getStoredVMA() === VMA_INITIAL) {
                 setStoredVMA(VMA_INITIAL);
             }
 
-            const selector = document.getElementById('program-selector');
-            selector.value = currentProgramKey; 
+            // 2. Charger les préférences de l'utilisateur
+            activeSport = getPreference('userActiveSport', 'running');
+            currentProgramKey = getPreference('userProgramKey', PROGRAM_3KM_ID);
+            currentWODDifficulty = getPreference('userWODDifficulty', 'intermediate');
+
+            // 3. Mettre à jour les sélecteurs UI
+            const programSelector = document.getElementById('program-selector');
+            programSelector.value = currentProgramKey; 
             
-            // Assurez-vous que le sélecteur de difficulté WOD est initialisé avec la valeur par défaut
             const wodSelector = document.getElementById('wod-selector');
-            currentWODDifficulty = wodSelector.value;
+            wodSelector.value = currentWODDifficulty;
             
-            selectSport('running'); // Assure que le mode 'running' est sélectionné au démarrage
+            // 4. Initialiser l'affichage avec le sport actif récupéré
+            selectSport(activeSport); 
         };
 
         // Fermer la modale en cliquant en dehors
