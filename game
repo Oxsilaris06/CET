@@ -1,0 +1,974 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Gilette Takedown V2 - Advanced</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Saira+Stencil+One&family=Oswald:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    
+    <style>
+        /* --- GLOBAL & UI --- */
+        body {
+            background-color: #0f172a;
+            color: #e2e8f0;
+            font-family: 'Oswald', sans-serif;
+            overflow: hidden;
+            touch-action: none;
+            user-select: none;
+        }
+        
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            background-color: #1e293b;
+            /* Fond quadrillé tactique */
+            background-image: 
+                linear-gradient(rgba(51, 65, 85, 0.5) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(51, 65, 85, 0.5) 1px, transparent 1px);
+            background-size: 40px 40px;
+        }
+
+        canvas { display: block; touch-action: none; }
+
+        .ui-layer {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; padding: 10px;
+        }
+        
+        .interactive { pointer-events: auto; }
+        .stencil { font-family: 'Saira Stencil One', cursive; }
+        
+        /* Effet CRT / Scanline */
+        .crt-overlay {
+            position: absolute; inset: 0; pointer-events: none; z-index: 20;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%);
+            background-size: 100% 4px;
+        }
+
+        /* Animations */
+        @keyframes pulse-red { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
+        .animate-pulse-red { animation: pulse-red 2s infinite; }
+
+        /* Boutons tactiques */
+        .tac-btn {
+            background: rgba(15, 23, 42, 0.9);
+            border: 1px solid #475569;
+            color: #94a3b8;
+            text-transform: uppercase;
+            font-family: 'Saira Stencil One', sans-serif;
+            transition: all 0.2s;
+        }
+        .tac-btn:active { transform: scale(0.95); }
+        .tac-btn.active { border-color: #3b82f6; color: #3b82f6; background: rgba(59, 130, 246, 0.1); }
+        .tac-btn.danger { border-color: #ef4444; color: #ef4444; }
+        .tac-btn.play { border-color: #22c55e; color: #22c55e; background: rgba(34, 197, 94, 0.1); }
+
+        /* Modal */
+        #modal-screen {
+            position: absolute; inset: 0; background: rgba(15, 23, 42, 0.98); z-index: 50;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            transition: opacity 0.3s;
+        }
+        .hidden-modal { opacity: 0; pointer-events: none; }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+        <div class="crt-overlay"></div>
+
+        <!-- UI LAYER -->
+        <div class="ui-layer">
+            <!-- Top Bar -->
+            <div class="flex justify-between items-start interactive w-full">
+                <div class="flex flex-col gap-1">
+                    <div class="bg-slate-900/90 border border-slate-700 px-3 py-1 rounded text-blue-500 stencil text-lg shadow-lg">
+                        GILETTE TAKEDOWN <span class="text-xs text-slate-500">V2</span>
+                    </div>
+                    <div id="status-badge" class="bg-yellow-500/20 border border-yellow-500/50 px-2 py-1 rounded text-yellow-400 text-xs font-bold text-center shadow-lg">
+                        PLANIFICATION
+                    </div>
+                </div>
+
+                <!-- Stats -->
+                <div class="flex gap-2">
+                    <div class="bg-slate-900/90 border border-slate-700 px-3 py-1 rounded text-center shadow-lg">
+                        <div class="text-[10px] text-slate-400">HOSTILES</div>
+                        <div id="ui-hostiles" class="text-red-500 font-bold text-xl leading-none">0</div>
+                    </div>
+                    <div class="bg-slate-900/90 border border-slate-700 px-3 py-1 rounded text-center shadow-lg">
+                        <div class="text-[10px] text-slate-400">CIVILS</div>
+                        <div id="ui-civils" class="text-green-500 font-bold text-xl leading-none">0</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bottom Controls -->
+            <div class="flex flex-col gap-2 mb-2 interactive w-full">
+                
+                <!-- Outils Planification (Visible only in pause/plan) -->
+                <div id="planning-tools" class="flex justify-center gap-3 mb-2 transition-opacity duration-300">
+                    <div class="text-xs text-slate-400 bg-slate-900/80 px-2 py-1 rounded">
+                        <span class="material-icons text-sm align-middle">touch_app</span> 
+                        Tracer itinéraire
+                    </div>
+                    <div class="text-xs text-slate-400 bg-slate-900/80 px-2 py-1 rounded">
+                        <span class="material-icons text-sm align-middle">visibility</span> 
+                        Champs de vision dynamiques
+                    </div>
+                </div>
+
+                <!-- Main Actions -->
+                <div class="flex justify-between items-center">
+                    <button id="btn-reset" class="tac-btn rounded-full w-12 h-12 flex items-center justify-center shadow-lg" title="Réinitialiser">
+                        <span class="material-icons">restart_alt</span>
+                    </button>
+
+                    <div class="flex gap-3">
+                        <button id="btn-clear" class="tac-btn px-4 py-2 rounded shadow-lg text-sm font-bold tracking-wide">
+                            EFFACER
+                        </button>
+                        <!-- Bouton Play/Pause Dynamique -->
+                        <button id="btn-action" class="tac-btn play px-6 py-2 rounded shadow-lg text-xl font-bold tracking-widest flex items-center gap-2">
+                            <span class="material-icons" id="icon-action">play_arrow</span> 
+                            <span id="text-action">ACTION</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal Mission / Result -->
+        <div id="modal-screen">
+            <div class="relative w-full max-w-md p-6 text-center">
+                <img src="android-icon-192x192.png" class="w-20 h-20 mx-auto mb-4 opacity-90 drop-shadow-[0_0_10px_rgba(59,130,246,0.5)]">
+                <h2 id="modal-title" class="stencil text-4xl text-white mb-2 tracking-widest">BRIEFING</h2>
+                <div id="modal-content" class="text-gray-300 mb-8 text-sm bg-slate-800/50 p-4 rounded border border-slate-700">
+                    <!-- Dynamic Content -->
+                </div>
+                <button id="btn-modal-action" class="bg-blue-600 hover:bg-blue-500 text-white w-full py-4 rounded text-xl font-bold stencil tracking-widest shadow-lg border-t border-blue-400">
+                    LANCER
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- ASSETS & CONFIG ---
+        const CANVAS = document.getElementById('gameCanvas');
+        const CTX = CANVAS.getContext('2d');
+        const ICON_IMG = new Image();
+        ICON_IMG.src = 'android-icon-192x192.png';
+
+        // États du jeu
+        const STATES = { PLANNING: 0, RUNNING: 1, PAUSED: 2, ENDED: 3 };
+        let appState = STATES.PLANNING;
+
+        // Configuration Physique
+        const CFG = {
+            opSpeed: 2.2,
+            opRadius: 18,
+            opViewDist: 280,
+            opFov: Math.PI / 2.2, // ~80 deg
+            enemySpeed: 1.2,
+            enemyRadius: 18,
+            enemyViewDist: 220,
+            enemyFov: Math.PI / 3, // 60 deg
+            bulletSpeed: 12,
+            fireRate: 15 // frames entre tirs
+        };
+
+        // Variables Globales
+        let currentLevel = 0;
+        let entities = [];
+        let walls = [];
+        let furniture = []; // Couverture basse (bloque mouvement, pas vision)
+        let particles = [];
+        let bullets = [];
+        let activeDrag = null; // Opérateur en cours de tracé
+        let frameCount = 0;
+
+        // --- MATHS & PHYSIQUE ---
+        const Vec2 = (x, y) => ({x, y});
+        const dist = (v1, v2) => Math.hypot(v2.x - v1.x, v2.y - v1.y);
+        const angleTo = (v1, v2) => Math.atan2(v2.y - v1.y, v2.x - v1.x);
+        
+        // Intersection Segment-Segment (Pour les murs)
+        function lineIntersect(p1, p2, p3, p4) {
+            const denom = (p4.y - p3.y) * (p2.x - p1.x) - (p4.x - p3.x) * (p2.y - p1.y);
+            if (denom === 0) return null;
+            const ua = ((p4.x - p3.x) * (p1.y - p3.y) - (p4.y - p3.y) * (p1.x - p3.x)) / denom;
+            const ub = ((p2.x - p1.x) * (p1.y - p3.y) - (p2.y - p1.y) * (p1.x - p3.x)) / denom;
+            if (ua >= 0 && ua <= 1 && ub >= 0 && ub <= 1) {
+                return { x: p1.x + ua * (p2.x - p1.x), y: p1.y + ua * (p2.y - p1.y) };
+            }
+            return null;
+        }
+
+        // Raycast de vision
+        function checkLineOfSight(start, end) {
+            // Distance max
+            if (dist(start, end) > CFG.opViewDist * 1.2) return false; // Légère tolérance
+
+            // Murs
+            for (let w of walls) {
+                // 4 cotés du mur
+                const lines = [
+                    [Vec2(w.x, w.y), Vec2(w.x + w.w, w.y)],
+                    [Vec2(w.x + w.w, w.y), Vec2(w.x + w.w, w.y + w.h)],
+                    [Vec2(w.x + w.w, w.y + w.h), Vec2(w.x, w.y + w.h)],
+                    [Vec2(w.x, w.y + w.h), Vec2(w.x, w.y)]
+                ];
+                for (let l of lines) {
+                    if (lineIntersect(start, end, l[0], l[1])) return false;
+                }
+            }
+            return true;
+        }
+
+        // --- ENTITÉS ---
+
+        class Entity {
+            constructor(x, y, team) {
+                this.pos = Vec2(x, y);
+                this.team = team; // 'blue', 'red', 'civil'
+                this.angle = 0;
+                this.active = true;
+                this.hp = 100;
+                this.radius = CFG.opRadius;
+            }
+            hit(dmg, angle) {
+                this.hp -= dmg;
+                // Particules de sang
+                spawnParticles(this.pos.x, this.pos.y, 10, 'blood', angle);
+                if (this.hp <= 0) {
+                    this.active = false;
+                    this.hp = 0;
+                }
+            }
+        }
+
+        class Operator extends Entity {
+            constructor(x, y) {
+                super(x, y, 'blue');
+                this.path = []; // Liste de points
+                this.pathIdx = 0;
+                this.viewRange = CFG.opViewDist;
+                this.fov = CFG.opFov;
+                this.cooldown = 0;
+                this.mag = 30; // Munitions
+            }
+
+            update() {
+                if (!this.active) return;
+                if (appState !== STATES.RUNNING) return;
+
+                // Mouvement
+                if (this.path.length > 0 && this.pathIdx < this.path.length) {
+                    let target = this.path[this.pathIdx];
+                    let d = dist(this.pos, target);
+                    
+                    // Orientation fluide vers le mouvement
+                    let moveAngle = angleTo(this.pos, target);
+                    this.angle = lerpAngle(this.angle, moveAngle, 0.2);
+
+                    if (d < CFG.opSpeed) {
+                        this.pos = target;
+                        this.pathIdx++;
+                    } else {
+                        this.pos.x += Math.cos(moveAngle) * CFG.opSpeed;
+                        this.pos.y += Math.sin(moveAngle) * CFG.opSpeed;
+                    }
+                }
+
+                // Combat
+                this.cooldown--;
+                let enemies = entities.filter(e => e.team === 'red' && e.active);
+                
+                // Chercher l'ennemi le plus proche et visible
+                let target = null;
+                let minDist = Infinity;
+
+                for (let e of enemies) {
+                    if (checkLineOfSight(this.pos, e.pos)) {
+                        // Vérifier si dans le cône de vision
+                        let ang = angleTo(this.pos, e.pos);
+                        let diff = Math.abs(normalizeAngle(ang - this.angle));
+                        
+                        if (diff < this.fov / 2) {
+                            let d = dist(this.pos, e.pos);
+                            if (d < minDist) {
+                                minDist = d;
+                                target = e;
+                            }
+                        }
+                    }
+                }
+
+                if (target) {
+                    // Tourner vers la cible rapidement
+                    this.angle = angleTo(this.pos, target.pos);
+                    if (this.cooldown <= 0 && this.mag > 0) {
+                        shoot(this, target);
+                        this.cooldown = CFG.fireRate;
+                        this.mag--;
+                    }
+                }
+            }
+
+            draw(ctx) {
+                // Trace
+                if (this.path.length > 0 && this.active) {
+                    ctx.strokeStyle = 'rgba(59, 130, 246, 0.4)';
+                    ctx.lineWidth = 2;
+                    ctx.setLineDash([5, 5]);
+                    ctx.beginPath();
+                    // Dessine à partir de la pos actuelle
+                    ctx.moveTo(this.pos.x, this.pos.y);
+                    // Dessine à partir de l'index courant ou 0 si planning
+                    let start = (appState === STATES.PLANNING || appState === STATES.PAUSED) ? 0 : this.pathIdx;
+                    for(let i=start; i<this.path.length; i++) {
+                        ctx.lineTo(this.path[i].x, this.path[i].y);
+                    }
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                    
+                    // Indicateur de fin de course
+                    if (this.path.length > 0) {
+                        let end = this.path[this.path.length-1];
+                        ctx.fillStyle = 'rgba(59, 130, 246, 0.4)';
+                        ctx.beginPath(); ctx.arc(end.x, end.y, 4, 0, Math.PI*2); ctx.fill();
+                    }
+                }
+
+                ctx.save();
+                ctx.translate(this.pos.x, this.pos.y);
+                
+                // Cadavre ou Vivant
+                if (!this.active) {
+                    ctx.rotate(this.angle);
+                    ctx.fillStyle = '#334155'; // Gris mort
+                    ctx.beginPath(); ctx.arc(0,0, this.radius, 0, Math.PI*2); ctx.fill();
+                    // Croix
+                    ctx.strokeStyle = '#94a3b8'; ctx.lineWidth = 2;
+                    ctx.beginPath(); ctx.moveTo(-10,-10); ctx.lineTo(10,10); ctx.moveTo(10,-10); ctx.lineTo(-10,10); ctx.stroke();
+                } else {
+                    // Vision Cone
+                    ctx.rotate(this.angle);
+                    ctx.fillStyle = 'rgba(59, 130, 246, 0.15)'; // Bleu
+                    ctx.beginPath(); ctx.moveTo(0,0); ctx.arc(0,0, this.viewRange, -this.fov/2, this.fov/2); ctx.fill();
+
+                    // Sprite
+                    ctx.rotate(Math.PI/2); // Image nativement droite
+                    try {
+                        ctx.drawImage(ICON_IMG, -this.radius, -this.radius, this.radius*2, this.radius*2);
+                    } catch(e) {
+                        ctx.fillStyle = '#3b82f6'; ctx.beginPath(); ctx.arc(0,0, this.radius, 0, Math.PI*2); ctx.fill();
+                    }
+                    
+                    // Indicateur munitions si bas
+                    if (this.mag < 10) {
+                        ctx.rotate(-Math.PI/2); // Reset rot
+                        ctx.fillStyle = 'orange';
+                        ctx.font = '10px Arial';
+                        ctx.fillText("!", 0, -20);
+                    }
+                }
+                ctx.restore();
+            }
+        }
+
+        class Enemy extends Entity {
+            constructor(x, y, patrolPoints = []) {
+                super(x, y, 'red');
+                this.patrolPoints = patrolPoints;
+                this.patrolIdx = 0;
+                this.state = 'PATROL'; // PATROL, ALERT, COMBAT
+                this.alertTimer = 0;
+                this.cooldown = 0;
+                this.fov = CFG.enemyFov;
+                this.angle = patrolPoints.length > 0 ? angleTo(this.pos, patrolPoints[0]) : Math.random() * Math.PI * 2;
+            }
+
+            update() {
+                if (!this.active || appState !== STATES.RUNNING) return;
+
+                // 1. Check Vision
+                let target = null;
+                let minDist = Infinity;
+                let operators = entities.filter(e => e.team === 'blue' && e.active);
+
+                for (let op of operators) {
+                    if (checkLineOfSight(this.pos, op.pos)) {
+                        let ang = angleTo(this.pos, op.pos);
+                        let diff = Math.abs(normalizeAngle(ang - this.angle));
+                        
+                        // En alerte, FOV augmente
+                        let currentFov = (this.state === 'ALERT') ? Math.PI : this.fov;
+
+                        if (diff < currentFov / 2) {
+                            if (dist(this.pos, op.pos) < minDist) {
+                                minDist = dist(this.pos, op.pos);
+                                target = op;
+                            }
+                        }
+                    }
+                }
+
+                // 2. State Machine
+                if (target) {
+                    this.state = 'COMBAT';
+                    this.angle = angleTo(this.pos, target.pos);
+                    this.cooldown--;
+                    if (this.cooldown <= 0) {
+                        shoot(this, target);
+                        this.cooldown = CFG.fireRate * 1.5; // Tire moins vite que le PSIG
+                    }
+                } else {
+                    if (this.state === 'COMBAT') {
+                        // Perte de vue -> Alerte
+                        this.state = 'ALERT';
+                        this.alertTimer = 120; // 2 secondes de recherche
+                    } else if (this.state === 'ALERT') {
+                        this.alertTimer--;
+                        // Tourne sur soi meme pour chercher
+                        this.angle += 0.05;
+                        if (this.alertTimer <= 0) this.state = 'PATROL';
+                    } else {
+                        // PATROL
+                        if (this.patrolPoints.length > 0) {
+                            let dest = this.patrolPoints[this.patrolIdx];
+                            let d = dist(this.pos, dest);
+                            let moveAngle = angleTo(this.pos, dest);
+                            
+                            // Smooth turn
+                            this.angle = lerpAngle(this.angle, moveAngle, 0.1);
+
+                            if (d < 5) {
+                                this.patrolIdx = (this.patrolIdx + 1) % this.patrolPoints.length;
+                            } else {
+                                this.pos.x += Math.cos(moveAngle) * CFG.enemySpeed;
+                                this.pos.y += Math.sin(moveAngle) * CFG.enemySpeed;
+                            }
+                        }
+                    }
+                }
+            }
+
+            draw(ctx) {
+                if (!this.active) {
+                    // Cadavre
+                    ctx.fillStyle = '#450a0a'; // Rouge sombre
+                    ctx.beginPath(); ctx.arc(this.pos.x, this.pos.y, this.radius, 0, Math.PI*2); ctx.fill();
+                    return;
+                }
+
+                ctx.save();
+                ctx.translate(this.pos.x, this.pos.y);
+                ctx.rotate(this.angle);
+
+                // Cône
+                ctx.fillStyle = this.state === 'COMBAT' ? 'rgba(239, 68, 68, 0.3)' : 'rgba(239, 68, 68, 0.1)';
+                let currentFov = (this.state === 'ALERT') ? Math.PI : this.fov;
+                ctx.beginPath(); ctx.moveTo(0,0); ctx.arc(0,0, CFG.enemyViewDist, -currentFov/2, currentFov/2); ctx.fill();
+
+                // Corps
+                ctx.fillStyle = '#ef4444';
+                ctx.beginPath(); ctx.arc(0,0, this.radius, 0, Math.PI*2); ctx.fill();
+                
+                // Arme
+                ctx.fillStyle = '#1e293b';
+                ctx.fillRect(0, -4, 25, 8);
+
+                // "!" si alerte
+                if (this.state === 'COMBAT' || this.state === 'ALERT') {
+                    ctx.fillStyle = 'yellow';
+                    ctx.font = 'bold 20px Arial';
+                    ctx.fillText('!', -5, -25);
+                }
+
+                ctx.restore();
+            }
+        }
+
+        class Hostage extends Entity {
+            constructor(x, y) {
+                super(x, y, 'civil');
+            }
+            draw(ctx) {
+                ctx.fillStyle = '#22c55e'; // Vert
+                ctx.beginPath(); ctx.arc(this.pos.x, this.pos.y, this.radius, 0, Math.PI*2); ctx.fill();
+                // Mains en l'air (petit détail)
+                ctx.fillStyle = '#bbf7d0';
+                ctx.beginPath(); ctx.arc(this.pos.x - 15, this.pos.y - 5, 6, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.arc(this.pos.x + 15, this.pos.y - 5, 6, 0, Math.PI*2); ctx.fill();
+            }
+        }
+
+        // --- GAMEPLAY FUNCTIONS ---
+
+        function shoot(shooter, target) {
+            // Recul visuel (simple shake)
+            // Muzzle flash
+            spawnParticles(
+                shooter.pos.x + Math.cos(shooter.angle)*20, 
+                shooter.pos.y + Math.sin(shooter.angle)*20, 
+                5, 'flash'
+            );
+            // Douille
+            spawnParticles(shooter.pos.x, shooter.pos.y, 1, 'casing');
+
+            // Création projectile (hitscan visuel)
+            bullets.push({
+                start: {x: shooter.pos.x, y: shooter.pos.y},
+                end: {x: target.pos.x, y: target.pos.y},
+                life: 5
+            });
+
+            // Dégâts (proba de toucher)
+            // Distance influence precision
+            let d = dist(shooter.pos, target.pos);
+            let hitChance = 1 - (d / shooter.viewRange)*0.5; // Min 50% chance max range
+            
+            if (Math.random() < hitChance) {
+                target.hit(35, shooter.angle); // 3 coups pour tuer
+                // Alerter les ennemis proches
+                alertEnemies(target.pos);
+            } else {
+                // Tir raté (impact mur ou sol près de la cible)
+                let missX = target.pos.x + (Math.random()-0.5)*40;
+                let missY = target.pos.y + (Math.random()-0.5)*40;
+                spawnParticles(missX, missY, 3, 'dust');
+            }
+        }
+
+        function alertEnemies(sourcePos) {
+            entities.forEach(e => {
+                if (e.team === 'red' && e.active && e.state === 'PATROL') {
+                    if (dist(e.pos, sourcePos) < 300) { // Rayon d'audition
+                        e.state = 'ALERT';
+                        e.alertTimer = 100;
+                        // Regarde vers le bruit
+                        e.angle = angleTo(e.pos, sourcePos);
+                    }
+                }
+            });
+        }
+
+        function spawnParticles(x, y, count, type, angle = 0) {
+            for(let i=0; i<count; i++) {
+                particles.push({
+                    x, y, type,
+                    vx: (Math.random() - 0.5) * (type === 'blood' ? 5 : 2) + (type === 'blood' ? Math.cos(angle)*3 : 0),
+                    vy: (Math.random() - 0.5) * (type === 'blood' ? 5 : 2) + (type === 'blood' ? Math.sin(angle)*3 : 0),
+                    life: type === 'flash' ? 2 : (type === 'blood' ? 100 : 20), // Sang reste longtemps
+                    color: type === 'blood' ? '#991b1b' : (type === 'flash' ? '#fef08a' : '#cbd5e1'),
+                    size: Math.random() * 3 + 1
+                });
+            }
+        }
+
+        // --- LEVELS ---
+
+        const LEVELS = [
+            {
+                name: "ENTRÉE DYNAMIQUE",
+                brief: "Une sentinelle identifiée. Pénétrez, neutralisez, sécurisez.",
+                setup: (cw, ch) => {
+                    walls = [
+                        {x: cw/2 - 10, y: 200, w: 20, h: ch}, // Mur central
+                        {x: 0, y: 200, w: cw/2 - 60, h: 20}, // Mur haut gauche
+                        {x: cw/2 + 60, y: 200, w: cw/2, h: 20}, // Mur haut droite
+                    ];
+                    entities = [
+                        new Operator(cw/2 - 40, ch - 50),
+                        new Operator(cw/2 + 40, ch - 50),
+                        new Enemy(cw/2, 100, [Vec2(cw/2 - 100, 100), Vec2(cw/2 + 100, 100)]) // Patrouille
+                    ];
+                }
+            },
+            {
+                name: "LE COULOIR DE LA MORT",
+                brief: "Progression en milieu cloisonné. Attention aux angles morts.",
+                setup: (cw, ch) => {
+                    walls = [
+                        {x: 200, y: 100, w: 20, h: ch-200}, // Gauche
+                        {x: cw-200, y: 100, w: 20, h: ch-200}, // Droite
+                        {x: 200, y: 100, w: cw-400, h: 20}, // Haut
+                        {x: cw/2 - 50, y: ch/2, w: 100, h: 20} // Obstacle central
+                    ];
+                    entities = [
+                        new Operator(cw/2, ch - 50),
+                        new Enemy(250, 150, [Vec2(250, 150), Vec2(250, ch/2)]),
+                        new Enemy(cw-250, 150, []) // Statique
+                    ];
+                }
+            },
+            {
+                name: "PRISE D'OTAGE",
+                brief: "Les civils sont la priorité. Tirs précis requis.",
+                setup: (cw, ch) => {
+                    // Complexe : 3 pièces
+                    walls = [
+                        {x: cw/3, y: 0, w: 20, h: ch*0.6}, // Mur vertical 1
+                        {x: cw*0.66, y: ch*0.4, w: 20, h: ch*0.6}, // Mur vertical 2
+                        {x: 0, y: ch*0.6, w: cw/3, h: 20}, // Horizontal G
+                    ];
+                    entities = [
+                        new Operator(50, ch-50),
+                        new Operator(100, ch-50),
+                        new Hostage(cw - 100, 100),
+                        new Enemy(cw - 150, 150, []), // Garde otage
+                        new Enemy(cw/2, ch/2, [Vec2(cw/2, ch/2), Vec2(cw/2, 100)]) // Patrouilleur
+                    ];
+                }
+            }
+        ];
+
+        // --- CORE FUNCTIONS ---
+
+        function initGame() {
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+            
+            // Mouse/Touch Listeners
+            CANVAS.addEventListener('mousedown', onInputStart);
+            CANVAS.addEventListener('mousemove', onInputMove);
+            window.addEventListener('mouseup', onInputEnd);
+            
+            CANVAS.addEventListener('touchstart', onInputStart, {passive: false});
+            CANVAS.addEventListener('touchmove', onInputMove, {passive: false});
+            window.addEventListener('touchend', onInputEnd);
+
+            loadLevel(0);
+            requestAnimationFrame(gameLoop);
+        }
+
+        function resizeCanvas() {
+            CANVAS.width = window.innerWidth;
+            CANVAS.height = window.innerHeight;
+            // Reload current level walls if resizing (simple fix)
+            if(walls.length === 0 && LEVELS[currentLevel]) LEVELS[currentLevel].setup(CANVAS.width, CANVAS.height);
+        }
+
+        function loadLevel(idx) {
+            if (idx >= LEVELS.length) {
+                showModal("CAMPAGNE TERMINÉE", "Excellent travail. Secteur sécurisé.", "REJOUER", () => location.reload());
+                return;
+            }
+            currentLevel = idx;
+            walls = [];
+            entities = [];
+            particles = [];
+            bullets = [];
+            LEVELS[idx].setup(CANVAS.width, CANVAS.height);
+            
+            updateUI();
+            setAppState(STATES.PLANNING);
+            
+            showModal(`MISSION ${idx+1}`, LEVELS[idx].name + "<br>" + LEVELS[idx].brief, "INITIALISER", () => hideModal());
+        }
+
+        function setAppState(newState) {
+            appState = newState;
+            const badge = document.getElementById('status-badge');
+            const btnAction = document.getElementById('btn-action');
+            const tools = document.getElementById('planning-tools');
+            const iconAction = document.getElementById('icon-action');
+            const textAction = document.getElementById('text-action');
+
+            if (newState === STATES.PLANNING) {
+                badge.innerText = "PLANIFICATION";
+                badge.className = "bg-yellow-500/20 border border-yellow-500/50 px-2 py-1 rounded text-yellow-400 text-xs font-bold text-center shadow-lg";
+                tools.style.opacity = "1";
+                btnAction.classList.remove('danger');
+                btnAction.classList.add('play');
+                iconAction.innerText = "play_arrow";
+                textAction.innerText = "ACTION";
+            } else if (newState === STATES.RUNNING) {
+                badge.innerText = "ASSAUT EN COURS";
+                badge.className = "bg-red-500/20 border border-red-500/50 px-2 py-1 rounded text-red-400 text-xs font-bold text-center shadow-lg animate-pulse";
+                tools.style.opacity = "0";
+                btnAction.classList.remove('play');
+                btnAction.classList.add('danger'); // Style "Pause"
+                iconAction.innerText = "pause";
+                textAction.innerText = "PAUSE";
+            } else if (newState === STATES.PAUSED) {
+                badge.innerText = "PAUSE TACTIQUE";
+                badge.className = "bg-blue-500/20 border border-blue-500/50 px-2 py-1 rounded text-blue-400 text-xs font-bold text-center shadow-lg";
+                tools.style.opacity = "1"; // Outils dispos en pause
+                btnAction.classList.remove('danger');
+                btnAction.classList.add('play');
+                iconAction.innerText = "play_arrow";
+                textAction.innerText = "REPRENDRE";
+            }
+        }
+
+        // --- INPUT LOGIC (Improved for Edit on Pause) ---
+
+        function getPos(e) {
+            const r = CANVAS.getBoundingClientRect();
+            const x = e.touches ? e.touches[0].clientX : e.clientX;
+            const y = e.touches ? e.touches[0].clientY : e.clientY;
+            return Vec2(x - r.left, y - r.top);
+        }
+
+        function onInputStart(e) {
+            if (appState === STATES.RUNNING || appState === STATES.ENDED) return; // Pas d'édition pendant l'action
+            e.preventDefault();
+            let p = getPos(e);
+
+            // Trouver un opérateur sous le doigt
+            for (let op of entities) {
+                if (op.team === 'blue' && op.active) {
+                    if (dist(p, op.pos) < 40) {
+                        // Si on est en PAUSE, on efface le futur chemin à partir d'ici
+                        if (appState === STATES.PAUSED) {
+                            op.path = op.path.slice(0, op.pathIdx); // Garde l'historique, efface le futur
+                            // Ajouter la pos actuelle comme point de départ du nouveau tracé
+                            op.path.push({...op.pos}); 
+                        } else {
+                            // En PLANNING, on efface tout
+                            op.path = [op.pos];
+                            op.pathIdx = 0;
+                        }
+                        activeDrag = op;
+                        break;
+                    }
+                }
+            }
+        }
+
+        function onInputMove(e) {
+            if (!activeDrag) return;
+            e.preventDefault();
+            let p = getPos(e);
+            
+            // Ajouter des points si distance suffisante (lissage)
+            let last = activeDrag.path[activeDrag.path.length-1];
+            if (dist(p, last) > 15) {
+                // Collision murale basique pour le tracé (empêcher de tracer à travers les murs)
+                if (!checkWallCollisionLine(last, p)) {
+                    activeDrag.path.push(p);
+                }
+            }
+        }
+
+        function onInputEnd(e) {
+            activeDrag = null;
+        }
+
+        // --- UPDATE & DRAW LOOP ---
+
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        function update() {
+            if (appState === STATES.RUNNING) {
+                entities.forEach(e => e.update());
+                
+                // Check Win/Lose
+                let enemies = entities.filter(e => e.team === 'red' && e.active);
+                let ops = entities.filter(e => e.team === 'blue' && e.active);
+                let hostages = entities.filter(e => e.team === 'civil');
+
+                // Update UI counts
+                updateUI();
+
+                if (enemies.length === 0) {
+                    setAppState(STATES.ENDED);
+                    setTimeout(() => showModal("MISSION ACCOMPLIE", "Zone sécurisée. Aucune menace résiduelle.", "MISSION SUIVANTE", () => loadLevel(currentLevel + 1)), 1000);
+                } else if (ops.length === 0) {
+                    setAppState(STATES.ENDED);
+                    setTimeout(() => showModal("ECHEC MISSION", "Opérateurs neutralisés.", "RECOMMENCER", () => loadLevel(currentLevel)), 1000);
+                }
+                // Check hostage death (friendly fire)
+                let deadHostages = hostages.filter(h => !h.active);
+                if (deadHostages.length > 0) {
+                    setAppState(STATES.ENDED);
+                    setTimeout(() => showModal("ECHEC CRITIQUE", "Otage touché.", "RECOMMENCER", () => loadLevel(currentLevel)), 1000);
+                }
+            }
+        }
+
+        function draw() {
+            // Clear
+            CTX.fillStyle = '#1e293b';
+            CTX.fillRect(0, 0, CANVAS.width, CANVAS.height);
+            
+            // Grid Effect
+            CTX.strokeStyle = 'rgba(255,255,255,0.03)';
+            CTX.lineWidth = 1;
+            CTX.beginPath();
+            for(let i=0; i<CANVAS.width; i+=40) { CTX.moveTo(i,0); CTX.lineTo(i,CANVAS.height); }
+            for(let i=0; i<CANVAS.height; i+=40) { CTX.moveTo(0,i); CTX.lineTo(CANVAS.width,i); }
+            CTX.stroke();
+
+            // Walls (Shadows first)
+            CTX.fillStyle = 'rgba(0,0,0,0.5)';
+            walls.forEach(w => CTX.fillRect(w.x+5, w.y+5, w.w, w.h));
+            
+            CTX.fillStyle = '#0f172a';
+            CTX.strokeStyle = '#64748b';
+            CTX.lineWidth = 3;
+            walls.forEach(w => {
+                CTX.fillRect(w.x, w.y, w.w, w.h);
+                CTX.strokeRect(w.x, w.y, w.w, w.h);
+            });
+
+            // Traces (Chemins) - Toujours visibles pour aider
+            entities.forEach(e => {
+                if (e.team === 'blue' && e.path && e.path.length > 0) {
+                    CTX.strokeStyle = (appState === STATES.PLANNING || appState === STATES.PAUSED) ? '#3b82f6' : 'rgba(59, 130, 246, 0.3)';
+                    CTX.lineWidth = 2;
+                    CTX.setLineDash([5, 5]);
+                    CTX.beginPath();
+                    
+                    // Dessin intelligent du chemin
+                    // Si PLANNING : Tout le chemin
+                    // Si PAUSE : Du point actuel à la fin
+                    // Si RUNNING : Du point actuel à la fin
+                    let startIndex = (appState === STATES.PLANNING) ? 0 : e.pathIdx;
+                    if (startIndex > 0 && startIndex < e.path.length) {
+                         CTX.moveTo(e.pos.x, e.pos.y);
+                         CTX.lineTo(e.path[startIndex].x, e.path[startIndex].y);
+                    } else if (e.path.length > 0) {
+                         CTX.moveTo(e.path[0].x, e.path[0].y);
+                    }
+
+                    for(let i=startIndex; i<e.path.length; i++) {
+                        CTX.lineTo(e.path[i].x, e.path[i].y);
+                    }
+                    CTX.stroke();
+                    CTX.setLineDash([]);
+                    
+                    // Points finaux
+                    if (e.path.length > 0) {
+                        let end = e.path[e.path.length-1];
+                        CTX.fillStyle = '#3b82f6';
+                        CTX.beginPath(); CTX.arc(end.x, end.y, 4, 0, Math.PI*2); CTX.fill();
+                    }
+                }
+            });
+
+            // Entities (Dead first)
+            entities.filter(e => !e.active).forEach(e => e.draw(CTX));
+            entities.filter(e => e.active).forEach(e => e.draw(CTX));
+
+            // Particles
+            for(let i=particles.length-1; i>=0; i--) {
+                let p = particles[i];
+                p.life--;
+                p.x += p.vx;
+                p.y += p.vy;
+                p.vx *= 0.9; p.vy *= 0.9; // Friction
+                
+                CTX.globalAlpha = p.life / 20;
+                CTX.fillStyle = p.color;
+                
+                if (p.type === 'casing') {
+                    CTX.fillRect(p.x, p.y, 3, 1);
+                } else {
+                    CTX.beginPath(); CTX.arc(p.x, p.y, p.size, 0, Math.PI*2); CTX.fill();
+                }
+                
+                if (p.life <= 0) particles.splice(i, 1);
+            }
+            CTX.globalAlpha = 1;
+
+            // Bullets (Tracers)
+            for(let i=bullets.length-1; i>=0; i--) {
+                let b = bullets[i];
+                b.life--;
+                CTX.strokeStyle = '#fbbf24'; // Gold
+                CTX.lineWidth = 2;
+                CTX.beginPath();
+                CTX.moveTo(b.start.x, b.start.y);
+                CTX.lineTo(b.end.x, b.end.y);
+                CTX.stroke();
+                if (b.life <= 0) bullets.splice(i, 1);
+            }
+        }
+
+        // --- UTILS ---
+        function lerpAngle(a, b, t) {
+            let diff = normalizeAngle(b - a);
+            return normalizeAngle(a + diff * t);
+        }
+        function normalizeAngle(a) {
+            while (a > Math.PI) a -= 2*Math.PI;
+            while (a < -Math.PI) a += 2*Math.PI;
+            return a;
+        }
+        function checkWallCollisionLine(p1, p2) {
+            for(let w of walls) {
+                // Simplified bounding box check first
+                 if (Math.min(p1.x, p2.x) > w.x + w.w || Math.max(p1.x, p2.x) < w.x || Math.min(p1.y, p2.y) > w.y + w.h || Math.max(p1.y, p2.y) < w.y) continue;
+                 // 4 sides check
+                 if (lineIntersect(p1, p2, Vec2(w.x,w.y), Vec2(w.x+w.w,w.y))) return true;
+                 if (lineIntersect(p1, p2, Vec2(w.x,w.y+w.h), Vec2(w.x+w.w,w.y+w.h))) return true;
+                 if (lineIntersect(p1, p2, Vec2(w.x,w.y), Vec2(w.x,w.y+w.h))) return true;
+                 if (lineIntersect(p1, p2, Vec2(w.x+w.w,w.y), Vec2(w.x+w.w,w.y+w.h))) return true;
+            }
+            return false;
+        }
+
+        // --- UI FUNCTIONS ---
+        const modal = document.getElementById('modal-screen');
+        const modalTitle = document.getElementById('modal-title');
+        const modalContent = document.getElementById('modal-content');
+        const modalBtn = document.getElementById('btn-modal-action');
+
+        function showModal(title, content, btnText, action) {
+            modalTitle.innerText = title;
+            modalContent.innerHTML = content;
+            modalBtn.innerText = btnText;
+            modalBtn.onclick = action;
+            modal.classList.remove('hidden-modal');
+        }
+        function hideModal() {
+            modal.classList.add('hidden-modal');
+        }
+
+        function updateUI() {
+            let hostiles = entities.filter(e => e.team === 'red' && e.active).length;
+            let civils = entities.filter(e => e.team === 'civil' && e.active).length;
+            document.getElementById('ui-hostiles').innerText = hostiles;
+            document.getElementById('ui-civils').innerText = civils;
+        }
+
+        // Boutons Principaux
+        document.getElementById('btn-action').addEventListener('click', () => {
+            if (appState === STATES.PLANNING || appState === STATES.PAUSED) {
+                setAppState(STATES.RUNNING);
+            } else if (appState === STATES.RUNNING) {
+                setAppState(STATES.PAUSED);
+            }
+        });
+
+        document.getElementById('btn-clear').addEventListener('click', () => {
+            if (appState === STATES.PLANNING) {
+                entities.filter(e => e.team === 'blue').forEach(e => {
+                    e.path = [];
+                    e.pathIdx = 0;
+                });
+            }
+        });
+
+        document.getElementById('btn-reset').addEventListener('click', () => {
+            loadLevel(currentLevel);
+        });
+
+        // Start
+        initGame();
+
+    </script>
+</body>
+</html>
