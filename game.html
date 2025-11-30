@@ -3,309 +3,291 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Gilette Takedown V2 - Advanced</title>
+    <title>Gilette Takedown: Black Ops</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Saira+Stencil+One&family=Oswald:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Black+Ops+One&family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     
     <style>
-        /* --- GLOBAL & UI --- */
+        :root {
+            --ui-color: #3b82f6;
+            --danger-color: #ef4444;
+            --success-color: #10b981;
+            --bg-dark: #0f172a;
+        }
+        
         body {
-            background-color: #0f172a;
+            background-color: #000;
             color: #e2e8f0;
-            font-family: 'Oswald', sans-serif;
+            font-family: 'Rajdhani', sans-serif;
             overflow: hidden;
             touch-action: none;
             user-select: none;
+            -webkit-font-smoothing: antialiased;
         }
         
-        #game-container {
+        /* --- CRT & Scanlines Effect --- */
+        #game-wrapper {
             position: relative;
             width: 100vw;
             height: 100vh;
-            background-color: #1e293b;
-            background-image: 
-                linear-gradient(rgba(51, 65, 85, 0.5) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(51, 65, 85, 0.5) 1px, transparent 1px);
-            background-size: 40px 40px;
+            background: #0b0f19;
+            overflow: hidden;
         }
 
-        canvas { display: block; touch-action: none; }
+        canvas { display: block; }
 
-        .ui-layer {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; padding: 10px;
-        }
-        
-        .interactive { pointer-events: auto; }
-        .stencil { font-family: 'Saira Stencil One', cursive; }
-        
-        .crt-overlay {
-            position: absolute; inset: 0; pointer-events: none; z-index: 20;
-            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%);
+        .scanlines {
+            position: absolute; inset: 0; pointer-events: none; z-index: 10;
+            background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0) 50%, rgba(0,0,0,0.2) 50%, rgba(0,0,0,0.2));
             background-size: 100% 4px;
+            animation: scrollLines 10s linear infinite;
+        }
+        .vignette {
+            position: absolute; inset: 0; pointer-events: none; z-index: 11;
+            background: radial-gradient(circle, rgba(0,0,0,0) 60%, rgba(0,0,0,0.8) 100%);
         }
 
-        /* Action Buttons */
-        .action-btn {
-            background: rgba(30, 41, 59, 0.9);
-            border: 2px solid #475569;
-            color: white;
-            border-radius: 50%;
-            width: 60px; height: 60px;
-            display: flex; align-items: center; justify-content: center;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
-            transition: all 0.2s;
-            position: relative;
+        /* --- UI Elements --- */
+        .hud-panel {
+            backdrop-filter: blur(4px);
+            background: rgba(15, 23, 42, 0.85);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            box-shadow: 0 0 15px rgba(0,0,0,0.5);
         }
-        .action-btn:active { transform: scale(0.9); }
-        .action-btn.primary { border-color: #3b82f6; color: #3b82f6; background: rgba(59, 130, 246, 0.15); }
-        .action-btn.danger { border-color: #ef4444; color: #ef4444; background: rgba(239, 68, 68, 0.15); }
-        .action-btn.warning { border-color: #eab308; color: #eab308; background: rgba(234, 179, 8, 0.15); }
         
-        .cooldown-overlay {
-            position: absolute; bottom: 0; left: 0; width: 100%; background: rgba(0,0,0,0.5);
-            border-radius: 50%; transition: height 0.1s;
+        .stencil { font-family: 'Black Ops One', cursive; }
+        
+        .btn-tac {
+            transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+        .btn-tac:active { transform: scale(0.95); }
+        .btn-tac::after {
+            content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 2px;
+            background: rgba(255,255,255,0.3);
         }
 
-        /* Modal */
-        #modal-screen {
-            position: absolute; inset: 0; background: rgba(15, 23, 42, 0.98); z-index: 50;
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
-            transition: opacity 0.3s;
-        }
-        .hidden-modal { opacity: 0; pointer-events: none; }
+        /* Animations */
+        @keyframes pulse-red { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
+        .animate-pulse-red { animation: pulse-red 2s infinite; }
 
-        .context-menu {
-            position: absolute;
-            bottom: 90px; right: 20px; /* Position fixe mobile friendly */
-            display: flex; flex-direction: column; gap: 10px;
-            align-items: flex-end;
-            pointer-events: none;
-        }
-        .context-btn {
-            pointer-events: auto;
-            opacity: 0; transform: translateY(20px); transition: all 0.3s;
-            background: #0f172a; color: white; padding: 10px 20px; border-radius: 8px;
-            border: 1px solid #334155; font-weight: bold;
-            display: flex; align-items: center; gap: 10px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-        }
-        .context-btn.visible { opacity: 1; transform: translateY(0); }
+        .modal-enter { animation: modalPop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
+        @keyframes modalPop { from { opacity: 0; transform: scale(0.9) translateY(20px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+
+        /* Custom Scrollbar for context menu if needed */
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
     </style>
 </head>
 <body>
 
-    <div id="game-container">
-        <canvas id="gameCanvas"></canvas>
-        <div class="crt-overlay"></div>
+    <div id="game-wrapper">
+        <canvas id="worldCanvas"></canvas> <!-- World & Shadows -->
+        <canvas id="uiCanvas" style="position:absolute; top:0; left:0; pointer-events:none;"></canvas> <!-- High Res UI overlays -->
+        
+        <div class="scanlines"></div>
+        <div class="vignette"></div>
 
-        <!-- UI LAYER -->
-        <div class="ui-layer">
-            <!-- Top Info -->
-            <div class="flex justify-between items-start w-full pointer-events-none">
+        <!-- MAIN HUD -->
+        <div class="absolute inset-0 pointer-events-none p-4 flex flex-col justify-between z-20">
+            
+            <!-- TOP BAR -->
+            <div class="flex justify-between items-start">
                 <div class="flex flex-col gap-1">
-                    <div class="bg-slate-900/90 border border-slate-700 px-3 py-1 rounded text-blue-500 stencil text-lg shadow-lg">
-                        GILETTE TAKEDOWN
-                    </div>
-                    <div id="status-badge" class="bg-yellow-500/20 border border-yellow-500/50 px-2 py-1 rounded text-yellow-400 text-xs font-bold text-center shadow-lg">
-                        PLANIFICATION
+                    <h1 class="stencil text-3xl text-blue-500 tracking-wider drop-shadow-lg leading-none">TAKEDOWN</h1>
+                    <div id="phase-indicator" class="flex items-center gap-2 text-xs font-bold text-yellow-400 bg-yellow-900/30 px-2 py-1 rounded border border-yellow-500/30 w-max">
+                        <span class="w-2 h-2 rounded-full bg-yellow-400 animate-pulse"></span>
+                        <span id="phase-text">PLANIFICATION</span>
                     </div>
                 </div>
-                <div class="flex gap-2">
-                    <div class="bg-slate-900/90 border border-slate-700 px-3 py-1 rounded text-center shadow-lg">
-                        <div class="text-[10px] text-slate-400">HOSTILES</div>
-                        <div id="ui-hostiles" class="text-red-500 font-bold text-xl leading-none">0</div>
+
+                <div class="flex gap-3">
+                    <div class="hud-panel px-4 py-2 rounded-lg flex flex-col items-center">
+                        <span class="text-[10px] text-slate-400 tracking-widest uppercase">Hostiles</span>
+                        <span id="hud-hostiles" class="text-2xl font-bold text-red-500 leading-none">0</span>
                     </div>
-                    <div class="bg-slate-900/90 border border-slate-700 px-3 py-1 rounded text-center shadow-lg">
-                        <div class="text-[10px] text-slate-400">CIVILS</div>
-                        <div id="ui-civils" class="text-green-500 font-bold text-xl leading-none">0</div>
+                    <div class="hud-panel px-4 py-2 rounded-lg flex flex-col items-center">
+                        <span class="text-[10px] text-slate-400 tracking-widest uppercase">Civils</span>
+                        <span id="hud-civils" class="text-2xl font-bold text-green-500 leading-none">0</span>
                     </div>
                 </div>
             </div>
 
-            <!-- Contextual Actions (Floating Right) -->
-            <div class="context-menu" id="context-menu">
-                <button id="btn-evac" class="context-btn bg-green-600 border-green-400">
-                    <span class="material-icons">accessibility_new</span> ÉVACUER CIVIL
-                </button>
-                <button id="btn-breach" class="context-btn bg-orange-600 border-orange-400">
-                    <span class="material-icons">meeting_room</span> OUVRIR PORTE
-                </button>
+            <!-- CONTEXT ACTIONS (Right Side) -->
+            <div id="context-layer" class="absolute right-4 bottom-32 flex flex-col gap-3 items-end pointer-events-none">
+                <!-- Injected via JS -->
             </div>
 
-            <!-- Bottom Controls -->
-            <div class="w-full flex flex-col gap-2 interactive mt-auto">
+            <!-- BOTTOM CONTROL BAR -->
+            <div class="pointer-events-auto flex flex-col gap-3">
                 
-                <!-- Selected Unit Actions -->
-                <div id="unit-actions" class="flex justify-center gap-4 mb-2 transition-all duration-300 opacity-0 translate-y-10">
-                    <div class="flex flex-col items-center">
-                        <button id="btn-grenade" class="action-btn warning">
-                            <span class="material-icons">flash_on</span>
-                            <div class="coherence-overlay" id="cd-grenade" style="height:0%"></div>
-                        </button>
-                        <span class="text-[10px] text-slate-300 bg-slate-900 px-1 rounded mt-1">FLASHBANG</span>
-                    </div>
-                    <div class="flex flex-col items-center">
-                        <button id="btn-reload" class="action-btn primary">
-                            <span class="material-icons">refresh</span>
-                        </button>
-                        <span class="text-[10px] text-slate-300 bg-slate-900 px-1 rounded mt-1">RECHARGER</span>
-                    </div>
+                <!-- Unit Specific Controls -->
+                <div id="unit-controls" class="flex justify-center gap-6 transition-all duration-300 opacity-0 translate-y-10">
+                    <button id="btn-flash" class="btn-tac group relative w-14 h-14 rounded-xl bg-slate-800 border border-slate-600 flex items-center justify-center hover:bg-slate-700 hover:border-yellow-400 transition-colors">
+                        <span class="material-icons text-yellow-400 group-hover:scale-110 transition-transform">flash_on</span>
+                        <div class="absolute -bottom-6 text-[10px] font-bold text-slate-400 bg-slate-900 px-2 py-0.5 rounded">STUN</div>
+                        <div id="cd-flash" class="absolute inset-0 bg-black/60 origin-bottom transition-all duration-75" style="height:0%"></div>
+                    </button>
+                    
+                    <button id="btn-reload" class="btn-tac group relative w-14 h-14 rounded-xl bg-slate-800 border border-slate-600 flex items-center justify-center hover:bg-slate-700 hover:border-blue-400 transition-colors">
+                        <span class="material-icons text-blue-400 group-hover:rotate-180 transition-transform duration-500">sync</span>
+                        <div class="absolute -bottom-6 text-[10px] font-bold text-slate-400 bg-slate-900 px-2 py-0.5 rounded">MAG</div>
+                    </button>
                 </div>
 
-                <!-- Main Bar -->
-                <div class="flex justify-between items-center bg-slate-900/80 p-2 rounded-xl border border-slate-700 backdrop-blur-md">
-                    <button id="btn-reset" class="p-3 text-slate-400 hover:text-white transition" title="Reset Level">
+                <!-- Main Play/Pause -->
+                <div class="hud-panel p-2 rounded-xl flex items-center justify-between gap-4">
+                    <button onclick="Game.resetLevel()" class="btn-tac p-3 text-slate-400 hover:text-white rounded-lg hover:bg-white/5">
                         <span class="material-icons">restart_alt</span>
                     </button>
 
-                    <div class="flex gap-4">
-                        <button id="btn-clear" class="text-slate-400 text-xs uppercase font-bold tracking-wider hover:text-white transition px-2">
-                            EFFACER TRACÉS
-                        </button>
-                        <button id="btn-action" class="bg-blue-600 hover:bg-blue-500 text-white px-8 py-3 rounded-lg shadow-lg font-bold stencil text-xl tracking-widest active:scale-95 transition border-b-4 border-blue-800 active:border-b-0 active:translate-y-1 flex items-center gap-2">
-                            <span class="material-icons" id="icon-action">play_arrow</span>
-                            <span id="text-action">ACTION</span>
+                    <div class="flex-1 flex justify-center">
+                        <button id="btn-clear" class="btn-tac text-xs font-bold text-slate-400 hover:text-white uppercase tracking-widest px-4 py-2 hover:bg-white/5 rounded">
+                            Reset Paths
                         </button>
                     </div>
+
+                    <button id="btn-execute" class="btn-tac bg-blue-600 hover:bg-blue-500 text-white px-8 py-3 rounded-lg shadow-[0_0_20px_rgba(37,99,235,0.5)] flex items-center gap-2 font-bold text-xl tracking-wider min-w-[160px] justify-center border-b-4 border-blue-800 active:border-b-0 active:translate-y-1">
+                        <span class="material-icons">play_arrow</span> EXECUTE
+                    </button>
                 </div>
             </div>
         </div>
 
-        <!-- Modal -->
-        <div id="modal-screen">
-            <div class="relative w-full max-w-md p-6 text-center">
-                <img src="android-icon-192x192.png" class="w-20 h-20 mx-auto mb-4 opacity-90 drop-shadow-[0_0_10px_rgba(59,130,246,0.5)]">
-                <h2 id="modal-title" class="stencil text-4xl text-white mb-2 tracking-widest">BRIEFING</h2>
-                <div id="modal-content" class="text-gray-300 mb-8 text-sm bg-slate-800/50 p-4 rounded border border-slate-700"></div>
-                <button id="btn-modal-action" class="bg-blue-600 hover:bg-blue-500 text-white w-full py-4 rounded text-xl font-bold stencil tracking-widest shadow-lg border-t border-blue-400">
-                    LANCER
+        <!-- MODAL -->
+        <div id="modal-overlay" class="absolute inset-0 bg-slate-900/95 z-50 flex items-center justify-center hidden">
+            <div class="modal-enter max-w-md w-full mx-4 bg-slate-800 border border-slate-700 p-8 rounded-2xl shadow-2xl text-center relative overflow-hidden">
+                <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-blue-500 to-transparent"></div>
+                <h2 id="modal-title" class="stencil text-5xl text-white mb-2 uppercase drop-shadow-[0_0_10px_rgba(255,255,255,0.5)]">BRIEFING</h2>
+                <div class="w-16 h-1 bg-blue-500 mx-auto mb-6"></div>
+                <p id="modal-desc" class="text-lg text-slate-300 mb-8 leading-relaxed font-light"></p>
+                <button id="modal-btn" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-xl text-xl tracking-widest uppercase transition-all shadow-lg hover:shadow-blue-500/25">
+                    Compris
                 </button>
             </div>
         </div>
     </div>
 
     <script>
-        const CANVAS = document.getElementById('gameCanvas');
-        const CTX = CANVAS.getContext('2d');
-        const ICON_IMG = new Image();
-        ICON_IMG.src = 'android-icon-192x192.png';
+        /**
+         * GILETTE TAKEDOWN V3 - REMASTERED
+         * Concept: Single-file tactical strategy game
+         * Improvements: Canvas Layering, Path Smoothing, Camera Shake, Particle System, Raycasting FOV
+         */
 
-        const STATES = { PLANNING: 0, RUNNING: 1, PAUSED: 2, ENDED: 3 };
-        let appState = STATES.PLANNING;
-
-        const CFG = {
-            opSpeed: 2.0,
-            opRadius: 18,
-            opViewDist: 280,
-            opFov: Math.PI / 2.2,
-            enemySpeed: 1.0,
-            enemyRadius: 18,
-            enemyViewDist: 220,
-            enemyFov: Math.PI / 2.5,
-            bulletSpeed: 15,
-            fireRate: 20
+        // --- UTILS & MATH ---
+        const Vec2 = (x, y) => ({x, y});
+        const Dist = (v1, v2) => Math.hypot(v2.x - v1.x, v2.y - v1.y);
+        const AngleTo = (v1, v2) => Math.atan2(v2.y - v1.y, v2.x - v1.x);
+        const Lerp = (a, b, t) => a + (b - a) * t;
+        const LerpAngle = (a, b, t) => {
+            let d = b - a;
+            while (d > Math.PI) d -= 2*Math.PI;
+            while (d < -Math.PI) d += 2*Math.PI;
+            return a + d * t;
+        };
+        // Line-Line Intersection
+        const Intersect = (p1, p2, p3, p4) => {
+            const d = (p4.y - p3.y) * (p2.x - p1.x) - (p4.x - p3.x) * (p2.y - p1.y);
+            if (d === 0) return null;
+            const ua = ((p4.x - p3.x) * (p1.y - p3.y) - (p4.y - p3.y) * (p1.x - p3.x)) / d;
+            const ub = ((p2.x - p1.x) * (p1.y - p3.y) - (p2.y - p1.y) * (p1.x - p3.x)) / d;
+            if (ua >= 0 && ua <= 1 && ub >= 0 && ub <= 1) return { x: p1.x + ua * (p2.x - p1.x), y: p1.y + ua * (p2.y - p1.y) };
+            return null;
         };
 
-        let currentLevel = 0;
-        let entities = [];
-        let walls = [];
-        let doors = [];
-        let particles = [];
-        let bullets = [];
-        let activeDrag = null;
-        let selectedUnit = null;
-        let frameCount = 0;
+        // --- CONFIG ---
+        const CFG = {
+            colors: {
+                wall: '#1e293b', floor: '#0f172a', op: '#3b82f6', enemy: '#ef4444', hostage: '#10b981',
+                grid: 'rgba(59, 130, 246, 0.05)'
+            },
+            op: { speed: 2.5, rad: 16, view: 350, fov: Math.PI / 1.8 },
+            enemy: { speed: 1.2, rad: 16, view: 280, fov: Math.PI / 2.2 },
+            w: 0, h: 0 // set on resize
+        };
 
-        // --- VECTORS ---
-        const Vec2 = (x, y) => ({x, y});
-        const dist = (v1, v2) => Math.hypot(v2.x - v1.x, v2.y - v1.y);
-        const angleTo = (v1, v2) => Math.atan2(v2.y - v1.y, v2.x - v1.x);
+        // --- ENGINE CLASSES ---
 
-        // --- PHYSICS ---
-        function lineIntersect(p1, p2, p3, p4) {
-            const denom = (p4.y - p3.y) * (p2.x - p1.x) - (p4.x - p3.x) * (p2.y - p1.y);
-            if (denom === 0) return null;
-            const ua = ((p4.x - p3.x) * (p1.y - p3.y) - (p4.y - p3.y) * (p1.x - p3.x)) / denom;
-            const ub = ((p2.x - p1.x) * (p1.y - p3.y) - (p2.y - p1.y) * (p1.x - p3.x)) / denom;
-            if (ua >= 0 && ua <= 1 && ub >= 0 && ub <= 1) {
-                return { x: p1.x + ua * (p2.x - p1.x), y: p1.y + ua * (p2.y - p1.y) };
+        class Camera {
+            constructor() { this.x = 0; this.y = 0; this.shake = 0; }
+            addShake(amount) { this.shake = Math.min(this.shake + amount, 20); }
+            update() {
+                if(this.shake > 0) {
+                    this.x = (Math.random() - 0.5) * this.shake;
+                    this.y = (Math.random() - 0.5) * this.shake;
+                    this.shake *= 0.9;
+                    if(this.shake < 0.5) this.shake = 0;
+                } else { this.x = 0; this.y = 0; }
             }
-            return null;
         }
 
-        function checkLineOfSight(start, end) {
-            if (dist(start, end) > CFG.opViewDist * 1.2) return false;
-            // Check Walls
-            for (let w of walls) {
-                const lines = [
-                    [Vec2(w.x, w.y), Vec2(w.x + w.w, w.y)],
-                    [Vec2(w.x + w.w, w.y), Vec2(w.x + w.w, w.y + w.h)],
-                    [Vec2(w.x + w.w, w.y + w.h), Vec2(w.x, w.y + w.h)],
-                    [Vec2(w.x, w.y + w.h), Vec2(w.x, w.y)]
-                ];
-                for (let l of lines) if (lineIntersect(start, end, l[0], l[1])) return false;
+        class Particle {
+            constructor(x, y, type) {
+                this.x = x; this.y = y; this.type = type;
+                this.life = 1.0;
+                const speed = type === 'blood' ? 2 : (type === 'spark' ? 6 : 1);
+                const angle = Math.random() * Math.PI * 2;
+                this.vx = Math.cos(angle) * Math.random() * speed;
+                this.vy = Math.sin(angle) * Math.random() * speed;
+                this.size = Math.random() * 3 + 1;
+                this.decay = Math.random() * 0.03 + 0.02;
             }
-            // Check Doors
-            for (let d of doors) {
-                if (!d.open) {
-                    // Simplified door collision (line segment)
-                    let p1 = d.vertical ? Vec2(d.x, d.y) : Vec2(d.x, d.y);
-                    let p2 = d.vertical ? Vec2(d.x, d.y + d.size) : Vec2(d.x + d.size, d.y);
-                    if (lineIntersect(start, end, p1, p2)) return false;
-                }
+            update() {
+                this.x += this.vx; this.y += this.vy;
+                this.life -= this.decay;
+                if(this.type === 'blood') { this.vx *= 0.8; this.vy *= 0.8; } // Blood splatters stick
             }
-            return true;
+            draw(ctx) {
+                ctx.globalAlpha = this.life;
+                ctx.fillStyle = this.type === 'blood' ? '#991b1b' : (this.type === 'spark' ? '#fbbf24' : '#ffffff');
+                ctx.beginPath(); ctx.arc(this.x, this.y, this.size, 0, Math.PI*2); ctx.fill();
+                ctx.globalAlpha = 1;
+            }
         }
-
-        // --- CLASSES ---
 
         class Door {
-            constructor(x, y, size, vertical) {
-                this.x = x; this.y = y;
-                this.size = size;
-                this.vertical = vertical;
-                this.open = false;
-                this.id = Math.random().toString(36).substr(2, 9);
+            constructor(x, y, w, vertical) {
+                this.x = x; this.y = y; this.w = w; this.vertical = vertical;
+                this.open = false; this.progress = 0;
+            }
+            get center() { return this.vertical ? {x: this.x, y: this.y + this.w/2} : {x: this.x + this.w/2, y: this.y}; }
+            update() {
+                if(this.open && this.progress < 1) this.progress += 0.1;
+                else if(!this.open && this.progress > 0) this.progress -= 0.1;
             }
             draw(ctx) {
                 ctx.save();
                 ctx.translate(this.x, this.y);
-                if (this.open) {
-                    // Opened door visual
-                    if (this.vertical) ctx.rotate(-Math.PI/2.5);
-                    else ctx.rotate(-Math.PI/2.5);
+                if(this.vertical) {
+                    ctx.translate(0, this.open ? 0 : 0); // Pivot logic
+                    ctx.rotate(this.progress * -Math.PI/2.2);
+                    ctx.fillStyle = '#b45309'; ctx.fillRect(-2, 0, 4, this.w);
+                    ctx.fillStyle = '#451a03'; ctx.fillRect(-1, 2, 2, this.w-4);
+                } else {
+                    ctx.rotate(this.progress * -Math.PI/2.2);
+                    ctx.fillStyle = '#b45309'; ctx.fillRect(0, -2, this.w, 4);
+                    ctx.fillStyle = '#451a03'; ctx.fillRect(2, -1, this.w-4, 2);
                 }
-                ctx.fillStyle = this.open ? '#475569' : '#b45309'; // Brown closed, Gray open
-                ctx.fillRect(0, 0, this.vertical ? 6 : this.size, this.vertical ? this.size : 6);
-                ctx.strokeStyle = '#fcd34d';
-                ctx.strokeRect(0, 0, this.vertical ? 6 : this.size, this.vertical ? this.size : 6);
                 ctx.restore();
-            }
-            interact() {
-                this.open = !this.open;
-                // Noise triggers enemies
-                if(this.open) alertEnemies(Vec2(this.x, this.y), 400);
             }
         }
 
         class Entity {
             constructor(x, y, team) {
-                this.pos = Vec2(x, y);
-                this.team = team; 
-                this.angle = 0;
-                this.active = true;
-                this.hp = 100;
-                this.radius = CFG.opRadius;
+                this.pos = Vec2(x, y); this.team = team;
+                this.active = true; this.angle = 0; this.hp = 100;
+                this.flashTimer = 0;
             }
-            hit(dmg, angle) {
+            hit(dmg, sourcePos) {
                 this.hp -= dmg;
-                spawnParticles(this.pos.x, this.pos.y, 8, 'blood', angle);
-                if (this.hp <= 0) {
+                Game.spawnParticles(this.pos.x, this.pos.y, 5, 'blood');
+                if(this.hp <= 0) {
                     this.active = false;
-                    this.hp = 0;
-                    if (this.team === 'red') updateUI();
+                    // Leave body
+                    Game.corpses.push({x: this.pos.x, y: this.pos.y, angle: this.angle, team: this.team});
                 }
             }
         }
@@ -313,611 +295,523 @@
         class Operator extends Entity {
             constructor(x, y) {
                 super(x, y, 'blue');
-                this.path = [];
-                this.pathIdx = 0;
-                this.mag = 30;
-                this.reloading = 0;
-                this.grenades = 2;
-                this.cooldown = 0;
+                this.path = []; this.pathIdx = 0;
+                this.mag = 30; this.reloadTimer = 0; this.cooldown = 0;
             }
-
             update() {
-                if (!this.active) return;
+                if(!this.active) return;
                 
-                // Reload Logic
-                if (this.reloading > 0) {
-                    this.reloading--;
-                    if (this.reloading === 0) this.mag = 30;
-                    return; // No move/shoot while reloading
+                // Movement
+                if(Game.state === 'RUNNING' && this.path.length > 0 && this.pathIdx < this.path.length) {
+                    let target = this.path[this.pathIdx];
+                    let d = Dist(this.pos, target);
+                    let angle = AngleTo(this.pos, target);
+                    this.angle = LerpAngle(this.angle, angle, 0.2);
+                    
+                    if(d < CFG.op.speed) {
+                        this.pos = target; this.pathIdx++;
+                    } else {
+                        this.pos.x += Math.cos(angle) * CFG.op.speed;
+                        this.pos.y += Math.sin(angle) * CFG.op.speed;
+                    }
                 }
 
-                if (appState === STATES.RUNNING) {
-                    // Movement
-                    if (this.path.length > 0 && this.pathIdx < this.path.length) {
-                        let target = this.path[this.pathIdx];
-                        let d = dist(this.pos, target);
-                        let moveAngle = angleTo(this.pos, target);
-                        this.angle = lerpAngle(this.angle, moveAngle, 0.15);
+                // Combat
+                this.cooldown--; this.reloadTimer--;
+                if(this.mag <= 0 && this.reloadTimer <= 0) { this.mag = 30; this.reloadTimer = 120; }
+                if(this.reloadTimer > 0) return;
 
-                        if (d < CFG.opSpeed) {
-                            this.pos = target;
-                            this.pathIdx++;
-                        } else {
-                            this.pos.x += Math.cos(moveAngle) * CFG.opSpeed;
-                            this.pos.y += Math.sin(moveAngle) * CFG.opSpeed;
-                        }
-                        
-                        // Stop if door closed in front
-                        for (let door of doors) {
-                             if (!door.open && dist(this.pos, Vec2(door.x, door.y)) < 40) {
-                                 // Simple check: pause movement if very close to closed door
-                                 // Allow player to open it
-                             }
+                // Auto-Target
+                let targets = Game.enemies.filter(e => e.active);
+                let bestT = null; let minD = Infinity;
+
+                for(let t of targets) {
+                    if(Dist(this.pos, t.pos) < CFG.op.view && Game.checkLOS(this.pos, t.pos)) {
+                        let aToT = AngleTo(this.pos, t.pos);
+                        let diff = Math.abs(LerpAngle(0, aToT - this.angle, 1)); // Normalized diff
+                        if(diff < CFG.op.fov/2) {
+                            if(Dist(this.pos, t.pos) < minD) { minD = Dist(this.pos, t.pos); bestT = t; }
                         }
                     }
+                }
 
-                    // Combat
-                    this.cooldown--;
-                    if (this.mag <= 0 && this.reloading === 0) this.reload();
-
-                    let enemies = entities.filter(e => e.team === 'red' && e.active);
-                    let target = null;
-                    let minDist = Infinity;
-
-                    for (let e of enemies) {
-                        if (checkLineOfSight(this.pos, e.pos)) {
-                            let ang = angleTo(this.pos, e.pos);
-                            let diff = Math.abs(normalizeAngle(ang - this.angle));
-                            if (diff < CFG.opFov / 2 && dist(this.pos, e.pos) < minDist) {
-                                minDist = dist(this.pos, e.pos);
-                                target = e;
-                            }
-                        }
-                    }
-
-                    if (target) {
-                        this.angle = angleTo(this.pos, target.pos); // Snap aim
-                        if (this.cooldown <= 0 && this.mag > 0) {
-                            shoot(this, target);
-                            this.cooldown = CFG.fireRate;
-                            this.mag--;
-                        }
+                if(bestT) {
+                    this.angle = AngleTo(this.pos, bestT.pos);
+                    if(this.cooldown <= 0 && this.mag > 0) {
+                        Game.shoot(this, bestT);
+                        this.cooldown = 8; this.mag--;
                     }
                 }
             }
-
             draw(ctx) {
-                // Path
-                if (this.path.length > 0 && this.active) {
-                    ctx.strokeStyle = (this === selectedUnit) ? '#fbbf24' : 'rgba(59, 130, 246, 0.4)';
-                    ctx.lineWidth = 2;
-                    ctx.setLineDash([5, 5]);
-                    ctx.beginPath();
-                    ctx.moveTo(this.pos.x, this.pos.y);
-                    let start = (appState === STATES.PLANNING || appState === STATES.PAUSED) ? 0 : this.pathIdx;
-                    for(let i=start; i<this.path.length; i++) ctx.lineTo(this.path[i].x, this.path[i].y);
-                    ctx.stroke();
-                    ctx.setLineDash([]);
-                    if(this.path.length > 0) {
-                        let end = this.path[this.path.length-1];
-                        ctx.fillStyle = (this === selectedUnit) ? '#fbbf24' : '#3b82f6';
-                        ctx.beginPath(); ctx.arc(end.x, end.y, 4, 0, Math.PI*2); ctx.fill();
-                    }
-                }
-
+                if(!this.active) return;
                 ctx.save();
                 ctx.translate(this.pos.x, this.pos.y);
-                
-                // Selection Halo
-                if (this === selectedUnit) {
-                    ctx.strokeStyle = '#fbbf24';
-                    ctx.lineWidth = 2;
-                    ctx.beginPath(); ctx.arc(0,0, this.radius + 5, 0, Math.PI*2); ctx.stroke();
+                // Selection Circle
+                if(this === Game.selected) {
+                    ctx.beginPath(); ctx.strokeStyle = '#fbbf24'; ctx.lineWidth=2;
+                    ctx.arc(0,0, 22, 0, Math.PI*2); ctx.stroke();
                 }
-
-                if (!this.active) {
-                    ctx.rotate(this.angle);
-                    ctx.fillStyle = '#334155';
-                    ctx.beginPath(); ctx.arc(0,0, this.radius, 0, Math.PI*2); ctx.fill();
-                    ctx.strokeStyle = '#94a3b8'; ctx.lineWidth = 2;
-                    ctx.beginPath(); ctx.moveTo(-10,-10); ctx.lineTo(10,10); ctx.moveTo(10,-10); ctx.lineTo(-10,10); ctx.stroke();
-                } else {
-                    // Reloading indicator
-                    if (this.reloading > 0) {
-                        ctx.fillStyle = 'rgba(0,0,0,0.5)';
-                        ctx.fillRect(-20, -35, 40, 6);
-                        ctx.fillStyle = '#fbbf24';
-                        ctx.fillRect(-20, -35, 40 * (1 - this.reloading/120), 6);
-                    }
-
-                    ctx.rotate(this.angle);
-                    ctx.fillStyle = 'rgba(59, 130, 246, 0.15)';
-                    ctx.beginPath(); ctx.moveTo(0,0); ctx.arc(0,0, this.viewRange, -CFG.opFov/2, CFG.opFov/2); ctx.fill();
-
-                    ctx.rotate(Math.PI/2);
-                    try { ctx.drawImage(ICON_IMG, -this.radius, -this.radius, this.radius*2, this.radius*2); } 
-                    catch(e) { ctx.fillStyle = '#3b82f6'; ctx.beginPath(); ctx.arc(0,0, this.radius, 0, Math.PI*2); ctx.fill(); }
-                }
+                ctx.rotate(this.angle);
+                // Body
+                ctx.fillStyle = CFG.colors.op;
+                ctx.beginPath(); ctx.arc(0,0, CFG.op.rad, 0, Math.PI*2); ctx.fill();
+                // Arms/Gun
+                ctx.fillStyle = '#1e293b'; ctx.fillRect(0, -6, 24, 12);
                 ctx.restore();
-            }
-
-            reload() {
-                if (this.reloading === 0) this.reloading = 120; // 2s @ 60fps
-            }
-            
-            throwGrenade(targetPos) {
-                if (this.grenades > 0) {
-                    this.grenades--;
-                    // Visual FX + Stun logic
-                    spawnParticles(targetPos.x, targetPos.y, 20, 'flashbang');
-                    // Stun enemies in range
-                    entities.forEach(e => {
-                        if (e.team === 'red' && e.active && dist(e.pos, targetPos) < 150) {
-                            e.cooldown = 180; // 3s stun
-                            e.state = 'ALERT'; // Alerted but stunned
-                        }
-                    });
-                    return true;
-                }
-                return false;
             }
         }
 
         class Enemy extends Entity {
-            constructor(x, y, patrolPoints = []) {
+            constructor(x, y, patrol) {
                 super(x, y, 'red');
-                this.patrolPoints = patrolPoints;
-                this.patrolIdx = 0;
-                this.state = 'PATROL'; 
-                this.alertTimer = 0;
-                this.cooldown = 0;
-                this.angle = patrolPoints.length > 0 ? angleTo(this.pos, patrolPoints[0]) : Math.random() * Math.PI * 2;
+                this.patrol = patrol; this.pIdx = 0;
+                this.state = 'PATROL'; // PATROL, ALERT, COMBAT, STUNNED
+                this.stunTimer = 0; this.shootTimer = 0;
+                if(patrol.length) this.angle = AngleTo(this.pos, patrol[0]);
             }
             update() {
-                if (!this.active || appState !== STATES.RUNNING) return;
+                if(!this.active || Game.state !== 'RUNNING') return;
                 
-                // Stunned?
-                if (this.cooldown > 0 && this.state !== 'COMBAT') {
-                    this.cooldown--;
-                    return; 
-                }
+                if(this.stunTimer > 0) { this.stunTimer--; return; }
 
-                // Vision Check
+                // Check Vision
                 let target = null;
-                let operators = entities.filter(e => e.team === 'blue' && e.active);
-                for (let op of operators) {
-                    if (checkLineOfSight(this.pos, op.pos)) {
-                        let ang = angleTo(this.pos, op.pos);
-                        let diff = Math.abs(normalizeAngle(ang - this.angle));
-                        let currentFov = (this.state === 'ALERT') ? Math.PI : CFG.enemyFov;
-                        if (diff < currentFov / 2 && dist(this.pos, op.pos) < CFG.enemyViewDist) {
-                            target = op;
-                        }
+                for(let op of Game.ops) {
+                    if(op.active && Game.checkLOS(this.pos, op.pos) && Dist(this.pos, op.pos) < CFG.enemy.view) {
+                        let a = AngleTo(this.pos, op.pos);
+                        let diff = Math.abs(LerpAngle(0, a - this.angle, 1));
+                        if(diff < CFG.enemy.fov/2 || this.state === 'ALERT') target = op;
                     }
                 }
 
-                if (target) {
+                if(target) {
                     this.state = 'COMBAT';
-                    this.angle = angleTo(this.pos, target.pos);
-                    this.cooldown--;
-                    if (this.cooldown <= 0) {
-                        shoot(this, target);
-                        this.cooldown = CFG.fireRate * 1.5;
+                    this.angle = AngleTo(this.pos, target.pos);
+                    this.shootTimer--;
+                    if(this.shootTimer <= 0) {
+                        Game.shoot(this, target);
+                        this.shootTimer = 40; // Slower than Ops
                     }
                 } else {
-                     if (this.state === 'COMBAT') {
-                        this.state = 'ALERT';
-                        this.alertTimer = 120;
-                    } else if (this.state === 'ALERT') {
-                        this.alertTimer--;
-                        this.angle += 0.05; // Scan
-                        if (this.alertTimer <= 0) this.state = 'PATROL';
-                    } else if (this.patrolPoints.length > 0) {
-                        let dest = this.patrolPoints[this.patrolIdx];
-                        if (dist(this.pos, dest) < 5) this.patrolIdx = (this.patrolIdx + 1) % this.patrolPoints.length;
+                    if(this.state === 'COMBAT') this.state = 'ALERT'; // Lost visual
+                    
+                    if(this.state === 'PATROL' && this.patrol.length > 0) {
+                        let dest = this.patrol[this.pIdx];
+                        let d = Dist(this.pos, dest);
+                        this.angle = LerpAngle(this.angle, AngleTo(this.pos, dest), 0.1);
+                        if(d < 5) this.pIdx = (this.pIdx + 1) % this.patrol.length;
                         else {
-                            let ang = angleTo(this.pos, dest);
-                            this.angle = lerpAngle(this.angle, ang, 0.1);
-                            this.pos.x += Math.cos(ang) * CFG.enemySpeed;
-                            this.pos.y += Math.sin(ang) * CFG.enemySpeed;
+                            this.pos.x += Math.cos(this.angle) * CFG.enemy.speed;
+                            this.pos.y += Math.sin(this.angle) * CFG.enemy.speed;
                         }
                     }
                 }
             }
             draw(ctx) {
-                if (!this.active) {
-                    ctx.fillStyle = '#450a0a'; ctx.beginPath(); ctx.arc(this.pos.x, this.pos.y, this.radius, 0, Math.PI*2); ctx.fill();
-                    return;
-                }
+                if(!this.active) return;
                 ctx.save();
                 ctx.translate(this.pos.x, this.pos.y);
                 ctx.rotate(this.angle);
-                
-                // Vision
-                ctx.fillStyle = this.state === 'COMBAT' ? 'rgba(239, 68, 68, 0.3)' : 'rgba(239, 68, 68, 0.1)';
-                let currentFov = (this.state === 'ALERT') ? Math.PI : CFG.enemyFov;
-                ctx.beginPath(); ctx.moveTo(0,0); ctx.arc(0,0, CFG.enemyViewDist, -currentFov/2, currentFov/2); ctx.fill();
-                
-                // Body
-                ctx.fillStyle = '#ef4444'; ctx.beginPath(); ctx.arc(0,0, this.radius, 0, Math.PI*2); ctx.fill();
-                ctx.fillStyle = '#1e293b'; ctx.fillRect(0, -4, 25, 8);
-                
-                if (this.cooldown > 0 && this.state !== 'COMBAT') { // Stunned visual
-                     ctx.fillStyle = 'white'; ctx.font = '12px Arial'; ctx.fillText('ZZZ', -10, -25);
-                } else if (this.state === 'COMBAT' || this.state === 'ALERT') {
-                    ctx.fillStyle = 'yellow'; ctx.font = 'bold 20px Arial'; ctx.fillText('!', -5, -25);
+                ctx.fillStyle = CFG.colors.enemy;
+                ctx.beginPath(); ctx.arc(0,0, CFG.enemy.rad, 0, Math.PI*2); ctx.fill();
+                // Mask
+                ctx.fillStyle = '#000'; ctx.fillRect(4, -5, 8, 10);
+                if(this.state === 'COMBAT') {
+                    ctx.fillStyle = '#fbbf24'; ctx.font="bold 20px Arial"; ctx.fillText("!", -5, -20);
+                } else if (this.stunTimer > 0) {
+                    ctx.fillStyle = '#fff'; ctx.font="bold 16px Arial"; ctx.fillText("@@", -8, -20);
                 }
                 ctx.restore();
             }
         }
 
         class Hostage extends Entity {
-            constructor(x, y) {
-                super(x, y, 'civil');
-                this.evacuated = false;
-            }
+            constructor(x, y) { super(x, y, 'civil'); this.evacuated = false; }
             draw(ctx) {
-                if (this.evacuated) return;
-                if (!this.active) {
-                     ctx.fillStyle = '#14532d'; ctx.beginPath(); ctx.arc(this.pos.x, this.pos.y, this.radius, 0, Math.PI*2); ctx.fill();
-                     return;
-                }
-                ctx.fillStyle = '#22c55e'; 
-                ctx.beginPath(); ctx.arc(this.pos.x, this.pos.y, this.radius, 0, Math.PI*2); ctx.fill();
-                ctx.fillStyle = '#bbf7d0'; // Hands up
-                ctx.beginPath(); ctx.arc(this.pos.x - 12, this.pos.y - 8, 6, 0, Math.PI*2); ctx.fill();
-                ctx.beginPath(); ctx.arc(this.pos.x + 12, this.pos.y - 8, 6, 0, Math.PI*2); ctx.fill();
+                if(!this.active || this.evacuated) return;
+                ctx.fillStyle = CFG.colors.hostage;
+                ctx.beginPath(); ctx.arc(this.pos.x, this.pos.y, 14, 0, Math.PI*2); ctx.fill();
+                // Hands tied
+                ctx.fillStyle = '#d1fae5'; ctx.beginPath(); ctx.arc(this.pos.x-8, this.pos.y-8, 5, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.arc(this.pos.x+8, this.pos.y-8, 5, 0, Math.PI*2); ctx.fill();
             }
         }
 
-        // --- FX ---
-        function spawnParticles(x, y, count, type, angle = 0) {
-            for(let i=0; i<count; i++) {
-                particles.push({
-                    x, y, type,
-                    vx: (Math.random()-0.5)*(type==='flashbang'?15:5),
-                    vy: (Math.random()-0.5)*(type==='flashbang'?15:5),
-                    life: type === 'flash' ? 2 : (type==='flashbang'?30:40),
-                    color: type==='blood'?'#991b1b':(type==='flashbang'?'#ffffff':'#fbbf24'),
-                    size: Math.random()*3+1
-                });
-            }
-        }
+        // --- GAME SYSTEM ---
 
-        function alertEnemies(pos, range) {
-             entities.forEach(e => {
-                if (e.team === 'red' && e.active && e.state === 'PATROL' && dist(e.pos, pos) < range) {
-                    e.state = 'ALERT'; e.alertTimer = 100; e.angle = angleTo(e.pos, pos);
-                }
-            });
-        }
-        
-        function shoot(shooter, target) {
-            spawnParticles(shooter.pos.x + Math.cos(shooter.angle)*20, shooter.pos.y + Math.sin(shooter.angle)*20, 5, 'flash');
-            bullets.push({start: {...shooter.pos}, end: {...target.pos}, life: 5});
+        const Game = {
+            canvas: document.getElementById('worldCanvas'),
+            ctx: document.getElementById('worldCanvas').getContext('2d'),
+            uiCanvas: document.getElementById('uiCanvas'),
+            uictx: document.getElementById('uiCanvas').getContext('2d'),
             
-            let d = dist(shooter.pos, target.pos);
-            let hitChance = 1 - (d/shooter.viewRange)*0.4;
-            if (Math.random() < hitChance) {
-                target.hit(35, shooter.angle);
-                alertEnemies(target.pos, 400);
-            } else {
-                spawnParticles(target.pos.x + (Math.random()-0.5)*40, target.pos.y + (Math.random()-0.5)*40, 3, 'dust');
-            }
-        }
+            state: 'PLANNING',
+            levelIdx: 0,
+            
+            // Entities
+            walls: [], doors: [], ops: [], enemies: [], hostages: [], corpses: [], particles: [], bullets: [],
+            camera: new Camera(),
+            selected: null,
 
-        // --- LEVELS ---
-        const LEVELS = [
-            {
-                name: "INITIATION",
-                brief: "Prise en main. Neutralisez la sentinelle et évacuez le VIP.",
-                setup: (cw, ch) => {
-                    walls = [ {x: cw/2-10, y: 150, w: 20, h: ch}, {x: 0, y: 150, w: cw/2-60, h: 20}, {x: cw/2+60, y: 150, w: cw, h: 20} ];
-                    doors = [ new Door(cw/2-60, 150, 60, false) ];
-                    entities = [
-                        new Operator(cw/2, ch-50),
-                        new Enemy(cw/2, 50, [Vec2(cw/2-100, 50), Vec2(cw/2+100, 50)]),
-                        new Hostage(100, 50)
-                    ];
+            levels: [
+                {
+                    name: "ZONE D'ENTRAÎNEMENT",
+                    desc: "La porte est fermée. Utilisez l'ordre 'Ouvrir' ou passez en mode Assaut pour la franchir. Neutralisez la cible.",
+                    setup: (w, h) => {
+                        Game.walls = [{x: w/2-10, y: 200, w: 20, h: h}, {x:0, y:200, w:w/2-60, h:20}, {x:w/2+60, y:200, w:w, h:20}];
+                        Game.doors = [new Door(w/2-60, 200, 60, false)];
+                        Game.ops = [new Operator(w/2, h-100)];
+                        Game.enemies = [new Enemy(w/2, 100, [Vec2(100,100), Vec2(w-100,100)])];
+                        Game.hostages = [];
+                    }
+                },
+                {
+                    name: "EXTRACTION VIP",
+                    desc: "Plusieurs pièces. Des patrouilles hostiles. Le VIP est retenu à l'arrière. Silence recommandé.",
+                    setup: (w, h) => {
+                        Game.walls = [
+                            {x:300, y:0, w:20, h:h/2}, {x:300, y:h/2+80, w:20, h:h}, // Vertical Split
+                            {x:0, y:h/2, w:300, h:20}, {x:320, y:h/3, w:w, h:20} // Horizontals
+                        ];
+                        Game.doors = [new Door(300, h/2, 80, true), new Door(500, h/3, 80, false)];
+                        Game.ops = [new Operator(50, h-50), new Operator(100, h-50)];
+                        Game.enemies = [
+                            new Enemy(150, 150, []), 
+                            new Enemy(w-100, 100, [Vec2(w-100, 100), Vec2(w-100, h-100)]),
+                            new Enemy(w-150, h/2+50, [])
+                        ];
+                        Game.hostages = [new Hostage(w-50, 50)];
+                    }
+                }
+            ],
+
+            init() {
+                window.addEventListener('resize', this.resize.bind(this));
+                this.resize();
+                
+                // Input
+                const tHandler = (e) => { e.preventDefault(); this.handleInput(e.touches ? e.touches[0] : e, e.type); };
+                this.canvas.addEventListener('mousedown', tHandler);
+                this.canvas.addEventListener('mousemove', tHandler);
+                window.addEventListener('mouseup', () => this.drag = null);
+                this.canvas.addEventListener('touchstart', tHandler, {passive:false});
+                this.canvas.addEventListener('touchmove', tHandler, {passive:false});
+                window.addEventListener('touchend', () => this.drag = null);
+
+                // UI binds
+                document.getElementById('btn-execute').onclick = () => this.toggleState();
+                document.getElementById('btn-clear').onclick = () => { if(this.state === 'PLANNING') this.ops.forEach(o => o.path = []); };
+                document.getElementById('btn-flash').onclick = () => this.useSkill('flash');
+                document.getElementById('btn-reload').onclick = () => this.useSkill('reload');
+
+                this.loadLevel(0);
+                this.loop();
+            },
+
+            resize() {
+                CFG.w = window.innerWidth; CFG.h = window.innerHeight;
+                this.canvas.width = CFG.w; this.canvas.height = CFG.h;
+                this.uiCanvas.width = CFG.w; this.uiCanvas.height = CFG.h;
+                if(this.walls.length === 0) this.loadLevel(this.levelIdx); // Reload if empty
+            },
+
+            loadLevel(idx) {
+                this.levelIdx = idx;
+                if(idx >= this.levels.length) { this.showModal("MISSION ACCOMPLIE", "Bon travail, commandant. Retour à la base.", () => location.reload()); return; }
+                
+                this.walls=[]; this.doors=[]; this.ops=[]; this.enemies=[]; this.hostages=[]; this.corpses=[]; this.bullets=[];
+                this.levels[idx].setup(CFG.w, CFG.h);
+                
+                this.state = 'PLANNING';
+                this.updateUIPhase();
+                this.showModal(this.levels[idx].name, this.levels[idx].desc, () => document.getElementById('modal-overlay').classList.add('hidden'));
+            },
+
+            toggleState() {
+                if(this.state === 'PLANNING') { this.state = 'RUNNING'; this.selected = null; }
+                else if (this.state === 'RUNNING') { this.state = 'PLANNING'; }
+                this.updateUIPhase();
+            },
+
+            updateUIPhase() {
+                const ind = document.getElementById('phase-indicator');
+                const txt = document.getElementById('phase-text');
+                const btn = document.getElementById('btn-execute');
+                
+                if(this.state === 'PLANNING') {
+                    ind.className = "flex items-center gap-2 text-xs font-bold text-yellow-400 bg-yellow-900/30 px-2 py-1 rounded border border-yellow-500/30 w-max";
+                    txt.innerText = "PLANIFICATION";
+                    btn.innerHTML = '<span class="material-icons">play_arrow</span> ASSAUT';
+                    btn.className = "btn-tac bg-blue-600 hover:bg-blue-500 text-white px-8 py-3 rounded-lg font-bold text-xl tracking-wider min-w-[160px] flex items-center gap-2 justify-center border-b-4 border-blue-800 active:border-b-0 active:translate-y-1";
+                } else {
+                    ind.className = "flex items-center gap-2 text-xs font-bold text-red-500 bg-red-900/30 px-2 py-1 rounded border border-red-500/30 w-max animate-pulse";
+                    txt.innerText = "EN COURS";
+                    btn.innerHTML = '<span class="material-icons">pause</span> PAUSE';
+                    btn.className = "btn-tac bg-slate-700 hover:bg-slate-600 text-white px-8 py-3 rounded-lg font-bold text-xl tracking-wider min-w-[160px] flex items-center gap-2 justify-center border-b-4 border-slate-900 active:border-b-0 active:translate-y-1";
+                }
+                document.getElementById('context-layer').innerHTML = ''; // Clear context
+            },
+
+            handleInput(e, type) {
+                const r = this.canvas.getBoundingClientRect();
+                const pos = Vec2(e.clientX - r.left, e.clientY - r.top);
+
+                if(type === 'mousedown' || type === 'touchstart') {
+                    // Check Unit selection
+                    let clickedOp = this.ops.find(o => Dist(pos, o.pos) < 30);
+                    if(clickedOp) {
+                        this.selected = clickedOp;
+                        this.drag = clickedOp;
+                        if(this.state === 'PLANNING') {
+                             clickedOp.path = [clickedOp.pos];
+                             clickedOp.pathIdx = 0;
+                        }
+                    } else {
+                        // Check Interactions (Doors/Hostages)
+                        if(this.selected) {
+                            // Simple distance check from selected unit to object
+                        } else {
+                            this.selected = null;
+                        }
+                    }
+                    this.updateUnitUI();
+                } else if ((type === 'mousemove' || type === 'touchmove') && this.drag && this.state === 'PLANNING') {
+                    // Draw Path
+                    let last = this.drag.path[this.drag.path.length-1];
+                    if(Dist(pos, last) > 20) {
+                        // Smooth wall sliding could go here, for now basic LOS check
+                        if(this.checkLOS(last, pos)) this.drag.path.push(pos);
+                    }
                 }
             },
-            {
-                name: "DOUBLE IMPACT",
-                brief: "Deux pièces. Nettoyez méthodiquement.",
-                setup: (cw, ch) => {
-                    walls = [ 
-                        {x: cw/3, y:0, w:20, h:ch}, 
-                        {x: cw*0.66, y:0, w:20, h:ch},
-                        {x: 0, y: ch/2, w: cw, h: 20}
+
+            // --- GAMEPLAY LOGIC ---
+            checkLOS(p1, p2) {
+                for(let w of this.walls) {
+                    // Simple AABB vs Line approximation or detailed line intersect
+                    const edges = [
+                        [Vec2(w.x, w.y), Vec2(w.x+w.w, w.y)], [Vec2(w.x+w.w, w.y), Vec2(w.x+w.w, w.y+w.h)],
+                        [Vec2(w.x+w.w, w.y+w.h), Vec2(w.x, w.y+w.h)], [Vec2(w.x, w.y+w.h), Vec2(w.x, w.y)]
                     ];
-                    doors = [ 
-                        new Door(cw/3, ch/4, 60, true),
-                        new Door(cw*0.66, ch*0.75, 60, true)
-                    ];
-                    entities = [
-                        new Operator(50, ch-50),
-                        new Operator(cw-50, ch-50),
-                        new Enemy(cw/2, ch/4, []),
-                        new Enemy(cw/6, 50, [Vec2(cw/6, 50), Vec2(cw/6, ch/2-50)]),
-                        new Hostage(cw/2, 50)
-                    ];
+                    for(let edge of edges) if(Intersect(p1, p2, edge[0], edge[1])) return false;
                 }
-            }
-        ];
-
-        // --- CORE ---
-        function init() {
-            resize();
-            window.addEventListener('resize', resize);
-            
-            CANVAS.addEventListener('mousedown', onPointerDown);
-            CANVAS.addEventListener('mousemove', onPointerMove);
-            window.addEventListener('mouseup', onPointerUp);
-            CANVAS.addEventListener('touchstart', onPointerDown, {passive: false});
-            CANVAS.addEventListener('touchmove', onPointerMove, {passive: false});
-            window.addEventListener('touchend', onPointerUp);
-
-            loadLvl(0);
-            requestAnimationFrame(loop);
-        }
-
-        function resize() { CANVAS.width = window.innerWidth; CANVAS.height = window.innerHeight; }
-        
-        function loadLvl(i) {
-            if (i >= LEVELS.length) { showModal("TERMINÉ", "Bravo !", "REJOUER", () => loadLvl(0)); return; }
-            currentLevel = i;
-            walls=[]; doors=[]; entities=[]; particles=[]; bullets=[];
-            LEVELS[i].setup(CANVAS.width, CANVAS.height);
-            setState(STATES.PLANNING);
-            showModal(`MISSION ${i+1}`, LEVELS[i].name + "<br>" + LEVELS[i].brief, "GO", () => hideModal());
-            updateUI();
-        }
-
-        function setState(s) {
-            appState = s;
-            const badge = document.getElementById('status-badge');
-            const btnMain = document.getElementById('btn-action');
-            const iconAction = document.getElementById('icon-action');
-            const textAction = document.getElementById('text-action');
-
-            if (s === STATES.PLANNING) {
-                badge.innerText = "PLANIFICATION"; 
-                badge.className = "bg-yellow-500/20 border border-yellow-500/50 px-2 py-1 rounded text-yellow-400 text-xs font-bold text-center shadow-lg";
-                btnMain.classList.remove('danger'); 
-                btnMain.classList.add('play');
-                iconAction.innerText = "play_arrow";
-                textAction.innerText = "ACTION";
-            } else if (s === STATES.RUNNING) {
-                badge.innerText = "ASSAUT"; 
-                badge.className = "bg-red-500/20 border border-red-500/50 px-2 py-1 rounded text-red-500 text-xs font-bold text-center shadow-lg animate-pulse";
-                btnMain.classList.remove('play');
-                btnMain.classList.add('danger');
-                iconAction.innerText = "pause";
-                textAction.innerText = "PAUSE";
-                selectedUnit = null; 
-                updateContextUI();
-            } else if (s === STATES.PAUSED) {
-                badge.innerText = "PAUSE"; 
-                badge.className = "bg-blue-500/20 border border-blue-500/50 px-2 py-1 rounded text-blue-400 text-xs font-bold text-center shadow-lg";
-                btnMain.classList.remove('danger');
-                btnMain.classList.add('play');
-                iconAction.innerText = "play_arrow";
-                textAction.innerText = "REPRENDRE";
-            }
-            updateActionUI();
-        }
-
-        // --- INPUT ---
-        function getPos(e) {
-            const r = CANVAS.getBoundingClientRect();
-            const x = e.touches ? e.touches[0].clientX : e.clientX;
-            const y = e.touches ? e.touches[0].clientY : e.clientY;
-            return Vec2(x - r.left, y - r.top);
-        }
-
-        function onPointerDown(e) {
-            if (appState === STATES.ENDED) return;
-            e.preventDefault();
-            let p = getPos(e);
-            let clickedUnit = null;
-
-            // Check Operators
-            for (let op of entities.filter(e=>e.team==='blue' && e.active)) {
-                if (dist(p, op.pos) < 40) {
-                    clickedUnit = op;
-                    break;
+                for(let d of this.doors) {
+                    if(!d.open) {
+                        let dc = d.vertical ? 
+                            [Vec2(d.x, d.y), Vec2(d.x, d.y+d.w)] : 
+                            [Vec2(d.x, d.y), Vec2(d.x+d.w, d.y)];
+                        if(Intersect(p1, p2, dc[0], dc[1])) return false;
+                    }
                 }
-            }
+                return true;
+            },
 
-            // Planning Phase: Drag path
-            if (clickedUnit && (appState === STATES.PLANNING || appState === STATES.PAUSED)) {
-                selectedUnit = clickedUnit;
-                if (appState === STATES.PAUSED) {
-                     // Cut path at current pos to redraw future
-                     op.path = op.path.slice(0, op.pathIdx);
-                     op.path.push({...op.pos});
+            shoot(shooter, target) {
+                this.bullets.push({s: {...shooter.pos}, e: {...target.pos}, life: 5});
+                this.camera.addShake(3);
+                this.spawnParticles(shooter.pos.x + Math.cos(shooter.angle)*20, shooter.pos.y + Math.sin(shooter.angle)*20, 5, 'spark');
+                
+                // Hit Calc
+                let d = Dist(shooter.pos, target.pos);
+                let acc = 1 - (d / 400); // Accuracy drops with range
+                if(Math.random() < acc) target.hit(35);
+                
+                // Alert nearby
+                this.enemies.forEach(e => {
+                    if(Dist(e.pos, shooter.pos) < 300 && e.state === 'PATROL') e.state = 'ALERT';
+                });
+            },
+
+            spawnParticles(x, y, count, type) {
+                for(let i=0; i<count; i++) this.particles.push(new Particle(x, y, type));
+            },
+
+            useSkill(type) {
+                if(!this.selected || this.state !== 'RUNNING') return;
+                const u = this.selected;
+                if(type === 'flash') {
+                    // Logic: Flashbang at cursor or simple radial stun around unit for demo
+                    this.spawnParticles(u.pos.x, u.pos.y, 30, 'spark');
+                    this.enemies.forEach(e => {
+                        if(Dist(u.pos, e.pos) < 200 && this.checkLOS(u.pos, e.pos)) e.stunTimer = 180;
+                    });
+                } else if (type === 'reload') {
+                    u.mag = 30; u.reloadTimer = 120;
+                }
+            },
+
+            updateUnitUI() {
+                const p = document.getElementById('unit-controls');
+                if(this.selected) {
+                    p.classList.remove('opacity-0', 'translate-y-10');
+                    
+                    // Context buttons
+                    const ctxLayer = document.getElementById('context-layer');
+                    ctxLayer.innerHTML = '';
+                    
+                    // Check near interactions
+                    this.doors.forEach(d => {
+                        if(Dist(this.selected.pos, d.center) < 50) {
+                            let btn = document.createElement('button');
+                            btn.className = "pointer-events-auto bg-slate-800 border border-orange-500 text-orange-500 px-4 py-2 rounded font-bold flex items-center gap-2 animate-bounce";
+                            btn.innerHTML = `<span class="material-icons">meeting_room</span> ${d.open ? 'FERMER' : 'OUVRIR'}`;
+                            btn.onclick = () => d.open = !d.open;
+                            ctxLayer.appendChild(btn);
+                        }
+                    });
+                    this.hostages.forEach(h => {
+                         if(!h.evacuated && Dist(this.selected.pos, h.pos) < 50) {
+                            let btn = document.createElement('button');
+                            btn.className = "pointer-events-auto bg-green-600 text-white px-4 py-2 rounded font-bold flex items-center gap-2";
+                            btn.innerHTML = `<span class="material-icons">accessibility_new</span> ÉVACUER`;
+                            btn.onclick = () => { h.evacuated = true; this.updateStats(); };
+                            ctxLayer.appendChild(btn);
+                         }
+                    });
+
                 } else {
-                     clickedUnit.path = [clickedUnit.pos];
-                     clickedUnit.pathIdx = 0;
+                    p.classList.add('opacity-0', 'translate-y-10');
+                    document.getElementById('context-layer').innerHTML = '';
                 }
-                activeDrag = clickedUnit;
-            } 
-            // Running Phase: Select only
-            else if (clickedUnit && appState === STATES.RUNNING) {
-                selectedUnit = clickedUnit;
-            }
-            // Click empty space: Deselect
-            else if (!clickedUnit) {
-                selectedUnit = null;
-            }
-            
-            updateActionUI();
-            updateContextUI();
-        }
+            },
 
-        function onPointerMove(e) {
-            if (!activeDrag) return;
-            e.preventDefault();
-            let p = getPos(e);
-            let last = activeDrag.path[activeDrag.path.length-1];
-            if (dist(p, last) > 15 && !checkWallCollisionLine(last, p)) {
-                activeDrag.path.push(p);
-            }
-        }
-
-        function onPointerUp() { activeDrag = null; }
-
-        // --- UI UPDATES ---
-        function updateActionUI() {
-            const panel = document.getElementById('unit-actions');
-            if (selectedUnit && selectedUnit.team === 'blue') {
-                panel.classList.remove('opacity-0', 'translate-y-10');
-            } else {
-                panel.classList.add('opacity-0', 'translate-y-10');
-            }
-        }
-
-        function updateContextUI() {
-            const btnEvac = document.getElementById('btn-evac');
-            const btnBreach = document.getElementById('btn-breach');
-            btnEvac.classList.remove('visible');
-            btnBreach.classList.remove('visible');
-
-            if (selectedUnit && selectedUnit.active) {
-                // Check Hostages
-                let nearHostage = entities.some(e => e.team === 'civil' && e.active && !e.evacuated && dist(selectedUnit.pos, e.pos) < 60);
-                if (nearHostage) btnEvac.classList.add('visible');
-
-                // Check Doors
-                let nearDoor = doors.some(d => dist(selectedUnit.pos, Vec2(d.x + (d.vertical?0:d.size/2), d.y + (d.vertical?d.size/2:0))) < 60);
-                if (nearDoor) btnBreach.classList.add('visible');
-            }
-        }
-
-        // --- GAME LOOP ---
-        function loop() {
-            // Logic
-            if (appState === STATES.RUNNING) {
-                entities.forEach(e => e.update());
-                // Check Win
-                let enemies = entities.filter(e => e.team === 'red' && e.active);
-                let hostages = entities.filter(e => e.team === 'civil' && e.active && !e.evacuated);
-                let ops = entities.filter(e => e.team === 'blue' && e.active);
+            updateStats() {
+                document.getElementById('hud-hostiles').innerText = this.enemies.filter(e => e.active).length;
+                document.getElementById('hud-civils').innerText = this.hostages.filter(h => !h.evacuated).length;
                 
-                if (enemies.length === 0 && hostages.length === 0) {
-                    setAppState(STATES.ENDED);
-                    setTimeout(()=>showModal("ZONE SÉCURISÉE", "Tous les objectifs atteints.", "NIVEAU SUIVANT", () => loadLvl(currentLevel+1)), 1000);
-                } else if (ops.length === 0) {
-                    setAppState(STATES.ENDED);
-                    setTimeout(()=>showModal("ÉCHEC", "Opérateurs à terre.", "RÉESSAYER", () => loadLvl(currentLevel)), 1000);
+                // Check Win/Loss
+                if(this.state === 'RUNNING') {
+                    if(this.enemies.filter(e=>e.active).length === 0 && this.hostages.filter(h=>!h.evacuated).length === 0) {
+                        setTimeout(() => this.loadLevel(this.levelIdx+1), 2000);
+                    }
+                    if(this.ops.filter(o=>o.active).length === 0) {
+                        setTimeout(() => this.loadLevel(this.levelIdx), 2000);
+                    }
                 }
+            },
+
+            showModal(t, d, cb) {
+                document.getElementById('modal-title').innerText = t;
+                document.getElementById('modal-desc').innerText = d;
+                const btn = document.getElementById('modal-btn');
+                btn.onclick = cb;
+                document.getElementById('modal-overlay').classList.remove('hidden');
+            },
+
+            // --- RENDER LOOP ---
+            loop() {
+                this.camera.update();
                 
-                // Update real time UI
-                if (selectedUnit) updateContextUI();
-            }
+                // Logic
+                this.doors.forEach(d => d.update());
+                this.ops.forEach(o => o.update());
+                this.enemies.forEach(e => e.update());
+                this.particles.forEach((p, i) => { p.update(); if(p.life<=0) this.particles.splice(i,1); });
+                this.bullets.forEach((b, i) => { b.life--; if(b.life<=0) this.bullets.splice(i,1); });
 
-            // Draw
-            CTX.fillStyle = '#1e293b'; CTX.fillRect(0, 0, CANVAS.width, CANVAS.height);
-            CTX.strokeStyle='rgba(255,255,255,0.05)'; CTX.beginPath();
-            for(let i=0; i<CANVAS.width; i+=40){CTX.moveTo(i,0);CTX.lineTo(i,CANVAS.height)}
-            for(let i=0; i<CANVAS.height; i+=40){CTX.moveTo(0,i);CTX.lineTo(CANVAS.width,i)}
-            CTX.stroke();
+                this.updateStats();
 
-            doors.forEach(d => d.draw(CTX));
-            CTX.fillStyle='rgba(0,0,0,0.5)'; walls.forEach(w=>CTX.fillRect(w.x+5,w.y+5,w.w,w.h));
-            CTX.fillStyle='#0f172a'; CTX.strokeStyle='#64748b'; CTX.lineWidth=3;
-            walls.forEach(w=>{CTX.fillRect(w.x,w.y,w.w,w.h); CTX.strokeRect(w.x,w.y,w.w,w.h)});
+                // DRAW WORLD
+                const ctx = this.ctx;
+                ctx.save();
+                ctx.fillStyle = '#0f172a';
+                ctx.fillRect(0,0,CFG.w, CFG.h);
+                
+                // Camera Shake apply
+                ctx.translate(this.camera.x, this.camera.y);
 
-            entities.forEach(e => e.draw(CTX));
-            
-            // Particles / Bullets
-            bullets.forEach((b,i) => {
-                b.life--; CTX.strokeStyle='#fbbf24'; CTX.lineWidth=2; CTX.beginPath(); 
-                CTX.moveTo(b.start.x, b.start.y); CTX.lineTo(b.end.x, b.end.y); CTX.stroke();
-                if(b.life<=0) bullets.splice(i,1);
-            });
-            particles.forEach((p,i) => {
-                p.life--; p.x+=p.vx; p.y+=p.vy; CTX.globalAlpha=p.life/20; CTX.fillStyle=p.color;
-                CTX.beginPath(); CTX.arc(p.x,p.y,p.size,0,Math.PI*2); CTX.fill();
-                if(p.life<=0) particles.splice(i,1);
-            });
-            CTX.globalAlpha=1;
+                // Grid Floor
+                ctx.strokeStyle = CFG.colors.grid; ctx.lineWidth = 1;
+                ctx.beginPath();
+                for(let x=0; x<CFG.w; x+=40) { ctx.moveTo(x,0); ctx.lineTo(x,CFG.h); }
+                for(let y=0; y<CFG.h; y+=40) { ctx.moveTo(0,y); ctx.lineTo(CFG.w,y); }
+                ctx.stroke();
 
-            requestAnimationFrame(loop);
-        }
-
-        // --- HELPERS ---
-        function lerpAngle(a, b, t) {
-            let d = b - a;
-            while (d > Math.PI) d -= 2*Math.PI; while (d < -Math.PI) d += 2*Math.PI;
-            return a + d * t;
-        }
-        function normalizeAngle(a) { while (a > Math.PI) a -= 2*Math.PI; while (a < -Math.PI) a += 2*Math.PI; return a; }
-        function checkWallCollisionLine(p1, p2) { return false; /* Simplification for brevity, add back if needed */ }
-        
-        function updateUI() {
-            document.getElementById('ui-hostiles').innerText = entities.filter(e=>e.team==='red' && e.active).length;
-            document.getElementById('ui-civils').innerText = entities.filter(e=>e.team==='civil' && !e.evacuated).length;
-        }
-
-        const modal = document.getElementById('modal-screen');
-        function showModal(t, c, b, cb) {
-            document.getElementById('modal-title').innerText = t;
-            document.getElementById('modal-content').innerHTML = c;
-            const btn = document.getElementById('btn-modal-action');
-            btn.innerText = b;
-            btn.onclick = cb;
-            modal.classList.remove('hidden-modal');
-        }
-        function hideModal() { modal.classList.add('hidden-modal'); }
-
-        // --- BUTTONS ---
-        document.getElementById('btn-action').onclick = () => {
-            if (appState === STATES.PLANNING || appState === STATES.PAUSED) setState(STATES.RUNNING);
-            else if (appState === STATES.RUNNING) setState(STATES.PAUSED);
-        };
-        document.getElementById('btn-reset').onclick = () => loadLvl(currentLevel);
-        document.getElementById('btn-clear').onclick = () => {
-            if (appState === STATES.PLANNING) entities.filter(e=>e.team==='blue').forEach(e => { e.path=[]; e.pathIdx=0; });
-        };
-
-        // Actions
-        document.getElementById('btn-reload').onclick = () => {
-            if(selectedUnit) selectedUnit.reload();
-        };
-        document.getElementById('btn-grenade').onclick = () => {
-            if(selectedUnit) {
-                // Throw towards looking direction
-                let target = {
-                    x: selectedUnit.pos.x + Math.cos(selectedUnit.angle)*150,
-                    y: selectedUnit.pos.y + Math.sin(selectedUnit.angle)*150
-                };
-                selectedUnit.throwGrenade(target);
-            }
-        };
-        document.getElementById('btn-evac').onclick = () => {
-            if(selectedUnit) {
-                entities.forEach(e => {
-                    if (e.team === 'civil' && !e.evacuated && dist(selectedUnit.pos, e.pos) < 60) {
-                        e.evacuated = true;
-                        spawnParticles(e.pos.x, e.pos.y, 20, 'flash'); // Poof effect
-                        updateUI();
-                    }
+                // Dead bodies
+                this.corpses.forEach(c => {
+                    ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(c.angle);
+                    ctx.fillStyle = '#334155'; ctx.beginPath(); ctx.arc(0,0,14,0,Math.PI*2); ctx.fill();
+                    // Blood pool
+                    ctx.fillStyle = '#450a0a'; ctx.beginPath(); ctx.arc(0,0,20,0,Math.PI*2); ctx.fill();
+                    ctx.restore();
                 });
-                updateContextUI();
-            }
-        };
-        document.getElementById('btn-breach').onclick = () => {
-            if(selectedUnit) {
-                doors.forEach(d => {
-                    if (dist(selectedUnit.pos, Vec2(d.x+(d.vertical?0:d.size/2), d.y+(d.vertical?d.size/2:0))) < 60) {
-                        d.interact();
-                    }
+
+                // Paths (Planning)
+                if(this.state === 'PLANNING' || this.selected) {
+                    this.ops.forEach(o => {
+                        if(o.path.length) {
+                            ctx.beginPath();
+                            ctx.strokeStyle = (o === this.selected) ? '#fbbf24' : 'rgba(59, 130, 246, 0.4)';
+                            ctx.lineWidth = 2; ctx.setLineDash([5,5]);
+                            ctx.moveTo(o.pos.x, o.pos.y);
+                            for(let p of o.path) ctx.lineTo(p.x, p.y);
+                            ctx.stroke(); ctx.setLineDash([]);
+                            // Waypoints
+                            ctx.fillStyle = ctx.strokeStyle;
+                            for(let p of o.path) { ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI*2); ctx.fill(); }
+                        }
+                    });
+                }
+
+                // Entities
+                this.hostages.forEach(h => h.draw(ctx));
+                this.ops.forEach(o => o.draw(ctx));
+                this.enemies.forEach(e => e.draw(ctx));
+
+                // Particles & Bullets
+                this.particles.forEach(p => p.draw(ctx));
+                this.bullets.forEach(b => {
+                    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
+                    ctx.beginPath(); ctx.moveTo(b.s.x, b.s.y); ctx.lineTo(b.e.x, b.e.y); ctx.stroke();
                 });
+
+                // FOG OF WAR / SHADOWS (The "Pro" Look)
+                // Draw darkness everywhere
+                ctx.save();
+                ctx.fillStyle = 'rgba(0,0,0,0.85)';
+                ctx.fillRect(-10, -10, CFG.w+20, CFG.h+20);
+                
+                // Cut out vision cones
+                ctx.globalCompositeOperation = 'destination-out';
+                
+                // Operator Vision
+                this.ops.forEach(o => {
+                    if(!o.active) return;
+                    ctx.save(); ctx.translate(o.pos.x, o.pos.y); ctx.rotate(o.angle);
+                    
+                    // Main cone
+                    ctx.beginPath(); ctx.moveTo(0,0);
+                    ctx.arc(0,0, CFG.op.view, -CFG.op.fov/2, CFG.op.fov/2);
+                    ctx.closePath(); ctx.fill();
+                    
+                    // Small radius around unit
+                    ctx.beginPath(); ctx.arc(0,0, 60, 0, Math.PI*2); ctx.fill();
+                    ctx.restore();
+                });
+                
+                ctx.restore();
+
+                // Walls & Doors (On top of shadows for clarity, or below for realism. Top is better for gameplay)
+                ctx.shadowColor = 'black'; ctx.shadowBlur = 10;
+                this.walls.forEach(w => {
+                    ctx.fillStyle = '#1e293b'; ctx.fillRect(w.x, w.y, w.w, w.h);
+                    ctx.strokeStyle = '#334155'; ctx.strokeRect(w.x, w.y, w.w, w.h);
+                });
+                this.doors.forEach(d => d.draw(ctx));
+                ctx.shadowBlur = 0;
+
+                ctx.restore();
+                
+                // UI Canvas Draw (Selection reticles etc)
+                // ... (Separated for cleaner rendering if needed)
+
+                requestAnimationFrame(() => this.loop());
             }
         };
 
-        init();
+        // Boot
+        Game.init();
 
     </script>
 </body>
