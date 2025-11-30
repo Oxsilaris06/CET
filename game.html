@@ -188,11 +188,10 @@
     <script>
         /**
          * GILETTE TAKEDOWN V3 - PROFESSIONAL REMASTER
-         * - Implemented full collision detection (unit vs walls/doors)
-         * - Implemented real bullet movement and projectile collision checks
-         * - Dynamic door opening/closing based on progress
-         * - Path smoothing for better planning visualization
-         * - Cooldown and ammo tracking for Operator skills
+         * * IMPROVEMENTS (02/12/2025):
+         * - Ensured all entity spawns (Operators, Enemies, Hostages) are in safe, non-colliding areas.
+         * - Improved map boundary checks in checkCollision.
+         * - Retained and refined tactical pathing logic for Operators.
          */
 
         // --- UTILS & MATH ---
@@ -222,7 +221,7 @@
                 wall: '#1e293b', floor: '#0f172a', op: '#3b82f6', enemy: '#ef4444', hostage: '#10b981',
                 grid: 'rgba(59, 130, 246, 0.05)', bullet: '#fbbf24'
             },
-            op: { speed: 2.5, rad: 16, view: 350, fov: Math.PI / 1.8, reloadTime: 120, flashCD: 300 },
+            op: { speed: 2.5, rad: 16, view: 350, fov: Math.PI / 1.8, reloadTime: 120, flashCD: 300, turnPauseDuration: 15 }, // 15 frames for tactical pause
             enemy: { speed: 1.2, rad: 16, view: 280, fov: Math.PI / 2.2, fireRate: 40 },
             bullet: { speed: 20, damage: 35 },
             w: 0, h: 0, // set on resize
@@ -339,6 +338,7 @@
                 this.path = []; this.pathIdx = 0;
                 this.mag = 30; this.reloadTimer = 0; this.cooldown = 0;
                 this.flashCD = 0;
+                this.turnPause = 0; // New: Timer for tactical turning pause
             }
             update() {
                 if(!this.active) return;
@@ -347,6 +347,7 @@
                 this.cooldown = Math.max(0, this.cooldown - 1);
                 this.reloadTimer = Math.max(0, this.reloadTimer - 1);
                 this.flashCD = Math.max(0, this.flashCD - 1);
+                this.turnPause = Math.max(0, this.turnPause - 1);
 
                 if(this.flashTimer > 0) { this.flashTimer--; return; }
                 if(Game.state !== 'RUNNING') return;
@@ -355,15 +356,34 @@
                 if(this.path.length > 0 && this.pathIdx < this.path.length) {
                     let target = this.path[this.pathIdx];
                     let d = Dist(this.pos, target);
-                    let angle = AngleTo(this.pos, target);
+                    let targetAngle = AngleTo(this.pos, target);
+                    let angleDiff = Math.abs(LerpAngle(0, targetAngle - this.angle, 1)); 
+
+                    // Tactical pause logic
+                    if (this.turnPause > 0) {
+                        this.angle = LerpAngle(this.angle, targetAngle, 0.4); // Still turn while paused
+                        return; // Halt movement
+                    }
                     
-                    this.angle = LerpAngle(this.angle, angle, 0.2);
+                    // Smooth rotation towards the target
+                    this.angle = LerpAngle(this.angle, targetAngle, 0.2);
                     
                     if(d < CFG.op.speed) {
-                        this.pos = target; this.pathIdx++;
+                        this.pos = target; 
+                        this.pathIdx++;
+                        
+                        // Check if new destination exists and requires significant turn
+                        if (this.pathIdx < this.path.length) {
+                             let nextTargetAngle = AngleTo(this.pos, this.path[this.pathIdx]);
+                             let nextAngleDiff = Math.abs(LerpAngle(0, nextTargetAngle - this.angle, 1));
+                             if (nextAngleDiff > Math.PI / 4) { // Pause if turning more than 45 degrees
+                                 this.turnPause = CFG.op.turnPauseDuration;
+                             }
+                        }
+
                     } else {
-                        const newX = this.pos.x + Math.cos(angle) * CFG.op.speed;
-                        const newY = this.pos.y + Math.sin(angle) * CFG.op.speed;
+                        const newX = this.pos.x + Math.cos(this.angle) * CFG.op.speed;
+                        const newY = this.pos.y + Math.sin(this.angle) * CFG.op.speed;
                         
                         // Collision Check
                         if(Game.checkCollision({x: newX, y: newY}, this.rad)) {
@@ -384,7 +404,8 @@
                 let bestT = null; let minD = Infinity;
 
                 for(let t of targets) {
-                    if(Dist(this.pos, t.pos) < CFG.op.view && Game.checkLOS(this.pos, t.pos)) {
+                    // Op needs good LOS, door must be almost open (0.99)
+                    if(Dist(this.pos, t.pos) < CFG.op.view && Game.checkLOS(this.pos, t.pos, false, 0.99)) { 
                         let aToT = AngleTo(this.pos, t.pos);
                         // Check if target is in the field of view cone
                         let angleDiff = Math.abs(LerpAngle(0, aToT - this.angle, 1)); 
@@ -411,6 +432,12 @@
                 if(this === Game.selected) {
                     ctx.beginPath(); ctx.strokeStyle = '#fbbf24'; ctx.lineWidth=2;
                     ctx.arc(0,0, this.rad + 6, 0, Math.PI*2); ctx.stroke();
+                    
+                    // Draw state text
+                    ctx.fillStyle = this.reloadTimer > 0 ? '#ef4444' : '#ffffff'; 
+                    ctx.font = "bold 16px 'Rajdhani'";
+                    const magText = this.reloadTimer > 0 ? "RELOAD" : `${this.mag}`;
+                    ctx.fillText(magText, -15, -30);
                 }
                 
                 ctx.rotate(this.angle);
@@ -427,13 +454,6 @@
                 }
 
                 ctx.restore();
-                
-                // HUD: Ammo/Reload/Health
-                if (this === Game.selected) {
-                    ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.font = "bold 14px 'Rajdhani'";
-                    const magText = this.reloadTimer > 0 ? "RELOAD" : `${this.mag} / 30`;
-                    ctx.fillText(magText, this.pos.x - 15, this.pos.y + 30);
-                }
             }
         }
 
@@ -459,12 +479,15 @@
                 // Check Vision
                 let target = null;
                 for(let op of Game.ops) {
-                    if(op.active && Game.checkLOS(this.pos, op.pos) && Dist(this.pos, op.pos) < CFG.enemy.view) {
-                        let a = AngleTo(this.pos, op.pos);
-                        let angleDiff = Math.abs(LerpAngle(0, a - this.angle, 1));
-                        // Alert state widens the FOV slightly
-                        const fov = this.state === 'ALERT' ? Math.PI : CFG.enemy.fov;
-                        if(angleDiff < fov/2) target = op;
+                    // Enemy needs less progress on door opening to see (0.1)
+                    if(op.active && Game.checkLOS(this.pos, op.pos, false, 0.1)) { 
+                        if (Dist(this.pos, op.pos) < CFG.enemy.view) {
+                            let a = AngleTo(this.pos, op.pos);
+                            let angleDiff = Math.abs(LerpAngle(0, a - this.angle, 1));
+                            // Alert state widens the FOV slightly
+                            const fov = this.state === 'ALERT' ? Math.PI : CFG.enemy.fov;
+                            if(angleDiff < fov/2) target = op;
+                        }
                     }
                 }
 
@@ -563,7 +586,8 @@
                 }
 
                 // 2. Check wall collision (Line segment from current pos to next pos)
-                if(!Game.checkLOS(this.pos, nextPos, true)) {
+                // Use a high minDoorProgress (0.99) for bullets to hit doors unless fully open.
+                if(!Game.checkLOS(this.pos, nextPos, true, 0.99)) { 
                     Game.spawnParticles(nextX, nextY, 5, 'spark');
                     Game.camera.addShake(2);
                     this.active = false;
@@ -619,8 +643,10 @@
                         ];
                         Game.doors = [new Door(cw-120, ch-50, 110, false)];
                         
-                        Game.ops = [new Operator(cw, h-50)];
-                        Game.enemies = [new Enemy(cw, ch-100, [Vec2(cw, 50), Vec2(cw, ch-100)])];
+                        // SAFE SPAWNS: Op starts in open area at bottom
+                        Game.ops = [new Operator(cw, h - 50)];
+                        // SAFE SPAWNS: Enemy starts in open area at top patroling
+                        Game.enemies = [new Enemy(cw-100, 100, [Vec2(cw+100, 100), Vec2(cw-100, 100)])];
                         Game.hostages = [];
                     }
                 },
@@ -642,13 +668,20 @@
                             new Door(cw-100, ch+50, 80, true), // Door 1
                             new Door(cw-50, ch-100, 100, false) // Door 2
                         ];
-                        Game.ops = [new Operator(50, h-50), new Operator(cw+200, h-50)];
+                        // SAFE SPAWNS: Ops start in the large bottom-left room
+                        Game.ops = [new Operator(50, h-50), new Operator(cw, h-50)]; 
+                        
+                        // SAFE SPAWNS: Enemies in various strategic locations
                         Game.enemies = [
-                            new Enemy(cw-200, ch-50, [Vec2(50, ch-50), Vec2(cw-150, ch-50)]),
-                            new Enemy(cw+200, ch-200, []),
-                            new Enemy(cw+350, h-50, [])
+                            // Patrol in bottom-left room
+                            new Enemy(cw-200, h-50, [Vec2(50, h-50), Vec2(cw-150, h-50)]), 
+                            // Static in upper-left room
+                            new Enemy(cw-200, 50, []),
+                            // Static near hostage room entrance
+                            new Enemy(cw+150, ch+50, [])
                         ];
-                        Game.hostages = [new Hostage(cw+50, 50)];
+                        // SAFE SPAWNS: Hostage in the upper-right corner room
+                        Game.hostages = [new Hostage(w-50, 50)];
                     }
                 }
             ],
@@ -831,7 +864,8 @@
             // --- GAMEPLAY LOGIC ---
 
             // Checks for line of sight/bullet path against walls and fully closed parts of doors
-            checkLOS(p1, p2, checkAllDoors=false) {
+            // minDoorProgress: the minimum progress (0 to 1) a door must have to NOT block LOS
+            checkLOS(p1, p2, checkAllDoors=false, minDoorProgress=0.99) {
                 for(let w of this.walls) {
                     const edges = [
                         [Vec2(w.x, w.y), Vec2(w.x+w.w, w.y)], [Vec2(w.x+w.w, w.y), Vec2(w.x+w.w, w.y+w.h)],
@@ -841,9 +875,10 @@
                 }
                 
                 for(let d of this.doors) {
-                    if(d.progress < 0.99 || checkAllDoors) { // Door is not fully open
+                    if(d.progress < minDoorProgress || checkAllDoors) { // Door is not sufficiently open
                         // Simplified check: only check the central axis of the door
                         if(d.vertical) {
+                            // Check the main line segment of the door slab
                             if(Intersect(p1, p2, Vec2(d.x, d.y + 10), Vec2(d.x, d.y + d.w - 10))) return false;
                         } else {
                             if(Intersect(p1, p2, Vec2(d.x + 10, d.y), Vec2(d.x + d.w - 10, d.y))) return false;
@@ -877,8 +912,8 @@
                     }
                 }
                 
-                // Check map boundaries
-                if (pos.x < radius || pos.x > CFG.mapW - radius || pos.y < radius || pos.y > CFG.mapH - radius) {
+                // Check map boundaries (using inner limits for radius safety)
+                if (pos.x <= 10 + radius || pos.x >= CFG.mapW - 10 - radius || pos.y <= 10 + radius || pos.y >= CFG.mapH - 10 - radius) {
                     return true;
                 }
                 
