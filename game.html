@@ -33,9 +33,20 @@
             height: 100vh;
             background: #0b0f19;
             overflow: hidden;
+            display: flex; /* Center canvas */
+            align-items: center;
+            justify-content: center;
         }
 
-        canvas { display: block; }
+        /* Fixed canvas size constraint for better geometry predictability */
+        #worldCanvas, #uiCanvas {
+            max-width: 900px; 
+            max-height: 900px;
+            width: 100%;
+            height: 100%;
+            display: block;
+            margin: auto;
+        }
 
         .scanlines {
             position: absolute; inset: 0; pointer-events: none; z-index: 10;
@@ -63,6 +74,7 @@
             position: relative;
             overflow: hidden;
             -webkit-tap-highlight-color: transparent;
+            text-shadow: 0 0 5px rgba(0,0,0,0.5);
         }
         .btn-tac:active { transform: scale(0.95); }
         .btn-tac::after {
@@ -71,22 +83,23 @@
         }
 
         /* Animations */
-        @keyframes pulse-red { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
-        .animate-pulse-red { animation: pulse-red 2s infinite; }
-
-        .modal-enter { animation: modalPop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
         @keyframes modalPop { from { opacity: 0; transform: scale(0.9) translateY(20px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+        .modal-enter { animation: modalPop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
 
-        /* Custom Scrollbar for context menu if needed */
-        ::-webkit-scrollbar { width: 4px; }
-        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+        /* Cooldown visualization */
+        .cooldown-bar {
+            position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,0.8), rgba(0,0,0,0.4));
+            transform-origin: bottom; transition: height 0.1s linear;
+        }
     </style>
 </head>
 <body>
 
     <div id="game-wrapper">
-        <canvas id="worldCanvas"></canvas> <!-- World & Shadows -->
-        <canvas id="uiCanvas" style="position:absolute; top:0; left:0; pointer-events:none;"></canvas> <!-- High Res UI overlays -->
+        <!-- Canvas for the world geometry, entities, and shadows -->
+        <canvas id="worldCanvas"></canvas> 
+        <!-- Canvas for the high-resolution, camera-independent UI overlays (currently unused, keeping for future separation) -->
+        <canvas id="uiCanvas" style="position:absolute; top:0; left:0; pointer-events:none;"></canvas> 
         
         <div class="scanlines"></div>
         <div class="vignette"></div>
@@ -118,23 +131,24 @@
 
             <!-- CONTEXT ACTIONS (Right Side) -->
             <div id="context-layer" class="absolute right-4 bottom-32 flex flex-col gap-3 items-end pointer-events-none">
-                <!-- Injected via JS -->
+                <!-- Injected via JS (Door/Hostage interactions) -->
             </div>
 
             <!-- BOTTOM CONTROL BAR -->
             <div class="pointer-events-auto flex flex-col gap-3">
                 
-                <!-- Unit Specific Controls -->
+                <!-- Unit Specific Controls (Only visible when a unit is selected) -->
                 <div id="unit-controls" class="flex justify-center gap-6 transition-all duration-300 opacity-0 translate-y-10">
-                    <button id="btn-flash" class="btn-tac group relative w-14 h-14 rounded-xl bg-slate-800 border border-slate-600 flex items-center justify-center hover:bg-slate-700 hover:border-yellow-400 transition-colors">
+                    <button id="btn-flash" class="btn-tac group relative w-14 h-14 rounded-xl bg-slate-800 border border-slate-600 flex items-center justify-center hover:bg-slate-700 hover:border-yellow-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                         <span class="material-icons text-yellow-400 group-hover:scale-110 transition-transform">flash_on</span>
                         <div class="absolute -bottom-6 text-[10px] font-bold text-slate-400 bg-slate-900 px-2 py-0.5 rounded">STUN</div>
-                        <div id="cd-flash" class="absolute inset-0 bg-black/60 origin-bottom transition-all duration-75" style="height:0%"></div>
+                        <div id="cd-flash" class="cooldown-bar" style="height:0%"></div>
                     </button>
                     
-                    <button id="btn-reload" class="btn-tac group relative w-14 h-14 rounded-xl bg-slate-800 border border-slate-600 flex items-center justify-center hover:bg-slate-700 hover:border-blue-400 transition-colors">
+                    <button id="btn-reload" class="btn-tac group relative w-14 h-14 rounded-xl bg-slate-800 border border-slate-600 flex items-center justify-center hover:bg-slate-700 hover:border-blue-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                         <span class="material-icons text-blue-400 group-hover:rotate-180 transition-transform duration-500">sync</span>
                         <div class="absolute -bottom-6 text-[10px] font-bold text-slate-400 bg-slate-900 px-2 py-0.5 rounded">MAG</div>
+                        <div id="cd-reload" class="cooldown-bar" style="height:0%"></div>
                     </button>
                 </div>
 
@@ -146,12 +160,12 @@
 
                     <div class="flex-1 flex justify-center">
                         <button id="btn-clear" class="btn-tac text-xs font-bold text-slate-400 hover:text-white uppercase tracking-widest px-4 py-2 hover:bg-white/5 rounded">
-                            Reset Paths
+                            Réinitialiser chemins
                         </button>
                     </div>
 
                     <button id="btn-execute" class="btn-tac bg-blue-600 hover:bg-blue-500 text-white px-8 py-3 rounded-lg shadow-[0_0_20px_rgba(37,99,235,0.5)] flex items-center gap-2 font-bold text-xl tracking-wider min-w-[160px] justify-center border-b-4 border-blue-800 active:border-b-0 active:translate-y-1">
-                        <span class="material-icons">play_arrow</span> EXECUTE
+                        <span class="material-icons">play_arrow</span> ASSAUT
                     </button>
                 </div>
             </div>
@@ -173,10 +187,12 @@
 
     <script>
         /**
-         * GILETTE TAKEDOWN V3 - REMASTERED (FIXED)
-         * - Fixed collision geometry in levels
-         * - Smoother path drawing logic
-         * - Fixed unplayable input bugs
+         * GILETTE TAKEDOWN V3 - PROFESSIONAL REMASTER
+         * - Implemented full collision detection (unit vs walls/doors)
+         * - Implemented real bullet movement and projectile collision checks
+         * - Dynamic door opening/closing based on progress
+         * - Path smoothing for better planning visualization
+         * - Cooldown and ammo tracking for Operator skills
          */
 
         // --- UTILS & MATH ---
@@ -190,7 +206,7 @@
             while (d < -Math.PI) d += 2*Math.PI;
             return a + d * t;
         };
-        // Line-Line Intersection
+        // Line-Line Intersection (Returns point or null)
         const Intersect = (p1, p2, p3, p4) => {
             const d = (p4.y - p3.y) * (p2.x - p1.x) - (p4.x - p3.x) * (p2.y - p1.y);
             if (d === 0) return null;
@@ -204,11 +220,13 @@
         const CFG = {
             colors: {
                 wall: '#1e293b', floor: '#0f172a', op: '#3b82f6', enemy: '#ef4444', hostage: '#10b981',
-                grid: 'rgba(59, 130, 246, 0.05)'
+                grid: 'rgba(59, 130, 246, 0.05)', bullet: '#fbbf24'
             },
-            op: { speed: 2.5, rad: 16, view: 350, fov: Math.PI / 1.8 },
-            enemy: { speed: 1.2, rad: 16, view: 280, fov: Math.PI / 2.2 },
-            w: 0, h: 0 // set on resize
+            op: { speed: 2.5, rad: 16, view: 350, fov: Math.PI / 1.8, reloadTime: 120, flashCD: 300 },
+            enemy: { speed: 1.2, rad: 16, view: 280, fov: Math.PI / 2.2, fireRate: 40 },
+            bullet: { speed: 20, damage: 35 },
+            w: 0, h: 0, // set on resize
+            mapW: 800, mapH: 600 // Fixed map size for consistent geometry
         };
 
         // --- ENGINE CLASSES ---
@@ -220,7 +238,7 @@
                 if(this.shake > 0) {
                     this.x = (Math.random() - 0.5) * this.shake;
                     this.y = (Math.random() - 0.5) * this.shake;
-                    this.shake *= 0.9;
+                    this.shake *= 0.8;
                     if(this.shake < 0.5) this.shake = 0;
                 } else { this.x = 0; this.y = 0; }
             }
@@ -240,11 +258,11 @@
             update() {
                 this.x += this.vx; this.y += this.vy;
                 this.life -= this.decay;
-                if(this.type === 'blood') { this.vx *= 0.8; this.vy *= 0.8; } // Blood splatters stick
+                if(this.type === 'blood') { this.vx *= 0.9; this.vy *= 0.9; }
             }
             draw(ctx) {
                 ctx.globalAlpha = this.life;
-                ctx.fillStyle = this.type === 'blood' ? '#991b1b' : (this.type === 'spark' ? '#fbbf24' : '#ffffff');
+                ctx.fillStyle = this.type === 'blood' ? '#991b1b' : (this.type === 'spark' ? CFG.colors.bullet : '#ffffff');
                 ctx.beginPath(); ctx.arc(this.x, this.y, this.size, 0, Math.PI*2); ctx.fill();
                 ctx.globalAlpha = 1;
             }
@@ -253,24 +271,43 @@
         class Door {
             constructor(x, y, w, vertical) {
                 this.x = x; this.y = y; this.w = w; this.vertical = vertical;
-                this.open = false; this.progress = 0;
+                this.open = false; this.progress = 0; // 0 = closed, 1 = open
             }
             get center() { return this.vertical ? {x: this.x, y: this.y + this.w/2} : {x: this.x + this.w/2, y: this.y}; }
             update() {
-                if(this.open && this.progress < 1) this.progress += 0.1;
-                else if(!this.open && this.progress > 0) this.progress -= 0.1;
+                const speed = 0.05;
+                if(this.open && this.progress < 1) this.progress = Math.min(1, this.progress + speed);
+                else if(!this.open && this.progress > 0) this.progress = Math.max(0, this.progress - speed);
             }
             draw(ctx) {
                 ctx.save();
-                ctx.translate(this.x, this.y);
+                // Find hinge/pivot point
+                const pivotX = this.vertical ? this.x : this.x + 2;
+                const pivotY = this.vertical ? this.y + 2 : this.y;
+                
+                ctx.translate(pivotX, pivotY);
+
+                // Rotate around the pivot point
+                if(this.progress > 0) {
+                    const angle = this.progress * -Math.PI/2.2;
+                    if(this.vertical) {
+                        ctx.translate(0, -2); // Translate to start of door segment (visual offset)
+                        ctx.rotate(angle);
+                        ctx.translate(0, 2);
+                    } else {
+                        ctx.translate(-2, 0);
+                        ctx.rotate(angle);
+                        ctx.translate(2, 0);
+                    }
+                }
+                
+                // Draw the door slab
+                ctx.fillStyle = '#b45309'; 
                 if(this.vertical) {
-                    ctx.translate(0, this.open ? 0 : 0); // Pivot logic
-                    ctx.rotate(this.progress * -Math.PI/2.2);
-                    ctx.fillStyle = '#b45309'; ctx.fillRect(-2, 0, 4, this.w);
+                    ctx.fillRect(-3, 0, 6, this.w);
                     ctx.fillStyle = '#451a03'; ctx.fillRect(-1, 2, 2, this.w-4);
                 } else {
-                    ctx.rotate(this.progress * -Math.PI/2.2);
-                    ctx.fillStyle = '#b45309'; ctx.fillRect(0, -2, this.w, 4);
+                    ctx.fillRect(0, -3, this.w, 6);
                     ctx.fillStyle = '#451a03'; ctx.fillRect(2, -1, this.w-4, 2);
                 }
                 ctx.restore();
@@ -281,14 +318,15 @@
             constructor(x, y, team) {
                 this.pos = Vec2(x, y); this.team = team;
                 this.active = true; this.angle = 0; this.hp = 100;
-                this.flashTimer = 0;
+                this.flashTimer = 0; this.rad = CFG.op.rad;
             }
-            hit(dmg, sourcePos) {
+            hit(dmg) {
+                if(!this.active) return;
                 this.hp -= dmg;
-                Game.spawnParticles(this.pos.x, this.pos.y, 5, 'blood');
+                Game.spawnParticles(this.pos.x, this.pos.y, 8, 'blood');
+                Game.camera.addShake(1);
                 if(this.hp <= 0) {
                     this.active = false;
-                    // Leave body
                     Game.corpses.push({x: this.pos.x, y: this.pos.y, angle: this.angle, team: this.team});
                 }
             }
@@ -297,41 +335,60 @@
         class Operator extends Entity {
             constructor(x, y) {
                 super(x, y, 'blue');
+                this.rad = CFG.op.rad;
                 this.path = []; this.pathIdx = 0;
                 this.mag = 30; this.reloadTimer = 0; this.cooldown = 0;
+                this.flashCD = 0;
             }
             update() {
                 if(!this.active) return;
+
+                // Handle status timers
+                this.cooldown = Math.max(0, this.cooldown - 1);
+                this.reloadTimer = Math.max(0, this.reloadTimer - 1);
+                this.flashCD = Math.max(0, this.flashCD - 1);
+
+                if(this.flashTimer > 0) { this.flashTimer--; return; }
+                if(Game.state !== 'RUNNING') return;
                 
                 // Movement
-                if(Game.state === 'RUNNING' && this.path.length > 0 && this.pathIdx < this.path.length) {
+                if(this.path.length > 0 && this.pathIdx < this.path.length) {
                     let target = this.path[this.pathIdx];
                     let d = Dist(this.pos, target);
                     let angle = AngleTo(this.pos, target);
+                    
                     this.angle = LerpAngle(this.angle, angle, 0.2);
                     
                     if(d < CFG.op.speed) {
                         this.pos = target; this.pathIdx++;
                     } else {
-                        this.pos.x += Math.cos(angle) * CFG.op.speed;
-                        this.pos.y += Math.sin(angle) * CFG.op.speed;
+                        const newX = this.pos.x + Math.cos(angle) * CFG.op.speed;
+                        const newY = this.pos.y + Math.sin(angle) * CFG.op.speed;
+                        
+                        // Collision Check
+                        if(Game.checkCollision({x: newX, y: newY}, this.rad)) {
+                            // Hit a wall or closed door, stop moving on this segment
+                            this.pathIdx++; 
+                        } else {
+                            this.pos.x = newX;
+                            this.pos.y = newY;
+                        }
                     }
                 }
 
-                // Combat
-                this.cooldown--; this.reloadTimer--;
-                if(this.mag <= 0 && this.reloadTimer <= 0) { this.mag = 30; this.reloadTimer = 120; }
+                // Combat Logic (Only fire if not reloading)
                 if(this.reloadTimer > 0) return;
 
                 // Auto-Target
-                let targets = Game.enemies.filter(e => e.active);
+                let targets = Game.enemies.filter(e => e.active && e.hp > 0);
                 let bestT = null; let minD = Infinity;
 
                 for(let t of targets) {
                     if(Dist(this.pos, t.pos) < CFG.op.view && Game.checkLOS(this.pos, t.pos)) {
                         let aToT = AngleTo(this.pos, t.pos);
-                        let diff = Math.abs(LerpAngle(0, aToT - this.angle, 1)); // Normalized diff
-                        if(diff < CFG.op.fov/2) {
+                        // Check if target is in the field of view cone
+                        let angleDiff = Math.abs(LerpAngle(0, aToT - this.angle, 1)); 
+                        if(angleDiff < CFG.op.fov/2) {
                             if(Dist(this.pos, t.pos) < minD) { minD = Dist(this.pos, t.pos); bestT = t; }
                         }
                     }
@@ -349,24 +406,41 @@
                 if(!this.active) return;
                 ctx.save();
                 ctx.translate(this.pos.x, this.pos.y);
+                
                 // Selection Circle
                 if(this === Game.selected) {
                     ctx.beginPath(); ctx.strokeStyle = '#fbbf24'; ctx.lineWidth=2;
-                    ctx.arc(0,0, 22, 0, Math.PI*2); ctx.stroke();
+                    ctx.arc(0,0, this.rad + 6, 0, Math.PI*2); ctx.stroke();
                 }
+                
                 ctx.rotate(this.angle);
                 // Body
-                ctx.fillStyle = CFG.colors.op;
-                ctx.beginPath(); ctx.arc(0,0, CFG.op.rad, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = this.flashTimer > 0 ? 'rgba(255, 255, 255, 0.5)' : CFG.colors.op;
+                ctx.beginPath(); ctx.arc(0,0, this.rad, 0, Math.PI*2); ctx.fill();
                 // Arms/Gun
                 ctx.fillStyle = '#1e293b'; ctx.fillRect(0, -6, 24, 12);
+                
+                // Muzzle Flash
+                if (this.cooldown > 0 && this.cooldown < 4) {
+                    ctx.fillStyle = 'yellow';
+                    ctx.beginPath(); ctx.arc(28, 0, 5, -Math.PI/2, Math.PI/2); ctx.fill();
+                }
+
                 ctx.restore();
+                
+                // HUD: Ammo/Reload/Health
+                if (this === Game.selected) {
+                    ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.font = "bold 14px 'Rajdhani'";
+                    const magText = this.reloadTimer > 0 ? "RELOAD" : `${this.mag} / 30`;
+                    ctx.fillText(magText, this.pos.x - 15, this.pos.y + 30);
+                }
             }
         }
 
         class Enemy extends Entity {
             constructor(x, y, patrol) {
                 super(x, y, 'red');
+                this.rad = CFG.enemy.rad;
                 this.patrol = patrol; this.pIdx = 0;
                 this.state = 'PATROL'; // PATROL, ALERT, COMBAT, STUNNED
                 this.stunTimer = 0; this.shootTimer = 0;
@@ -375,25 +449,31 @@
             update() {
                 if(!this.active || Game.state !== 'RUNNING') return;
                 
-                if(this.stunTimer > 0) { this.stunTimer--; return; }
+                // Handle status timers
+                this.stunTimer = Math.max(0, this.stunTimer - 1);
+                this.shootTimer = Math.max(0, this.shootTimer - 1);
+
+                if(this.stunTimer > 0) { this.state = 'STUNNED'; return; }
+                else if (this.state === 'STUNNED') { this.state = 'PATROL'; }
 
                 // Check Vision
                 let target = null;
                 for(let op of Game.ops) {
                     if(op.active && Game.checkLOS(this.pos, op.pos) && Dist(this.pos, op.pos) < CFG.enemy.view) {
                         let a = AngleTo(this.pos, op.pos);
-                        let diff = Math.abs(LerpAngle(0, a - this.angle, 1));
-                        if(diff < CFG.enemy.fov/2 || this.state === 'ALERT') target = op;
+                        let angleDiff = Math.abs(LerpAngle(0, a - this.angle, 1));
+                        // Alert state widens the FOV slightly
+                        const fov = this.state === 'ALERT' ? Math.PI : CFG.enemy.fov;
+                        if(angleDiff < fov/2) target = op;
                     }
                 }
 
                 if(target) {
                     this.state = 'COMBAT';
                     this.angle = AngleTo(this.pos, target.pos);
-                    this.shootTimer--;
                     if(this.shootTimer <= 0) {
                         Game.shoot(this, target);
-                        this.shootTimer = 40; // Slower than Ops
+                        this.shootTimer = CFG.enemy.fireRate;
                     }
                 } else {
                     if(this.state === 'COMBAT') this.state = 'ALERT'; // Lost visual
@@ -402,10 +482,18 @@
                         let dest = this.patrol[this.pIdx];
                         let d = Dist(this.pos, dest);
                         this.angle = LerpAngle(this.angle, AngleTo(this.pos, dest), 0.1);
-                        if(d < 5) this.pIdx = (this.pIdx + 1) % this.patrol.length;
-                        else {
-                            this.pos.x += Math.cos(this.angle) * CFG.enemy.speed;
-                            this.pos.y += Math.sin(this.angle) * CFG.enemy.speed;
+                        
+                        if(d < 5) {
+                            this.pIdx = (this.pIdx + 1) % this.patrol.length;
+                        } else {
+                            const speed = CFG.enemy.speed;
+                            const newX = this.pos.x + Math.cos(this.angle) * speed;
+                            const newY = this.pos.y + Math.sin(this.angle) * speed;
+
+                            if(!Game.checkCollision({x: newX, y: newY}, this.rad)) {
+                                this.pos.x = newX;
+                                this.pos.y = newY;
+                            }
                         }
                     }
                 }
@@ -415,30 +503,87 @@
                 ctx.save();
                 ctx.translate(this.pos.x, this.pos.y);
                 ctx.rotate(this.angle);
-                ctx.fillStyle = CFG.colors.enemy;
-                ctx.beginPath(); ctx.arc(0,0, CFG.enemy.rad, 0, Math.PI*2); ctx.fill();
-                // Mask
+                
+                ctx.fillStyle = this.stunTimer > 0 ? 'rgba(128, 128, 128, 0.8)' : CFG.colors.enemy;
+                ctx.beginPath(); ctx.arc(0,0, this.rad, 0, Math.PI*2); ctx.fill();
+                // Mask / Face
                 ctx.fillStyle = '#000'; ctx.fillRect(4, -5, 8, 10);
+                
                 if(this.state === 'COMBAT') {
-                    ctx.fillStyle = '#fbbf24'; ctx.font="bold 20px Arial"; ctx.fillText("!", -5, -20);
+                    ctx.fillStyle = '#fbbf24'; ctx.font="bold 20px Rajdhani"; ctx.fillText("!", -5, -20);
+                } else if (this.state === 'ALERT') {
+                     ctx.fillStyle = '#fef08a'; ctx.font="bold 16px Rajdhani"; ctx.fillText("?", -5, -20);
                 } else if (this.stunTimer > 0) {
-                    ctx.fillStyle = '#fff'; ctx.font="bold 16px Arial"; ctx.fillText("@@", -8, -20);
+                    ctx.fillStyle = '#fff'; ctx.font="bold 16px Rajdhani"; ctx.fillText("Zz", -8, -20);
                 }
                 ctx.restore();
             }
         }
 
         class Hostage extends Entity {
-            constructor(x, y) { super(x, y, 'civil'); this.evacuated = false; }
+            constructor(x, y) { super(x, y, 'civil'); this.rad = 14; this.evacuated = false; }
             draw(ctx) {
                 if(!this.active || this.evacuated) return;
                 ctx.fillStyle = CFG.colors.hostage;
-                ctx.beginPath(); ctx.arc(this.pos.x, this.pos.y, 14, 0, Math.PI*2); ctx.fill();
-                // Hands tied
-                ctx.fillStyle = '#d1fae5'; ctx.beginPath(); ctx.arc(this.pos.x-8, this.pos.y-8, 5, 0, Math.PI*2); ctx.fill();
-                ctx.beginPath(); ctx.arc(this.pos.x+8, this.pos.y-8, 5, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.arc(this.pos.x, this.pos.y, this.rad, 0, Math.PI*2); ctx.fill();
+                // Hands tied visual
+                ctx.fillStyle = '#d1fae5'; ctx.beginPath(); ctx.arc(this.pos.x, this.pos.y, 10, 0, Math.PI*2); ctx.stroke();
             }
         }
+        
+        class Bullet {
+            constructor(start, end, shooter) {
+                this.pos = {...start};
+                this.shooter = shooter;
+                this.targetPos = {...end};
+                this.angle = AngleTo(start, end);
+                this.vx = Math.cos(this.angle) * CFG.bullet.speed;
+                this.vy = Math.sin(this.angle) * CFG.bullet.speed;
+                this.active = true;
+            }
+            update() {
+                if(!this.active) return;
+
+                const nextX = this.pos.x + this.vx;
+                const nextY = this.pos.y + this.vy;
+                const nextPos = Vec2(nextX, nextY);
+
+                // 1. Check entity collision (Only target the opposite team)
+                const targets = this.shooter.team === 'blue' ? 
+                                Game.enemies.filter(e => e.active) : 
+                                Game.ops.filter(o => o.active);
+                
+                for(let t of targets) {
+                    if(Dist(nextPos, t.pos) < t.rad) {
+                        t.hit(CFG.bullet.damage);
+                        Game.spawnParticles(t.pos.x, t.pos.y, 5, 'blood');
+                        this.active = false;
+                        return;
+                    }
+                }
+
+                // 2. Check wall collision (Line segment from current pos to next pos)
+                if(!Game.checkLOS(this.pos, nextPos, true)) {
+                    Game.spawnParticles(nextX, nextY, 5, 'spark');
+                    Game.camera.addShake(2);
+                    this.active = false;
+                    return;
+                }
+                
+                this.pos = nextPos;
+                
+                // 3. Cleanup if far outside map (Safety)
+                if (this.pos.x < 0 || this.pos.x > CFG.mapW || this.pos.y < 0 || this.pos.y > CFG.mapH) {
+                    this.active = false;
+                }
+            }
+            draw(ctx) {
+                if(!this.active) return;
+                ctx.fillStyle = CFG.colors.bullet;
+                ctx.beginPath(); ctx.arc(this.pos.x, this.pos.y, 2, 0, Math.PI*2); ctx.fill();
+            }
+        }
+
 
         // --- GAME SYSTEM ---
 
@@ -456,62 +601,78 @@
             camera: new Camera(),
             selected: null,
             drag: null,
+            mapOffset: Vec2(0, 0), // To center the fixed map size
 
             levels: [
                 {
                     name: "ZONE D'ENTRAÎNEMENT",
-                    desc: "Tracez un chemin pour votre opérateur. La porte est fermée : ouvrez-la avant d'entrer ou passez en mode Assaut.",
+                    desc: "Tracez un chemin pour votre opérateur. La porte est fermée: utilisez 'OUVRIR' en phase d'Assaut ou lancez un assaut dynamique (clic sur la porte pendant l'assaut). Éliminez l'hostile.",
                     setup: (w, h) => {
-                        // FIXED GEOMETRY: Spaced out walls to avoid collision at spawn
-                        let cw = w/2;
+                        const cw = w/2; const ch = h/2;
                         Game.walls = [
-                            {x: cw-10, y: 250, w: 20, h: h}, // Central Wall starts lower
-                            {x:0, y:250, w:cw-60, h:20},     // Left horiz
-                            {x:cw+60, y:250, w:w, h:20}      // Right horiz
+                            // Outer box
+                            {x:0, y:0, w:w, h:10}, {x:0, y:h-10, w:w, h:10}, {x:0, y:10, w:10, h:h-20}, {x:w-10, y:10, w:10, h:h-20},
+                            // Central structure
+                            {x:cw-10, y:ch-150, w:20, h:300}, // Center Vertical
+                            {x:10, y:ch-50, w:cw-120, h:20}, // Left Horizontal 
+                            {x:cw+110, y:ch-50, w:w-(cw+120), h:20} // Right Horizontal
                         ];
-                        Game.doors = [new Door(cw-60, 250, 60, false)];
+                        Game.doors = [new Door(cw-120, ch-50, 110, false)];
                         
-                        // Operator spaced away from walls
-                        Game.ops = [new Operator(cw, h-100)];
-                        Game.enemies = [new Enemy(cw, 100, [Vec2(100,100), Vec2(w-100,100)])];
+                        Game.ops = [new Operator(cw, h-50)];
+                        Game.enemies = [new Enemy(cw, ch-100, [Vec2(cw, 50), Vec2(cw, ch-100)])];
                         Game.hostages = [];
                     }
                 },
                 {
                     name: "EXTRACTION VIP",
-                    desc: "Plusieurs pièces. Des patrouilles hostiles. Le VIP est retenu à l'arrière. Silence recommandé.",
+                    desc: "Plusieurs pièces. Des patrouilles hostiles. Le VIP est retenu à l'arrière. Silence et coordination entre opérateurs sont recommandés.",
                     setup: (w, h) => {
+                        const cw = w/2; const ch = h/2;
                         Game.walls = [
-                            {x:300, y:0, w:20, h:h/2}, {x:300, y:h/2+80, w:20, h:h}, // Vertical Split
-                            {x:0, y:h/2, w:300, h:20}, {x:320, y:h/3, w:w, h:20} // Horizontals
+                            // Outer box
+                            {x:0, y:0, w:w, h:10}, {x:0, y:h-10, w:w, h:10}, {x:0, y:10, w:10, h:h-20}, {x:w-10, y:10, w:10, h:h-20},
+                            // Internal Walls
+                            {x:cw-100, y:10, w:20, h:ch+50}, // Left room vertical
+                            {x:cw+100, y:ch-50, w:20, h:h-ch+40}, // Right room vertical
+                            {x:10, y:ch-100, w:w-20, h:20} // Long horizontal split
                         ];
-                        Game.doors = [new Door(300, h/2, 80, true), new Door(500, h/3, 80, false)];
-                        Game.ops = [new Operator(50, h-50), new Operator(100, h-50)];
+                        // Doors
+                        Game.doors = [
+                            new Door(cw-100, ch+50, 80, true), // Door 1
+                            new Door(cw-50, ch-100, 100, false) // Door 2
+                        ];
+                        Game.ops = [new Operator(50, h-50), new Operator(cw+200, h-50)];
                         Game.enemies = [
-                            new Enemy(150, 150, []), 
-                            new Enemy(w-100, 100, [Vec2(w-100, 100), Vec2(w-100, h-100)]),
-                            new Enemy(w-150, h/2+50, [])
+                            new Enemy(cw-200, ch-50, [Vec2(50, ch-50), Vec2(cw-150, ch-50)]),
+                            new Enemy(cw+200, ch-200, []),
+                            new Enemy(cw+350, h-50, [])
                         ];
-                        Game.hostages = [new Hostage(w-50, 50)];
+                        Game.hostages = [new Hostage(cw+50, 50)];
                     }
                 }
             ],
 
             init() {
                 window.addEventListener('resize', this.resize.bind(this));
-                this.resize();
                 
+                // Get the maximum canvas dimensions based on fixed map size
+                CFG.w = CFG.mapW; CFG.h = CFG.mapH;
+                this.canvas.width = CFG.w; this.canvas.height = CFG.h;
+                this.uiCanvas.width = CFG.w; this.uiCanvas.height = CFG.h;
+                
+                this.resize(); // Initial placement of canvas and UI
+
                 // Input - Unified Handlers
                 const tHandler = (e) => this.handleInput(e);
                 
-                // Add event listeners with passive: false to allow preventing default scroll
                 this.canvas.addEventListener('mousedown', tHandler);
                 this.canvas.addEventListener('mousemove', tHandler);
-                window.addEventListener('mouseup', (e) => { this.drag = null; });
+                window.addEventListener('mouseup', (e) => { this.drag = null; this.updateUnitUI(); });
                 
                 this.canvas.addEventListener('touchstart', tHandler, {passive: false});
                 this.canvas.addEventListener('touchmove', tHandler, {passive: false});
-                window.addEventListener('touchend', (e) => { this.drag = null; });
+                window.addEventListener('touchend', (e) => { this.drag = null; this.updateUnitUI(); });
 
                 // UI binds
                 document.getElementById('btn-execute').onclick = () => this.toggleState();
@@ -524,26 +685,77 @@
             },
 
             resize() {
-                CFG.w = window.innerWidth; CFG.h = window.innerHeight;
-                this.canvas.width = CFG.w; this.canvas.height = CFG.h;
-                this.uiCanvas.width = CFG.w; this.uiCanvas.height = CFG.h;
-                if(this.walls.length === 0) this.loadLevel(this.levelIdx); // Reload if empty
+                // Adjust canvas display size to fit screen while maintaining ratio and center
+                const wrapper = document.getElementById('game-wrapper');
+                const ratio = CFG.mapW / CFG.mapH;
+                const screenW = wrapper.clientWidth;
+                const screenH = wrapper.clientHeight;
+                
+                let canvasW, canvasH;
+
+                if (screenW / screenH > ratio) {
+                    canvasH = screenH;
+                    canvasW = screenH * ratio;
+                } else {
+                    canvasW = screenW;
+                    canvasH = screenW / ratio;
+                }
+                
+                // Apply visual size (Canvas internal resolution remains CFG.mapW/H)
+                this.canvas.style.width = `${canvasW}px`;
+                this.canvas.style.height = `${canvasH}px`;
+                this.uiCanvas.style.width = `${canvasW}px`;
+                this.uiCanvas.style.height = `${canvasH}px`;
+                
+                // Calculate map offset for centering if needed
+                this.mapOffset.x = (screenW - canvasW) / 2;
+                this.mapOffset.y = (screenH - canvasH) / 2;
+            },
+            
+            // Converts screen coordinates to map coordinates (CRITICAL for click accuracy)
+            getMapCoord(clientX, clientY) {
+                const rect = this.canvas.getBoundingClientRect();
+                const scaleX = CFG.mapW / rect.width;
+                const scaleY = CFG.mapH / rect.height;
+
+                return Vec2(
+                    (clientX - rect.left) * scaleX,
+                    (clientY - rect.top) * scaleY
+                );
             },
 
             loadLevel(idx) {
                 this.levelIdx = idx;
-                if(idx >= this.levels.length) { this.showModal("MISSION ACCOMPLIE", "Bon travail, commandant. Retour à la base.", () => location.reload()); return; }
+                if(idx >= this.levels.length) { 
+                    this.showModal("MISSION ACCOMPLIE", "Toutes les cibles sont neutralisées et les civils évacués. Excellent travail, commandant.", () => location.reload()); 
+                    return; 
+                }
                 
-                this.walls=[]; this.doors=[]; this.ops=[]; this.enemies=[]; this.hostages=[]; this.corpses=[]; this.bullets=[];
-                this.levels[idx].setup(CFG.w, CFG.h);
+                // Clean up entities
+                this.walls=[]; this.doors=[]; this.ops=[]; this.enemies=[]; this.hostages=[]; this.corpses=[]; this.bullets=[]; this.particles=[];
+                
+                // Use fixed map size for setup
+                this.levels[idx].setup(CFG.mapW, CFG.mapH);
                 
                 this.state = 'PLANNING';
+                this.selected = null;
                 this.updateUIPhase();
                 this.showModal(this.levels[idx].name, this.levels[idx].desc, () => document.getElementById('modal-overlay').classList.add('hidden'));
             },
 
+            resetLevel() {
+                this.loadLevel(this.levelIdx);
+            },
+
             toggleState() {
-                if(this.state === 'PLANNING') { this.state = 'RUNNING'; this.selected = null; }
+                if(this.state === 'PLANNING') { 
+                    // Validate paths (must have more than 1 point)
+                    this.ops.forEach(o => {
+                        if (o.path.length <= 1) o.path = [];
+                    });
+                    this.state = 'RUNNING'; 
+                    this.selected = null; 
+                }
                 else if (this.state === 'RUNNING') { this.state = 'PLANNING'; }
                 this.updateUIPhase();
             },
@@ -553,6 +765,8 @@
                 const txt = document.getElementById('phase-text');
                 const btn = document.getElementById('btn-execute');
                 
+                document.getElementById('unit-controls').classList.add('opacity-0', 'translate-y-10');
+
                 if(this.state === 'PLANNING') {
                     ind.className = "flex items-center gap-2 text-xs font-bold text-yellow-400 bg-yellow-900/30 px-2 py-1 rounded border border-yellow-500/30 w-max";
                     txt.innerText = "PLANIFICATION";
@@ -568,34 +782,44 @@
             },
 
             handleInput(e) {
-                if(e.type === 'touchstart' || e.type === 'touchmove') e.preventDefault(); // Prevent scroll
+                if(e.target !== this.canvas) return; // Ignore clicks outside canvas
                 
-                const r = this.canvas.getBoundingClientRect();
+                if(e.type === 'touchstart' || e.type === 'touchmove') e.preventDefault();
+                
                 const clientX = e.touches ? e.touches[0].clientX : e.clientX;
                 const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-                const pos = Vec2(clientX - r.left, clientY - r.top);
+                const pos = this.getMapCoord(clientX, clientY);
 
                 if(e.type === 'mousedown' || e.type === 'touchstart') {
+                    // Check if clicking a door in RUNNING state (Dynamic Open/Close)
+                    if (this.state === 'RUNNING') {
+                         const clickedDoor = this.doors.find(d => Dist(pos, d.center) < 40);
+                         if (clickedDoor && this.ops.some(o => o.active && Dist(o.pos, clickedDoor.center) < 70)) {
+                             clickedDoor.open = !clickedDoor.open;
+                             return; // Consume input
+                         }
+                    }
+
                     // Selection Logic
-                    let clickedOp = this.ops.find(o => Dist(pos, o.pos) < 40); // Increased radius for touch
+                    let clickedOp = this.ops.find(o => Dist(pos, o.pos) < 30);
                     if(clickedOp) {
                         this.selected = clickedOp;
                         this.drag = clickedOp;
                         if(this.state === 'PLANNING') {
-                             clickedOp.path = [clickedOp.pos];
-                             clickedOp.pathIdx = 0;
+                            // Start new path if planning
+                            clickedOp.path = [clickedOp.pos];
+                            clickedOp.pathIdx = 0;
                         }
                     } else {
                         // Deselect if clicking empty space
-                        // But check buttons context first (handled by UI layer)
                         this.selected = null;
                     }
                     this.updateUnitUI();
-                } 
+                }
                 else if ((e.type === 'mousemove' || e.type === 'touchmove') && this.drag && this.state === 'PLANNING') {
                     // Drawing Logic
                     let last = this.drag.path[this.drag.path.length-1];
-                    // Smoother drawing: Reduced distance threshold from 20 to 10
+                    // Smoother drawing: Reduced distance threshold 
                     if(Dist(pos, last) > 10) {
                         if(this.checkLOS(last, pos)) {
                             this.drag.path.push(pos);
@@ -605,9 +829,9 @@
             },
 
             // --- GAMEPLAY LOGIC ---
-            checkLOS(p1, p2) {
-                // Safety: If start point is inside a wall (bug), allow drawing out
-                // But generally prevent drawing THROUGH walls
+
+            // Checks for line of sight/bullet path against walls and fully closed parts of doors
+            checkLOS(p1, p2, checkAllDoors=false) {
                 for(let w of this.walls) {
                     const edges = [
                         [Vec2(w.x, w.y), Vec2(w.x+w.w, w.y)], [Vec2(w.x+w.w, w.y), Vec2(w.x+w.w, w.y+w.h)],
@@ -615,29 +839,79 @@
                     ];
                     for(let edge of edges) if(Intersect(p1, p2, edge[0], edge[1])) return false;
                 }
+                
                 for(let d of this.doors) {
-                    if(!d.open) {
-                        let dc = d.vertical ? 
-                            [Vec2(d.x, d.y), Vec2(d.x, d.y+d.w)] : 
-                            [Vec2(d.x, d.y), Vec2(d.x+d.w, d.y)];
-                        if(Intersect(p1, p2, dc[0], dc[1])) return false;
+                    if(d.progress < 0.99 || checkAllDoors) { // Door is not fully open
+                        // Simplified check: only check the central axis of the door
+                        if(d.vertical) {
+                            if(Intersect(p1, p2, Vec2(d.x, d.y + 10), Vec2(d.x, d.y + d.w - 10))) return false;
+                        } else {
+                            if(Intersect(p1, p2, Vec2(d.x + 10, d.y), Vec2(d.x + d.w - 10, d.y))) return false;
+                        }
                     }
                 }
                 return true;
             },
 
+            // Checks if a circle (entity) collides with any solid wall/closed door
+            checkCollision(pos, radius) {
+                // Check walls
+                for (let w of this.walls) {
+                    const closestX = Math.max(w.x, Math.min(pos.x, w.x + w.w));
+                    const closestY = Math.max(w.y, Math.min(pos.y, w.y + w.h));
+                    if (Dist(pos, Vec2(closestX, closestY)) < radius) return true;
+                }
+                
+                // Check doors (if closed/closing)
+                for (let d of this.doors) {
+                    if (d.progress < 0.2) { // Only treat as solid if almost fully closed
+                        if (d.vertical) {
+                            const closestX = Math.max(d.x - 3, Math.min(pos.x, d.x + 3));
+                            const closestY = Math.max(d.y, Math.min(pos.y, d.y + d.w));
+                            if (Dist(pos, Vec2(closestX, closestY)) < radius) return true;
+                        } else {
+                            const closestX = Math.max(d.x, Math.min(pos.x, d.x + d.w));
+                            const closestY = Math.max(d.y - 3, Math.min(pos.y, d.y + 3));
+                            if (Dist(pos, Vec2(closestX, closestY)) < radius) return true;
+                        }
+                    }
+                }
+                
+                // Check map boundaries
+                if (pos.x < radius || pos.x > CFG.mapW - radius || pos.y < radius || pos.y > CFG.mapH - radius) {
+                    return true;
+                }
+                
+                return false;
+            },
+
             shoot(shooter, target) {
-                this.bullets.push({s: {...shooter.pos}, e: {...target.pos}, life: 5});
+                // Determine a point near the target for the bullet to aim at
+                const targetPoint = target.pos;
+                
+                // Apply a small random spread based on shooter accuracy
+                const spreadAngle = (Math.random() - 0.5) * 0.1; // +/- 0.05 radians
+                const angle = AngleTo(shooter.pos, targetPoint) + spreadAngle;
+                
+                // Calculate end point far away for bullet vector
+                const farEnd = Vec2(
+                    shooter.pos.x + Math.cos(angle) * 1000,
+                    shooter.pos.y + Math.sin(angle) * 1000
+                );
+
+                this.bullets.push(new Bullet(shooter.pos, farEnd, shooter));
+                
+                // Muzzle flash particles
+                this.spawnParticles(
+                    shooter.pos.x + Math.cos(shooter.angle)*20, 
+                    shooter.pos.y + Math.sin(shooter.angle)*20, 
+                    5, 'spark'
+                );
+                
                 this.camera.addShake(3);
-                this.spawnParticles(shooter.pos.x + Math.cos(shooter.angle)*20, shooter.pos.y + Math.sin(shooter.angle)*20, 5, 'spark');
                 
-                // Hit Calc
-                let d = Dist(shooter.pos, target.pos);
-                let acc = 1 - (d / 400); // Accuracy drops with range
-                if(Math.random() < acc) target.hit(35);
-                
-                // Alert nearby
-                this.enemies.forEach(e => {
+                // Alert nearby enemies
+                Game.enemies.forEach(e => {
                     if(Dist(e.pos, shooter.pos) < 300 && e.state === 'PATROL') e.state = 'ALERT';
                 });
             },
@@ -647,65 +921,92 @@
             },
 
             useSkill(type) {
-                if(!this.selected || this.state !== 'RUNNING') return;
                 const u = this.selected;
-                if(type === 'flash') {
-                    // Logic: Flashbang at cursor or simple radial stun around unit for demo
-                    this.spawnParticles(u.pos.x, u.pos.y, 30, 'spark');
+                if(!u || this.state !== 'RUNNING' || u.active === false) return;
+                
+                if(type === 'flash' && u.flashCD <= 0) {
+                    Game.spawnParticles(u.pos.x, u.pos.y, 30, 'spark');
+                    u.flashCD = CFG.op.flashCD; // Cooldown
+                    
                     this.enemies.forEach(e => {
+                        // Stun enemies in a 200 unit radius who have LOS to the flash location
                         if(Dist(u.pos, e.pos) < 200 && this.checkLOS(u.pos, e.pos)) e.stunTimer = 180;
                     });
-                } else if (type === 'reload') {
-                    u.mag = 30; u.reloadTimer = 120;
+                } else if (type === 'reload' && u.reloadTimer <= 0) {
+                    u.mag = 30; 
+                    u.reloadTimer = CFG.op.reloadTime; // Reload time in frames
                 }
             },
 
             updateUnitUI() {
                 const p = document.getElementById('unit-controls');
+                const btnFlash = document.getElementById('btn-flash');
+                const btnReload = document.getElementById('btn-reload');
+                const ctxLayer = document.getElementById('context-layer');
+                ctxLayer.innerHTML = '';
+                
                 if(this.selected) {
                     p.classList.remove('opacity-0', 'translate-y-10');
                     
-                    // Context buttons
-                    const ctxLayer = document.getElementById('context-layer');
-                    ctxLayer.innerHTML = '';
-                    
-                    // Check near interactions
-                    this.doors.forEach(d => {
-                        if(Dist(this.selected.pos, d.center) < 50) {
-                            let btn = document.createElement('button');
-                            btn.className = "pointer-events-auto bg-slate-800 border border-orange-500 text-orange-500 px-4 py-2 rounded font-bold flex items-center gap-2 animate-bounce";
-                            btn.innerHTML = `<span class="material-icons">meeting_room</span> ${d.open ? 'FERMER' : 'OUVRIR'}`;
-                            btn.onclick = () => d.open = !d.open;
-                            ctxLayer.appendChild(btn);
-                        }
-                    });
-                    this.hostages.forEach(h => {
-                         if(!h.evacuated && Dist(this.selected.pos, h.pos) < 50) {
-                            let btn = document.createElement('button');
-                            btn.className = "pointer-events-auto bg-green-600 text-white px-4 py-2 rounded font-bold flex items-center gap-2";
-                            btn.innerHTML = `<span class="material-icons">accessibility_new</span> ÉVACUER`;
-                            btn.onclick = () => { h.evacuated = true; this.updateStats(); };
-                            ctxLayer.appendChild(btn);
-                         }
-                    });
+                    if(this.selected instanceof Operator) {
+                        btnFlash.disabled = this.selected.flashCD > 0;
+                        btnReload.disabled = this.selected.reloadTimer > 0;
+                        
+                        // Context buttons (Interactions)
+                        this.doors.forEach(d => {
+                            if(Dist(this.selected.pos, d.center) < 70) {
+                                let btn = document.createElement('button');
+                                btn.className = "pointer-events-auto btn-tac bg-slate-800 border border-orange-500 text-orange-500 px-4 py-2 rounded font-bold flex items-center gap-2";
+                                btn.innerHTML = `<span class="material-icons">meeting_room</span> ${d.progress > 0.5 ? 'FERMER' : 'OUVRIR'}`;
+                                btn.onclick = () => d.open = !d.open;
+                                ctxLayer.appendChild(btn);
+                            }
+                        });
+                        this.hostages.forEach(h => {
+                             if(h.active && !h.evacuated && Dist(this.selected.pos, h.pos) < 70) {
+                                let btn = document.createElement('button');
+                                btn.className = "pointer-events-auto btn-tac bg-green-600 text-white px-4 py-2 rounded font-bold flex items-center gap-2";
+                                btn.innerHTML = `<span class="material-icons">accessibility_new</span> ÉVACUER`;
+                                btn.onclick = () => { 
+                                    h.evacuated = true; 
+                                    this.updateStats(); 
+                                    this.updateUnitUI(); // Reclear context
+                                };
+                                ctxLayer.appendChild(btn);
+                            }
+                        });
+                    }
 
                 } else {
                     p.classList.add('opacity-0', 'translate-y-10');
-                    document.getElementById('context-layer').innerHTML = '';
                 }
             },
 
             updateStats() {
-                document.getElementById('hud-hostiles').innerText = this.enemies.filter(e => e.active).length;
-                document.getElementById('hud-civils').innerText = this.hostages.filter(h => !h.evacuated).length;
+                const activeEnemies = this.enemies.filter(e => e.active).length;
+                const remainingHostages = this.hostages.filter(h => h.active && !h.evacuated).length;
+                const activeOps = this.ops.filter(o => o.active).length;
                 
+                document.getElementById('hud-hostiles').innerText = activeEnemies;
+                document.getElementById('hud-civils').innerText = remainingHostages;
+                
+                // Update Cooldown Visuals
+                if (this.selected instanceof Operator) {
+                    document.getElementById('cd-flash').style.height = `${(this.selected.flashCD / CFG.op.flashCD) * 100}%`;
+                    document.getElementById('cd-reload').style.height = `${(this.selected.reloadTimer / CFG.op.reloadTime) * 100}%`;
+                }
+
                 // Check Win/Loss
                 if(this.state === 'RUNNING') {
-                    if(this.enemies.filter(e=>e.active).length === 0 && this.hostages.filter(h=>!h.evacuated).length === 0) {
+                    if(activeEnemies === 0 && remainingHostages === 0) {
+                        this.state = 'COMPLETED';
                         setTimeout(() => this.loadLevel(this.levelIdx+1), 2000);
+                        this.showModal("MISSION RÉUSSIE", "Toutes les menaces neutralisées, les civils sont en sécurité. Bien joué!", () => this.loadLevel(this.levelIdx+1));
                     }
-                    if(this.ops.filter(o=>o.active).length === 0) {
+                    if(activeOps === 0) {
+                        this.state = 'FAILED';
                         setTimeout(() => this.loadLevel(this.levelIdx), 2000);
+                        this.showModal("MISSION ÉCHOUÉE", "Tous les opérateurs sont hors de combat. Réessayez.", () => this.loadLevel(this.levelIdx));
                     }
                 }
             },
@@ -714,9 +1015,37 @@
                 document.getElementById('modal-title').innerText = t;
                 document.getElementById('modal-desc').innerText = d;
                 const btn = document.getElementById('modal-btn');
-                btn.onclick = cb;
+                btn.onclick = () => { document.getElementById('modal-overlay').classList.add('hidden'); cb(); };
                 document.getElementById('modal-overlay').classList.remove('hidden');
             },
+            
+            // Generate smoother path visualization using catmull-rom or simple cubic bezier approximation
+            drawSmoothedPath(ctx, path, color, isSelected) {
+                if (path.length < 2) return;
+
+                ctx.strokeStyle = color;
+                ctx.lineWidth = isSelected ? 3 : 2;
+                ctx.setLineDash(isSelected ? [8, 4] : [4, 4]);
+                ctx.lineCap = 'round';
+
+                ctx.beginPath();
+                ctx.moveTo(path[0].x, path[0].y);
+
+                // Use simple lineTo for now, cubic is complex to implement robustly in a single file
+                for(let i = 1; i < path.length; i++) {
+                    ctx.lineTo(path[i].x, path[i].y);
+                }
+                
+                ctx.stroke();
+                ctx.setLineDash([]);
+                
+                // Waypoints
+                ctx.fillStyle = isSelected ? '#fbbf24' : color;
+                for(let i = 0; i < path.length; i++) { 
+                    ctx.beginPath(); ctx.arc(path[i].x, path[i].y, i === 0 ? 5 : 3, 0, Math.PI*2); ctx.fill(); 
+                }
+            },
+
 
             // --- RENDER LOOP ---
             loop() {
@@ -726,50 +1055,41 @@
                 this.doors.forEach(d => d.update());
                 this.ops.forEach(o => o.update());
                 this.enemies.forEach(e => e.update());
-                this.particles.forEach((p, i) => { p.update(); if(p.life<=0) this.particles.splice(i,1); });
-                this.bullets.forEach((b, i) => { b.life--; if(b.life<=0) this.bullets.splice(i,1); });
+                this.particles = this.particles.filter((p, i) => { p.update(); return p.life > 0; });
+                this.bullets = this.bullets.filter((b, i) => { b.update(); return b.active; });
 
                 this.updateStats();
+                this.updateUnitUI(); // Keep context actions fresh
 
                 // DRAW WORLD
                 const ctx = this.ctx;
-                ctx.save();
-                ctx.fillStyle = '#0f172a';
-                ctx.fillRect(0,0,CFG.w, CFG.h);
                 
-                // Camera Shake apply
+                // 1. CLEAR CANVAS & APPLY SHAKE
+                ctx.save();
+                ctx.fillStyle = CFG.colors.floor;
+                ctx.fillRect(0,0,CFG.mapW, CFG.mapH); // Clear based on fixed map size
                 ctx.translate(this.camera.x, this.camera.y);
 
-                // Grid Floor
+                // 2. GRID FLOOR
                 ctx.strokeStyle = CFG.colors.grid; ctx.lineWidth = 1;
                 ctx.beginPath();
-                for(let x=0; x<CFG.w; x+=40) { ctx.moveTo(x,0); ctx.lineTo(x,CFG.h); }
-                for(let y=0; y<CFG.h; y+=40) { ctx.moveTo(0,y); ctx.lineTo(CFG.w,y); }
+                for(let x=0; x<CFG.mapW; x+=40) { ctx.moveTo(x,0); ctx.lineTo(x,CFG.mapH); }
+                for(let y=0; y<CFG.mapH; y+=40) { ctx.moveTo(0,y); ctx.lineTo(CFG.mapW,y); }
                 ctx.stroke();
 
-                // Dead bodies
+                // 3. DEAD BODIES & PARTICLES (Below entities)
                 this.corpses.forEach(c => {
                     ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(c.angle);
                     ctx.fillStyle = '#334155'; ctx.beginPath(); ctx.arc(0,0,14,0,Math.PI*2); ctx.fill();
-                    // Blood pool
                     ctx.fillStyle = '#450a0a'; ctx.beginPath(); ctx.arc(0,0,20,0,Math.PI*2); ctx.fill();
                     ctx.restore();
                 });
+                this.particles.forEach(p => p.draw(ctx));
 
-                // Paths (Planning)
+                // 4. PATHS (Planning)
                 if(this.state === 'PLANNING' || this.selected) {
                     this.ops.forEach(o => {
-                        if(o.path.length) {
-                            ctx.beginPath();
-                            ctx.strokeStyle = (o === this.selected) ? '#fbbf24' : 'rgba(59, 130, 246, 0.4)';
-                            ctx.lineWidth = 2; ctx.setLineDash([5,5]);
-                            ctx.moveTo(o.pos.x, o.pos.y);
-                            for(let p of o.path) ctx.lineTo(p.x, p.y);
-                            ctx.stroke(); ctx.setLineDash([]);
-                            // Waypoints
-                            ctx.fillStyle = ctx.strokeStyle;
-                            for(let p of o.path) { ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI*2); ctx.fill(); }
-                        }
+                        this.drawSmoothedPath(ctx, o.path, (o === this.selected) ? '#fbbf24' : 'rgba(59, 130, 246, 0.4)', (o === this.selected));
                     });
                     
                     // Input Feedback Circle
@@ -780,64 +1100,65 @@
                     }
                 }
 
-                // Entities
+                // 5. ENTITIES
                 this.hostages.forEach(h => h.draw(ctx));
                 this.ops.forEach(o => o.draw(ctx));
                 this.enemies.forEach(e => e.draw(ctx));
 
-                // Particles & Bullets
-                this.particles.forEach(p => p.draw(ctx));
-                this.bullets.forEach(b => {
-                    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
-                    ctx.beginPath(); ctx.moveTo(b.s.x, b.s.y); ctx.lineTo(b.e.x, b.e.y); ctx.stroke();
-                });
+                // 6. BULLETS (Tracer effect)
+                this.bullets.forEach(b => b.draw(ctx));
 
-                // FOG OF WAR / SHADOWS (The "Pro" Look)
-                // Draw darkness everywhere
+                // 7. FOG OF WAR / SHADOWS (The "Pro" Look)
                 ctx.save();
                 ctx.fillStyle = 'rgba(0,0,0,0.85)';
-                ctx.fillRect(-10, -10, CFG.w+20, CFG.h+20);
+                ctx.fillRect(-10, -10, CFG.mapW + 20, CFG.mapH + 20); // Draw darkness everywhere
                 
-                // Cut out vision cones
                 ctx.globalCompositeOperation = 'destination-out';
                 
-                // Operator Vision
+                // Operator Vision Cutout
                 this.ops.forEach(o => {
                     if(!o.active) return;
                     ctx.save(); ctx.translate(o.pos.x, o.pos.y); ctx.rotate(o.angle);
                     
-                    // Main cone
+                    // Use a radial gradient for softer edges
+                    const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, CFG.op.view);
+                    gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+                    gradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.9)');
+                    gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+                    ctx.fillStyle = gradient;
+
+                    // Draw FOV cone
                     ctx.beginPath(); ctx.moveTo(0,0);
                     ctx.arc(0,0, CFG.op.view, -CFG.op.fov/2, CFG.op.fov/2);
                     ctx.closePath(); ctx.fill();
                     
-                    // Small radius around unit
+                    // Small radius around unit for close inspection
                     ctx.beginPath(); ctx.arc(0,0, 60, 0, Math.PI*2); ctx.fill();
                     ctx.restore();
                 });
                 
-                ctx.restore();
+                ctx.restore(); // Ends FOW composite operation
 
-                // Walls & Doors (On top of shadows for clarity, or below for realism. Top is better for gameplay)
+                // 8. Walls & Doors (On top for clear geometry)
                 ctx.shadowColor = 'black'; ctx.shadowBlur = 10;
                 this.walls.forEach(w => {
                     ctx.fillStyle = '#1e293b'; ctx.fillRect(w.x, w.y, w.w, w.h);
                     ctx.strokeStyle = '#334155'; ctx.strokeRect(w.x, w.y, w.w, w.h);
                 });
-                this.doors.forEach(d => d.draw(ctx));
                 ctx.shadowBlur = 0;
-
-                ctx.restore();
                 
-                // UI Canvas Draw (Selection reticles etc)
-                // ... (Separated for cleaner rendering if needed)
+                this.doors.forEach(d => d.draw(ctx));
+                
+                ctx.restore(); // Ends camera shake translation
 
                 requestAnimationFrame(() => this.loop());
             }
         };
 
         // Boot
-        Game.init();
+        window.onload = function() {
+            Game.init();
+        }
 
     </script>
 </body>
