@@ -2,8 +2,8 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Merch</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Merch [Tactical]</title>
     <link rel="icon" href="favicon.ico" sizes="any" type="image/png">
     <link rel="icon" href="favicon.ico" type="image/svg+xml">
     <link rel="apple-touch-icon" href="favicon.ico">
@@ -66,7 +66,7 @@
             --revolut-btn-color: #000000;
         }
 
-        * { box-sizing: border-box; margin: 0; padding: 0; outline: none; }
+        * { box-sizing: border-box; margin: 0; padding: 0; outline: none; -webkit-tap-highlight-color: transparent; }
         
         body { 
             font-family: var(--font-ui); 
@@ -137,19 +137,39 @@
         tr:last-child td { border-bottom: none; }
         tr:hover { background-color: var(--bg-interactive); }
         
+        /* Mobile Table Styles (Card View) */
         @media (max-width: 600px) {
+            .table-container { border: none; }
             .table-container table, .table-container thead, .table-container tbody, .table-container th, .table-container td, .table-container tr { display: block; }
             .table-container thead tr { position: absolute; top: -9999px; left: -9999px; }
+            
             .table-container tr { 
-                border: 1px solid var(--border-color); border-radius: var(--radius-sm); 
-                margin-bottom: 15px; padding: 15px; background-color: var(--bg-interactive); 
-                display: grid; grid-template-columns: 1fr 1fr; gap: 5px 10px; align-items: center; text-align: center; 
+                border: 1px solid var(--border-color); 
+                border-radius: var(--radius-sm); 
+                margin-bottom: 15px; 
+                padding: 15px; 
+                background-color: var(--bg-interactive); 
             }
-            .table-container td { border-bottom: none; padding: 5px; }
+            
+            .table-container td { 
+                border-bottom: 1px solid var(--border-color); 
+                padding: 8px 0; 
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                text-align: right;
+            }
+            .table-container td:last-child { border-bottom: none; }
+            
             .table-container td:before { 
-                content: attr(data-label); display: block; font-weight: 500; 
-                text-transform: uppercase; color: var(--text-secondary); 
-                font-size: 0.8em; margin-bottom: 5px; 
+                content: attr(data-label); 
+                float: left;
+                font-weight: 700; 
+                text-transform: uppercase; 
+                color: var(--text-secondary); 
+                font-size: 0.85em; 
+                font-family: var(--font-ui);
+                margin-right: 10px;
             }
         }
         
@@ -221,7 +241,7 @@
         
         .conso-item-image { 
             width: 50px; height: 50px; object-fit: cover; border-radius: 4px; 
-            border: 1px solid var(--border-color);
+            border: 1px solid var(--border-color); flex-shrink: 0;
         }
         .conso-item-label { flex-grow: 1; display: flex; flex-direction: column; font-family: var(--font-ui); }
         .item-info { font-size: 0.85em; color: var(--text-secondary); font-family: var(--font-data); }
@@ -268,9 +288,25 @@
         /* Responsive Adjustments */
         @media (max-width: 600px) {
             body { padding-left: 45px; } /* Ajustement pour dock replié */
-            .conso-item { flex-direction: column; text-align: center; }
-            .conso-item-label { align-items: center; }
-            .conso-item input { width: 100%; margin-top: 10px; }
+            .container { padding: 15px; }
+            h1 { font-size: 2em; margin-bottom: 20px; }
+            fieldset { padding: 15px; }
+            
+            /* Conso Item - Card View */
+            .conso-item { 
+                flex-direction: column; 
+                align-items: center; 
+                text-align: center; 
+                padding: 15px;
+            }
+            .conso-item-image { width: 70px; height: 70px; margin-bottom: 10px; }
+            .conso-item-label { width: 100%; margin-bottom: 10px; }
+            .conso-item input { width: 100% !important; max-width: 150px; padding: 12px; font-size: 1.1em; }
+            
+            /* Summary Item */
+            .summary-item { flex-direction: column; align-items: flex-start; gap: 5px; }
+            .summary-item-left { width: 100%; justify-content: flex-start; }
+            .summary-item span:last-child { align-self: flex-end; font-size: 1.2em; }
         }
     </style>
 </head>
@@ -375,7 +411,7 @@
             const toggleIcon = document.getElementById('darkModeIcon');
             
             function setInitialTheme() {
-                const savedTheme = localStorage.getItem('themeCheck'); // Utilise la même clé que les autres pages
+                const savedTheme = localStorage.getItem('themeCheck');
                 const isDark = savedTheme !== 'light';
                 body.classList.toggle('dark-mode', isDark);
                 body.classList.toggle('light-mode', !isDark);
@@ -389,7 +425,7 @@
             });
             setInitialTheme();
 
-            // Dock Logic (Original Merch Logic preserved but styled)
+            // Dock Logic
             const dockMenu = document.getElementById('dockMenu');
             const dockToggleBtn = document.getElementById('dockToggleBtn');
             const dockToggleIcon = dockToggleBtn.querySelector('.material-icons');
@@ -401,13 +437,20 @@
                 dockToggleIcon.style.transform = isCollapsed ? 'rotate(180deg)' : 'rotate(0deg)';
             }
             
+            // Auto collapse on mobile
+            if (window.innerWidth <= 600) {
+                if (localStorage.getItem('dockCollapsed') === null) {
+                    dockMenu.classList.add('collapsed');
+                    dockToggleIcon.style.transform = 'rotate(180deg)';
+                }
+            }
+
             if (localStorage.getItem('dockCollapsed') === 'true') { 
                 dockMenu.classList.add('collapsed');
                 dockToggleIcon.style.transform = 'rotate(180deg)';
             }
             
             dockToggleBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleDock(); });
-            // Pas de fermeture auto sur clic externe pour ce dock fixe latéral
 
             // --- CHARGEMENT DE LA CONFIGURATION ---
             try {
