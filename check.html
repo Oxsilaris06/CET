@@ -465,7 +465,7 @@
         <div class="dock-menu-item" id="dockToggleBtn" title="Réduire"><span class="material-symbols-outlined">expand_more</span></div>
         <a href="index.html" class="dock-menu-item" title="Accueil"><span class="material-symbols-outlined">home</span></a>
         
-        <!-- BOUTON SCAN AJOUTÉ ICI -->
+        <!-- BOUTON SCAN -->
         <div class="dock-menu-item" id="scanBtn" title="Scanner Véhicule">
             <span class="material-symbols-outlined">qr_code_scanner</span>
         </div>
@@ -494,7 +494,8 @@
     </div>
     
     <div class="container">
-        <h1>CHECKLIST OPS</h1>
+        <!-- TITRE MODIFIÉ -->
+        <h1>CHECKLIST</h1>
 
         <!-- Indicateur de Progression Global -->
         <div id="global-progress-container">
@@ -504,7 +505,7 @@
             </div>
         </div>
 
-        <!-- Navigation Tabs -->
+        <!-- Navigation Tabs - STRUCTURE FIXE -->
         <nav class="nav-menu">
             <div class="nav-item active" id="tab-patrouille" data-target="patrouille">Patrouille</div>
             <div class="nav-item" data-target="reco">Reco</div>
@@ -516,7 +517,7 @@
             
             <section id="patrouille" class="content-section active">
                 
-                <!-- Toggle Menu -->
+                <!-- Toggle Menu avec IMAGES RESTAURÉES -->
                 <div class="toggle-menu" id="patrouille-toggle-menu">
                     <button class="toggle-btn" data-toggle="tm">
                         <img src="ak.svg" alt="Icône Tuerie de Masse" data-toggle-icon>
@@ -567,8 +568,9 @@
             </section>
 
         </main>
+        <!-- FOOTER MODIFIÉ -->
         <footer id="main-footer">
-            Checklist v3.4 (Restored Icons) &bull; G/ Maheux
+            Checklist v3.4 • G/ Maheux
         </footer>
     </div>
 
@@ -638,7 +640,7 @@
             toast.classList.add('show');
             setTimeout(() => {
                 toast.classList.remove('show');
-            }, 5000); // 5s pour avoir le temps de lire
+            }, 5000); 
         }
 
         function onScanSuccess(decodedText, decodedResult) {
@@ -670,8 +672,8 @@
             localStorage.setItem('currentVehicleName', currentVehicleName);
             localStorage.setItem('savedVehicleInventory', JSON.stringify(savedVehicleInventory));
 
-            // 2. Mettre à jour CHECKLIST_DATA pour l'onglet Patrouille
-            // On remplace les données par défaut par celles du véhicule
+            // 2. Mettre à jour CHECKLIST_DATA pour l'onglet Patrouille UNIQUEMENT
+            // On écrase les données "patrouille" avec celles du véhicule
             const formattedInventory = {};
             for (const key in savedVehicleInventory) {
                 const readableKey = key.replace(/_/g, ' ');
@@ -679,54 +681,52 @@
             }
             CHECKLIST_DATA.patrouille = formattedInventory;
 
-            // 3. Mettre à jour l'UI
+            // 3. Mettre à jour l'UI de l'onglet EXISTANT
             const tabPatrouille = document.getElementById('tab-patrouille');
-            tabPatrouille.textContent = data.vehicule.split(' ')[0]; // Affiche "SHARAN"
-            tabPatrouille.style.color = "var(--success-green)";
+            if (tabPatrouille) {
+                // On met à jour le texte du premier onglet, on n'en crée PAS d'autre
+                tabPatrouille.textContent = data.vehicule.split(' ')[0]; // ex: "SHARAN"
+                tabPatrouille.style.color = "var(--success-green)";
+            }
             
             const vehicleTitle = document.getElementById('vehicle-title');
-            vehicleTitle.style.display = 'block';
-            vehicleTitle.textContent = `INVENTAIRE : ${data.vehicule}`;
+            if (vehicleTitle) {
+                vehicleTitle.style.display = 'block';
+                vehicleTitle.textContent = `INVENTAIRE : ${data.vehicule}`;
+            }
 
-            // 5. Régénérer la checklist
+            // 4. Régénérer la checklist
             initializeChecklists();
             
-            // 6. Basculer sur l'onglet concerné
+            // 5. Basculer sur l'onglet concerné (qui est toujours l'onglet principal)
             showSection('patrouille');
         }
 
         function startScanner() {
             document.getElementById('scanner-modal').classList.add('active');
             
-            // On initialise l'instance si elle n'existe pas encore
             if (!html5QrCode) {
                  html5QrCode = new Html5Qrcode("reader");
             }
             
-            // Box plus tolérante sur mobile
             const config = { fps: 10, qrbox: { width: 250, height: 250 } };
             
-            // Démarrage direct avec la caméra arrière ("environment")
             html5QrCode.start(
                 { facingMode: "environment" }, 
                 config, 
                 onScanSuccess,
-                (errorMessage) => {
-                    // Erreur de scan frame par frame, on ignore pour ne pas spammer
-                }
+                (errorMessage) => { }
             ).catch(err => {
                 console.error("Erreur démarrage caméra", err);
                 document.getElementById('scanner-modal').classList.remove('active');
                 
-                // Gestion explicite des erreurs pour l'utilisateur
                 let errorMsg = "Erreur caméra inconnue.";
-                
                 if (err.name === "NotAllowedError" || err.toString().includes("Permission")) {
                     errorMsg = "Accès refusé. Autorisez la caméra dans les réglages.";
                 } else if (err.name === "NotFoundError") {
-                    errorMsg = "Aucune caméra trouvée sur l'appareil.";
+                    errorMsg = "Aucune caméra trouvée.";
                 } else if (err.name === "NotReadableError") {
-                    errorMsg = "La caméra est déjà utilisée par une autre appli.";
+                    errorMsg = "Caméra occupée par une autre appli.";
                 } else if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
                     errorMsg = "Sécurité : La caméra nécessite HTTPS.";
                 } else {
@@ -741,9 +741,7 @@
             if (html5QrCode) {
                 html5QrCode.stop().then(() => {
                     document.getElementById('scanner-modal').classList.remove('active');
-                    html5QrCode.clear(); // Nettoie le DOM (enlève la vidéo)
-                    // On ne met pas html5QrCode à null ici pour pouvoir le réutiliser, 
-                    // mais clear() est important pour enlever le canvas noir
+                    html5QrCode.clear(); 
                 }).catch(err => {
                     console.error("Failed to stop scanner", err);
                     document.getElementById('scanner-modal').classList.remove('active');
@@ -796,7 +794,7 @@
                     }
                 });
                 
-                const categoryKey = category.replace(/\s+/g, '-').replace(/[()]/g, ''); // Sanitize ID
+                const categoryKey = category.replace(/\s+/g, '-').replace(/[()]/g, ''); 
                 const titleElement = document.getElementById(`title-${activeSectionId}-${categoryKey}`);
                 if (titleElement) {
                     const isCompleted = categoryChecked === categoryItems.length && categoryItems.length > 0;
@@ -924,10 +922,17 @@
                 CHECKLIST_DATA.patrouille = formattedInventory;
                 
                 // Update UI Header
-                document.getElementById('tab-patrouille').textContent = currentVehicleName.split(' ')[0];
-                document.getElementById('tab-patrouille').style.color = "var(--success-green)";
-                document.getElementById('vehicle-title').style.display = 'block';
-                document.getElementById('vehicle-title').textContent = `INVENTAIRE : ${currentVehicleName}`;
+                const tabPatrouille = document.getElementById('tab-patrouille');
+                if (tabPatrouille) {
+                    tabPatrouille.textContent = currentVehicleName.split(' ')[0];
+                    tabPatrouille.style.color = "var(--success-green)";
+                }
+                
+                const vehicleTitle = document.getElementById('vehicle-title');
+                if (vehicleTitle) {
+                    vehicleTitle.style.display = 'block';
+                    vehicleTitle.textContent = `INVENTAIRE : ${currentVehicleName}`;
+                }
             }
 
             const patrouilleContainer = document.getElementById('patrouille-group-container');
@@ -1021,7 +1026,7 @@
             
             scanBtn.addEventListener('click', startScanner);
             
-            closeScannerBtn.addEventListener('click', stopScanner); // Utilise la fonction stop améliorée
+            closeScannerBtn.addEventListener('click', stopScanner); 
 
             if (localStorage.getItem('dockCollapsedCheck') === 'true') { 
                 dockMenu.classList.add('collapsed'); 
