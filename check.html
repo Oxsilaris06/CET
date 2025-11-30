@@ -9,7 +9,7 @@
     
     <!-- Viewport pour mobile -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Checklist Ops [Tactical]</title>
+    <title>Checklist </title>
     
     <!-- Polices -->
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Oswald:wght@300;400;500&family=Saira+Stencil+One&display=swap" rel="stylesheet">
@@ -117,10 +117,14 @@
             padding: 5px;
             border-radius: var(--radius-md);
             overflow-x: auto; /* Permet le scroll si noms longs */
+            scrollbar-width: none; /* Firefox */
         }
+        .nav-menu::-webkit-scrollbar { display: none; /* Chrome/Safari */ }
+        
         .nav-item {
             flex: 1;
             padding: 12px; 
+            min-width: 100px; /* Assure une taille min pour le scroll */
             border: 1px solid transparent;
             border-radius: var(--radius-sm); 
             background-color: transparent;
@@ -144,6 +148,16 @@
             color: var(--accent-blue);
             box-shadow: 0 0 15px rgba(59, 130, 246, 0.15);
             font-weight: bold;
+        }
+        /* Style spécial pour les onglets véhicules ajoutés */
+        .nav-item.vehicle-tab {
+            color: var(--success-green);
+            border-color: rgba(34, 197, 94, 0.3);
+        }
+        .nav-item.vehicle-tab.active {
+            background-color: rgba(34, 197, 94, 0.15);
+            color: var(--success-green);
+            box-shadow: 0 0 15px rgba(34, 197, 94, 0.15);
         }
 
         /* --- PROGRESS BAR --- */
@@ -494,8 +508,8 @@
     </div>
     
     <div class="container">
-        <!-- TITRE MODIFIÉ -->
-        <h1>CHECKLIST</h1>
+        <!-- TITRE -->
+        <h1>CHECKLIST OPS</h1>
 
         <!-- Indicateur de Progression Global -->
         <div id="global-progress-container">
@@ -505,11 +519,12 @@
             </div>
         </div>
 
-        <!-- Navigation Tabs - STRUCTURE FIXE -->
-        <nav class="nav-menu">
+        <!-- Navigation Tabs -->
+        <nav class="nav-menu" id="nav-menu-container">
             <div class="nav-item active" id="tab-patrouille" data-target="patrouille">Patrouille</div>
             <div class="nav-item" data-target="reco">Reco</div>
             <div class="nav-item" data-target="tir">Tir</div>
+            <!-- Les onglets véhicules s'ajouteront ici -->
         </nav>
 
         <!-- Contenu des sections -->
@@ -533,10 +548,7 @@
                     </button>
                 </div>
                 
-                <!-- Titre dynamique pour véhicule (par défaut caché) -->
-                <h3 id="vehicle-title" style="display:none; text-align:center; color: var(--accent-blue); margin-bottom: 15px; font-family:var(--font-data);">INVENTAIRE VEHICULE</h3>
-
-                <!-- Liste de base Patrouille (ou Véhicule scanné) -->
+                <!-- Liste de base Patrouille -->
                 <div class="category-group-container two-columns" id="patrouille-group-container">
                     <!-- Injecté par JS -->
                 </div>
@@ -567,10 +579,12 @@
                 <div class="category-group-container two-columns" id="tir-group-container"></div>
             </section>
 
+            <!-- Les sections véhicules s'ajouteront ici -->
+
         </main>
-        <!-- FOOTER MODIFIÉ -->
+        
         <footer id="main-footer">
-            Checklist v3.4 • G/ Maheux
+            Checklist v3.5 • G/ Maheux
         </footer>
     </div>
 
@@ -590,7 +604,7 @@
             "Panneau molle": ["Dépistages Stup", "Embout alcoo", "Doc terrain"] 
         };
 
-        // Configuration Globale (Mutable pour le scan)
+        // Configuration Globale
         let CHECKLIST_DATA = {
             patrouille: JSON.parse(JSON.stringify(DEFAULT_PATROUILLE_DATA)), // Deep copy
             tm: {
@@ -622,8 +636,9 @@
         };
         
         let checklistState = JSON.parse(localStorage.getItem('quickChecklistState')) || {};
-        let currentVehicleName = localStorage.getItem('currentVehicleName') || null; // Stocke le nom du véhicule scanné
-        let savedVehicleInventory = JSON.parse(localStorage.getItem('savedVehicleInventory')) || null; // Stocke l'inventaire scanné
+        
+        // Nouvelle gestion : Liste des véhicules ajoutés (tableau d'objets)
+        let addedVehicles = JSON.parse(localStorage.getItem('addedVehicles')) || []; 
 
         // --- SCANNER LOGIC ROBUSTE ---
         let html5QrCode = null; // Instance unique
@@ -650,12 +665,9 @@
                 
                 // Validation sommaire de la structure JSON
                 if (data.vehicule && data.inventaire) {
-                    // Arrêter le scanner immédiatement
                     stopScanner();
-
-                    // Mise à jour de l'app
-                    updateAppWithVehicleData(data);
-                    showNotification(`Véhicule identifié : ${data.vehicule}`);
+                    addVehicleTab(data, true); // true = save to persistence
+                    showNotification(`Véhicule ajouté : ${data.vehicule}`);
                 } else {
                     showNotification("Format QR Code invalide", "error");
                 }
@@ -665,41 +677,91 @@
             }
         }
 
-        function updateAppWithVehicleData(data) {
-            // 1. Sauvegarder les données
-            currentVehicleName = data.vehicule;
-            savedVehicleInventory = data.inventaire;
-            localStorage.setItem('currentVehicleName', currentVehicleName);
-            localStorage.setItem('savedVehicleInventory', JSON.stringify(savedVehicleInventory));
+        function generateIdFromName(name) {
+            return 'vehicule-' + name.toLowerCase().replace(/[^a-z0-9]/g, '-');
+        }
 
-            // 2. Mettre à jour CHECKLIST_DATA pour l'onglet Patrouille UNIQUEMENT
-            // On écrase les données "patrouille" avec celles du véhicule
+        function addVehicleTab(vehicleData, savePersistence = false) {
+            const vehicleId = generateIdFromName(vehicleData.vehicule);
+            const vehicleNameShort = vehicleData.vehicule.split(' ')[0]; // ex: "SHARAN"
+
+            // 1. Ajouter les données à CHECKLIST_DATA
+            // On formate les clés pour l'affichage
             const formattedInventory = {};
-            for (const key in savedVehicleInventory) {
+            for (const key in vehicleData.inventaire) {
                 const readableKey = key.replace(/_/g, ' ');
-                formattedInventory[readableKey] = savedVehicleInventory[key];
+                formattedInventory[readableKey] = vehicleData.inventaire[key];
             }
-            CHECKLIST_DATA.patrouille = formattedInventory;
+            CHECKLIST_DATA[vehicleId] = formattedInventory;
 
-            // 3. Mettre à jour l'UI de l'onglet EXISTANT
-            const tabPatrouille = document.getElementById('tab-patrouille');
-            if (tabPatrouille) {
-                // On met à jour le texte du premier onglet, on n'en crée PAS d'autre
-                tabPatrouille.textContent = data.vehicule.split(' ')[0]; // ex: "SHARAN"
-                tabPatrouille.style.color = "var(--success-green)";
-            }
-            
-            const vehicleTitle = document.getElementById('vehicle-title');
-            if (vehicleTitle) {
-                vehicleTitle.style.display = 'block';
-                vehicleTitle.textContent = `INVENTAIRE : ${data.vehicule}`;
+            // 2. Vérifier si l'onglet existe déjà pour éviter doublons
+            if (document.getElementById(`tab-${vehicleId}`)) {
+                // Si existe déjà, on le met juste à jour et on switch dessus
+                // On pourrait vider la section et la refaire, mais ici on va supposer que c'est un refresh
+                // Pour simplifier, si existe, on focus juste
+                showSection(vehicleId);
+                return;
             }
 
-            // 4. Régénérer la checklist
-            initializeChecklists();
+            // 3. Créer l'onglet de navigation
+            const navMenu = document.getElementById('nav-menu-container');
+            const newTab = document.createElement('div');
+            newTab.className = 'nav-item vehicle-tab';
+            newTab.id = `tab-${vehicleId}`;
+            newTab.dataset.target = vehicleId;
+            newTab.textContent = vehicleNameShort;
+            newTab.addEventListener('click', () => showSection(vehicleId));
+            navMenu.appendChild(newTab);
+
+            // 4. Créer la section de contenu
+            const mainContent = document.getElementById('main-content');
+            const newSection = document.createElement('section');
+            newSection.id = vehicleId;
+            newSection.className = 'content-section';
             
-            // 5. Basculer sur l'onglet concerné (qui est toujours l'onglet principal)
-            showSection('patrouille');
+            // Titre interne à la section
+            const sectionTitle = document.createElement('h3');
+            sectionTitle.style.textAlign = 'center';
+            sectionTitle.style.color = 'var(--accent-blue)';
+            sectionTitle.style.marginBottom = '15px';
+            sectionTitle.style.fontFamily = 'var(--font-data)';
+            sectionTitle.textContent = `INVENTAIRE : ${vehicleData.vehicule}`;
+            newSection.appendChild(sectionTitle);
+
+            // Conteneur de la grille
+            const groupContainer = document.createElement('div');
+            groupContainer.className = 'category-group-container two-columns';
+            groupContainer.id = `${vehicleId}-group-container`;
+            newSection.appendChild(groupContainer);
+
+            mainContent.appendChild(newSection);
+
+            // 5. Générer le contenu de la checklist pour ce véhicule
+            const col1 = document.createElement('div');
+            const col2 = document.createElement('div');
+            col1.className = 'category-column-wrapper';
+            col2.className = 'category-column-wrapper';
+            
+            const [group1, group2] = splitCategories(CHECKLIST_DATA[vehicleId]);
+            
+            generateChecklistModules(group1, col1, vehicleId, false);
+            generateChecklistModules(group2, col2, vehicleId, false);
+
+            groupContainer.appendChild(col1);
+            groupContainer.appendChild(col2);
+
+            // 6. Sauvegarder si demandé
+            if (savePersistence) {
+                // Vérifier si pas déjà dans la liste
+                const existingIndex = addedVehicles.findIndex(v => v.vehicule === vehicleData.vehicule);
+                if (existingIndex === -1) {
+                    addedVehicles.push(vehicleData);
+                    localStorage.setItem('addedVehicles', JSON.stringify(addedVehicles));
+                }
+            }
+
+            // 7. Afficher le nouvel onglet
+            showSection(vehicleId);
         }
 
         function startScanner() {
@@ -771,9 +833,13 @@
             const activeSectionId = localStorage.getItem('quickChecklistActiveSection') || 'patrouille';
             const allItemsInActiveSection = {};
             
-            const baseData = CHECKLIST_DATA[activeSectionId] || {};
-            Object.assign(allItemsInActiveSection, baseData);
+            // Si la section active est dans CHECKLIST_DATA, on l'utilise
+            if (CHECKLIST_DATA[activeSectionId]) {
+                const baseData = CHECKLIST_DATA[activeSectionId] || {};
+                Object.assign(allItemsInActiveSection, baseData);
+            }
             
+            // Gestion spéciale pour l'onglet patrouille qui a des toggles
             if (activeSectionId === 'patrouille') {
                 document.querySelectorAll('.toggle-btn.active').forEach(btn => {
                     const toggleType = btn.dataset.toggle;
@@ -905,36 +971,23 @@
 
         function showSection(targetId) {
             document.querySelectorAll('.content-section').forEach(section => section.classList.remove('active'));
-            document.getElementById(targetId).classList.add('active');
+            // Sécuriser l'accès à l'élément (cas où l'ID n'existe pas encore)
+            const targetSection = document.getElementById(targetId);
+            if (targetSection) {
+                targetSection.classList.add('active');
+            } else {
+                // Fallback si la section n'existe pas (ex: véhicule supprimé mais ID en mémoire)
+                document.getElementById('patrouille').classList.add('active');
+                targetId = 'patrouille';
+            }
+
             document.querySelectorAll('.nav-item').forEach(btn => btn.classList.toggle('active', btn.dataset.target === targetId));
             localStorage.setItem('quickChecklistActiveSection', targetId);
             updateProgress(); 
         }
 
         function initializeChecklists() {
-            // Restauration des données véhicule si présentes
-            if (savedVehicleInventory && currentVehicleName) {
-                 const formattedInventory = {};
-                for (const key in savedVehicleInventory) {
-                    const readableKey = key.replace(/_/g, ' ');
-                    formattedInventory[readableKey] = savedVehicleInventory[key];
-                }
-                CHECKLIST_DATA.patrouille = formattedInventory;
-                
-                // Update UI Header
-                const tabPatrouille = document.getElementById('tab-patrouille');
-                if (tabPatrouille) {
-                    tabPatrouille.textContent = currentVehicleName.split(' ')[0];
-                    tabPatrouille.style.color = "var(--success-green)";
-                }
-                
-                const vehicleTitle = document.getElementById('vehicle-title');
-                if (vehicleTitle) {
-                    vehicleTitle.style.display = 'block';
-                    vehicleTitle.textContent = `INVENTAIRE : ${currentVehicleName}`;
-                }
-            }
-
+            // Initialisation des listes statiques
             const patrouilleContainer = document.getElementById('patrouille-group-container');
             patrouilleContainer.innerHTML = '';
             
@@ -970,7 +1023,7 @@
             generateChecklistModules(CHECKLIST_DATA.mo, moCol1, 'patrouille', true);
             toggleMoContainer.appendChild(moCol1);
 
-            // Autres sections
+            // Autres sections statiques
             const recoContainer = document.getElementById('reco-group-container');
             recoContainer.innerHTML = '';
             const [recoGroup1, recoGroup2] = splitCategories(CHECKLIST_DATA.reco);
@@ -990,12 +1043,20 @@
             generateChecklistModules(tirGroup2, tirCol2, 'tir', false);
             tirContainer.appendChild(tirCol1);
             tirContainer.appendChild(tirCol2);
+
+            // Initialisation des onglets véhicules persistants
+            if (addedVehicles.length > 0) {
+                addedVehicles.forEach(vehicle => {
+                    addVehicleTab(vehicle, false); // false car déjà dans localStorage
+                });
+            }
         }
 
         document.addEventListener('DOMContentLoaded', () => {
             initializeChecklists(); 
 
-            document.querySelectorAll('.nav-item').forEach(btn => {
+            // Délégation d'événement ou réattachement pour les items statiques
+            document.querySelectorAll('.nav-item:not(.vehicle-tab)').forEach(btn => {
                 btn.addEventListener('click', () => {
                     showSection(btn.dataset.target);
                 });
@@ -1053,15 +1114,15 @@
             });
 
             resetBtn.addEventListener('click', () => {
-                const confirmation = window.confirm("Réinitialiser tout ? (Effacera les cases et le véhicule scanné)");
+                const confirmation = window.confirm("Réinitialiser tout ? (Effacera les cases et TOUS les véhicules ajoutés)");
                 if (confirmation) {
                     localStorage.removeItem('quickChecklistState');
                     localStorage.removeItem('toggle-tm-active');
                     localStorage.removeItem('toggle-forcene-active');
                     localStorage.removeItem('toggle-mo-active');
                     
-                    localStorage.removeItem('currentVehicleName');
-                    localStorage.removeItem('savedVehicleInventory');
+                    localStorage.removeItem('addedVehicles');
+                    localStorage.removeItem('quickChecklistActiveSection');
                     
                     location.reload(); 
                 } 
