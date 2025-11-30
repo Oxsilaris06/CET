@@ -2,21 +2,17 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <!-- Icônes Apple et Favicon -->
     <link rel="icon" href="favicon.ico" sizes="any" type="image/png">
     <link rel="icon" href="favicon.ico" type="image/svg+xml">
     <link rel="apple-touch-icon" href="favicon.ico">
     
-    <!-- Viewport pour mobile -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Checklist </title>
     
-    <!-- Polices -->
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Oswald:wght@300;400;500&family=Saira+Stencil+One&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
     
-    <!-- Librairie QR Code Scanner (Cloudflare CDN) -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js" xintegrity="sha512-r6rDA7W6ZeQhvl8S7yRVQUKVuyW9lq7hyp4Dqrp4sX/ea+fWSITrV+s2+Val6bu5FRhJbE9TlBJtF5XVLM5i7g==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 
     <style>
         /* --- THEME TACTICAL GLASS --- */
@@ -39,6 +35,7 @@
             
             --danger-red: #ef4444;
             --success-green: #22c55e;
+            --success-dark: #15803d; /* Vert foncé pour le mode clair */
             
             --module-bg-unchecked: rgba(255, 255, 255, 0.02);
             --module-bg-checked: rgba(34, 197, 94, 0.15);
@@ -63,6 +60,7 @@
             --border-color: #cbd5e1;
             --module-bg-unchecked: #ffffff;
             --module-bg-checked: rgba(34, 197, 94, 0.2);
+            --text-muted: #94a3b8;
         }
 
         /* --- BASE --- */
@@ -79,7 +77,7 @@
                 linear-gradient(90deg, rgba(59, 130, 246, 0.03) 1px, transparent 1px);
             background-size: 40px 40px;
             padding: 15px;
-            padding-bottom: 100px; /* Espace pour le dock */
+            padding-bottom: 100px;
             min-height: 100vh;
         }
 
@@ -96,7 +94,6 @@
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
         }
 
-        /* --- HEADER --- */
         h1 { 
             font-size: 2.5em;
             margin-bottom: 25px; 
@@ -116,15 +113,15 @@
             background: rgba(0,0,0,0.2);
             padding: 5px;
             border-radius: var(--radius-md);
-            overflow-x: auto; /* Permet le scroll si noms longs */
-            scrollbar-width: none; /* Firefox */
+            overflow-x: auto;
+            scrollbar-width: none;
         }
-        .nav-menu::-webkit-scrollbar { display: none; /* Chrome/Safari */ }
+        .nav-menu::-webkit-scrollbar { display: none; }
         
         .nav-item {
             flex: 1;
             padding: 12px; 
-            min-width: 100px; /* Assure une taille min pour le scroll */
+            min-width: 100px;
             border: 1px solid transparent;
             border-radius: var(--radius-sm); 
             background-color: transparent;
@@ -137,6 +134,7 @@
             text-transform: uppercase;
             letter-spacing: 1px;
             white-space: nowrap;
+            user-select: none; /* Empêche la sélection de texte lors de l'appui long */
         }
         .nav-item:hover {
             color: var(--text-primary);
@@ -149,7 +147,6 @@
             box-shadow: 0 0 15px rgba(59, 130, 246, 0.15);
             font-weight: bold;
         }
-        /* Style spécial pour les onglets véhicules ajoutés */
         .nav-item.vehicle-tab {
             color: var(--success-green);
             border-color: rgba(34, 197, 94, 0.3);
@@ -264,9 +261,21 @@
             margin-bottom: 5px;
             line-height: 1.3;
         }
+        
+        /* --- DARK MODE CHECKED (Texte Blanc) --- */
         .checklist-module.checked .checklist-module-label {
             color: #fff;
             font-weight: 600;
+        }
+
+        /* --- LIGHT MODE CHECKED (Texte Vert Foncé - FIX DEMANDÉ) --- */
+        body.light-mode .checklist-module.checked .checklist-module-label {
+            color: var(--success-dark); /* Vert foncé pour contraste sur fond clair */
+            font-weight: 700;
+        }
+        body.light-mode .checklist-module.checked .checkmark {
+            color: var(--success-dark);
+            text-shadow: none;
         }
 
         .checklist-module input[type="checkbox"] { position: absolute; opacity: 0; }
@@ -404,7 +413,7 @@
         #scanBtn:hover { color: #4ade80; box-shadow: 0 0 10px rgba(34, 197, 94, 0.3); }
 
         /* --- SCANNER MODAL --- */
-        #scanner-modal {
+        #scanner-modal, #tab-context-menu {
             display: none;
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0,0,0,0.95);
@@ -414,17 +423,16 @@
             justify-content: center;
             padding: 20px;
         }
-        #scanner-modal.active { display: flex; }
+        #scanner-modal.active, #tab-context-menu.active { display: flex; }
         
         #reader {
             width: 100%;
             max-width: 500px;
-            /* Pas de hauteur fixe pour laisser la vidéo s'adapter */
             border-radius: 12px;
             overflow: hidden;
             border: 2px solid var(--accent-blue);
             box-shadow: 0 0 30px rgba(59, 130, 246, 0.2);
-            background: #000; /* Fond noir pendant chargement */
+            background: #000;
         }
         
         .scanner-header {
@@ -448,6 +456,48 @@
             display: flex; align-items: center; gap: 8px;
         }
         .close-scanner-btn:hover { background: #dc2626; }
+
+        /* --- CONTEXT MENU MODAL --- */
+        .context-menu-box {
+            background: var(--bg-container);
+            backdrop-filter: blur(15px);
+            border: 1px solid var(--border-color);
+            padding: 20px;
+            border-radius: var(--radius-md);
+            width: 300px;
+            max-width: 90%;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .context-menu-box h3 {
+            text-align: center;
+            color: var(--text-primary);
+            margin-bottom: 10px;
+            font-family: var(--font-ui);
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 10px;
+        }
+        .ctx-btn {
+            padding: 12px;
+            border: none;
+            border-radius: var(--radius-sm);
+            font-family: var(--font-ui);
+            font-size: 1rem;
+            cursor: pointer;
+            text-align: left;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: var(--bg-interactive);
+            color: var(--text-primary);
+            transition: all 0.2s;
+        }
+        .ctx-btn:hover { background: var(--bg-interactive-hover); }
+        .ctx-btn.delete { color: var(--danger-red); }
+        .ctx-btn.delete:hover { background: rgba(239, 68, 68, 0.1); }
+        .ctx-btn.cancel { text-align: center; justify-content: center; margin-top: 10px; background: transparent; border: 1px solid var(--border-color); }
 
         /* Notification Toast */
         #notification-toast {
@@ -478,12 +528,9 @@
     <div class="dock-menu" id="dockMenu">
         <div class="dock-menu-item" id="dockToggleBtn" title="Réduire"><span class="material-symbols-outlined">expand_more</span></div>
         <a href="index.html" class="dock-menu-item" title="Accueil"><span class="material-symbols-outlined">home</span></a>
-        
-        <!-- BOUTON SCAN -->
         <div class="dock-menu-item" id="scanBtn" title="Scanner Véhicule">
             <span class="material-symbols-outlined">qr_code_scanner</span>
         </div>
-
         <div class="dock-menu-item" id="darkModeToggle" title="Thème J/N">
             <span class="material-symbols-outlined" id="darkModeIcon">nightlight</span>
         </div>
@@ -501,6 +548,17 @@
         </button>
     </div>
 
+    <!-- Context Menu Modal -->
+    <div id="tab-context-menu">
+        <div class="context-menu-box">
+            <h3 id="ctx-menu-title">Gestion Onglet</h3>
+            <button id="ctx-move-btn" class="ctx-btn"><span class="material-symbols-outlined">first_page</span> Mettre au début</button>
+            <button id="ctx-reset-btn" class="ctx-btn"><span class="material-symbols-outlined">restart_alt</span> Réinitialiser</button>
+            <button id="ctx-delete-btn" class="ctx-btn delete"><span class="material-symbols-outlined">delete</span> Supprimer</button>
+            <button id="ctx-cancel-btn" class="ctx-btn cancel">Annuler</button>
+        </div>
+    </div>
+
     <!-- Notification Toast -->
     <div id="notification-toast">
         <span class="material-symbols-outlined">check_circle</span>
@@ -508,10 +566,8 @@
     </div>
     
     <div class="container">
-        <!-- TITRE -->
         <h1>CHECKLIST OPS</h1>
 
-        <!-- Indicateur de Progression Global -->
         <div id="global-progress-container">
             <div class="progress-text" id="global-progress-text">0/0</div>
             <div class="progress-bar-container">
@@ -519,20 +575,14 @@
             </div>
         </div>
 
-        <!-- Navigation Tabs -->
         <nav class="nav-menu" id="nav-menu-container">
             <div class="nav-item active" id="tab-patrouille" data-target="patrouille">Patrouille</div>
             <div class="nav-item" data-target="reco">Reco</div>
             <div class="nav-item" data-target="tir">Tir</div>
-            <!-- Les onglets véhicules s'ajouteront ici -->
         </nav>
 
-        <!-- Contenu des sections -->
         <main id="main-content">
-            
             <section id="patrouille" class="content-section active">
-                
-                <!-- Toggle Menu avec IMAGES RESTAURÉES -->
                 <div class="toggle-menu" id="patrouille-toggle-menu">
                     <button class="toggle-btn" data-toggle="tm">
                         <img src="ak.svg" alt="Icône Tuerie de Masse" data-toggle-icon>
@@ -548,12 +598,8 @@
                     </button>
                 </div>
                 
-                <!-- Liste de base Patrouille -->
-                <div class="category-group-container two-columns" id="patrouille-group-container">
-                    <!-- Injecté par JS -->
-                </div>
-
-                <!-- Conteneurs Toggles -->
+                <div class="category-group-container two-columns" id="patrouille-group-container"></div>
+                
                 <div class="toggle-content" id="toggle-tm">
                      <div class="category-group-container">
                         <div class="checklist-container" id="patrouille-tm-list-container"></div>
@@ -578,18 +624,14 @@
             <section id="tir" class="content-section">
                 <div class="category-group-container two-columns" id="tir-group-container"></div>
             </section>
-
-            <!-- Les sections véhicules s'ajouteront ici -->
-
         </main>
         
         <footer id="main-footer">
-            Checklist v3.5 • G/ Maheux
+            Checklist v3.6 • G/ Maheux
         </footer>
     </div>
 
     <script>
-        // Données par défaut
         const DEFAULT_PATROUILLE_DATA = {
             "Mobilité": ["Plein?", "Télépeage?","Bon ESCOTA?"],
             "Sécurité": ["CPS : PSA? UMP? G36? T7?"],
@@ -604,75 +646,114 @@
             "Panneau molle": ["Dépistages Stup", "Embout alcoo", "Doc terrain"] 
         };
 
-        // Configuration Globale
         let CHECKLIST_DATA = {
-            patrouille: JSON.parse(JSON.stringify(DEFAULT_PATROUILLE_DATA)), // Deep copy
-            tm: {
-                "Munitions": ["Chargeur supplémentaires"],
-                "Grenades": ["GENL?", "MP7?"],
-                "Petit +": ["Drone"]
-            },
-            forcene: {
-                "Matériel PC": ["Lot PC (Tableaux, Dossier papier, Marqueurs)"],
-                "Camo": ["Ghillie"],
-                "AFI": ["LBD40"], 
-                 "Petit +": ["Drone"]
-            },
-            mo: { 
-                "Matériel & Munitions": ["Jambières MO avec Grenades", "Sac MO", "Boucliers MO"],
-                "Armement chargé dans le VL?": ["LBD40"],
-                "Petit +": ["Eau", "Casse -croûte?"]
-            },
-            reco: {
-                "Sécurité": ["CPS : PSA?"], 
-                "Matériel Reco": ["Tenue adaptée", "SAC Reco", "Brassard", "Carte Pro", "PASS"],
-                "Tech Reco": ["Drone", "Ecouteurs Bluetooth","Mesures : Lacet? Metre?"]
-            },
-            tir: {
-                "Armement": ["Armes : PSA? G36? UMP? FAP?", "Munitions"],
-                "Matériel": ["Caisse de tir", "Caisse lunettes", "Porte cibles", "Cibles"],
-                "Petit +": ["Boite munition de service", "Eau", "Casse-croûte?"]
-            }
+            patrouille: JSON.parse(JSON.stringify(DEFAULT_PATROUILLE_DATA)), 
+            tm: { "Munitions": ["Chargeur supplémentaires"], "Grenades": ["GENL?", "MP7?"], "Petit +": ["Drone"] },
+            forcene: { "Matériel PC": ["Lot PC"], "Camo": ["Ghillie"], "AFI": ["LBD40"], "Petit +": ["Drone"] },
+            mo: { "Matériel & Munitions": ["Jambières MO", "Sac MO", "Boucliers MO"], "Armement": ["LBD40"], "Petit +": ["Eau", "Casse -croûte?"] },
+            reco: { "Sécurité": ["CPS : PSA?"], "Matériel Reco": ["Tenue adaptée", "SAC Reco", "Brassard", "Carte Pro", "PASS"], "Tech Reco": ["Drone", "Ecouteurs Bluetooth","Mesures"] },
+            tir: { "Armement": ["Armes", "Munitions"], "Matériel": ["Caisse de tir", "Caisse lunettes", "Porte cibles", "Cibles"], "Petit +": ["Boite mun", "Eau"] }
         };
         
         let checklistState = JSON.parse(localStorage.getItem('quickChecklistState')) || {};
-        
-        // Nouvelle gestion : Liste des véhicules ajoutés (tableau d'objets)
         let addedVehicles = JSON.parse(localStorage.getItem('addedVehicles')) || []; 
-
-        // --- SCANNER LOGIC ROBUSTE ---
-        let html5QrCode = null; // Instance unique
+        let html5QrCode = null;
+        let currentContextMenuTarget = null; // Store ID of vehicle being modified
 
         function showNotification(message, type = 'success') {
             const toast = document.getElementById('notification-toast');
             const msgSpan = document.getElementById('notification-message');
             const icon = toast.querySelector('.material-symbols-outlined');
-            
             msgSpan.textContent = message;
             toast.style.background = type === 'error' ? 'rgba(239, 68, 68, 0.9)' : 'rgba(34, 197, 94, 0.9)';
             icon.textContent = type === 'error' ? 'error' : 'check_circle';
-            
             toast.classList.add('show');
-            setTimeout(() => {
-                toast.classList.remove('show');
-            }, 5000); 
+            setTimeout(() => { toast.classList.remove('show'); }, 5000); 
         }
 
+        // --- CONTEXT MENU LOGIC ---
+        function openContextMenu(vehicleId, vehicleName) {
+            currentContextMenuTarget = vehicleId;
+            document.getElementById('ctx-menu-title').textContent = vehicleName;
+            document.getElementById('tab-context-menu').classList.add('active');
+        }
+
+        function closeContextMenu() {
+            document.getElementById('tab-context-menu').classList.remove('active');
+            currentContextMenuTarget = null;
+        }
+
+        function deleteTargetTab() {
+            if (!currentContextMenuTarget) return;
+            
+            // Remove from addedVehicles
+            const vehicleIndex = addedVehicles.findIndex(v => generateIdFromName(v.vehicule) === currentContextMenuTarget);
+            if (vehicleIndex > -1) {
+                addedVehicles.splice(vehicleIndex, 1);
+                localStorage.setItem('addedVehicles', JSON.stringify(addedVehicles));
+            }
+            
+            // Remove Checklist State for this vehicle
+            Object.keys(checklistState).forEach(key => {
+                if (key.startsWith(currentContextMenuTarget)) {
+                    delete checklistState[key];
+                }
+            });
+            localStorage.setItem('quickChecklistState', JSON.stringify(checklistState));
+
+            // Reload Page to refresh cleanly (simpler than DOM manipulation for tabs)
+            location.reload();
+        }
+
+        function resetTargetTab() {
+            if (!currentContextMenuTarget) return;
+            
+            // Clear only keys starting with this vehicle ID
+            Object.keys(checklistState).forEach(key => {
+                if (key.startsWith(currentContextMenuTarget)) {
+                    delete checklistState[key];
+                }
+            });
+            localStorage.setItem('quickChecklistState', JSON.stringify(checklistState));
+            
+            // Update UI
+            document.querySelectorAll(`#${currentContextMenuTarget} .checklist-module.checked`).forEach(el => {
+                el.classList.remove('checked');
+                el.querySelector('input').checked = false;
+                el.querySelector('.checkmark').textContent = 'radio_button_unchecked';
+            });
+            
+            updateProgress();
+            closeContextMenu();
+            showNotification("Onglet réinitialisé");
+        }
+
+        function moveTargetTabToFront() {
+             if (!currentContextMenuTarget) return;
+             
+             const vehicleIndex = addedVehicles.findIndex(v => generateIdFromName(v.vehicule) === currentContextMenuTarget);
+             if (vehicleIndex > 0) {
+                 const vehicle = addedVehicles.splice(vehicleIndex, 1)[0];
+                 addedVehicles.unshift(vehicle); // Move to start
+                 localStorage.setItem('addedVehicles', JSON.stringify(addedVehicles));
+                 location.reload(); // Refresh to re-order tabs
+             } else {
+                 closeContextMenu(); // Already first
+             }
+        }
+
+        // --- SCANNER LOGIC ---
         function onScanSuccess(decodedText, decodedResult) {
-            console.log(`Scan result: ${decodedText}`);
             try {
                 const data = JSON.parse(decodedText);
-                
-                // Validation sommaire de la structure JSON
                 if (data.vehicule && data.inventaire) {
                     stopScanner();
-                    addVehicleTab(data, true); // true = save to persistence
+                    addVehicleTab(data, true); 
                     showNotification(`Véhicule ajouté : ${data.vehicule}`);
                 } else {
                     showNotification("Format QR Code invalide", "error");
                 }
             } catch (e) {
-                console.error(e);
                 showNotification("Erreur de lecture des données", "error");
             }
         }
@@ -683,10 +764,8 @@
 
         function addVehicleTab(vehicleData, savePersistence = false) {
             const vehicleId = generateIdFromName(vehicleData.vehicule);
-            const vehicleNameShort = vehicleData.vehicule.split(' ')[0]; // ex: "SHARAN"
+            const vehicleNameShort = vehicleData.vehicule.split(' ')[0];
 
-            // 1. Ajouter les données à CHECKLIST_DATA
-            // On formate les clés pour l'affichage
             const formattedInventory = {};
             for (const key in vehicleData.inventaire) {
                 const readableKey = key.replace(/_/g, ' ');
@@ -694,32 +773,42 @@
             }
             CHECKLIST_DATA[vehicleId] = formattedInventory;
 
-            // 2. Vérifier si l'onglet existe déjà pour éviter doublons
             if (document.getElementById(`tab-${vehicleId}`)) {
-                // Si existe déjà, on le met juste à jour et on switch dessus
-                // On pourrait vider la section et la refaire, mais ici on va supposer que c'est un refresh
-                // Pour simplifier, si existe, on focus juste
                 showSection(vehicleId);
                 return;
             }
 
-            // 3. Créer l'onglet de navigation
             const navMenu = document.getElementById('nav-menu-container');
             const newTab = document.createElement('div');
             newTab.className = 'nav-item vehicle-tab';
             newTab.id = `tab-${vehicleId}`;
             newTab.dataset.target = vehicleId;
             newTab.textContent = vehicleNameShort;
+            
+            // Interactions
             newTab.addEventListener('click', () => showSection(vehicleId));
+            
+            // Long Press (Mobile) & Right Click (PC) for Context Menu
+            let pressTimer;
+            newTab.addEventListener('touchstart', (e) => {
+                pressTimer = setTimeout(() => {
+                    openContextMenu(vehicleId, vehicleNameShort);
+                }, 800); // 800ms long press
+            });
+            newTab.addEventListener('touchend', () => clearTimeout(pressTimer));
+            newTab.addEventListener('touchmove', () => clearTimeout(pressTimer));
+            newTab.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+                openContextMenu(vehicleId, vehicleNameShort);
+            });
+
             navMenu.appendChild(newTab);
 
-            // 4. Créer la section de contenu
             const mainContent = document.getElementById('main-content');
             const newSection = document.createElement('section');
             newSection.id = vehicleId;
             newSection.className = 'content-section';
             
-            // Titre interne à la section
             const sectionTitle = document.createElement('h3');
             sectionTitle.style.textAlign = 'center';
             sectionTitle.style.color = 'var(--accent-blue)';
@@ -728,7 +817,6 @@
             sectionTitle.textContent = `INVENTAIRE : ${vehicleData.vehicule}`;
             newSection.appendChild(sectionTitle);
 
-            // Conteneur de la grille
             const groupContainer = document.createElement('div');
             groupContainer.className = 'category-group-container two-columns';
             groupContainer.id = `${vehicleId}-group-container`;
@@ -736,65 +824,36 @@
 
             mainContent.appendChild(newSection);
 
-            // 5. Générer le contenu de la checklist pour ce véhicule
             const col1 = document.createElement('div');
             const col2 = document.createElement('div');
             col1.className = 'category-column-wrapper';
             col2.className = 'category-column-wrapper';
             
             const [group1, group2] = splitCategories(CHECKLIST_DATA[vehicleId]);
-            
             generateChecklistModules(group1, col1, vehicleId, false);
             generateChecklistModules(group2, col2, vehicleId, false);
-
             groupContainer.appendChild(col1);
             groupContainer.appendChild(col2);
 
-            // 6. Sauvegarder si demandé
             if (savePersistence) {
-                // Vérifier si pas déjà dans la liste
                 const existingIndex = addedVehicles.findIndex(v => v.vehicule === vehicleData.vehicule);
                 if (existingIndex === -1) {
                     addedVehicles.push(vehicleData);
                     localStorage.setItem('addedVehicles', JSON.stringify(addedVehicles));
                 }
             }
-
-            // 7. Afficher le nouvel onglet
             showSection(vehicleId);
         }
 
         function startScanner() {
             document.getElementById('scanner-modal').classList.add('active');
-            
-            if (!html5QrCode) {
-                 html5QrCode = new Html5Qrcode("reader");
-            }
-            
+            if (!html5QrCode) html5QrCode = new Html5Qrcode("reader");
             const config = { fps: 10, qrbox: { width: 250, height: 250 } };
-            
-            html5QrCode.start(
-                { facingMode: "environment" }, 
-                config, 
-                onScanSuccess,
-                (errorMessage) => { }
-            ).catch(err => {
-                console.error("Erreur démarrage caméra", err);
+            html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess, () => {}).catch(err => {
                 document.getElementById('scanner-modal').classList.remove('active');
-                
                 let errorMsg = "Erreur caméra inconnue.";
-                if (err.name === "NotAllowedError" || err.toString().includes("Permission")) {
-                    errorMsg = "Accès refusé. Autorisez la caméra dans les réglages.";
-                } else if (err.name === "NotFoundError") {
-                    errorMsg = "Aucune caméra trouvée.";
-                } else if (err.name === "NotReadableError") {
-                    errorMsg = "Caméra occupée par une autre appli.";
-                } else if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
-                    errorMsg = "Sécurité : La caméra nécessite HTTPS.";
-                } else {
-                    errorMsg = "Erreur : " + err;
-                }
-                
+                if (err.name === "NotAllowedError") errorMsg = "Accès refusé. Autorisez la caméra.";
+                else if (location.protocol !== 'https:' && location.hostname !== 'localhost') errorMsg = "Sécurité : HTTPS requis.";
                 showNotification(errorMsg, "error");
             });
         }
@@ -805,7 +864,6 @@
                     document.getElementById('scanner-modal').classList.remove('active');
                     html5QrCode.clear(); 
                 }).catch(err => {
-                    console.error("Failed to stop scanner", err);
                     document.getElementById('scanner-modal').classList.remove('active');
                 });
             } else {
@@ -813,13 +871,10 @@
             }
         }
 
-        // --- CORE LOGIC ---
-
         function splitCategories(dataObject) {
             const categories = Object.keys(dataObject);
             const midIndex = Math.ceil(categories.length / 2);
-            const group1 = {};
-            const group2 = {};
+            const group1 = {}; const group2 = {};
             categories.forEach((category, index) => {
                 if (index < midIndex) group1[category] = dataObject[category];
                 else group2[category] = dataObject[category];
@@ -833,18 +888,12 @@
             const activeSectionId = localStorage.getItem('quickChecklistActiveSection') || 'patrouille';
             const allItemsInActiveSection = {};
             
-            // Si la section active est dans CHECKLIST_DATA, on l'utilise
             if (CHECKLIST_DATA[activeSectionId]) {
-                const baseData = CHECKLIST_DATA[activeSectionId] || {};
-                Object.assign(allItemsInActiveSection, baseData);
+                Object.assign(allItemsInActiveSection, CHECKLIST_DATA[activeSectionId]);
             }
-            
-            // Gestion spéciale pour l'onglet patrouille qui a des toggles
             if (activeSectionId === 'patrouille') {
                 document.querySelectorAll('.toggle-btn.active').forEach(btn => {
-                    const toggleType = btn.dataset.toggle;
-                    const toggleData = CHECKLIST_DATA[toggleType] || {};
-                    Object.assign(allItemsInActiveSection, toggleData);
+                    Object.assign(allItemsInActiveSection, CHECKLIST_DATA[btn.dataset.toggle] || {});
                 });
             }
 
@@ -854,29 +903,18 @@
                 let categoryChecked = 0;
                 categoryItems.forEach((itemText, index) => {
                     const key = `${activeSectionId}-${category}-${index}`; 
-                    if (checklistState[key]) {
-                        checkedItems++;
-                        categoryChecked++;
-                    }
+                    if (checklistState[key]) { checkedItems++; categoryChecked++; }
                 });
-                
                 const categoryKey = category.replace(/\s+/g, '-').replace(/[()]/g, ''); 
                 const titleElement = document.getElementById(`title-${activeSectionId}-${categoryKey}`);
                 if (titleElement) {
-                    const isCompleted = categoryChecked === categoryItems.length && categoryItems.length > 0;
-                    titleElement.classList.toggle('completed', isCompleted);
+                    titleElement.classList.toggle('completed', categoryChecked === categoryItems.length && categoryItems.length > 0);
                 }
             }
 
             const progress = totalItems > 0 ? (checkedItems / totalItems) * 100 : 0;
             document.getElementById('global-progress-bar').style.width = `${progress}%`;
             document.getElementById('global-progress-text').textContent = `${checkedItems}/${totalItems} (${Math.round(progress)}%)`;
-        }
-
-        function updateState(key, isChecked) {
-            checklistState[key] = isChecked;
-            localStorage.setItem('quickChecklistState', JSON.stringify(checklistState));
-            updateProgress();
         }
 
         function toggleCheckModule(event) {
@@ -890,68 +928,40 @@
             
             module.classList.toggle('checked', isChecked);
             checkbox.checked = isChecked; 
+            module.querySelector('.checkmark').textContent = isChecked ? 'check_circle' : 'radio_button_unchecked';
             
-            const icon = module.querySelector('.checkmark');
-            icon.textContent = isChecked ? 'check_circle' : 'radio_button_unchecked';
-
-            updateState(key, isChecked);
+            checklistState[key] = isChecked;
+            localStorage.setItem('quickChecklistState', JSON.stringify(checklistState));
+            updateProgress();
         }
 
         function generateChecklistModules(dataObject, parentContainer, sectionPrefix, isToggleContent = false) {
             for (const category in dataObject) {
                 if (dataObject.hasOwnProperty(category)) {
-                    
                     const categoryBlock = document.createElement('div');
                     categoryBlock.className = 'single-category-block';
-                    
-                    const headerDiv = document.createElement('div');
-                    headerDiv.className = 'category-header';
-                    
-                    const title = document.createElement('div');
-                    title.className = 'category-title';
-                    title.textContent = category.toUpperCase().replace(/_/g, ' '); // Formatage
+                    const headerDiv = document.createElement('div'); headerDiv.className = 'category-header';
+                    const title = document.createElement('div'); title.className = 'category-title';
+                    title.textContent = category.toUpperCase().replace(/_/g, ' '); 
                     title.id = `title-${sectionPrefix}-${category.replace(/\s+/g, '-').replace(/[()]/g, '')}`; 
-                    headerDiv.appendChild(title);
-                    categoryBlock.appendChild(headerDiv);
-                    
-                    const grid = document.createElement('div');
-                    grid.className = 'checklist-grid';
+                    headerDiv.appendChild(title); categoryBlock.appendChild(headerDiv);
+                    const grid = document.createElement('div'); grid.className = 'checklist-grid';
                     categoryBlock.appendChild(grid);
                     
-                    const items = dataObject[category];
-                    items.forEach((itemText, index) => {
+                    dataObject[category].forEach((itemText, index) => {
                         const key = `${sectionPrefix}-${category}-${index}`;
                         const isChecked = checklistState[key] || false;
-
                         const module = document.createElement('label');
                         module.className = 'checklist-module';
                         module.dataset.key = key;
-                        module.setAttribute('tabindex', '0'); 
-                        
                         if (isToggleContent) module.classList.add('toggle-added-item');
                         if (isChecked) module.classList.add('checked');
 
-                        const checkbox = document.createElement('input');
-                        checkbox.type = 'checkbox';
-                        checkbox.checked = isChecked;
-                        checkbox.id = key; 
-                        module.appendChild(checkbox);
-
-                        const textSpan = document.createElement('span');
-                        textSpan.className = 'checklist-module-label';
-                        textSpan.textContent = itemText;
-                        module.appendChild(textSpan);
-
-                        const icon = document.createElement('span');
-                        icon.className = 'material-symbols-outlined checkmark';
-                        icon.textContent = isChecked ? 'check_circle' : 'radio_button_unchecked';
-                        module.appendChild(icon);
+                        const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.checked = isChecked; checkbox.id = key; module.appendChild(checkbox);
+                        const textSpan = document.createElement('span'); textSpan.className = 'checklist-module-label'; textSpan.textContent = itemText; module.appendChild(textSpan);
+                        const icon = document.createElement('span'); icon.className = 'material-symbols-outlined checkmark'; icon.textContent = isChecked ? 'check_circle' : 'radio_button_unchecked'; module.appendChild(icon);
 
                         module.addEventListener('click', toggleCheckModule);
-                        module.addEventListener('keydown', (e) => {
-                            if (e.key === ' ' || e.key === 'Enter') toggleCheckModule(e);
-                        });
-                        
                         grid.appendChild(module);
                     });
                     parentContainer.appendChild(categoryBlock);
@@ -971,133 +981,88 @@
 
         function showSection(targetId) {
             document.querySelectorAll('.content-section').forEach(section => section.classList.remove('active'));
-            // Sécuriser l'accès à l'élément (cas où l'ID n'existe pas encore)
             const targetSection = document.getElementById(targetId);
-            if (targetSection) {
-                targetSection.classList.add('active');
-            } else {
-                // Fallback si la section n'existe pas (ex: véhicule supprimé mais ID en mémoire)
-                document.getElementById('patrouille').classList.add('active');
-                targetId = 'patrouille';
-            }
-
+            if (targetSection) targetSection.classList.add('active');
+            else { document.getElementById('patrouille').classList.add('active'); targetId = 'patrouille'; }
             document.querySelectorAll('.nav-item').forEach(btn => btn.classList.toggle('active', btn.dataset.target === targetId));
             localStorage.setItem('quickChecklistActiveSection', targetId);
             updateProgress(); 
         }
 
         function initializeChecklists() {
-            // Initialisation des listes statiques
-            const patrouilleContainer = document.getElementById('patrouille-group-container');
-            patrouilleContainer.innerHTML = '';
-            
-            const col1 = document.createElement('div');
-            const col2 = document.createElement('div');
-            col1.className = 'category-column-wrapper';
-            col2.className = 'category-column-wrapper';
-            
+            const patrouilleContainer = document.getElementById('patrouille-group-container'); patrouilleContainer.innerHTML = '';
+            const col1 = document.createElement('div'); const col2 = document.createElement('div'); col1.className = 'category-column-wrapper'; col2.className = 'category-column-wrapper';
             const [group1, group2] = splitCategories(CHECKLIST_DATA.patrouille);
-            
-            generateChecklistModules(group1, col1, 'patrouille', false);
-            generateChecklistModules(group2, col2, 'patrouille', false);
+            generateChecklistModules(group1, col1, 'patrouille', false); generateChecklistModules(group2, col2, 'patrouille', false);
+            patrouilleContainer.appendChild(col1); patrouilleContainer.appendChild(col2);
 
-            patrouilleContainer.appendChild(col1);
-            patrouilleContainer.appendChild(col2);
+            const toggleTmContainer = document.querySelector('#toggle-tm .category-group-container'); toggleTmContainer.innerHTML = ''; 
+            const tmCol1 = document.createElement('div'); tmCol1.className = 'category-column-wrapper'; generateChecklistModules(CHECKLIST_DATA.tm, tmCol1, 'patrouille', true); toggleTmContainer.appendChild(tmCol1);
 
-            // Toggles
-            const toggleTmContainer = document.querySelector('#toggle-tm .category-group-container');
-            toggleTmContainer.innerHTML = ''; 
-            const tmCol1 = document.createElement('div'); tmCol1.className = 'category-column-wrapper';
-            generateChecklistModules(CHECKLIST_DATA.tm, tmCol1, 'patrouille', true); 
-            toggleTmContainer.appendChild(tmCol1);
+            const toggleForceneContainer = document.querySelector('#toggle-forcene .category-group-container'); toggleForceneContainer.innerHTML = '';
+            const forceneCol1 = document.createElement('div'); forceneCol1.className = 'category-column-wrapper'; generateChecklistModules(CHECKLIST_DATA.forcene, forceneCol1, 'patrouille', true); toggleForceneContainer.appendChild(forceneCol1);
 
-            const toggleForceneContainer = document.querySelector('#toggle-forcene .category-group-container');
-            toggleForceneContainer.innerHTML = '';
-            const forceneCol1 = document.createElement('div'); forceneCol1.className = 'category-column-wrapper';
-            generateChecklistModules(CHECKLIST_DATA.forcene, forceneCol1, 'patrouille', true);
-            toggleForceneContainer.appendChild(forceneCol1);
+            const toggleMoContainer = document.querySelector('#toggle-mo .category-group-container'); toggleMoContainer.innerHTML = '';
+            const moCol1 = document.createElement('div'); moCol1.className = 'category-column-wrapper'; generateChecklistModules(CHECKLIST_DATA.mo, moCol1, 'patrouille', true); toggleMoContainer.appendChild(moCol1);
 
-            const toggleMoContainer = document.querySelector('#toggle-mo .category-group-container');
-            toggleMoContainer.innerHTML = '';
-            const moCol1 = document.createElement('div'); moCol1.className = 'category-column-wrapper';
-            generateChecklistModules(CHECKLIST_DATA.mo, moCol1, 'patrouille', true);
-            toggleMoContainer.appendChild(moCol1);
-
-            // Autres sections statiques
-            const recoContainer = document.getElementById('reco-group-container');
-            recoContainer.innerHTML = '';
+            const recoContainer = document.getElementById('reco-group-container'); recoContainer.innerHTML = '';
             const [recoGroup1, recoGroup2] = splitCategories(CHECKLIST_DATA.reco);
-            const recoCol1 = document.createElement('div'); recoCol1.className = 'category-column-wrapper';
-            const recoCol2 = document.createElement('div'); recoCol2.className = 'category-column-wrapper';
-            generateChecklistModules(recoGroup1, recoCol1, 'reco', false);
-            generateChecklistModules(recoGroup2, recoCol2, 'reco', false);
-            recoContainer.appendChild(recoCol1);
-            recoContainer.appendChild(recoCol2);
+            const recoCol1 = document.createElement('div'); recoCol1.className = 'category-column-wrapper'; const recoCol2 = document.createElement('div'); recoCol2.className = 'category-column-wrapper';
+            generateChecklistModules(recoGroup1, recoCol1, 'reco', false); generateChecklistModules(recoGroup2, recoCol2, 'reco', false);
+            recoContainer.appendChild(recoCol1); recoContainer.appendChild(recoCol2);
             
-            const tirContainer = document.getElementById('tir-group-container');
-            tirContainer.innerHTML = '';
+            const tirContainer = document.getElementById('tir-group-container'); tirContainer.innerHTML = '';
             const [tirGroup1, tirGroup2] = splitCategories(CHECKLIST_DATA.tir);
-            const tirCol1 = document.createElement('div'); tirCol1.className = 'category-column-wrapper';
-            const tirCol2 = document.createElement('div'); tirCol2.className = 'category-column-wrapper';
-            generateChecklistModules(tirGroup1, tirCol1, 'tir', false);
-            generateChecklistModules(tirGroup2, tirCol2, 'tir', false);
-            tirContainer.appendChild(tirCol1);
-            tirContainer.appendChild(tirCol2);
+            const tirCol1 = document.createElement('div'); tirCol1.className = 'category-column-wrapper'; const tirCol2 = document.createElement('div'); tirCol2.className = 'category-column-wrapper';
+            generateChecklistModules(tirGroup1, tirCol1, 'tir', false); generateChecklistModules(tirGroup2, tirCol2, 'tir', false);
+            tirContainer.appendChild(tirCol1); tirContainer.appendChild(tirCol2);
 
-            // Initialisation des onglets véhicules persistants
-            if (addedVehicles.length > 0) {
-                addedVehicles.forEach(vehicle => {
-                    addVehicleTab(vehicle, false); // false car déjà dans localStorage
-                });
-            }
+            if (addedVehicles.length > 0) addedVehicles.forEach(vehicle => addVehicleTab(vehicle, false));
         }
 
         document.addEventListener('DOMContentLoaded', () => {
             initializeChecklists(); 
 
-            // Délégation d'événement ou réattachement pour les items statiques
             document.querySelectorAll('.nav-item:not(.vehicle-tab)').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    showSection(btn.dataset.target);
-                });
+                btn.addEventListener('click', () => showSection(btn.dataset.target));
             });
             
             document.querySelectorAll('.toggle-btn').forEach(btn => {
                 btn.addEventListener('click', handleToggle);
                 const toggleType = btn.dataset.toggle;
-                const isSavedActive = localStorage.getItem(`toggle-${toggleType}-active`) === 'true';
-                if (isSavedActive) {
-                    btn.classList.add('active');
-                    document.getElementById(`toggle-${toggleType}`).classList.add('active');
+                if (localStorage.getItem(`toggle-${toggleType}-active`) === 'true') {
+                    btn.classList.add('active'); document.getElementById(`toggle-${toggleType}`).classList.add('active');
                 }
             });
             
-            const activeSection = localStorage.getItem('quickChecklistActiveSection') || 'patrouille';
-            showSection(activeSection);
+            showSection(localStorage.getItem('quickChecklistActiveSection') || 'patrouille');
             
             const dockMenu = document.getElementById('dockMenu'); 
             const dockToggleBtn = document.getElementById('dockToggleBtn');
             const darkModeToggle = document.getElementById('darkModeToggle');
             const darkModeIcon = document.getElementById('darkModeIcon');
             const resetBtn = document.getElementById('resetBtn');
-            
-            // --- Scan Events ---
             const scanBtn = document.getElementById('scanBtn');
             const closeScannerBtn = document.getElementById('closeScannerBtn');
             
+            // Context Menu Buttons
+            document.getElementById('ctx-delete-btn').addEventListener('click', deleteTargetTab);
+            document.getElementById('ctx-reset-btn').addEventListener('click', resetTargetTab);
+            document.getElementById('ctx-move-btn').addEventListener('click', moveTargetTabToFront);
+            document.getElementById('ctx-cancel-btn').addEventListener('click', closeContextMenu);
+            document.getElementById('tab-context-menu').addEventListener('click', (e) => {
+                if(e.target.id === 'tab-context-menu') closeContextMenu();
+            });
+
             scanBtn.addEventListener('click', startScanner);
-            
             closeScannerBtn.addEventListener('click', stopScanner); 
 
-            if (localStorage.getItem('dockCollapsedCheck') === 'true') { 
-                dockMenu.classList.add('collapsed'); 
-            }
+            if (localStorage.getItem('dockCollapsedCheck') === 'true') dockMenu.classList.add('collapsed'); 
             dockToggleBtn.addEventListener('click', (event) => { 
                 event.stopPropagation(); 
                 dockMenu.classList.toggle('collapsed'); 
                 localStorage.setItem('dockCollapsedCheck', dockMenu.classList.contains('collapsed')); 
-                const icon = dockToggleBtn.querySelector('.material-symbols-outlined');
-                icon.textContent = dockMenu.classList.contains('collapsed') ? 'expand_less' : 'expand_more';
+                dockToggleBtn.querySelector('.material-symbols-outlined').textContent = dockMenu.classList.contains('collapsed') ? 'expand_less' : 'expand_more';
             });
 
             const isDarkMode = localStorage.getItem('themeCheck') !== 'light';
@@ -1114,20 +1079,16 @@
             });
 
             resetBtn.addEventListener('click', () => {
-                const confirmation = window.confirm("Réinitialiser tout ? (Effacera les cases et TOUS les véhicules ajoutés)");
-                if (confirmation) {
+                if (window.confirm("Réinitialiser tout ? (Effacera les cases et TOUS les véhicules ajoutés)")) {
                     localStorage.removeItem('quickChecklistState');
                     localStorage.removeItem('toggle-tm-active');
                     localStorage.removeItem('toggle-forcene-active');
                     localStorage.removeItem('toggle-mo-active');
-                    
                     localStorage.removeItem('addedVehicles');
                     localStorage.removeItem('quickChecklistActiveSection');
-                    
                     location.reload(); 
                 } 
             });
-            
             updateProgress();
         });
     </script>
