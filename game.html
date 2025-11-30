@@ -197,15 +197,14 @@
 
     <script>
         /**
-         * GILETTE TAKEDOWN V4 - TACTICAL FLASHBANG IMPLEMENTED
-         * * IMPROVEMENTS (03/12/2025):
-         * - Implemented Planning Mode switching (MOVE/FLASH)
-         * - Added Operator.flashPath for planning grenade trajectory
-         * - Introduced FlashbangProjectile class for execution
-         * - Reworked input handling to support both path drawing and flash path drawing
-         * - Enhanced Muzzle Flash visual effect
-         * * * FIX (04/12/2025):
-         * - Added null checks for Game.selected in Game.loop to prevent crash when nothing is selected.
+         * GILETTE TAKEDOWN V5 - VISUAL AND TACTICAL REFACTOR
+         * * IMPROVEMENTS (05/12/2025):
+         * - REDUCED ENTITY SIZE (rad 16 -> 10) for finer control and smaller hitbox.
+         * - OPERATOR VISUAL: Changed to a triangle (isosceles) shape to clearly show direction/facing.
+         * - ENEMY VISUAL: Retained circle but reduced size.
+         * - MUZZLE FLASH: Significantly enhanced visual feedback upon firing.
+         * - HIT FEEDBACK: Increased blood particle count upon damage.
+         * - Fixed null check crash in loop function.
          */
 
         // --- UTILS & MATH ---
@@ -235,8 +234,9 @@
                 wall: '#1e293b', floor: '#0f172a', op: '#3b82f6', enemy: '#ef4444', hostage: '#10b981',
                 grid: 'rgba(59, 130, 246, 0.05)', bullet: '#fbbf24', flash: '#facc15'
             },
-            op: { speed: 2.5, rad: 16, view: 350, fov: Math.PI / 1.8, reloadTime: 120, flashCD: 300, turnPauseDuration: 15, flashRange: 200 }, // 15 frames for tactical pause
-            enemy: { speed: 1.2, rad: 16, view: 280, fov: Math.PI / 2.2, fireRate: 40 },
+            // REDUCED SIZE FOR OPERATORS AND ENEMIES
+            op: { speed: 2.5, rad: 10, view: 350, fov: Math.PI / 1.8, reloadTime: 120, flashCD: 300, turnPauseDuration: 15, flashRange: 200 },
+            enemy: { speed: 1.2, rad: 10, view: 280, fov: Math.PI / 2.2, fireRate: 40 },
             bullet: { speed: 20, damage: 35 },
             flash: { speed: 10, rad: 5, stunDuration: 180 },
             w: 0, h: 0, // set on resize
@@ -262,7 +262,7 @@
             constructor(x, y, type) {
                 this.x = x; this.y = y; this.type = type;
                 this.life = 1.0;
-                const speed = type === 'blood' ? 2 : (type === 'spark' ? 6 : 1);
+                const speed = type === 'blood' ? 3 : (type === 'spark' ? 7 : 1); // Increased speed for visual feedback
                 const angle = Math.random() * Math.PI * 2;
                 this.vx = Math.cos(angle) * Math.random() * speed;
                 this.vy = Math.sin(angle) * Math.random() * speed;
@@ -337,7 +337,8 @@
             hit(dmg) {
                 if(!this.active) return;
                 this.hp -= dmg;
-                Game.spawnParticles(this.pos.x, this.pos.y, 8, 'blood');
+                // INCREASED particles for better hit feedback
+                Game.spawnParticles(this.pos.x, this.pos.y, 15, 'blood'); 
                 Game.camera.addShake(1);
                 if(this.hp <= 0) {
                     this.active = false;
@@ -459,17 +460,32 @@
                 }
                 
                 ctx.rotate(this.angle);
-                // Body
+                // Body - Now a Triangle
                 ctx.fillStyle = this.flashTimer > 0 ? 'rgba(255, 255, 255, 0.5)' : CFG.colors.op;
-                ctx.beginPath(); ctx.arc(0,0, this.rad, 0, Math.PI*2); ctx.fill();
-                // Arms/Gun
-                ctx.fillStyle = '#1e293b'; ctx.fillRect(0, -6, 24, 12);
+                ctx.beginPath();
+                const r = this.rad;
+                // Triangle points (Nose forward, base back)
+                ctx.moveTo(r * 1.5, 0);
+                ctx.lineTo(-r, r * 0.8);
+                ctx.lineTo(-r, -r * 0.8);
+                ctx.closePath();
+                ctx.fill();
                 
-                // Muzzle Flash Effect
+                // Arms/Gun (adjusted for new body size)
+                ctx.fillStyle = '#1e293b'; ctx.fillRect(r * 0.5, -4, r * 1.5, 8);
+                
+                // Muzzle Flash Effect (ENHANCED VISUALLY)
                 if (this.cooldown > 0 && this.cooldown < 4) {
-                    const flashSize = 6 + (4 - this.cooldown) * 2;
+                    const flashSize = 8 + (4 - this.cooldown) * 4;
                     ctx.fillStyle = CFG.colors.bullet;
-                    ctx.beginPath(); ctx.arc(24, 0, flashSize, -Math.PI/4, Math.PI/4); ctx.fill();
+                    ctx.beginPath(); 
+                    // Draw a cone shape from the gun barrel
+                    ctx.moveTo(r * 2, 0); 
+                    ctx.lineTo(r * 2 + flashSize * 0.8, -flashSize * 0.5);
+                    ctx.lineTo(r * 2 + flashSize, 0);
+                    ctx.lineTo(r * 2 + flashSize * 0.8, flashSize * 0.5);
+                    ctx.closePath();
+                    ctx.fill();
                 }
 
                 ctx.restore();
@@ -548,8 +564,12 @@
                 
                 ctx.fillStyle = this.stunTimer > 0 ? 'rgba(128, 128, 128, 0.8)' : CFG.colors.enemy;
                 ctx.beginPath(); ctx.arc(0,0, this.rad, 0, Math.PI*2); ctx.fill();
-                // Mask / Face
-                ctx.fillStyle = '#000'; ctx.fillRect(4, -5, 8, 10);
+                
+                // Gun/Arms (simple rectangle)
+                ctx.fillStyle = '#1e293b'; ctx.fillRect(this.rad * 0.5, -4, this.rad * 1.5, 8);
+                
+                // Mask / Face (Visual indicator of direction/eyes)
+                ctx.fillStyle = '#000'; ctx.fillRect(this.rad * 0.4, -4, 4, 8);
                 
                 if(this.state === 'COMBAT') {
                     ctx.fillStyle = '#fbbf24'; ctx.font="bold 20px Rajdhani"; ctx.fillText("!", -5, -20);
@@ -563,13 +583,13 @@
         }
 
         class Hostage extends Entity {
-            constructor(x, y) { super(x, y, 'civil'); this.rad = 14; this.evacuated = false; }
+            constructor(x, y) { super(x, y, 'civil'); this.rad = 10; this.evacuated = false; } // Reduced size
             draw(ctx) {
                 if(!this.active || this.evacuated) return;
                 ctx.fillStyle = CFG.colors.hostage;
                 ctx.beginPath(); ctx.arc(this.pos.x, this.pos.y, this.rad, 0, Math.PI*2); ctx.fill();
                 // Hands tied visual
-                ctx.fillStyle = '#d1fae5'; ctx.beginPath(); ctx.arc(this.pos.x, this.pos.y, 10, 0, Math.PI*2); ctx.stroke();
+                ctx.fillStyle = '#d1fae5'; ctx.beginPath(); ctx.arc(this.pos.x, this.pos.y, 8, 0, Math.PI*2); ctx.stroke();
             }
         }
         
@@ -598,7 +618,6 @@
                 for(let t of targets) {
                     if(Dist(nextPos, t.pos) < t.rad) {
                         t.hit(CFG.bullet.damage);
-                        Game.spawnParticles(t.pos.x, t.pos.y, 5, 'blood');
                         this.active = false;
                         return;
                     }
