@@ -337,8 +337,15 @@
         .dock-menu-item:hover { 
             color: var(--text-primary); background: rgba(255,255,255,0.1); transform: scale(1.1); 
         }
-        /* Dock Toggle (Hidden on PC, visible on Mobile) */
-        .dock-toggle-btn { display: none; }
+        
+        /* Styles pour le mode "collapsed" du Dock */
+        .dock-menu.collapsed { 
+            padding: 15px 5px; /* Réduit le padding horizontal */
+        }
+        .dock-menu.collapsed .dock-menu-item:not(#dockToggleBtn) { 
+            display: none; /* Cache tout sauf le bouton toggle */
+        }
+        #dockToggleBtn { color: var(--accent-blue); }
 
         /* --- MODALS & POPUPS --- */
         .item-description-popup { 
@@ -373,6 +380,9 @@
                 top: auto; bottom: 20px; left: 50%; transform: translateX(-50%);
                 flex-direction: row; width: auto; padding: 10px 20px;
             }
+            .dock-menu.collapsed {
+                width: auto; padding: 10px;
+            }
         }
         
         @media (max-width: 600px) {
@@ -390,6 +400,8 @@
     
     <!-- DOCK MENU -->
     <div class="dock-menu" id="dockMenu">
+        <!-- Bouton Toggle ajouté -->
+        <div class="dock-menu-item" id="dockToggleBtn" title="Réduire"><span class="material-symbols-outlined">expand_more</span></div>
         <a href="index.html" class="dock-menu-item" title="Accueil"><span class="material-icons">home</span></a>
         <div class="dock-menu-item" id="darkModeToggle" title="Mode Jour/Nuit"><span class="material-symbols-outlined" id="darkModeIcon">nightlight</span></div>
         <div class="dock-menu-item" onclick="document.getElementById('recap').scrollIntoView({ behavior: 'smooth' });" title="Voir Panier"><span class="material-icons">shopping_cart</span></div>
@@ -629,6 +641,33 @@
                     localStorage.setItem('showPopupConfigurator', 'false');
                 }
             }
+            
+            // --- DOCK COLLAPSE LOGIC ---
+            const dockMenu = document.getElementById('dockMenu');
+            const dockToggleBtn = document.getElementById('dockToggleBtn');
+            const dockToggleIcon = dockToggleBtn.querySelector('.material-symbols-outlined');
+
+            function updateDockState() {
+                const isCollapsed = dockMenu.classList.contains('collapsed');
+                dockToggleIcon.textContent = isCollapsed ? 'expand_less' : 'expand_more';
+                // Rotation visuelle optionnelle en plus du changement d'icône si souhaité par CSS
+            }
+
+            if (localStorage.getItem('dockCollapsed') === 'true') {
+                dockMenu.classList.add('collapsed');
+            }
+            updateDockState(); // Set initial icon
+
+            dockToggleBtn.addEventListener('click', e => {
+                e.stopPropagation();
+                dockMenu.classList.toggle('collapsed');
+                localStorage.setItem('dockCollapsed', dockMenu.classList.contains('collapsed'));
+                updateDockState();
+            });
+
+            // Fermer le dock si on clique ailleurs (uniquement sur mobile si besoin, ou désactivé pour mode PC fixe)
+            // Pour ce configurateur complexe, on garde le dock fixe ouvert/fermé par l'utilisateur.
+
             
             // --- LIGHTBOX LOGIC ---
             const lightboxOverlay = document.getElementById('lightbox-overlay');
