@@ -81,6 +81,10 @@
             content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 2px;
             background: rgba(255,255,255,0.3);
         }
+        .btn-active {
+            border-color: #fbbf24 !important;
+            box-shadow: 0 0 15px rgba(251, 191, 36, 0.5) !important;
+        }
 
         /* Animations */
         @keyframes modalPop { from { opacity: 0; transform: scale(0.9) translateY(20px); } to { opacity: 1; transform: scale(1) translateY(0); } }
@@ -139,9 +143,15 @@
                 
                 <!-- Unit Specific Controls (Only visible when a unit is selected) -->
                 <div id="unit-controls" class="flex justify-center gap-6 transition-all duration-300 opacity-0 translate-y-10">
-                    <button id="btn-flash" class="btn-tac group relative w-14 h-14 rounded-xl bg-slate-800 border border-slate-600 flex items-center justify-center hover:bg-slate-700 hover:border-yellow-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                    
+                    <button id="btn-mode-move" class="btn-tac group relative w-14 h-14 rounded-xl bg-slate-800 border border-slate-600 flex items-center justify-center hover:bg-slate-700 hover:border-blue-400 transition-colors btn-active" data-mode="MOVE">
+                        <span class="material-icons text-blue-400 group-hover:scale-110 transition-transform">directions_walk</span>
+                        <div class="absolute -bottom-6 text-[10px] font-bold text-slate-400 bg-slate-900 px-2 py-0.5 rounded">MOVE</div>
+                    </button>
+                    
+                    <button id="btn-mode-flash" class="btn-tac group relative w-14 h-14 rounded-xl bg-slate-800 border border-slate-600 flex items-center justify-center hover:bg-slate-700 hover:border-yellow-400 transition-colors" data-mode="FLASH">
                         <span class="material-icons text-yellow-400 group-hover:scale-110 transition-transform">flash_on</span>
-                        <div class="absolute -bottom-6 text-[10px] font-bold text-slate-400 bg-slate-900 px-2 py-0.5 rounded">STUN</div>
+                        <div class="absolute -bottom-6 text-[10px] font-bold text-slate-400 bg-slate-900 px-2 py-0.5 rounded">FLASH</div>
                         <div id="cd-flash" class="cooldown-bar" style="height:0%"></div>
                     </button>
                     
@@ -187,11 +197,15 @@
 
     <script>
         /**
-         * GILETTE TAKEDOWN V3 - PROFESSIONAL REMASTER
-         * * IMPROVEMENTS (02/12/2025):
-         * - Ensured all entity spawns (Operators, Enemies, Hostages) are in safe, non-colliding areas.
-         * - Improved map boundary checks in checkCollision.
-         * - Retained and refined tactical pathing logic for Operators.
+         * GILETTE TAKEDOWN V4 - TACTICAL FLASHBANG IMPLEMENTED
+         * * IMPROVEMENTS (03/12/2025):
+         * - Implemented Planning Mode switching (MOVE/FLASH)
+         * - Added Operator.flashPath for planning grenade trajectory
+         * - Introduced FlashbangProjectile class for execution
+         * - Reworked input handling to support both path drawing and flash path drawing
+         * - Enhanced Muzzle Flash visual effect
+         * * * FIX (04/12/2025):
+         * - Added null checks for Game.selected in Game.loop to prevent crash when nothing is selected.
          */
 
         // --- UTILS & MATH ---
@@ -219,11 +233,12 @@
         const CFG = {
             colors: {
                 wall: '#1e293b', floor: '#0f172a', op: '#3b82f6', enemy: '#ef4444', hostage: '#10b981',
-                grid: 'rgba(59, 130, 246, 0.05)', bullet: '#fbbf24'
+                grid: 'rgba(59, 130, 246, 0.05)', bullet: '#fbbf24', flash: '#facc15'
             },
-            op: { speed: 2.5, rad: 16, view: 350, fov: Math.PI / 1.8, reloadTime: 120, flashCD: 300, turnPauseDuration: 15 }, // 15 frames for tactical pause
+            op: { speed: 2.5, rad: 16, view: 350, fov: Math.PI / 1.8, reloadTime: 120, flashCD: 300, turnPauseDuration: 15, flashRange: 200 }, // 15 frames for tactical pause
             enemy: { speed: 1.2, rad: 16, view: 280, fov: Math.PI / 2.2, fireRate: 40 },
             bullet: { speed: 20, damage: 35 },
+            flash: { speed: 10, rad: 5, stunDuration: 180 },
             w: 0, h: 0, // set on resize
             mapW: 800, mapH: 600 // Fixed map size for consistent geometry
         };
@@ -336,9 +351,11 @@
                 super(x, y, 'blue');
                 this.rad = CFG.op.rad;
                 this.path = []; this.pathIdx = 0;
+                this.flashPath = []; // New: Stores the planned flashbang trajectory
                 this.mag = 30; this.reloadTimer = 0; this.cooldown = 0;
                 this.flashCD = 0;
-                this.turnPause = 0; // New: Timer for tactical turning pause
+                this.turnPause = 0;
+                this.flashUsed = false; // Flag to ensure flash is only launched once
             }
             update() {
                 if(!this.active) return;
@@ -352,31 +369,36 @@
                 if(this.flashTimer > 0) { this.flashTimer--; return; }
                 if(Game.state !== 'RUNNING') return;
                 
-                // Movement
+                // ACTION 1: Launch planned flashbang if not already used
+                if (this.flashPath.length > 1 && !this.flashUsed) {
+                    // Launch Flashbang
+                    Game.flashbangs.push(new FlashbangProjectile(this.pos, this.flashPath[this.flashPath.length - 1], this));
+                    this.flashUsed = true;
+                    this.flashPath = []; // Clear path once launched
+                    this.flashCD = CFG.op.flashCD;
+                }
+
+                // ACTION 2: Movement
                 if(this.path.length > 0 && this.pathIdx < this.path.length) {
                     let target = this.path[this.pathIdx];
                     let d = Dist(this.pos, target);
                     let targetAngle = AngleTo(this.pos, target);
-                    let angleDiff = Math.abs(LerpAngle(0, targetAngle - this.angle, 1)); 
-
-                    // Tactical pause logic
+                    
                     if (this.turnPause > 0) {
-                        this.angle = LerpAngle(this.angle, targetAngle, 0.4); // Still turn while paused
-                        return; // Halt movement
+                        this.angle = LerpAngle(this.angle, targetAngle, 0.4);
+                        return;
                     }
                     
-                    // Smooth rotation towards the target
                     this.angle = LerpAngle(this.angle, targetAngle, 0.2);
                     
                     if(d < CFG.op.speed) {
                         this.pos = target; 
                         this.pathIdx++;
                         
-                        // Check if new destination exists and requires significant turn
                         if (this.pathIdx < this.path.length) {
                              let nextTargetAngle = AngleTo(this.pos, this.path[this.pathIdx]);
                              let nextAngleDiff = Math.abs(LerpAngle(0, nextTargetAngle - this.angle, 1));
-                             if (nextAngleDiff > Math.PI / 4) { // Pause if turning more than 45 degrees
+                             if (nextAngleDiff > Math.PI / 4) {
                                  this.turnPause = CFG.op.turnPauseDuration;
                              }
                         }
@@ -385,9 +407,7 @@
                         const newX = this.pos.x + Math.cos(this.angle) * CFG.op.speed;
                         const newY = this.pos.y + Math.sin(this.angle) * CFG.op.speed;
                         
-                        // Collision Check
                         if(Game.checkCollision({x: newX, y: newY}, this.rad)) {
-                            // Hit a wall or closed door, stop moving on this segment
                             this.pathIdx++; 
                         } else {
                             this.pos.x = newX;
@@ -396,7 +416,7 @@
                     }
                 }
 
-                // Combat Logic (Only fire if not reloading)
+                // ACTION 3: Combat Logic (Only fire if not reloading)
                 if(this.reloadTimer > 0) return;
 
                 // Auto-Target
@@ -404,10 +424,8 @@
                 let bestT = null; let minD = Infinity;
 
                 for(let t of targets) {
-                    // Op needs good LOS, door must be almost open (0.99)
                     if(Dist(this.pos, t.pos) < CFG.op.view && Game.checkLOS(this.pos, t.pos, false, 0.99)) { 
                         let aToT = AngleTo(this.pos, t.pos);
-                        // Check if target is in the field of view cone
                         let angleDiff = Math.abs(LerpAngle(0, aToT - this.angle, 1)); 
                         if(angleDiff < CFG.op.fov/2) {
                             if(Dist(this.pos, t.pos) < minD) { minD = Dist(this.pos, t.pos); bestT = t; }
@@ -416,7 +434,7 @@
                 }
 
                 if(bestT) {
-                    this.angle = AngleTo(this.pos, bestT.pos);
+                    this.angle = LerpAngle(this.angle, AngleTo(this.pos, bestT.pos), 0.2); // Slower turn while shooting
                     if(this.cooldown <= 0 && this.mag > 0) {
                         Game.shoot(this, bestT);
                         this.cooldown = 8; this.mag--;
@@ -447,10 +465,11 @@
                 // Arms/Gun
                 ctx.fillStyle = '#1e293b'; ctx.fillRect(0, -6, 24, 12);
                 
-                // Muzzle Flash
+                // Muzzle Flash Effect
                 if (this.cooldown > 0 && this.cooldown < 4) {
-                    ctx.fillStyle = 'yellow';
-                    ctx.beginPath(); ctx.arc(28, 0, 5, -Math.PI/2, Math.PI/2); ctx.fill();
+                    const flashSize = 6 + (4 - this.cooldown) * 2;
+                    ctx.fillStyle = CFG.colors.bullet;
+                    ctx.beginPath(); ctx.arc(24, 0, flashSize, -Math.PI/4, Math.PI/4); ctx.fill();
                 }
 
                 ctx.restore();
@@ -493,7 +512,7 @@
 
                 if(target) {
                     this.state = 'COMBAT';
-                    this.angle = AngleTo(this.pos, target.pos);
+                    this.angle = LerpAngle(this.angle, AngleTo(this.pos, target.pos), 0.1);
                     if(this.shootTimer <= 0) {
                         Game.shoot(this, target);
                         this.shootTimer = CFG.enemy.fireRate;
@@ -586,7 +605,6 @@
                 }
 
                 // 2. Check wall collision (Line segment from current pos to next pos)
-                // Use a high minDoorProgress (0.99) for bullets to hit doors unless fully open.
                 if(!Game.checkLOS(this.pos, nextPos, true, 0.99)) { 
                     Game.spawnParticles(nextX, nextY, 5, 'spark');
                     Game.camera.addShake(2);
@@ -607,6 +625,68 @@
                 ctx.beginPath(); ctx.arc(this.pos.x, this.pos.y, 2, 0, Math.PI*2); ctx.fill();
             }
         }
+        
+        class FlashbangProjectile {
+             constructor(start, end, operator) {
+                this.pos = {...start};
+                this.target = {...end};
+                this.operator = operator;
+                this.angle = AngleTo(start, end);
+                const distance = Dist(start, end);
+                
+                // Calculate time to reach target based on distance and fixed speed
+                this.totalTime = Math.max(10, distance / CFG.flash.speed);
+                this.timeElapsed = 0;
+                this.active = true;
+            }
+            update() {
+                if(!this.active) return;
+                this.timeElapsed++;
+
+                // Interpolate position
+                const t = this.timeElapsed / this.totalTime;
+                
+                if (t >= 1) {
+                    this.detonate(this.target);
+                    this.active = false;
+                    return;
+                }
+                
+                const nextX = Lerp(this.pos.x, this.target.x, t);
+                const nextY = Lerp(this.pos.y, this.target.y, t);
+
+                const nextPos = Vec2(nextX, nextY);
+                
+                // Check for wall impact (This logic needs to check the entire line segment, but simple point check will do for now)
+                if(!Game.checkLOS(this.pos, nextPos, true, 0.99)) {
+                    this.detonate(this.pos);
+                    this.active = false;
+                    return;
+                }
+                
+                this.pos = nextPos;
+            }
+            detonate(position) {
+                Game.spawnParticles(position.x, position.y, 50, 'spark');
+                Game.camera.addShake(5);
+                
+                // Apply stun effect
+                Game.enemies.forEach(e => {
+                    const dist = Dist(position, e.pos);
+                    if(dist < CFG.op.flashRange) {
+                        // Check line of sight from flash point to enemy
+                        if(Game.checkLOS(position, e.pos, false, 0.99)) {
+                           e.stunTimer = CFG.flash.stunDuration;
+                        }
+                    }
+                });
+            }
+            draw(ctx) {
+                if(!this.active) return;
+                ctx.fillStyle = CFG.colors.flash;
+                ctx.beginPath(); ctx.arc(this.pos.x, this.pos.y, CFG.flash.rad, 0, Math.PI*2); ctx.fill();
+            }
+        }
 
 
         // --- GAME SYSTEM ---
@@ -618,10 +698,11 @@
             uictx: document.getElementById('uiCanvas').getContext('2d'),
             
             state: 'PLANNING',
+            mode: 'MOVE', // MOVE or FLASH (Planning mode)
             levelIdx: 0,
             
             // Entities
-            walls: [], doors: [], ops: [], enemies: [], hostages: [], corpses: [], particles: [], bullets: [],
+            walls: [], doors: [], ops: [], enemies: [], hostages: [], corpses: [], particles: [], bullets: [], flashbangs: [],
             camera: new Camera(),
             selected: null,
             drag: null,
@@ -630,7 +711,7 @@
             levels: [
                 {
                     name: "ZONE D'ENTRAÎNEMENT",
-                    desc: "Tracez un chemin pour votre opérateur. La porte est fermée: utilisez 'OUVRIR' en phase d'Assaut ou lancez un assaut dynamique (clic sur la porte pendant l'assaut). Éliminez l'hostile.",
+                    desc: "Tracez un chemin (MOVE) pour votre opérateur. Utilisez FLASH pour tracer une trajectoire de grenade qui se lancera au début de l'assaut. La grenade étourdit les cibles dans la ligne de mire à l'explosion.",
                     setup: (w, h) => {
                         const cw = w/2; const ch = h/2;
                         Game.walls = [
@@ -652,7 +733,7 @@
                 },
                 {
                     name: "EXTRACTION VIP",
-                    desc: "Plusieurs pièces. Des patrouilles hostiles. Le VIP est retenu à l'arrière. Silence et coordination entre opérateurs sont recommandés.",
+                    desc: "Plusieurs pièces. Des patrouilles hostiles. Le VIP est retenu à l'arrière. Utilisez la coordination et la grenade FLASH pour neutraliser les menaces sans vous exposer.",
                     setup: (w, h) => {
                         const cw = w/2; const ch = h/2;
                         Game.walls = [
@@ -701,17 +782,19 @@
                 
                 this.canvas.addEventListener('mousedown', tHandler);
                 this.canvas.addEventListener('mousemove', tHandler);
-                window.addEventListener('mouseup', (e) => { this.drag = null; this.updateUnitUI(); });
+                window.addEventListener('mouseup', (e) => { this.drag = null; this.endDrag(); this.updateUnitUI(); });
                 
                 this.canvas.addEventListener('touchstart', tHandler, {passive: false});
                 this.canvas.addEventListener('touchmove', tHandler, {passive: false});
-                window.addEventListener('touchend', (e) => { this.drag = null; this.updateUnitUI(); });
+                window.addEventListener('touchend', (e) => { this.drag = null; this.endDrag(); this.updateUnitUI(); });
 
                 // UI binds
                 document.getElementById('btn-execute').onclick = () => this.toggleState();
-                document.getElementById('btn-clear').onclick = () => { if(this.state === 'PLANNING') this.ops.forEach(o => o.path = []); };
-                document.getElementById('btn-flash').onclick = () => this.useSkill('flash');
-                document.getElementById('btn-reload').onclick = () => this.useSkill('reload');
+                document.getElementById('btn-clear').onclick = () => { if(this.state === 'PLANNING') this.ops.forEach(o => { o.path = []; o.flashPath = []; }); };
+                document.getElementById('btn-reload').onclick = () => { if(this.state === 'RUNNING') this.useSkill('reload'); };
+                
+                document.getElementById('btn-mode-move').onclick = () => this.setMode('MOVE');
+                document.getElementById('btn-mode-flash').onclick = () => this.setMode('FLASH');
 
                 this.loadLevel(0);
                 this.loop();
@@ -745,7 +828,6 @@
                 this.mapOffset.y = (screenH - canvasH) / 2;
             },
             
-            // Converts screen coordinates to map coordinates (CRITICAL for click accuracy)
             getMapCoord(clientX, clientY) {
                 const rect = this.canvas.getBoundingClientRect();
                 const scaleX = CFG.mapW / rect.width;
@@ -765,7 +847,10 @@
                 }
                 
                 // Clean up entities
-                this.walls=[]; this.doors=[]; this.ops=[]; this.enemies=[]; this.hostages=[]; this.corpses=[]; this.bullets=[]; this.particles=[];
+                this.walls=[]; this.doors=[]; this.ops=[]; this.enemies=[]; this.hostages=[]; this.corpses=[]; this.bullets=[]; this.flashbangs=[]; this.particles=[];
+                
+                // Reset flags
+                this.mode = 'MOVE';
                 
                 // Use fixed map size for setup
                 this.levels[idx].setup(CFG.mapW, CFG.mapH);
@@ -782,15 +867,36 @@
 
             toggleState() {
                 if(this.state === 'PLANNING') { 
-                    // Validate paths (must have more than 1 point)
+                    // Prepare ops for execution
                     this.ops.forEach(o => {
                         if (o.path.length <= 1) o.path = [];
+                        o.flashUsed = false; // Reset flash usage flag
                     });
                     this.state = 'RUNNING'; 
                     this.selected = null; 
                 }
                 else if (this.state === 'RUNNING') { this.state = 'PLANNING'; }
                 this.updateUIPhase();
+            },
+            
+            setMode(newMode) {
+                if (this.state !== 'PLANNING') return;
+                this.mode = newMode;
+                document.querySelectorAll('#unit-controls button[data-mode]').forEach(btn => {
+                    btn.classList.remove('btn-active');
+                });
+                document.querySelector(`#unit-controls button[data-mode="${newMode}"]`).classList.add('btn-active');
+            },
+            
+            endDrag() {
+                if (this.selected && this.state === 'PLANNING' && this.mode === 'FLASH') {
+                    // Finalize Flash Path: take only the first two points (start and target)
+                    if (this.selected.flashPath.length > 1) {
+                        this.selected.flashPath = [this.selected.pos, this.selected.flashPath[this.selected.flashPath.length - 1]];
+                    } else {
+                         this.selected.flashPath = []; // Invalid path
+                    }
+                }
             },
 
             updateUIPhase() {
@@ -815,7 +921,7 @@
             },
 
             handleInput(e) {
-                if(e.target !== this.canvas) return; // Ignore clicks outside canvas
+                if(e.target !== this.canvas) return;
                 
                 if(e.type === 'touchstart' || e.type === 'touchmove') e.preventDefault();
                 
@@ -824,38 +930,53 @@
                 const pos = this.getMapCoord(clientX, clientY);
 
                 if(e.type === 'mousedown' || e.type === 'touchstart') {
-                    // Check if clicking a door in RUNNING state (Dynamic Open/Close)
+                    // Dynamic Door Interaction (RUNNING phase)
                     if (this.state === 'RUNNING') {
                          const clickedDoor = this.doors.find(d => Dist(pos, d.center) < 40);
                          if (clickedDoor && this.ops.some(o => o.active && Dist(o.pos, clickedDoor.center) < 70)) {
                              clickedDoor.open = !clickedDoor.open;
-                             return; // Consume input
+                             return;
                          }
                     }
 
-                    // Selection Logic
+                    // Selection Logic (Always possible)
                     let clickedOp = this.ops.find(o => Dist(pos, o.pos) < 30);
                     if(clickedOp) {
                         this.selected = clickedOp;
                         this.drag = clickedOp;
                         if(this.state === 'PLANNING') {
-                            // Start new path if planning
-                            clickedOp.path = [clickedOp.pos];
-                            clickedOp.pathIdx = 0;
+                            // Start new path/flashpath depending on mode
+                            if (this.mode === 'MOVE') {
+                                clickedOp.path = [clickedOp.pos];
+                                clickedOp.pathIdx = 0;
+                            } else if (this.mode === 'FLASH') {
+                                // Only allow drawing if flash is not already planned
+                                if (!clickedOp.flashPath.length) {
+                                    clickedOp.flashPath = [clickedOp.pos];
+                                }
+                            }
                         }
                     } else {
-                        // Deselect if clicking empty space
                         this.selected = null;
+                        this.drag = null;
                     }
                     this.updateUnitUI();
                 }
                 else if ((e.type === 'mousemove' || e.type === 'touchmove') && this.drag && this.state === 'PLANNING') {
-                    // Drawing Logic
-                    let last = this.drag.path[this.drag.path.length-1];
-                    // Smoother drawing: Reduced distance threshold 
+                    let last = (this.mode === 'MOVE') ? this.drag.path[this.drag.path.length-1] : this.drag.flashPath[this.drag.flashPath.length-1];
+
                     if(Dist(pos, last) > 10) {
                         if(this.checkLOS(last, pos)) {
-                            this.drag.path.push(pos);
+                            if (this.mode === 'MOVE') {
+                                this.drag.path.push(pos);
+                            } else if (this.mode === 'FLASH') {
+                                // Only need start and end points for flash, so update the last point
+                                if (this.drag.flashPath.length === 1) {
+                                    this.drag.flashPath.push(pos);
+                                } else if (this.drag.flashPath.length > 1) {
+                                    this.drag.flashPath[1] = pos;
+                                }
+                            }
                         }
                     }
                 }
@@ -863,9 +984,9 @@
 
             // --- GAMEPLAY LOGIC ---
 
-            // Checks for line of sight/bullet path against walls and fully closed parts of doors
-            // minDoorProgress: the minimum progress (0 to 1) a door must have to NOT block LOS
+            // Checks for line of sight/bullet path against walls and doors
             checkLOS(p1, p2, checkAllDoors=false, minDoorProgress=0.99) {
+                // Check walls
                 for(let w of this.walls) {
                     const edges = [
                         [Vec2(w.x, w.y), Vec2(w.x+w.w, w.y)], [Vec2(w.x+w.w, w.y), Vec2(w.x+w.w, w.y+w.h)],
@@ -874,11 +995,10 @@
                     for(let edge of edges) if(Intersect(p1, p2, edge[0], edge[1])) return false;
                 }
                 
+                // Check doors
                 for(let d of this.doors) {
-                    if(d.progress < minDoorProgress || checkAllDoors) { // Door is not sufficiently open
-                        // Simplified check: only check the central axis of the door
+                    if(d.progress < minDoorProgress || checkAllDoors) {
                         if(d.vertical) {
-                            // Check the main line segment of the door slab
                             if(Intersect(p1, p2, Vec2(d.x, d.y + 10), Vec2(d.x, d.y + d.w - 10))) return false;
                         } else {
                             if(Intersect(p1, p2, Vec2(d.x + 10, d.y), Vec2(d.x + d.w - 10, d.y))) return false;
@@ -899,7 +1019,7 @@
                 
                 // Check doors (if closed/closing)
                 for (let d of this.doors) {
-                    if (d.progress < 0.2) { // Only treat as solid if almost fully closed
+                    if (d.progress < 0.2) {
                         if (d.vertical) {
                             const closestX = Math.max(d.x - 3, Math.min(pos.x, d.x + 3));
                             const closestY = Math.max(d.y, Math.min(pos.y, d.y + d.w));
@@ -921,27 +1041,16 @@
             },
 
             shoot(shooter, target) {
-                // Determine a point near the target for the bullet to aim at
                 const targetPoint = target.pos;
-                
-                // Apply a small random spread based on shooter accuracy
-                const spreadAngle = (Math.random() - 0.5) * 0.1; // +/- 0.05 radians
+                const spreadAngle = (Math.random() - 0.5) * 0.1;
                 const angle = AngleTo(shooter.pos, targetPoint) + spreadAngle;
                 
-                // Calculate end point far away for bullet vector
                 const farEnd = Vec2(
                     shooter.pos.x + Math.cos(angle) * 1000,
                     shooter.pos.y + Math.sin(angle) * 1000
                 );
 
                 this.bullets.push(new Bullet(shooter.pos, farEnd, shooter));
-                
-                // Muzzle flash particles
-                this.spawnParticles(
-                    shooter.pos.x + Math.cos(shooter.angle)*20, 
-                    shooter.pos.y + Math.sin(shooter.angle)*20, 
-                    5, 'spark'
-                );
                 
                 this.camera.addShake(3);
                 
@@ -957,25 +1066,17 @@
 
             useSkill(type) {
                 const u = this.selected;
-                if(!u || this.state !== 'RUNNING' || u.active === false) return;
+                if(!u || u.active === false) return;
                 
-                if(type === 'flash' && u.flashCD <= 0) {
-                    Game.spawnParticles(u.pos.x, u.pos.y, 30, 'spark');
-                    u.flashCD = CFG.op.flashCD; // Cooldown
-                    
-                    this.enemies.forEach(e => {
-                        // Stun enemies in a 200 unit radius who have LOS to the flash location
-                        if(Dist(u.pos, e.pos) < 200 && this.checkLOS(u.pos, e.pos)) e.stunTimer = 180;
-                    });
-                } else if (type === 'reload' && u.reloadTimer <= 0) {
+                if (type === 'reload' && u.reloadTimer <= 0) {
                     u.mag = 30; 
-                    u.reloadTimer = CFG.op.reloadTime; // Reload time in frames
+                    u.reloadTimer = CFG.op.reloadTime;
                 }
             },
 
             updateUnitUI() {
                 const p = document.getElementById('unit-controls');
-                const btnFlash = document.getElementById('btn-flash');
+                const btnFlash = document.getElementById('btn-mode-flash');
                 const btnReload = document.getElementById('btn-reload');
                 const ctxLayer = document.getElementById('context-layer');
                 ctxLayer.innerHTML = '';
@@ -984,7 +1085,10 @@
                     p.classList.remove('opacity-0', 'translate-y-10');
                     
                     if(this.selected instanceof Operator) {
-                        btnFlash.disabled = this.selected.flashCD > 0;
+                        // Check if flash is available (planned or on cooldown)
+                        const flashUnavailable = this.selected.flashCD > 0 || this.selected.flashPath.length > 1;
+                        btnFlash.disabled = flashUnavailable && this.state === 'PLANNING';
+                        
                         btnReload.disabled = this.selected.reloadTimer > 0;
                         
                         // Context buttons (Interactions)
@@ -1005,12 +1109,20 @@
                                 btn.onclick = () => { 
                                     h.evacuated = true; 
                                     this.updateStats(); 
-                                    this.updateUnitUI(); // Reclear context
+                                    this.updateUnitUI();
                                 };
                                 ctxLayer.appendChild(btn);
                             }
                         });
                     }
+                    // Sync mode button state
+                    document.querySelectorAll('#unit-controls button[data-mode]').forEach(btn => {
+                        if (btn.getAttribute('data-mode') === this.mode) {
+                            btn.classList.add('btn-active');
+                        } else {
+                            btn.classList.remove('btn-active');
+                        }
+                    });
 
                 } else {
                     p.classList.add('opacity-0', 'translate-y-10');
@@ -1054,8 +1166,8 @@
                 document.getElementById('modal-overlay').classList.remove('hidden');
             },
             
-            // Generate smoother path visualization using catmull-rom or simple cubic bezier approximation
-            drawSmoothedPath(ctx, path, color, isSelected) {
+            // Draw path for MOVE or FLASH
+            drawPath(ctx, path, color, isSelected) {
                 if (path.length < 2) return;
 
                 ctx.strokeStyle = color;
@@ -1066,7 +1178,6 @@
                 ctx.beginPath();
                 ctx.moveTo(path[0].x, path[0].y);
 
-                // Use simple lineTo for now, cubic is complex to implement robustly in a single file
                 for(let i = 1; i < path.length; i++) {
                     ctx.lineTo(path[i].x, path[i].y);
                 }
@@ -1092,9 +1203,10 @@
                 this.enemies.forEach(e => e.update());
                 this.particles = this.particles.filter((p, i) => { p.update(); return p.life > 0; });
                 this.bullets = this.bullets.filter((b, i) => { b.update(); return b.active; });
+                this.flashbangs = this.flashbangs.filter((f, i) => { f.update(); return f.active; });
 
                 this.updateStats();
-                this.updateUnitUI(); // Keep context actions fresh
+                // We call updateUnitUI inside updateStats to keep the context actions live in RUNNING mode
 
                 // DRAW WORLD
                 const ctx = this.ctx;
@@ -1124,14 +1236,31 @@
                 // 4. PATHS (Planning)
                 if(this.state === 'PLANNING' || this.selected) {
                     this.ops.forEach(o => {
-                        this.drawSmoothedPath(ctx, o.path, (o === this.selected) ? '#fbbf24' : 'rgba(59, 130, 246, 0.4)', (o === this.selected));
+                        const isOpSelected = (o === this.selected);
+                        
+                        // Draw Move Path
+                        this.drawPath(ctx, o.path, (isOpSelected && this.mode === 'MOVE') ? '#3b82f6' : 'rgba(59, 130, 246, 0.4)', (isOpSelected && this.mode === 'MOVE'));
+                        
+                        // Draw Flash Path
+                        if (o.flashPath.length) {
+                             this.drawPath(ctx, o.flashPath, (isOpSelected && this.mode === 'FLASH') ? CFG.colors.flash : 'rgba(250, 204, 21, 0.6)', (isOpSelected && this.mode === 'FLASH'));
+                        }
                     });
                     
                     // Input Feedback Circle
-                    if(this.drag && this.drag.path.length > 0) {
-                        let last = this.drag.path[this.drag.path.length-1];
-                        ctx.strokeStyle = '#fff'; ctx.lineWidth = 1;
-                        ctx.beginPath(); ctx.arc(last.x, last.y, 8, 0, Math.PI*2); ctx.stroke();
+                    if(this.drag && this.selected) {
+                        let path;
+                        if (this.mode === 'MOVE' && this.drag.path.length > 0) {
+                            path = this.drag.path;
+                        } else if (this.mode === 'FLASH' && this.drag.flashPath.length > 0) {
+                            path = this.drag.flashPath;
+                        }
+                        
+                        if (path) {
+                            let last = path[path.length-1];
+                            ctx.strokeStyle = '#fff'; ctx.lineWidth = 1;
+                            ctx.beginPath(); ctx.arc(last.x, last.y, 8, 0, Math.PI*2); ctx.stroke();
+                        }
                     }
                 }
 
@@ -1140,8 +1269,9 @@
                 this.ops.forEach(o => o.draw(ctx));
                 this.enemies.forEach(e => e.draw(ctx));
 
-                // 6. BULLETS (Tracer effect)
+                // 6. PROJECTILES (Bullets and Flashbangs)
                 this.bullets.forEach(b => b.draw(ctx));
+                this.flashbangs.forEach(f => f.draw(ctx));
 
                 // 7. FOG OF WAR / SHADOWS (The "Pro" Look)
                 ctx.save();
