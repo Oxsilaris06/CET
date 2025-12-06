@@ -6,11 +6,16 @@
 	<link rel="icon" href="favicon.ico" sizes="any" type="image/png">
     <link rel="icon" href="favicon.ico" type="image/svg+xml">
     <link rel="apple-touch-icon" href="favicon.ico">
-    <title>PC Tac v3.0</title>
+    <title>PC Tac v3.5 - Transfert</title>
     <!-- Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Oswald:wght@300;400;500&family=Saira+Stencil+One&display=swap" rel="stylesheet">
     <!-- Icons -->
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
+
+    <!-- Librairies Externes (QR Code Gen + Scanner + PDF) -->
+    <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
 
     <style>
         /* --- VARIABLES & THEME MODERNISÉS --- */
@@ -204,7 +209,7 @@
         .delete-btn { background: none; border: none; color: var(--trash-color); cursor: pointer; transition: color 0.2s; opacity: 0.6; }
         .delete-btn:hover { color: var(--danger-red); opacity: 1; }
 
-        /* --- DOCK MENU CORRIGÉ --- */
+        /* --- DOCK MENU --- */
         .dock-menu {
             position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
             background: var(--bg-glass-heavy); backdrop-filter: blur(15px);
@@ -212,14 +217,9 @@
             padding: 8px 15px; display: flex; align-items: center; gap: 10px;
             box-shadow: 0 10px 40px rgba(0,0,0,0.6); z-index: 1000;
             transition: width 0.3s, padding 0.3s;
-            
-            /* Gestion du débordement sur mobile */
-            max-width: 90vw; 
-            width: auto;
-            overflow-x: auto; 
-            scrollbar-width: none; /* Firefox */
+            max-width: 90vw; width: auto; overflow-x: auto; scrollbar-width: none;
         }
-        .dock-menu::-webkit-scrollbar { display: none; } /* Chrome */
+        .dock-menu::-webkit-scrollbar { display: none; } 
 
         .dock-menu.collapsed { width: 50px; height: 50px; padding: 0; justify-content: center; overflow: hidden; border-radius: 50%; }
         .dock-menu.collapsed .dock-menu-item:not(#dockToggleBtn) { display: none; }
@@ -232,35 +232,55 @@
         }
         .dock-menu-item:hover { color: var(--text-main); background: rgba(255,255,255,0.1); }
         #dockToggleBtn { color: var(--accent-blue); }
+        #transferDockBtn { color: var(--ao-green); }
 
         /* --- MODALES --- */
         .custom-modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 2000; display: none; backdrop-filter: blur(5px); }
         .custom-modal {
             position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
             background: var(--bg-body); border: 1px solid var(--border-glass); border-radius: var(--radius-md);
-            padding: 25px; width: 90%; max-width: 400px; z-index: 2001; display: none;
+            padding: 25px; width: 95%; max-width: 450px; z-index: 2001; display: none;
             box-shadow: 0 20px 50px rgba(0,0,0,0.5); text-align: center;
+            max-height: 90vh; overflow-y: auto;
         }
         .modal-buttons { display: flex; gap: 10px; margin-top: 20px; }
         .modal-buttons button { flex: 1; padding: 12px; border: none; border-radius: var(--radius-sm); cursor: pointer; font-weight: bold; }
         #confirmResetBtn { background: var(--danger-red); color: white; }
         #cancelResetBtn, #modalMessageBtn { background: rgba(255,255,255,0.1); color: var(--text-main); }
 
+        /* --- TRANSFERT MODAL STYLES --- */
+        .transfer-tabs { display: flex; gap: 10px; margin-bottom: 20px; }
+        .transfer-tab-btn {
+            flex: 1; padding: 10px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-glass);
+            color: var(--text-muted); cursor: pointer; border-radius: var(--radius-sm); font-family: var(--font-ui);
+        }
+        .transfer-tab-btn.active { background: var(--accent-blue); color: white; border-color: transparent; }
+        
+        .transfer-content { display: none; }
+        .transfer-content.active { display: block; }
+        
+        #qrcode-container {
+            background: white; padding: 20px; border-radius: var(--radius-sm); margin: 20px auto;
+            display: inline-block; max-width: 100%;
+        }
+        #qrcode-container img { margin: 0 auto; display: block; max-width: 100%; height: auto; }
+        
+        #qr-reader {
+            width: 100%; margin: 20px auto; border: 2px solid var(--accent-blue);
+            border-radius: var(--radius-sm); overflow: hidden; background: black;
+        }
+
         /* --- MOBILE RESPONSIVE (Cards) --- */
         @media (max-width: 768px) {
             .container { padding: 10px; }
             h1 { font-size: 2em; }
-            
-            /* Formulaire en colonne */
             .form-row.main-fields { display: flex; flex-direction: column; gap: 15px; }
-            /* Réorganisation ordre visuel */
             .form-row.main-fields > div:nth-child(1) { order: 1; display: flex; align-items: center; gap: 10px; }
             .form-row.main-fields > div:nth-child(1) input { width: 120px; }
             .form-row.main-fields > div:nth-child(2) { order: 2; }
             .form-row.main-fields > div:nth-child(3) { order: 3; }
             .form-row.main-fields > div:nth-child(4) { order: 4; }
 
-            /* Transformation Tableau -> Cartes */
             table, thead, tbody, th, td, tr { display: block; }
             thead { display: none; }
             
@@ -279,29 +299,14 @@
                 text-align: right;
             }
 
-            /* Labels CSS (pour ne pas toucher au HTML JS généré) */
-            td:nth-of-type(1) { /* Heure */
-                justify-content: flex-start; 
-                font-size: 1.1em;
-                border-bottom: 1px solid var(--border-glass);
-                padding-bottom: 10px; margin-bottom: 5px;
-            }
-            /* Cacher le bouton delete de la cellule heure sur mobile (on utilisera un global) */
+            td:nth-of-type(1) { justify-content: flex-start; font-size: 1.1em; border-bottom: 1px solid var(--border-glass); padding-bottom: 10px; margin-bottom: 5px; }
             td:nth-of-type(1) .delete-btn { display: none; }
-
             td:nth-of-type(2)::before { content: "Pax"; color: var(--text-muted); font-size: 0.75em; margin-right: 10px; }
             td:nth-of-type(3)::before { content: "Lieu"; color: var(--text-muted); font-size: 0.75em; margin-right: 10px; }
             td:nth-of-type(4)::before { content: "Ouvrant"; color: var(--text-muted); font-size: 0.75em; margin-right: 10px; }
-            
-            td:nth-of-type(5) { /* Remarques */
-                display: block; text-align: left;
-                background: rgba(0,0,0,0.2);
-                padding: 10px; margin-top: 10px; border-radius: 4px;
-                color: var(--text-muted); font-style: italic;
-            }
+            td:nth-of-type(5) { display: block; text-align: left; background: rgba(0,0,0,0.2); padding: 10px; margin-top: 10px; border-radius: 4px; color: var(--text-muted); font-style: italic; }
             td:nth-of-type(5)::before { content: "Notes"; display: block; font-size: 0.7em; margin-bottom: 4px; font-weight: bold; }
 
-            /* Bouton suppression flottant mobile */
             .mobile-delete-btn {
                 position: absolute; top: 15px; right: 15px;
                 background: rgba(239, 68, 68, 0.15); color: var(--danger-red);
@@ -310,14 +315,16 @@
             }
         }
         
-        .mobile-delete-btn { display: none; } /* Caché sur desktop */
+        .mobile-delete-btn { display: none; }
     </style>
 </head>
 <body class="dark-mode">
-    <!-- INPUTS CACHÉS & MODALES (Structure conservée) -->
+    <!-- INPUTS CACHÉS & MODALES -->
     <input type="file" id="jsonImportInput" accept=".json" style="display: none;">
 
     <div class="custom-modal-backdrop" id="modalBackdrop"></div>
+    
+    <!-- Modal Reset -->
     <div class="custom-modal" id="resetModal">
         <h3 style="color: var(--accent-blue); margin-bottom: 10px;">Purge Système</h3>
         <p style="color: var(--text-main);">Confirmer la suppression totale du journal d'opération ?</p>
@@ -327,11 +334,39 @@
         </div>
     </div>
     
+    <!-- Modal Message -->
     <div class="custom-modal" id="messageModal">
         <h3 id="modalMessageTitle" style="margin-bottom: 10px;">Message</h3>
         <p id="modalMessageContent" style="color: var(--text-main);"></p>
         <div class="modal-buttons">
             <button id="modalMessageBtn">OK</button>
+        </div>
+    </div>
+
+    <!-- Modal Transfert (NOUVEAU) -->
+    <div class="custom-modal" id="transferModal">
+        <h3 style="color: var(--accent-blue); margin-bottom: 15px;">Transfert Tactique</h3>
+        
+        <div class="transfer-tabs">
+            <button class="transfer-tab-btn active" data-tab="send">Envoyer (QR)</button>
+            <button class="transfer-tab-btn" data-tab="receive">Recevoir (Scan)</button>
+        </div>
+        
+        <!-- Contenu Envoyer -->
+        <div id="transfer-send" class="transfer-content active">
+            <p style="color: var(--text-muted); font-size: 0.9em;">Scanner ce code avec un autre PC Tac pour transférer les données.</p>
+            <div id="qrcode-container"></div>
+            <p id="qr-status-text" style="color: var(--civil-yellow); font-size: 0.8em; margin-top: 5px;"></p>
+        </div>
+        
+        <!-- Contenu Recevoir -->
+        <div id="transfer-receive" class="transfer-content">
+            <div id="qr-reader"></div>
+            <p style="color: var(--text-muted); font-size: 0.9em;">Pointez la caméra vers le QR Code.</p>
+        </div>
+
+        <div class="modal-buttons">
+            <button id="closeTransferBtn" style="background: rgba(255,255,255,0.1);">Fermer</button>
         </div>
     </div>
     
@@ -361,7 +396,6 @@
                  
                  <div>
                     <label>Pax / Élément</label>
-                    
                     <div id="pax_select_wrapper_standard" class="pax-select-wrapper">
                         <div class="pax-select" id="pax_select_container">
                             <span class="pax-select-option" data-pax="Adversaire">Adversaire</span>
@@ -370,7 +404,6 @@
                             <span class="pax-select-option" data-pax="AO">AO</span>
                         </div>
                     </div>
-                    
                     <div id="pax_select_wrapper_free" class="pax-select-wrapper" style="display: none;">
                         <div id="free_mode_options">
                             <div class="color-palette" id="free_color_palette"></div>
@@ -378,7 +411,6 @@
                             <input type="hidden" id="free_color_input" value="#800000" />
                         </div>
                     </div>
-                    
                     <input type="hidden" id="pax_input" required value="Adversaire">
                     <input type="hidden" id="pax_mode_input" value="standard">
                     <input type="hidden" id="pax_custom_color_input" value="#800000">
@@ -431,7 +463,7 @@
         </div>
         
 		<footer id="main-footer" style="text-align: center; margin-top: 30px; font-size: 0.7rem; color: var(--text-muted); opacity: 0.5;">
-            PC Tac v3.0 &bull; G/Maheux
+            PC Tac v3.5 &bull; G/Maheux
         </footer>
     </div>
     
@@ -439,6 +471,9 @@
     <div class="dock-menu collapsed" id="dockMenu">
         <div class="dock-menu-item" id="dockToggleBtn"><span class="material-symbols-outlined">expand_less</span></div>
         <a class="dock-menu-item" href="index.html"><span class="material-symbols-outlined">home</span></a>
+        
+        <div class="dock-menu-item" id="transferDockBtn" title="Transfert QR"><span class="material-symbols-outlined">qr_code_2</span></div>
+        
         <div class="dock-menu-item" id="exportJsonDockBtn"><span class="material-symbols-outlined">save</span></div>
         <div class="dock-menu-item" id="importJsonDockBtn"><span class="material-symbols-outlined">upload_file</span></div>
         <div class="dock-menu-item" id="darkModeToggle"><span class="material-symbols-outlined" id="darkModeIcon">nightlight</span></div>
@@ -447,8 +482,7 @@
         <div class="dock-menu-item" id="resetDataDockBtn"><span class="material-symbols-outlined" style="color: var(--danger-red);">delete_forever</span></div>
     </div>
 
-    <!-- SCRIPT ORIGINAL COMPLET (Avec fix couleur uniquement) -->
-    <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
+    <!-- SCRIPT COMPLET -->
     <script>
         const LOCAL_STORAGE_KEY = 'pcTacLogData';
         const HISTORY_STORAGE_KEY = 'pcTacHistory';
@@ -492,6 +526,13 @@
         const interventionTitleInput = document.getElementById('intervention_title_input');
         const sortTimeBtn = document.getElementById('sortTimeBtn');
         
+        // --- Nouveaux éléments Transfert ---
+        const transferDockBtn = document.getElementById('transferDockBtn');
+        const transferModal = document.getElementById('transferModal');
+        const closeTransferBtn = document.getElementById('closeTransferBtn');
+        const transferTabs = document.querySelectorAll('.transfer-tab-btn');
+        let html5QrCode;
+
         let isTimeInputManuallyChanged = false;
         let paxColorMap = {}; 
         let colorPaxMap = {};
@@ -520,7 +561,7 @@
             document.getElementById('modalMessageTitle').textContent = title;
             document.getElementById('modalMessageContent').textContent = content;
             const titleElement = document.getElementById('modalMessageTitle');
-            if (isError) { titleElement.style.color = 'var(--danger-red)'; } else { titleElement.style.color = 'var(--success-green)'; }
+            if (isError) { titleElement.style.color = 'var(--danger-red)'; } else { titleElement.style.color = 'var(--ao-green)'; }
             backdrop.style.display = 'block';
             modal.style.display = 'block';
             document.getElementById('modalMessageBtn').onclick = () => {
@@ -696,12 +737,11 @@
                 remarquesCell.style.width = '30%'; 
                 remarquesCell.textContent = entry.remarques;
 
-                // Ajout d'un bouton delete caché qui s'affichera sur mobile grâce au CSS
                 const mobileDelBtn = document.createElement('button');
                 mobileDelBtn.className = 'mobile-delete-btn';
                 mobileDelBtn.innerHTML = '<span class="material-symbols-outlined">delete</span>';
                 mobileDelBtn.onclick = function() { deleteLogEntry(entry.id); };
-                row.appendChild(mobileDelBtn); // Append direct au TR, CSS le positionnera en absolute
+                row.appendChild(mobileDelBtn); 
             });
              saveLogData(getLogData());
         }
@@ -829,7 +869,6 @@
             btn.addEventListener('click', () => setPaxMode(btn.dataset.mode));
         });
         
-        // CORRECTION BUG COULEUR ICI : J'ai commenté la ligne qui réinitialise la couleur quand on tape un nouveau nom
         freePaxInput.addEventListener('input', (e) => {
             const paxName = e.target.value.trim();
             if (paxModeInput.value === 'free') { paxInput.value = paxName; }
@@ -839,12 +878,6 @@
                 Array.from(document.getElementById('free_color_palette').querySelectorAll('.color-swatch')).forEach(s => {
                     s.classList.toggle('selected', s.dataset.color === savedColor);
                 });
-             } else {
-                 // CODE COMMENTÉ POUR FIXER LE BUG DE REINITIALISATION DE COULEUR
-                 // paxCustomColorInput.value = FREE_MODE_COLORS[0].hex;
-                 // Array.from(document.getElementById('free_color_palette').querySelectorAll('.color-swatch')).forEach((s, index) => {
-                 //    s.classList.toggle('selected', index === 0);
-                 // });
              }
         });
 
@@ -936,7 +969,8 @@
             };
             reader.readAsText(file);
         }
-        
+
+        // --- PDF UTILS (Minifié pour la place) ---
         function wrapTextForPdf(font, fontSize, text, maxWidth) {
             text = String(text || ''); const token = ' \n '; const chunks = text.replace(/\r?\n/g, token).split(' ');
             let lines = []; let currentLine = '';
@@ -949,11 +983,9 @@
             }
             lines.push(currentLine.trim()); return lines.filter(line => line.length > 0);
         }
-        
         function getPdfColors(isDarkMode, rgb) {
             return isDarkMode ? { background: rgb(0, 0, 0), text: rgb(1, 1, 1), line: rgb(1, 1, 1) } : { background: rgb(1, 1, 1), text: rgb(0, 0, 0), line: rgb(0, 0, 0) };
         }
-
         let pdfRgb; 
         async function buildPdf() {
             if (typeof PDFLib === 'undefined') { throw new Error("PDFLib non chargé."); }
@@ -1086,6 +1118,7 @@
             }
         }
 
+        // --- UI UTILS ---
         function isFullscreen() { return document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement; }
         function toggleFullscreen() {
             if (!isFullscreen()) { if (document.documentElement.requestFullscreen) { document.documentElement.requestFullscreen(); } } else { if (document.exitFullscreen) { document.exitFullscreen(); } }
@@ -1112,6 +1145,129 @@
         }
         function handleDeleteButtonClick(e) {
              if (e.target.closest('.delete-btn')) { const id = e.target.closest('.delete-btn').dataset.id; deleteLogEntry(id); }
+        }
+
+        // --- NOUVELLE LOGIQUE TRANSFERT QR (Compressée) ---
+        function openTransferModal() {
+            document.getElementById('modalBackdrop').style.display = 'block';
+            transferModal.style.display = 'block';
+            switchTransferTab('send');
+        }
+        function closeTransferModal() {
+            document.getElementById('modalBackdrop').style.display = 'none';
+            transferModal.style.display = 'none';
+            if(html5QrCode) { 
+                html5QrCode.stop().catch(err => console.log("Stop failed", err));
+                html5QrCode = null;
+            }
+        }
+        function switchTransferTab(tabName) {
+            transferTabs.forEach(t => t.classList.toggle('active', t.dataset.tab === tabName));
+            document.querySelectorAll('.transfer-content').forEach(c => c.classList.remove('active'));
+            document.getElementById(`transfer-${tabName}`).classList.add('active');
+            
+            if(tabName === 'send') {
+                if(html5QrCode) { html5QrCode.stop().then(() => html5QrCode = null); }
+                generateQR();
+            } else {
+                startScanner();
+            }
+        }
+        
+        function generateQR() {
+            const container = document.getElementById('qrcode-container');
+            container.innerHTML = '';
+            const statusText = document.getElementById('qr-status-text');
+            const logs = getLogData();
+            
+            if (logs.length === 0) {
+                container.textContent = "Aucune donnée à transférer.";
+                statusText.textContent = "";
+                return;
+            }
+
+            // --- COMPRESSION DES DONNÉES ---
+            // On mappe les objets JSON verbeux vers des tableaux simples pour gagner de la place
+            // Format: [id, heure, pax, paxMode, paxColor, lieu, fenetrePorte, remarques]
+            let compressedData = logs.map(l => [l.id, l.heure, l.pax, l.paxMode, l.paxColor, l.lieu, l.fenetrePorte, l.remarques]);
+            
+            // Titre en premier
+            let transferPayload = { t: interventionTitleInput.value, d: compressedData };
+            let jsonString = JSON.stringify(transferPayload);
+            
+            // Si trop gros pour un QR standard (~2500 chars max safe), on coupe les plus vieux
+            if (jsonString.length > 2000) {
+                const initialCount = compressedData.length;
+                while (jsonString.length > 2000 && compressedData.length > 0) {
+                    compressedData.shift(); // Enlever le plus vieux (début du tableau car trié par heure normalement)
+                    transferPayload.d = compressedData;
+                    jsonString = JSON.stringify(transferPayload);
+                }
+                statusText.textContent = `Données trop volumineuses. Les ${initialCount - compressedData.length} plus anciennes entrées ont été omises.`;
+            } else {
+                statusText.textContent = `${compressedData.length} entrées prêtes au transfert.`;
+            }
+
+            new QRCode(container, {
+                text: jsonString,
+                width: 256,
+                height: 256,
+                colorDark : "#000000",
+                colorLight : "#ffffff",
+                correctLevel : QRCode.CorrectLevel.M
+            });
+        }
+
+        function startScanner() {
+            if (html5QrCode) return; // Déjà actif
+            html5QrCode = new Html5Qrcode("qr-reader");
+            const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+            html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess)
+            .catch(err => {
+                document.getElementById('qr-reader').textContent = "Erreur caméra: " + err;
+            });
+        }
+
+        function onScanSuccess(decodedText, decodedResult) {
+            try {
+                const data = JSON.parse(decodedText);
+                if (data.d && Array.isArray(data.d)) {
+                    // Stop scan
+                    html5QrCode.stop().then(() => { html5QrCode = null; });
+                    closeTransferModal();
+
+                    // Reconstruction des données
+                    const currentLogs = getLogData();
+                    const currentIds = new Set(currentLogs.map(l => l.id));
+                    let addedCount = 0;
+
+                    if(data.t) { interventionTitleInput.value = data.t; saveTitle(); }
+
+                    // Format reçu: [id, heure, pax, paxMode, paxColor, lieu, fenetrePorte, remarques]
+                    data.d.forEach(item => {
+                        const id = item[0];
+                        if (!currentIds.has(id)) {
+                            currentLogs.push({
+                                id: id,
+                                heure: item[1],
+                                pax: item[2],
+                                paxMode: item[3],
+                                paxColor: item[4],
+                                lieu: item[5],
+                                fenetrePorte: item[6],
+                                remarques: item[7]
+                            });
+                            addedCount++;
+                        }
+                    });
+
+                    renderLogTable(currentLogs);
+                    showMessageModal("Transfert réussi", `${addedCount} nouvelles entrées importées.`, false);
+                }
+            } catch (e) {
+                console.error(e);
+                // Ignorer les erreurs de parsing QR non pertinents
+            }
         }
 
         document.addEventListener('DOMContentLoaded', () => {
@@ -1147,12 +1303,16 @@
             resetDataDockBtn.addEventListener('click', showResetModal);
             document.getElementById('confirmResetBtn').addEventListener('click', handleResetData);
             document.getElementById('cancelResetBtn').addEventListener('click', hideResetModal);
-            document.getElementById('modalBackdrop').addEventListener('click', (e) => { if (e.target.id === 'modalBackdrop') { hideResetModal(); } });
+            document.getElementById('modalBackdrop').addEventListener('click', (e) => { 
+                if (e.target.id === 'modalBackdrop') { hideResetModal(); closeTransferModal(); } 
+            });
             sortTimeBtn.addEventListener('click', sortLogTableByTime);
+
+            // Listeners Transfert
+            transferDockBtn.addEventListener('click', openTransferModal);
+            closeTransferBtn.addEventListener('click', closeTransferModal);
+            transferTabs.forEach(btn => btn.addEventListener('click', (e) => switchTransferTab(e.target.dataset.tab)));
         });
     </script>
 </body>
 </html>
-
-
-
