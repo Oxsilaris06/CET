@@ -6,7 +6,7 @@
 	<link rel="icon" href="favicon.ico" sizes="any" type="image/png">
     <link rel="icon" href="favicon.ico" type="image/svg+xml">
     <link rel="apple-touch-icon" href="favicon.ico">
-    <title>PC Tac v3.5 - Transfert</title>
+    <title>PC Tac v3.6 - Transfert & PDF</title>
     <!-- Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Oswald:wght@300;400;500&family=Saira+Stencil+One&display=swap" rel="stylesheet">
     <!-- Icons -->
@@ -270,6 +270,30 @@
             border-radius: var(--radius-sm); overflow: hidden; background: black;
         }
 
+        /* Nav controls for QR */
+        #qr-nav-controls {
+            display: flex; justify-content: center; align-items: center; gap: 15px; margin-top: 15px;
+            background: rgba(255,255,255,0.05); padding: 10px; border-radius: 8px;
+        }
+        .qr-nav-btn {
+            background: rgba(255,255,255,0.1); border: 1px solid var(--border-glass); color: var(--text-main);
+            width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer;
+        }
+        .qr-nav-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+        .qr-nav-btn:hover:not(:disabled) { background: var(--accent-blue); }
+        #qr-counter { font-family: var(--font-data); font-weight: bold; font-size: 1.1em; min-width: 60px; }
+
+        /* Toast */
+        #toast-container {
+            position: fixed; top: 20px; left: 50%; transform: translateX(-50%) translateY(-100px);
+            background: rgba(34, 197, 94, 0.9); backdrop-filter: blur(5px);
+            color: white; padding: 12px 24px; border-radius: 30px;
+            font-family: var(--font-ui); box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            z-index: 3000; transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            display: flex; align-items: center; gap: 10px; font-weight: 500;
+        }
+        #toast-container.show { transform: translateX(-50%) translateY(0); }
+
         /* --- MOBILE RESPONSIVE (Cards) --- */
         @media (max-width: 768px) {
             .container { padding: 10px; }
@@ -324,6 +348,12 @@
 
     <div class="custom-modal-backdrop" id="modalBackdrop"></div>
     
+    <!-- Toast Notification -->
+    <div id="toast-container">
+        <span class="material-symbols-outlined">check_circle</span>
+        <span id="toast-message">Action effectuée</span>
+    </div>
+
     <!-- Modal Reset -->
     <div class="custom-modal" id="resetModal">
         <h3 style="color: var(--accent-blue); margin-bottom: 10px;">Purge Système</h3>
@@ -343,7 +373,7 @@
         </div>
     </div>
 
-    <!-- Modal Transfert (NOUVEAU) -->
+    <!-- Modal Transfert -->
     <div class="custom-modal" id="transferModal">
         <h3 style="color: var(--accent-blue); margin-bottom: 15px;">Transfert Tactique</h3>
         
@@ -354,19 +384,26 @@
         
         <!-- Contenu Envoyer -->
         <div id="transfer-send" class="transfer-content active">
-            <p style="color: var(--text-muted); font-size: 0.9em;">Scanner ce code avec un autre PC Tac pour transférer les données.</p>
             <div id="qrcode-container"></div>
-            <p id="qr-status-text" style="color: var(--civil-yellow); font-size: 0.8em; margin-top: 5px;"></p>
+            
+            <!-- Navigation QR Code -->
+            <div id="qr-nav-controls" style="display: none;">
+                <button class="qr-nav-btn" id="prevQrBtn"><span class="material-symbols-outlined">arrow_back</span></button>
+                <span id="qr-counter">1/1</span>
+                <button class="qr-nav-btn" id="nextQrBtn"><span class="material-symbols-outlined">arrow_forward</span></button>
+            </div>
+            
+            <p id="qr-status-text" style="color: var(--text-muted); font-size: 0.85em; margin-top: 10px;"></p>
         </div>
         
         <!-- Contenu Recevoir -->
         <div id="transfer-receive" class="transfer-content">
             <div id="qr-reader"></div>
-            <p style="color: var(--text-muted); font-size: 0.9em;">Pointez la caméra vers le QR Code.</p>
+            <p style="color: var(--text-muted); font-size: 0.9em;">Scanner les QR codes séquentiellement.</p>
         </div>
 
         <div class="modal-buttons">
-            <button id="closeTransferBtn" style="background: rgba(255,255,255,0.1);">Fermer</button>
+            <button id="closeTransferBtn" style="background: rgba(255,255,255,0.1);">Terminer</button>
         </div>
     </div>
     
@@ -463,7 +500,7 @@
         </div>
         
 		<footer id="main-footer" style="text-align: center; margin-top: 30px; font-size: 0.7rem; color: var(--text-muted); opacity: 0.5;">
-            PC Tac v3.5 &bull; G/Maheux
+            PC Tac v3.6 &bull; G/Maheux
         </footer>
     </div>
     
@@ -532,6 +569,9 @@
         const closeTransferBtn = document.getElementById('closeTransferBtn');
         const transferTabs = document.querySelectorAll('.transfer-tab-btn');
         let html5QrCode;
+        let qrChunks = [];
+        let currentQrIndex = 0;
+        const QR_BATCH_SIZE = 8; // Nombre d'entrées par QR pour assurer la lisibilité
 
         let isTimeInputManuallyChanged = false;
         let paxColorMap = {}; 
@@ -568,6 +608,14 @@
                 backdrop.style.display = 'none';
                 modal.style.display = 'none';
             };
+        }
+        
+        function showToast(message) {
+            const toast = document.getElementById('toast-container');
+            const msgSpan = document.getElementById('toast-message');
+            msgSpan.textContent = message;
+            toast.classList.add('show');
+            setTimeout(() => { toast.classList.remove('show'); }, 3000);
         }
 
         function saveLogData(logData) {
@@ -1097,6 +1145,7 @@
             return pdfBytes;
         }
 
+        // Fonction RESTAURÉE : downloadPdf
         async function downloadPdf() {
             const btn = previewPdfDockBtn; 
             const originalIcon = btn.querySelector('.material-symbols-outlined').textContent;
@@ -1113,7 +1162,10 @@
                     link.href = url; link.download = fileName; document.body.appendChild(link); link.click();
                     setTimeout(() => { document.body.removeChild(link); URL.revokeObjectURL(url); }, 0); 
                 }
-            } catch (error) { showMessageModal("Erreur", "Erreur PDF critique"); } finally {
+            } catch (error) { 
+                console.error(error);
+                showMessageModal("Erreur", "Erreur PDF critique"); 
+            } finally {
                 btn.querySelector('.material-symbols-outlined').textContent = originalIcon; btn.disabled = false; btn.style.opacity = 1;
             }
         }
@@ -1147,7 +1199,7 @@
              if (e.target.closest('.delete-btn')) { const id = e.target.closest('.delete-btn').dataset.id; deleteLogEntry(id); }
         }
 
-        // --- NOUVELLE LOGIQUE TRANSFERT QR (Compressée) ---
+        // --- NOUVELLE LOGIQUE TRANSFERT QR (PAGINATION) ---
         function openTransferModal() {
             document.getElementById('modalBackdrop').style.display = 'block';
             transferModal.style.display = 'block';
@@ -1168,46 +1220,68 @@
             
             if(tabName === 'send') {
                 if(html5QrCode) { html5QrCode.stop().then(() => html5QrCode = null); }
-                generateQR();
+                prepareQRPagination(); // Initialise la pagination
             } else {
                 startScanner();
             }
         }
         
-        function generateQR() {
-            const container = document.getElementById('qrcode-container');
-            container.innerHTML = '';
-            const statusText = document.getElementById('qr-status-text');
+        // Fonction utilitaire pour découper un tableau en morceaux
+        function chunkArray(array, size) {
+            const chunks = [];
+            for (let i = 0; i < array.length; i += size) {
+                chunks.push(array.slice(i, i + size));
+            }
+            return chunks;
+        }
+
+        function prepareQRPagination() {
             const logs = getLogData();
+            const container = document.getElementById('qrcode-container');
+            const statusText = document.getElementById('qr-status-text');
+            const navControls = document.getElementById('qr-nav-controls');
+            
+            container.innerHTML = '';
             
             if (logs.length === 0) {
                 container.textContent = "Aucune donnée à transférer.";
                 statusText.textContent = "";
+                navControls.style.display = 'none';
                 return;
             }
 
-            // --- COMPRESSION DES DONNÉES ---
-            // On mappe les objets JSON verbeux vers des tableaux simples pour gagner de la place
-            // Format: [id, heure, pax, paxMode, paxColor, lieu, fenetrePorte, remarques]
+            // Découpage en morceaux
+            // On mappe d'abord en format compressé
             let compressedData = logs.map(l => [l.id, l.heure, l.pax, l.paxMode, l.paxColor, l.lieu, l.fenetrePorte, l.remarques]);
             
-            // Titre en premier
-            let transferPayload = { t: interventionTitleInput.value, d: compressedData };
+            qrChunks = chunkArray(compressedData, QR_BATCH_SIZE);
+            currentQrIndex = 0;
+            
+            if (qrChunks.length > 1) {
+                navControls.style.display = 'flex';
+            } else {
+                navControls.style.display = 'none';
+            }
+            
+            showQR(currentQrIndex);
+        }
+
+        function showQR(index) {
+            const container = document.getElementById('qrcode-container');
+            const statusText = document.getElementById('qr-status-text');
+            const counter = document.getElementById('qr-counter');
+            const prevBtn = document.getElementById('prevQrBtn');
+            const nextBtn = document.getElementById('nextQrBtn');
+            
+            container.innerHTML = ''; // Clear previous QR
+            
+            // Préparer le payload pour ce chunk spécifique
+            let transferPayload = { 
+                t: interventionTitleInput.value, 
+                d: qrChunks[index] 
+            };
             let jsonString = JSON.stringify(transferPayload);
             
-            // Si trop gros pour un QR standard (~2500 chars max safe), on coupe les plus vieux
-            if (jsonString.length > 2000) {
-                const initialCount = compressedData.length;
-                while (jsonString.length > 2000 && compressedData.length > 0) {
-                    compressedData.shift(); // Enlever le plus vieux (début du tableau car trié par heure normalement)
-                    transferPayload.d = compressedData;
-                    jsonString = JSON.stringify(transferPayload);
-                }
-                statusText.textContent = `Données trop volumineuses. Les ${initialCount - compressedData.length} plus anciennes entrées ont été omises.`;
-            } else {
-                statusText.textContent = `${compressedData.length} entrées prêtes au transfert.`;
-            }
-
             new QRCode(container, {
                 text: jsonString,
                 width: 256,
@@ -1216,6 +1290,16 @@
                 colorLight : "#ffffff",
                 correctLevel : QRCode.CorrectLevel.M
             });
+            
+            // Mise à jour UI Navigation
+            if (qrChunks.length > 1) {
+                statusText.textContent = `Page ${index + 1} sur ${qrChunks.length} - ${qrChunks[index].length} entrées.`;
+                counter.textContent = `${index + 1} / ${qrChunks.length}`;
+                prevBtn.disabled = index === 0;
+                nextBtn.disabled = index === qrChunks.length - 1;
+            } else {
+                statusText.textContent = `${qrChunks[0].length} entrées prêtes au transfert.`;
+            }
         }
 
         function startScanner() {
@@ -1232,9 +1316,9 @@
             try {
                 const data = JSON.parse(decodedText);
                 if (data.d && Array.isArray(data.d)) {
-                    // Stop scan
-                    html5QrCode.stop().then(() => { html5QrCode = null; });
-                    closeTransferModal();
+                    // NE PAS STOPPER LE SCANNER ICI POUR PERMETTRE LE SCAN SUIVANT
+                    // html5QrCode.stop().then(() => { html5QrCode = null; });
+                    // closeTransferModal();
 
                     // Reconstruction des données
                     const currentLogs = getLogData();
@@ -1260,9 +1344,13 @@
                             addedCount++;
                         }
                     });
-
-                    renderLogTable(currentLogs);
-                    showMessageModal("Transfert réussi", `${addedCount} nouvelles entrées importées.`, false);
+                    
+                    if (addedCount > 0) {
+                        renderLogTable(currentLogs);
+                        showToast(`Paquet reçu : ${addedCount} entrées ajoutées.`);
+                    } else {
+                        showToast("Données déjà présentes.");
+                    }
                 }
             } catch (e) {
                 console.error(e);
@@ -1312,6 +1400,14 @@
             transferDockBtn.addEventListener('click', openTransferModal);
             closeTransferBtn.addEventListener('click', closeTransferModal);
             transferTabs.forEach(btn => btn.addEventListener('click', (e) => switchTransferTab(e.target.dataset.tab)));
+            
+            // Nav Listeners
+            document.getElementById('prevQrBtn').addEventListener('click', () => {
+                if (currentQrIndex > 0) { currentQrIndex--; showQR(currentQrIndex); }
+            });
+            document.getElementById('nextQrBtn').addEventListener('click', () => {
+                if (currentQrIndex < qrChunks.length - 1) { currentQrIndex++; showQR(currentQrIndex); }
+            });
         });
     </script>
 </body>
