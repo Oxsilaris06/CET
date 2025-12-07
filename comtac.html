@@ -14,6 +14,8 @@
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <!-- QRCode.js pour la génération de QR codes -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <!-- Html5-Qrcode pour le scan -->
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 
     <style>
         /* --- THEME TACTIQUE (Basé sur PC Tac v3) --- */
@@ -255,6 +257,46 @@
             z-index: 100; display: none;
         }
 
+        /* --- SCANNER MODAL --- */
+        #scanner-modal {
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.9);
+            z-index: 2000;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(5px);
+        }
+        .scanner-container {
+            width: 90%; max-width: 500px;
+            background: var(--bg-panel);
+            border: 1px solid var(--accent-blue);
+            border-radius: var(--radius-md);
+            padding: 20px;
+            box-shadow: 0 0 30px var(--accent-glow);
+        }
+        .scanner-header {
+            display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;
+        }
+        .scanner-header h3 { color: white; margin: 0; font-family: var(--font-title); }
+        .close-btn { width: auto; background: none; color: var(--text-muted); padding: 5px; flex: 0; }
+        .close-btn:hover { color: var(--accent-red); }
+        
+        #reader {
+            width: 100%;
+            background: black;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        /* Customisation Html5Qrcode */
+        #reader__dashboard_section_csr button {
+            background: var(--accent-blue) !important; color: white !important;
+            border: none !important; padding: 8px 15px !important; border-radius: 4px !important;
+            margin-top: 10px; font-family: var(--font-ui);
+        }
+        #reader__dashboard_section_swaplink { display: none !important; }
+
     </style>
 </head>
 <body>
@@ -268,6 +310,22 @@
     </header>
 
     <div id="errorToast" class="toast">Erreur système</div>
+
+    <!-- SCANNER MODAL -->
+    <div id="scanner-modal">
+        <div class="scanner-container">
+            <div class="scanner-header">
+                <h3>SCAN TARGET</h3>
+                <button class="close-btn" onclick="stopQrScanner()">
+                    <span class="material-symbols-outlined">close</span>
+                </button>
+            </div>
+            <div id="reader"></div>
+            <p style="text-align: center; color: var(--text-muted); font-size: 0.8rem; margin-top: 15px;">
+                Visez le QR Code du chef d'équipe
+            </p>
+        </div>
+    </div>
 
     <!-- VIEW 1: LOGIN / CALLSIGN -->
     <div id="view-login" class="view active">
@@ -295,7 +353,7 @@
                 <button class="btn-secondary" onclick="joinFrequency()">
                     <span class="material-symbols-outlined">login</span> REJOINDRE
                 </button>
-                <button class="btn-secondary" id="scanQrBtn" onclick="toggleQrReader()">
+                <button class="btn-secondary" id="scanQrBtn" onclick="startQrScanner()">
                      <span class="material-symbols-outlined">qr_code_scanner</span> SCANNER QR
                 </button>
             </div>
@@ -364,7 +422,8 @@
             peers: {}, // Liste des pairs connectés (data)
             audioContext: null,
             analyser: null,
-            isHost: false
+            isHost: false,
+            html5QrcodeScanner: null
         };
 
         // DOM Elements
@@ -751,12 +810,55 @@
             }
         }
         
-        // --- QR SCANNER (Fallback pour fichiers locaux) ---
-        function toggleQrReader() {
-            // Note: L'intégration d'un scanner complet nécessite des bibliothèques lourdes
-            // et des contextes HTTPS sécurisés stricts. Pour ce module "single-file",
-            // on fournit une instruction claire à l'utilisateur.
-            alert("SCANNER : Utilisez l'appareil photo de votre mobile pour copier l'ID de la fréquence, puis collez-le dans le champ ID.");
+        // --- QR SCANNER (Implementation Html5-Qrcode) ---
+        
+        function startQrScanner() {
+            const modal = document.getElementById('scanner-modal');
+            modal.style.display = 'flex';
+            
+            // Nettoyage au cas où
+            if(state.html5QrcodeScanner) {
+                state.html5QrcodeScanner.clear();
+            }
+
+            state.html5QrcodeScanner = new Html5QrcodeScanner(
+                "reader", 
+                { fps: 10, qrbox: {width: 250, height: 250} }
+            );
+            
+            state.html5QrcodeScanner.render(onScanSuccess);
+        }
+
+        function stopQrScanner() {
+            if(state.html5QrcodeScanner) {
+                state.html5QrcodeScanner.clear().then(() => {
+                     document.getElementById('scanner-modal').style.display = 'none';
+                }).catch(err => {
+                     console.error("Failed to clear scanner", err);
+                     document.getElementById('scanner-modal').style.display = 'none';
+                });
+            } else {
+                document.getElementById('scanner-modal').style.display = 'none';
+            }
+        }
+
+        function onScanSuccess(decodedText, decodedResult) {
+            // Un scan réussi !
+            console.log(`Code scanned = ${decodedText}`);
+            
+            // Beep de confirmation
+            playRogerBeep('start');
+            
+            // Remplir le champ
+            document.getElementById('joinIdInput').value = decodedText;
+            
+            // Arrêter proprement le scan
+            stopQrScanner();
+            
+            // Feedback visuel ou auto-join ?
+            // On laisse l'utilisateur cliquer sur REJOINDRE pour confirmer
+            // Mais on peut mettre le focus sur le bouton
+            showToast("QR Code détecté !");
         }
 
     </script>
