@@ -5,20 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>COM TAC v1.0 // SECURE LINK</title>
     
-    <!-- Fonts (Mêmes que PC Tac pour cohérence visuelle) -->
+    <!-- Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Oswald:wght@300;400;500&family=Saira+Stencil+One&display=swap" rel="stylesheet">
-    <!-- Icons Material Symbols -->
+    <!-- Icons -->
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
 
-    <!-- PeerJS (WebRTC Wrapper) - Version CDN stable -->
+    <!-- PeerJS & Utils -->
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
-    <!-- QRCode.js pour la génération de QR codes -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    <!-- Html5-Qrcode pour le scan -->
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 
     <style>
-        /* --- THEME TACTIQUE (Basé sur PC Tac v3) --- */
+        /* --- THEME TACTIQUE --- */
         :root {
             --bg-body: #050505;
             --bg-glass: rgba(22, 22, 25, 0.85);
@@ -42,7 +40,6 @@
             font-family: var(--font-ui);
             background-color: var(--bg-body);
             color: var(--text-main);
-            /* Texture de fond tactique */
             background-image: 
                 linear-gradient(rgba(59, 130, 246, 0.02) 1px, transparent 1px),
                 linear-gradient(90deg, rgba(59, 130, 246, 0.02) 1px, transparent 1px);
@@ -81,10 +78,10 @@
         .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); transition: background 0.3s; }
         .status-connected .status-dot { background: var(--accent-green); box-shadow: 0 0 8px var(--accent-green); }
 
-        /* --- VIEWS (Gestion des écrans) --- */
+        /* --- VIEWS --- */
         .view {
             flex: 1;
-            display: none; /* Masqué par défaut */
+            display: none;
             flex-direction: column;
             padding: 20px;
             overflow-y: auto;
@@ -93,7 +90,6 @@
             transition: opacity 0.3s;
         }
         .view.active { display: flex; animation: fadeIn 0.4s ease-out; }
-
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
         /* --- FORMS & INPUTS --- */
@@ -131,11 +127,10 @@
 
         .btn-primary { background: var(--accent-blue); color: white; box-shadow: 0 4px 15px var(--accent-glow); }
         .btn-primary:active { transform: scale(0.98); }
-        
         .btn-secondary { background: rgba(255,255,255,0.05); color: var(--text-main); border: 1px solid rgba(255,255,255,0.1); }
         .btn-secondary:hover { background: rgba(255,255,255,0.1); }
 
-        /* --- COMMS INTERFACE (Grille principale) --- */
+        /* --- COMMS INTERFACE --- */
         .comm-grid {
             display: grid;
             grid-template-rows: auto 1fr auto;
@@ -143,7 +138,6 @@
             gap: 20px;
         }
 
-        /* Info Frequency Panel */
         .freq-panel {
             background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: var(--radius-md);
             padding: 15px; display: flex; justify-content: space-between; align-items: center;
@@ -151,43 +145,68 @@
         .freq-code { font-family: var(--font-data); color: var(--accent-blue); font-size: 1.2rem; letter-spacing: 2px; }
         .freq-label { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; display: block; }
 
-        /* QR Modal */
         #qrDisplay {
             background: white; padding: 15px; border-radius: 8px; margin: 20px auto;
             width: fit-content; display: none;
         }
         #qrDisplay.visible { display: block; }
 
-        /* Connected Users List */
+        /* --- USERS GRID (MODIFIÉ) --- */
         .users-list {
             background: rgba(0,0,0,0.2); border-radius: var(--radius-md);
-            padding: 10px; overflow-y: auto; flex: 1;
+            padding: 15px; 
+            overflow-y: auto; flex: 1;
             border: 1px solid rgba(255,255,255,0.05);
+            /* Grid Transformation */
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+            grid-auto-rows: min-content;
+            gap: 15px;
+            align-content: start;
         }
-        .user-item {
-            display: flex; align-items: center; padding: 10px;
-            border-bottom: 1px solid rgba(255,255,255,0.05);
-            transition: background 0.2s;
-        }
-        .user-item:last-child { border-bottom: none; }
-        .user-avatar {
-            width: 30px; height: 30px; background: rgba(255,255,255,0.1); border-radius: 50%;
-            display: flex; align-items: center; justify-content: center; margin-right: 10px;
-            font-weight: bold; color: var(--text-muted);
-        }
-        .user-name { flex: 1; font-size: 0.9rem; }
-        .user-status { font-size: 0.7rem; color: var(--text-muted); }
         
-        /* Indicateur visuel de parole */
-        .is-speaking .user-avatar { background: var(--accent-green); color: black; box-shadow: 0 0 10px var(--accent-green); }
+        .user-item {
+            display: flex; 
+            flex-direction: column; /* Vertical */
+            align-items: center; 
+            text-align: center;
+            padding: 15px 10px;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.05);
+            border-radius: 8px;
+            transition: all 0.2s;
+        }
+        .user-item:hover { background: rgba(255,255,255,0.08); }
+        
+        .user-avatar {
+            width: 45px; height: 45px; /* Plus grand */
+            background: rgba(255,255,255,0.1); border-radius: 50%;
+            display: flex; align-items: center; justify-content: center; 
+            margin-right: 0; margin-bottom: 8px; /* Ajustement marge */
+            font-weight: bold; color: var(--text-muted);
+            font-size: 1.1rem;
+            border: 2px solid transparent;
+            transition: all 0.2s;
+        }
+        
+        .user-name { font-size: 0.85rem; word-break: break-word; line-height: 1.2; width: 100%; }
+        .user-status { font-size: 0.65rem; color: var(--text-muted); margin-top: 4px; text-transform: uppercase; }
+        
+        /* Indicateur visuel de parole GRID */
+        .is-speaking .user-avatar { 
+            background: var(--accent-green); color: black; 
+            box-shadow: 0 0 15px var(--accent-green); 
+            border-color: #fff;
+            transform: scale(1.1);
+        }
+        .is-speaking { border-color: rgba(34, 197, 94, 0.3); background: rgba(34, 197, 94, 0.05); }
 
-        /* --- PTT MAIN CONTROLS --- */
+        /* --- CONTROLS --- */
         .controls-area {
             display: flex; flex-direction: column; gap: 15px; align-items: center;
             padding-bottom: 20px;
         }
 
-        /* PTT Button Styling */
         #pttBtn {
             width: 200px; height: 200px;
             border-radius: 50%;
@@ -200,34 +219,18 @@
             transition: all 0.1s;
             position: relative;
             display: flex; align-items: center; justify-content: center; flex-direction: column;
-            user-select: none;
-            -webkit-user-select: none; /* Safari */
+            user-select: none; -webkit-user-select: none;
         }
-        
-        #pttBtn::after {
-            content: "PUSH TO TALK";
-            font-size: 0.8rem; font-family: var(--font-ui); color: var(--text-muted);
-            margin-top: 5px; opacity: 0.5;
-        }
-
-        /* État actif (Appui) */
+        #pttBtn::after { content: "PUSH TO TALK"; font-size: 0.8rem; font-family: var(--font-ui); color: var(--text-muted); margin-top: 5px; opacity: 0.5; }
         #pttBtn:active, #pttBtn.active {
-            border-color: var(--accent-blue);
-            color: white;
+            border-color: var(--accent-blue); color: white;
             background: radial-gradient(circle, var(--accent-blue) 0%, #0f4c9c 100%);
             box-shadow: 0 0 40px var(--accent-glow), inset 0 0 20px rgba(0,0,0,0.5);
             transform: scale(0.95);
         }
-        
-        /* État VOX (Always On) */
-        #pttBtn.mode-vox {
-            border-color: var(--accent-green);
-            background: radial-gradient(circle, #064e3b 0%, #000000 100%);
-            color: var(--accent-green);
-        }
+        #pttBtn.mode-vox { border-color: var(--accent-green); background: radial-gradient(circle, #064e3b 0%, #000000 100%); color: var(--accent-green); }
         #pttBtn.mode-vox::after { content: "VOX ACTIVE"; color: var(--accent-green); opacity: 1; }
 
-        /* Toggle Modes Selector */
         .mode-selector {
             display: flex; background: rgba(0,0,0,0.4); padding: 4px; border-radius: 30px;
             border: 1px solid rgba(255,255,255,0.1);
@@ -241,15 +244,7 @@
         .mode-opt[data-mode="vox"].active { background: var(--accent-green); color: black; box-shadow: 0 0 10px rgba(34, 197, 94, 0.4); }
         .mode-opt[data-mode="ptt"].active { background: var(--accent-blue); color: white; box-shadow: 0 0 10px var(--accent-glow); }
         
-        /* Audio Visualizer */
-        canvas#visualizer {
-            width: 100%; height: 60px;
-            background: rgba(0,0,0,0.2);
-            border-radius: var(--radius-md);
-            margin-bottom: 10px;
-        }
-
-        /* Error Toast */
+        canvas#visualizer { width: 100%; height: 60px; background: rgba(0,0,0,0.2); border-radius: var(--radius-md); margin-bottom: 10px; }
         .toast {
             position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
             background: rgba(239, 68, 68, 0.9); color: white;
@@ -257,50 +252,26 @@
             z-index: 100; display: none;
         }
 
-        /* --- SCANNER MODAL --- */
         #scanner-modal {
-            position: fixed; inset: 0;
-            background: rgba(0,0,0,0.9);
-            z-index: 2000;
-            display: none;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            backdrop-filter: blur(5px);
+            position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 2000; display: none;
+            flex-direction: column; align-items: center; justify-content: center; backdrop-filter: blur(5px);
         }
         .scanner-container {
-            width: 90%; max-width: 500px;
-            background: var(--bg-panel);
-            border: 1px solid var(--accent-blue);
-            border-radius: var(--radius-md);
-            padding: 20px;
-            box-shadow: 0 0 30px var(--accent-glow);
+            width: 90%; max-width: 500px; background: var(--bg-panel); border: 1px solid var(--accent-blue);
+            border-radius: var(--radius-md); padding: 20px; box-shadow: 0 0 30px var(--accent-glow);
         }
-        .scanner-header {
-            display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;
-        }
+        .scanner-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
         .scanner-header h3 { color: white; margin: 0; font-family: var(--font-title); }
         .close-btn { width: auto; background: none; color: var(--text-muted); padding: 5px; flex: 0; }
-        .close-btn:hover { color: var(--accent-red); }
-        
-        #reader {
-            width: 100%;
-            background: black;
-            border-radius: 8px;
-            overflow: hidden;
-        }
-        /* Customisation Html5Qrcode */
+        #reader { width: 100%; background: black; border-radius: 8px; overflow: hidden; }
         #reader__dashboard_section_csr button {
-            background: var(--accent-blue) !important; color: white !important;
-            border: none !important; padding: 8px 15px !important; border-radius: 4px !important;
-            margin-top: 10px; font-family: var(--font-ui);
+            background: var(--accent-blue) !important; color: white !important; border: none !important;
+            padding: 8px 15px !important; border-radius: 4px !important; margin-top: 10px; font-family: var(--font-ui);
         }
         #reader__dashboard_section_swaplink { display: none !important; }
-
     </style>
 </head>
 <body>
-
     <header>
         <div class="app-title">COM <span style="color: white;">TAC</span></div>
         <div class="status-badge" id="connectionStatus">
@@ -316,18 +287,14 @@
         <div class="scanner-container">
             <div class="scanner-header">
                 <h3>SCAN TARGET</h3>
-                <button class="close-btn" onclick="stopQrScanner()">
-                    <span class="material-symbols-outlined">close</span>
-                </button>
+                <button class="close-btn" onclick="stopQrScanner()"><span class="material-symbols-outlined">close</span></button>
             </div>
             <div id="reader"></div>
-            <p style="text-align: center; color: var(--text-muted); font-size: 0.8rem; margin-top: 15px;">
-                Visez le QR Code du chef d'équipe
-            </p>
+            <p style="text-align: center; color: var(--text-muted); font-size: 0.8rem; margin-top: 15px;">Visez le QR Code du chef d'équipe</p>
         </div>
     </div>
 
-    <!-- VIEW 1: LOGIN / CALLSIGN -->
+    <!-- VIEW 1: LOGIN -->
     <div id="view-login" class="view active">
         <div class="panel">
             <h2>Identification</h2>
@@ -340,527 +307,228 @@
         </div>
     </div>
 
-    <!-- VIEW 2: MENU (CREATE / JOIN) -->
+    <!-- VIEW 2: MENU -->
     <div id="view-menu" class="view">
         <div class="panel">
             <h2 id="welcomeText">BONJOUR</h2>
             <div class="btn-group" style="flex-direction: column;">
-                <button class="btn-primary" onclick="createFrequency()">
-                    <span class="material-symbols-outlined">add_circle</span> CRÉER FRÉQUENCE
-                </button>
+                <button class="btn-primary" onclick="createFrequency()"><span class="material-symbols-outlined">add_circle</span> CRÉER FRÉQUENCE</button>
                 <div style="text-align: center; color: var(--text-muted); font-size: 0.8rem; margin: 10px 0;">- OU -</div>
                 <input type="text" id="joinIdInput" placeholder="ID FRÉQUENCE" style="margin-bottom: 10px;">
-                <button class="btn-secondary" onclick="joinFrequency()">
-                    <span class="material-symbols-outlined">login</span> REJOINDRE
-                </button>
-                <button class="btn-secondary" id="scanQrBtn" onclick="startQrScanner()">
-                     <span class="material-symbols-outlined">qr_code_scanner</span> SCANNER QR
-                </button>
+                <button class="btn-secondary" onclick="joinFrequency()"><span class="material-symbols-outlined">login</span> REJOINDRE</button>
+                <button class="btn-secondary" id="scanQrBtn" onclick="startQrScanner()"><span class="material-symbols-outlined">qr_code_scanner</span> SCANNER QR</button>
             </div>
         </div>
     </div>
 
-    <!-- VIEW 3: ACTIVE COMMS -->
+    <!-- VIEW 3: COMMS -->
     <div id="view-comms" class="view">
         <div class="comm-grid">
-            
-            <!-- Top Info -->
             <div>
                 <div class="freq-panel">
-                    <div>
-                        <span class="freq-label">FRÉQUENCE SECURISEE</span>
-                        <span class="freq-code" id="displayFreqId">...</span>
-                    </div>
-                    <button style="background:none; border:none; color:white; padding:0;" onclick="toggleQrDisplay()">
-                        <span class="material-symbols-outlined" style="font-size: 2rem;">qr_code_2</span>
-                    </button>
+                    <div><span class="freq-label">FRÉQUENCE SECURISEE</span><span class="freq-code" id="displayFreqId">...</span></div>
+                    <button style="background:none; border:none; color:white; padding:0;" onclick="toggleQrDisplay()"><span class="material-symbols-outlined" style="font-size: 2rem;">qr_code_2</span></button>
                 </div>
                 <div id="qrDisplay"></div>
             </div>
 
-            <!-- Users List -->
-            <div class="users-list" id="usersList">
-                <!-- Les utilisateurs connectés seront injectés ici -->
-            </div>
+            <div class="users-list" id="usersList"></div>
 
-            <!-- Controls Area -->
             <div class="controls-area">
                 <canvas id="visualizer"></canvas>
-                
                 <div class="mode-selector">
                     <div class="mode-opt active" data-mode="ptt" onclick="setAudioMode('ptt')">PTT</div>
                     <div class="mode-opt" data-mode="vox" onclick="setAudioMode('vox')">VOX</div>
                     <div class="mode-opt" data-mode="mute" onclick="setAudioMode('mute')">MUTE</div>
                 </div>
-
-                <button id="pttBtn">
-                    <span class="material-symbols-outlined" style="font-size: 3rem;">mic</span>
-                </button>
-                
-                <button class="btn-secondary" style="width: 100%; margin-top: 10px; background: rgba(239, 68, 68, 0.2); color: #fca5a5; border-color: rgba(239, 68, 68, 0.3);" onclick="leaveFrequency()">
-                    DÉCONNEXION
-                </button>
+                <button id="pttBtn"><span class="material-symbols-outlined" style="font-size: 3rem;">mic</span></button>
+                <button class="btn-secondary" style="width: 100%; margin-top: 10px; background: rgba(239, 68, 68, 0.2); color: #fca5a5; border-color: rgba(239, 68, 68, 0.3);" onclick="leaveFrequency()">DÉCONNEXION</button>
             </div>
         </div>
     </div>
 
     <script>
-        // --- CONFIG & STATE ---
-        const PEER_CONFIG = {
-            debug: 1
-        };
-
+        const PEER_CONFIG = { debug: 1 };
         let state = {
-            callsign: '',
-            peer: null,
-            myId: null,
-            conn: null, // Data connection (pour la signalisation état/texte)
-            currentCall: null, // Media call (pour l'audio)
-            localStream: null,
-            audioMode: 'ptt', // ptt, vox, mute
-            isTalking: false,
-            peers: {}, // Liste des pairs connectés (data)
-            audioContext: null,
-            analyser: null,
-            isHost: false,
-            html5QrcodeScanner: null
+            callsign: '', peer: null, myId: null, conn: null, currentCall: null, localStream: null,
+            audioMode: 'ptt', isTalking: false, peers: {}, audioContext: null, analyser: null, isHost: false, html5QrcodeScanner: null
         };
 
-        // DOM Elements
-        const views = {
-            login: document.getElementById('view-login'),
-            menu: document.getElementById('view-menu'),
-            comms: document.getElementById('view-comms')
-        };
+        const views = { login: document.getElementById('view-login'), menu: document.getElementById('view-menu'), comms: document.getElementById('view-comms') };
         const pttBtn = document.getElementById('pttBtn');
         const visualizerCanvas = document.getElementById('visualizer');
 
-        // --- NAVIGATION & UI HELPERS ---
-        function showView(viewName) {
-            Object.values(views).forEach(el => el.classList.remove('active'));
-            views[viewName].classList.add('active');
-        }
-
+        function showView(viewName) { Object.values(views).forEach(el => el.classList.remove('active')); views[viewName].classList.add('active'); }
         function goToMenu() {
             const input = document.getElementById('callsignInput');
-            if(input.value.trim().length < 2) {
-                showToast("Indicatif trop court");
-                return;
-            }
+            if(input.value.trim().length < 2) { showToast("Indicatif trop court"); return; }
             state.callsign = input.value.toUpperCase();
             document.getElementById('welcomeText').innerText = `BONJOUR ${state.callsign}`;
-            showView('menu');
-            initAudio(); // Demande de permission micro préventive
+            showView('menu'); initAudio();
         }
-
         function showToast(msg) {
-            const el = document.getElementById('errorToast');
-            el.innerText = msg;
-            el.style.display = 'block';
-            setTimeout(() => el.style.display = 'none', 3000);
+            const el = document.getElementById('errorToast'); el.innerText = msg; el.style.display = 'block'; setTimeout(() => el.style.display = 'none', 3000);
         }
 
-        // --- AUDIO ENGINE ---
         async function initAudio() {
             try {
-                // Récupération du flux audio
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
                 state.localStream = stream;
-                
-                // Audio Context pour le Roger Beep & Visualizer
                 state.audioContext = new (window.AudioContext || window.webkitAudioContext)();
                 state.analyser = state.audioContext.createAnalyser();
-                const source = state.audioContext.createMediaStreamSource(stream);
-                source.connect(state.analyser);
+                state.audioContext.createMediaStreamSource(stream).connect(state.analyser);
                 state.analyser.fftSize = 256;
-                
-                // Mute par défaut pour respecter la logique PTT initiale
-                setAudioTrackState(false);
-                drawVisualizer();
-                return true;
-            } catch (err) {
-                console.error("Audio Error", err);
-                showToast("Accès micro refusé");
-                return false;
-            }
+                setAudioTrackState(false); drawVisualizer(); return true;
+            } catch (err) { console.error("Audio Error", err); showToast("Accès micro refusé"); return false; }
         }
 
-        // Active/Désactive physiquement les pistes audio du flux
         function setAudioTrackState(enabled) {
-            if(state.localStream) {
-                state.localStream.getAudioTracks().forEach(track => track.enabled = enabled);
-            }
-            // Mise à jour de l'UI pour montrer que je parle
+            if(state.localStream) state.localStream.getAudioTracks().forEach(track => track.enabled = enabled);
             if(state.myId) updateMyStatusUI(enabled);
         }
 
-        // Générateur de sons synthétiques (Roger Beep)
         function playRogerBeep(type) {
             if(!state.audioContext) return;
-            
-            // Resume context si le navigateur l'a suspendu
-            if (state.audioContext.state === 'suspended') {
-                state.audioContext.resume();
-            }
-
+            if (state.audioContext.state === 'suspended') state.audioContext.resume();
             const oscillator = state.audioContext.createOscillator();
             const gainNode = state.audioContext.createGain();
-            
-            oscillator.connect(gainNode);
-            gainNode.connect(state.audioContext.destination);
-            
-            if (type === 'start') {
-                // Beep aigu de début
-                oscillator.frequency.value = 1200;
-                gainNode.gain.value = 0.1;
-                oscillator.start();
-                setTimeout(() => oscillator.stop(), 80);
-            } else {
-                // Beep grave de fin
-                oscillator.frequency.value = 800;
-                gainNode.gain.value = 0.1;
-                oscillator.start();
-                setTimeout(() => oscillator.stop(), 80);
-            }
+            oscillator.connect(gainNode); gainNode.connect(state.audioContext.destination);
+            if (type === 'start') { oscillator.frequency.value = 1200; } else { oscillator.frequency.value = 800; }
+            gainNode.gain.value = 0.1; oscillator.start(); setTimeout(() => oscillator.stop(), 80);
         }
 
         function setAudioMode(mode) {
             state.audioMode = mode;
-            // UI Update des boutons
             document.querySelectorAll('.mode-opt').forEach(el => el.classList.remove('active'));
             document.querySelector(`.mode-opt[data-mode="${mode}"]`).classList.add('active');
-            
             pttBtn.classList.remove('mode-vox');
-            
-            if(mode === 'vox') {
-                pttBtn.classList.add('mode-vox');
-                setAudioTrackState(true); // Micro ouvert
-            } else if (mode === 'mute') {
-                setAudioTrackState(false); // Micro fermé
-            } else {
-                // PTT (Push To Talk)
-                setAudioTrackState(false); // Micro fermé en attente d'appui
-            }
+            if(mode === 'vox') { pttBtn.classList.add('mode-vox'); setAudioTrackState(true); }
+            else { setAudioTrackState(false); }
         }
 
-        // --- PTT LOGIC (Push-To-Talk) ---
         function startTx() {
             if(state.audioMode !== 'ptt') return;
-            state.isTalking = true;
-            playRogerBeep('start');
-            setAudioTrackState(true);
-            pttBtn.classList.add('active');
+            state.isTalking = true; playRogerBeep('start'); setAudioTrackState(true); pttBtn.classList.add('active');
         }
 
         function endTx() {
             if(state.audioMode !== 'ptt') return;
-            state.isTalking = false;
-            setAudioTrackState(false);
-            playRogerBeep('end');
-            pttBtn.classList.remove('active');
+            state.isTalking = false; setAudioTrackState(false); playRogerBeep('end'); pttBtn.classList.remove('active');
         }
 
-        // Bind Events (Souris + Touch + Clavier)
         pttBtn.addEventListener('mousedown', startTx);
         pttBtn.addEventListener('mouseup', endTx);
-        pttBtn.addEventListener('mouseleave', endTx);
+        // Suppression de 'mouseleave' pour éviter les bips intempestifs si la souris glisse
         pttBtn.addEventListener('touchstart', (e) => { e.preventDefault(); startTx(); });
         pttBtn.addEventListener('touchend', (e) => { e.preventDefault(); endTx(); });
-        
-        // Barre Espace pour PTT
-        document.addEventListener('keydown', (e) => {
-            if(e.code === 'Space' && !state.isTalking && state.audioMode === 'ptt') startTx();
-        });
-        document.addEventListener('keyup', (e) => {
-            if(e.code === 'Space' && state.audioMode === 'ptt') endTx();
-        });
+        document.addEventListener('keydown', (e) => { if(e.code === 'Space' && !state.isTalking && state.audioMode === 'ptt') startTx(); });
+        document.addEventListener('keyup', (e) => { if(e.code === 'Space' && state.audioMode === 'ptt') endTx(); });
 
-        // --- PEER JS / NETWORKING (Cœur du système) ---
-        
         function updateConnectionStatus(connected) {
             const badge = document.getElementById('connectionStatus');
             const txt = document.getElementById('statusText');
-            if(connected) {
-                badge.classList.add('status-connected');
-                txt.innerText = "SÉCURISÉ / EN LIGNE";
-                txt.style.color = "var(--text-main)";
-            } else {
-                badge.classList.remove('status-connected');
-                txt.innerText = "HORS LIGNE";
-            }
+            if(connected) { badge.classList.add('status-connected'); txt.innerText = "SÉCURISÉ / EN LIGNE"; txt.style.color = "var(--text-main)"; }
+            else { badge.classList.remove('status-connected'); txt.innerText = "HORS LIGNE"; }
         }
 
-        // 1. CREATE FREQUENCY (Mode Hôte)
         function createFrequency() {
-            // S'assurer que l'audio est init
             if(!state.localStream) { initAudio().then(ok => { if(ok) createFrequency(); }); return; }
-            
-            state.isHost = true;
-            state.peer = new Peer(null, PEER_CONFIG);
-
-            state.peer.on('open', (id) => {
-                state.myId = id;
-                setupCommsUI(id);
-                updateConnectionStatus(true);
-                addSystemLog("Fréquence créée. En attente d'opérateurs...");
-                // Ajouter soi-même à la liste
-                addPeerToList(id, state.callsign, true);
-            });
-
-            // Quand un client se connecte (Data)
-            state.peer.on('connection', (conn) => {
-                handleDataConnection(conn);
-            });
-
-            // Quand un client appelle (Audio)
-            state.peer.on('call', (call) => {
-                call.answer(state.localStream);
-                handleMediaCall(call);
-            });
-            
+            state.isHost = true; state.peer = new Peer(null, PEER_CONFIG);
+            state.peer.on('open', (id) => { state.myId = id; setupCommsUI(id); updateConnectionStatus(true); addPeerToList(id, state.callsign, true); });
+            state.peer.on('connection', (conn) => { handleDataConnection(conn); });
+            state.peer.on('call', (call) => { call.answer(state.localStream); handleMediaCall(call); });
             state.peer.on('error', handlePeerError);
         }
 
-        // 2. JOIN FREQUENCY (Mode Client)
         function joinFrequency() {
             const hostId = document.getElementById('joinIdInput').value.trim();
             if(!hostId) return showToast("ID invalide");
-            
             if(!state.localStream) { initAudio().then(ok => { if(ok) joinFrequency(); }); return; }
-
-            state.isHost = false;
-            state.peer = new Peer(null, PEER_CONFIG);
-
+            state.isHost = false; state.peer = new Peer(null, PEER_CONFIG);
             state.peer.on('open', (id) => {
                 state.myId = id;
-                // Connexion Data
-                state.conn = state.peer.connect(hostId, {
-                    metadata: { callsign: state.callsign }
-                });
-                
-                state.conn.on('open', () => {
-                    updateConnectionStatus(true);
-                    setupCommsUI(hostId);
-                    addSystemLog("Connexion à la fréquence établie.");
-                    
-                    // Lancement appel audio vers l'hôte
-                    const call = state.peer.call(hostId, state.localStream);
-                    handleMediaCall(call);
-                });
-
-                state.conn.on('data', handleDataPacket);
-                state.conn.on('close', leaveFrequency);
+                state.conn = state.peer.connect(hostId, { metadata: { callsign: state.callsign } });
+                state.conn.on('open', () => { updateConnectionStatus(true); setupCommsUI(hostId); const call = state.peer.call(hostId, state.localStream); handleMediaCall(call); });
+                state.conn.on('data', handleDataPacket); state.conn.on('close', leaveFrequency);
             });
-
             state.peer.on('error', handlePeerError);
         }
 
-        function handlePeerError(err) {
-            console.error(err);
-            showToast("Erreur coms: " + err.type);
-            updateConnectionStatus(false);
-        }
-
-        // --- GESTION DES CONNEXIONS ---
-
+        function handlePeerError(err) { console.error(err); showToast("Erreur coms: " + err.type); updateConnectionStatus(false); }
         function handleDataConnection(conn) {
             conn.on('open', () => {
-                // Ajouter le pair à la liste
                 const peerCallsign = conn.metadata ? conn.metadata.callsign : 'Inconnu';
-                state.peers[conn.peer] = { callsign: peerCallsign, conn: conn };
-                addPeerToList(conn.peer, peerCallsign);
+                state.peers[conn.peer] = { callsign: peerCallsign, conn: conn }; addPeerToList(conn.peer, peerCallsign);
             });
-            conn.on('data', (data) => {
-                // Mise à jour du statut "Parle"
-                if(data.type === 'talking') {
-                    updatePeerUI(conn.peer, data.val);
-                }
-            });
-            conn.on('close', () => {
-                removePeerFromList(conn.peer);
-            });
+            conn.on('data', (data) => { if(data.type === 'talking') updatePeerUI(conn.peer, data.val); });
+            conn.on('close', () => { removePeerFromList(conn.peer); });
         }
-
         function handleMediaCall(call) {
             call.on('stream', (remoteStream) => {
-                // Créer un élément audio invisible pour jouer le son
-                const audio = document.createElement('audio');
-                audio.srcObject = remoteStream;
-                audio.play().catch(e => console.log("Autoplay bloqué, interaction requise"));
+                const audio = document.createElement('audio'); audio.srcObject = remoteStream;
+                audio.play().catch(e => console.log("Autoplay bloqué"));
             });
         }
-        
-        function handleDataPacket(data) {
-             // Réservé pour futures extensions (chat texte, etc.)
-        }
+        function handleDataPacket(data) {} // Future use
 
-        // Envoi de mon statut aux autres
         function updateMyStatusUI(isTalking) {
             const myItem = document.getElementById(`peer-${state.myId}`);
-            if(myItem) {
-                if(isTalking) myItem.classList.add('is-speaking');
-                else myItem.classList.remove('is-speaking');
-            }
-            
-            // Si je suis client, je préviens l'hôte
-            if(state.conn && state.conn.open) {
-                state.conn.send({ type: 'talking', val: isTalking });
-            }
-            // Si je suis hôte, je devrais prévenir tout le monde (simplifié ici)
+            if(myItem) { if(isTalking) myItem.classList.add('is-speaking'); else myItem.classList.remove('is-speaking'); }
+            if(state.conn && state.conn.open) state.conn.send({ type: 'talking', val: isTalking });
         }
-
-        // --- GESTION UI ---
 
         function setupCommsUI(freqId) {
-            showView('comms');
-            document.getElementById('displayFreqId').innerText = freqId;
-            
-            // Génération QR Code
-            const qrContainer = document.getElementById('qrDisplay');
-            qrContainer.innerHTML = '';
-            new QRCode(qrContainer, {
-                text: freqId,
-                width: 128,
-                height: 128,
-                colorDark : "#000000",
-                colorLight : "#ffffff",
-                correctLevel : QRCode.CorrectLevel.H
-            });
+            showView('comms'); document.getElementById('displayFreqId').innerText = freqId;
+            const qrContainer = document.getElementById('qrDisplay'); qrContainer.innerHTML = '';
+            new QRCode(qrContainer, { text: freqId, width: 128, height: 128, colorDark : "#000000", colorLight : "#ffffff", correctLevel : QRCode.CorrectLevel.H });
         }
-
-        function toggleQrDisplay() {
-            document.getElementById('qrDisplay').classList.toggle('visible');
-        }
+        function toggleQrDisplay() { document.getElementById('qrDisplay').classList.toggle('visible'); }
 
         function addPeerToList(id, name, isMe = false) {
             const list = document.getElementById('usersList');
-            if(document.getElementById(`peer-${id}`)) return; // Déjà existant
-
-            const div = document.createElement('div');
-            div.className = 'user-item';
-            div.id = `peer-${id}`;
+            if(document.getElementById(`peer-${id}`)) return;
+            const div = document.createElement('div'); div.className = 'user-item'; div.id = `peer-${id}`;
             const shortName = name.substring(0, 2);
-            
-            div.innerHTML = `
-                <div class="user-avatar">${shortName}</div>
-                <div class="user-name">
-                    ${name} ${isMe ? '(MOI)' : ''}
-                </div>
-                <div class="user-status">${isMe && state.isHost ? 'HOST' : 'OPERATOR'}</div>
-            `;
+            div.innerHTML = `<div class="user-avatar">${shortName}</div><div class="user-name">${name}</div><div class="user-status">${isMe && state.isHost ? 'HOST' : (isMe ? 'MOI' : 'OPR')}</div>`;
             list.appendChild(div);
         }
-
-        function removePeerFromList(id) {
-            const el = document.getElementById(`peer-${id}`);
-            if(el) el.remove();
-        }
-
+        function removePeerFromList(id) { const el = document.getElementById(`peer-${id}`); if(el) el.remove(); }
         function updatePeerUI(id, isTalking) {
             const el = document.getElementById(`peer-${id}`);
-            if(el) {
-                if(isTalking) el.classList.add('is-speaking');
-                else el.classList.remove('is-speaking');
-            }
+            if(el) { if(isTalking) el.classList.add('is-speaking'); else el.classList.remove('is-speaking'); }
         }
-        
-        function addSystemLog(msg) {
-            console.log("SYS:", msg);
-        }
+        function leaveFrequency() { if(state.peer) state.peer.destroy(); location.reload(); }
 
-        function leaveFrequency() {
-            if(state.peer) state.peer.destroy();
-            location.reload();
-        }
-
-        // --- VISUALIZER AUDIO ---
         function drawVisualizer() {
-            requestAnimationFrame(drawVisualizer);
-            if(!state.analyser) return;
-
-            const bufferLength = state.analyser.frequencyBinCount;
-            const dataArray = new Uint8Array(bufferLength);
+            requestAnimationFrame(drawVisualizer); if(!state.analyser) return;
+            const bufferLength = state.analyser.frequencyBinCount; const dataArray = new Uint8Array(bufferLength);
             state.analyser.getByteFrequencyData(dataArray);
-
-            const canvas = visualizerCanvas;
-            const ctx = canvas.getContext('2d');
-            const width = canvas.width;
-            const height = canvas.height;
-
+            const canvas = visualizerCanvas; const ctx = canvas.getContext('2d');
+            const width = canvas.width; const height = canvas.height;
             ctx.clearRect(0, 0, width, height);
-            
-            const barWidth = (width / bufferLength) * 2.5;
-            let barHeight;
-            let x = 0;
-
+            const barWidth = (width / bufferLength) * 2.5; let barHeight; let x = 0;
             for(let i = 0; i < bufferLength; i++) {
                 barHeight = dataArray[i] / 2;
-                
-                // Couleur basée sur l'activité
-                if(state.isTalking || state.audioMode === 'vox') {
-                     // Vert actif si micro ouvert
-                     ctx.fillStyle = `rgb(${barHeight + 50}, 200, 50)`; 
-                } else {
-                     // Bleu passif si micro fermé
-                     ctx.fillStyle = `rgba(59, 130, 246, 0.5)`; 
-                }
-
-                ctx.fillRect(x, height - barHeight, barWidth, barHeight);
-                x += barWidth + 1;
+                if(state.isTalking || state.audioMode === 'vox') ctx.fillStyle = `rgb(${barHeight + 50}, 200, 50)`; 
+                else ctx.fillStyle = `rgba(59, 130, 246, 0.5)`;
+                ctx.fillRect(x, height - barHeight, barWidth, barHeight); x += barWidth + 1;
             }
         }
-        
-        // --- QR SCANNER (Implementation Html5-Qrcode) ---
-        
-        function startQrScanner() {
-            const modal = document.getElementById('scanner-modal');
-            modal.style.display = 'flex';
-            
-            // Nettoyage au cas où
-            if(state.html5QrcodeScanner) {
-                state.html5QrcodeScanner.clear();
-            }
 
-            state.html5QrcodeScanner = new Html5QrcodeScanner(
-                "reader", 
-                { fps: 10, qrbox: {width: 250, height: 250} }
-            );
-            
+        function startQrScanner() {
+            const modal = document.getElementById('scanner-modal'); modal.style.display = 'flex';
+            if(state.html5QrcodeScanner) state.html5QrcodeScanner.clear();
+            state.html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: {width: 250, height: 250} });
             state.html5QrcodeScanner.render(onScanSuccess);
         }
-
         function stopQrScanner() {
-            if(state.html5QrcodeScanner) {
-                state.html5QrcodeScanner.clear().then(() => {
-                     document.getElementById('scanner-modal').style.display = 'none';
-                }).catch(err => {
-                     console.error("Failed to clear scanner", err);
-                     document.getElementById('scanner-modal').style.display = 'none';
-                });
-            } else {
-                document.getElementById('scanner-modal').style.display = 'none';
-            }
+            if(state.html5QrcodeScanner) { state.html5QrcodeScanner.clear().then(() => { document.getElementById('scanner-modal').style.display = 'none'; }).catch(err => { document.getElementById('scanner-modal').style.display = 'none'; }); } 
+            else { document.getElementById('scanner-modal').style.display = 'none'; }
         }
-
-        function onScanSuccess(decodedText, decodedResult) {
-            // Un scan réussi !
-            console.log(`Code scanned = ${decodedText}`);
-            
-            // Beep de confirmation
-            playRogerBeep('start');
-            
-            // Remplir le champ
-            document.getElementById('joinIdInput').value = decodedText;
-            
-            // Arrêter proprement le scan
-            stopQrScanner();
-            
-            // Feedback visuel ou auto-join ?
-            // On laisse l'utilisateur cliquer sur REJOINDRE pour confirmer
-            // Mais on peut mettre le focus sur le bouton
-            showToast("QR Code détecté !");
+        function onScanSuccess(decodedText) {
+            playRogerBeep('start'); document.getElementById('joinIdInput').value = decodedText;
+            stopQrScanner(); showToast("QR Code détecté !");
         }
-
     </script>
 </body>
 </html>
