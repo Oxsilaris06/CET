@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>COM TAC v1.0 // SECURE LINK</title>
+    <title>COM TAC v1.1 // RESILIENT LINK</title>
     
     <!-- Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Oswald:wght@300;400;500&family=Saira+Stencil+One&display=swap" rel="stylesheet">
@@ -74,9 +74,14 @@
             border: 1px solid rgba(255,255,255,0.1);
             color: var(--text-muted);
             display: flex; align-items: center; gap: 5px;
+            transition: all 0.3s;
         }
         .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); transition: background 0.3s; }
         .status-connected .status-dot { background: var(--accent-green); box-shadow: 0 0 8px var(--accent-green); }
+        .status-reconnecting { border-color: var(--accent-orange); color: var(--accent-orange); }
+        .status-reconnecting .status-dot { background: var(--accent-orange); animation: blink 1s infinite; }
+
+        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; } }
 
         /* --- VIEWS --- */
         .view {
@@ -129,6 +134,7 @@
         .btn-primary:active { transform: scale(0.98); }
         .btn-secondary { background: rgba(255,255,255,0.05); color: var(--text-main); border: 1px solid rgba(255,255,255,0.1); }
         .btn-secondary:hover { background: rgba(255,255,255,0.1); }
+        .btn-warning { background: rgba(245, 158, 11, 0.2); color: var(--accent-orange); border: 1px solid rgba(245, 158, 11, 0.4); }
 
         /* --- COMMS INTERFACE --- */
         .comm-grid {
@@ -151,13 +157,12 @@
         }
         #qrDisplay.visible { display: block; }
 
-        /* --- USERS GRID (MODIFIÉ) --- */
+        /* --- USERS GRID --- */
         .users-list {
             background: rgba(0,0,0,0.2); border-radius: var(--radius-md);
             padding: 15px; 
             overflow-y: auto; flex: 1;
             border: 1px solid rgba(255,255,255,0.05);
-            /* Grid Transformation */
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
             grid-auto-rows: min-content;
@@ -166,38 +171,28 @@
         }
         
         .user-item {
-            display: flex; 
-            flex-direction: column; /* Vertical */
-            align-items: center; 
-            text-align: center;
-            padding: 15px 10px;
-            background: rgba(255,255,255,0.03);
-            border: 1px solid rgba(255,255,255,0.05);
-            border-radius: 8px;
-            transition: all 0.2s;
+            display: flex; flex-direction: column; align-items: center; text-align: center;
+            padding: 15px 10px; background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.05); border-radius: 8px; transition: all 0.2s;
+            position: relative;
         }
         .user-item:hover { background: rgba(255,255,255,0.08); }
         
         .user-avatar {
-            width: 45px; height: 45px; /* Plus grand */
+            width: 45px; height: 45px;
             background: rgba(255,255,255,0.1); border-radius: 50%;
             display: flex; align-items: center; justify-content: center; 
-            margin-right: 0; margin-bottom: 8px; /* Ajustement marge */
-            font-weight: bold; color: var(--text-muted);
-            font-size: 1.1rem;
-            border: 2px solid transparent;
-            transition: all 0.2s;
+            margin-right: 0; margin-bottom: 8px;
+            font-weight: bold; color: var(--text-muted); font-size: 1.1rem;
+            border: 2px solid transparent; transition: all 0.2s;
         }
         
         .user-name { font-size: 0.85rem; word-break: break-word; line-height: 1.2; width: 100%; }
         .user-status { font-size: 0.65rem; color: var(--text-muted); margin-top: 4px; text-transform: uppercase; }
         
-        /* Indicateur visuel de parole GRID */
         .is-speaking .user-avatar { 
-            background: var(--accent-green); color: black; 
-            box-shadow: 0 0 15px var(--accent-green); 
-            border-color: #fff;
-            transform: scale(1.1);
+            background: var(--accent-green); color: black; box-shadow: 0 0 15px var(--accent-green); 
+            border-color: #fff; transform: scale(1.1);
         }
         .is-speaking { border-color: rgba(34, 197, 94, 0.3); background: rgba(34, 197, 94, 0.05); }
 
@@ -269,6 +264,19 @@
             padding: 8px 15px !important; border-radius: 4px !important; margin-top: 10px; font-family: var(--font-ui);
         }
         #reader__dashboard_section_swaplink { display: none !important; }
+
+        /* --- BRIDGE SERIAL TERMINAL --- */
+        #bridge-terminal {
+            width: 100%; height: 200px;
+            background: #000; border: 1px solid var(--text-muted);
+            border-radius: 4px; padding: 10px;
+            font-family: var(--font-data); font-size: 0.8rem; color: var(--accent-green);
+            overflow-y: auto; text-align: left; margin-bottom: 20px;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.8);
+        }
+        .serial-log { margin-bottom: 2px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .serial-ts { color: var(--text-muted); margin-right: 5px; }
+
     </style>
 </head>
 <body>
@@ -303,7 +311,7 @@
             <button class="btn-primary" onclick="goToMenu()">VALIDER</button>
         </div>
         <div style="margin-top: 20px; font-size: 0.7rem; color: var(--text-muted); opacity: 0.5;">
-            ENCRYPTION: DTLS/SRTP (WebRTC)<br>ARCHITECTURE: P2P MESH
+            ENCRYPTION: DTLS/SRTP (WebRTC)<br>ARCHITECTURE: P2P MESH<br>AUTO-RECONNECT: ACTIVÉ
         </div>
     </div>
 
@@ -317,6 +325,8 @@
                 <input type="text" id="joinIdInput" placeholder="ID FRÉQUENCE" style="margin-bottom: 10px;">
                 <button class="btn-secondary" onclick="joinFrequency()"><span class="material-symbols-outlined">login</span> REJOINDRE</button>
                 <button class="btn-secondary" id="scanQrBtn" onclick="startQrScanner()"><span class="material-symbols-outlined">qr_code_scanner</span> SCANNER QR</button>
+                <div style="text-align: center; color: var(--text-muted); font-size: 0.8rem; margin: 10px 0;">- HARDWARE -</div>
+                <button class="btn-warning" onclick="goToBridge()"><span class="material-symbols-outlined">settings_input_antenna</span> BRIDGE RADIO</button>
             </div>
         </div>
     </div>
@@ -347,29 +357,101 @@
         </div>
     </div>
 
+    <!-- VIEW 4: BRIDGE RADIO -->
+    <div id="view-bridge" class="view">
+        <div class="panel" style="max-width: 600px;">
+            <h2><span class="material-symbols-outlined" style="vertical-align: bottom;">settings_input_antenna</span> HARDWARE BRIDGE</h2>
+            <p style="color: var(--text-muted); margin-bottom: 20px; font-size: 0.9rem;">
+                Connectez un nœud radio (Meshtastic/LoRa) via USB pour activer la communication Off-Grid.
+            </p>
+            <div id="bridge-terminal">
+                <div class="serial-log">> TERMINAL INITIALISÉ...</div>
+            </div>
+            <div class="btn-group">
+                <button class="btn-warning" id="connectSerialBtn" onclick="connectSerial()"><span class="material-symbols-outlined">usb</span> CONNECTER USB</button>
+                <button class="btn-secondary" onclick="showView('menu')">RETOUR</button>
+            </div>
+            <div id="serialStatus" style="margin-top: 15px; font-size: 0.8rem; color: var(--text-muted);">STATUS: DÉCONNECTÉ</div>
+        </div>
+    </div>
+
     <script>
         const PEER_CONFIG = { debug: 1 };
         let state = {
             callsign: '', peer: null, myId: null, conn: null, currentCall: null, localStream: null,
-            audioMode: 'ptt', isTalking: false, peers: {}, audioContext: null, analyser: null, isHost: false, html5QrcodeScanner: null
+            audioMode: 'ptt', isTalking: false, peers: {}, audioContext: null, analyser: null, isHost: false, html5QrcodeScanner: null,
+            serialPort: null, serialReader: null, isSerialConnected: false,
+            // Resilience Vars
+            wakeLock: null,
+            syncInterval: null,
+            knownPeers: [], // Liste des pairs connus pour l'UI
+            lastSync: Date.now()
         };
 
-        const views = { login: document.getElementById('view-login'), menu: document.getElementById('view-menu'), comms: document.getElementById('view-comms') };
+        const views = { login: document.getElementById('view-login'), menu: document.getElementById('view-menu'), comms: document.getElementById('view-comms'), bridge: document.getElementById('view-bridge') };
         const pttBtn = document.getElementById('pttBtn');
         const visualizerCanvas = document.getElementById('visualizer');
 
+        /* --- RESILIENCE FUNCTIONS --- */
+        async function requestWakeLock() {
+            if ('wakeLock' in navigator) {
+                try {
+                    state.wakeLock = await navigator.wakeLock.request('screen');
+                    state.wakeLock.addEventListener('release', () => console.log('Wake Lock released'));
+                    console.log('Wake Lock actif');
+                } catch (err) { console.error(`${err.name}, ${err.message}`); }
+            }
+        }
+        // Réactiver WakeLock si l'onglet redevient visible
+        document.addEventListener('visibilitychange', async () => {
+            if (state.wakeLock !== null && document.visibilityState === 'visible') { await requestWakeLock(); }
+            // Redémarrer le contexte audio s'il est suspendu
+            if (state.audioContext && state.audioContext.state === 'suspended') { state.audioContext.resume(); }
+        });
+
+        // Loop de synchronisation (Heartbeat)
+        function startSyncLoop() {
+            if(state.syncInterval) clearInterval(state.syncInterval);
+            
+            state.syncInterval = setInterval(() => {
+                if(state.isHost) {
+                    // HOST: Diffuser la liste complète des pairs
+                    const activePeers = Object.keys(state.peers).map(id => ({
+                        id: id,
+                        callsign: state.peers[id].callsign,
+                        isHost: (id === state.myId) // Host is implied usually, but good for clarity
+                    }));
+                    // Add Host self
+                    activePeers.push({ id: state.myId, callsign: state.callsign, isHost: true });
+                    
+                    broadcastData({ type: 'sync_users', list: activePeers });
+                } else {
+                    // CLIENT: Envoyer un ping si connecté
+                    if(state.conn && state.conn.open) {
+                        state.conn.send({ type: 'keepalive' });
+                    } else if(state.conn && !state.conn.open && state.myId) {
+                        // Tentative de reconnexion auto
+                        console.log("Connexion perdue. Tentative de reconnexion...");
+                        updateConnectionStatus(false, true);
+                        state.peer.reconnect();
+                    }
+                }
+            }, 2000); // Sync toutes les 2 secondes
+        }
+
+        /* --- NAVIGATION --- */
         function showView(viewName) { Object.values(views).forEach(el => el.classList.remove('active')); views[viewName].classList.add('active'); }
         function goToMenu() {
             const input = document.getElementById('callsignInput');
             if(input.value.trim().length < 2) { showToast("Indicatif trop court"); return; }
             state.callsign = input.value.toUpperCase();
             document.getElementById('welcomeText').innerText = `BONJOUR ${state.callsign}`;
-            showView('menu'); initAudio();
+            showView('menu'); initAudio(); requestWakeLock();
         }
-        function showToast(msg) {
-            const el = document.getElementById('errorToast'); el.innerText = msg; el.style.display = 'block'; setTimeout(() => el.style.display = 'none', 3000);
-        }
+        function goToBridge() { showView('bridge'); if (!navigator.serial) { logSerial("ERREUR: API Web Serial non supportée."); document.getElementById('connectSerialBtn').disabled = true; document.getElementById('connectSerialBtn').style.opacity = 0.5; } }
+        function showToast(msg) { const el = document.getElementById('errorToast'); el.innerText = msg; el.style.display = 'block'; setTimeout(() => el.style.display = 'none', 3000); }
 
+        /* --- AUDIO --- */
         async function initAudio() {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
@@ -378,15 +460,11 @@
                 state.analyser = state.audioContext.createAnalyser();
                 state.audioContext.createMediaStreamSource(stream).connect(state.analyser);
                 state.analyser.fftSize = 256;
-                setAudioTrackState(false); drawVisualizer(); return true;
+                setAudioTrackState(false); drawVisualizer(); 
+                return true;
             } catch (err) { console.error("Audio Error", err); showToast("Accès micro refusé"); return false; }
         }
-
-        function setAudioTrackState(enabled) {
-            if(state.localStream) state.localStream.getAudioTracks().forEach(track => track.enabled = enabled);
-            if(state.myId) updateMyStatusUI(enabled);
-        }
-
+        function setAudioTrackState(enabled) { if(state.localStream) state.localStream.getAudioTracks().forEach(track => track.enabled = enabled); if(state.myId) updateMyStatusUI(enabled); }
         function playRogerBeep(type) {
             if(!state.audioContext) return;
             if (state.audioContext.state === 'suspended') state.audioContext.resume();
@@ -396,48 +474,41 @@
             if (type === 'start') { oscillator.frequency.value = 1200; } else { oscillator.frequency.value = 800; }
             gainNode.gain.value = 0.1; oscillator.start(); setTimeout(() => oscillator.stop(), 80);
         }
-
         function setAudioMode(mode) {
             state.audioMode = mode;
             document.querySelectorAll('.mode-opt').forEach(el => el.classList.remove('active'));
             document.querySelector(`.mode-opt[data-mode="${mode}"]`).classList.add('active');
             pttBtn.classList.remove('mode-vox');
-            if(mode === 'vox') { pttBtn.classList.add('mode-vox'); setAudioTrackState(true); }
-            else { setAudioTrackState(false); }
+            if(mode === 'vox') { pttBtn.classList.add('mode-vox'); setAudioTrackState(true); } else { setAudioTrackState(false); }
         }
-
-        function startTx() {
-            if(state.audioMode !== 'ptt') return;
-            state.isTalking = true; playRogerBeep('start'); setAudioTrackState(true); pttBtn.classList.add('active');
-        }
-
-        function endTx() {
-            if(state.audioMode !== 'ptt') return;
-            state.isTalking = false; setAudioTrackState(false); playRogerBeep('end'); pttBtn.classList.remove('active');
-        }
-
-        pttBtn.addEventListener('mousedown', startTx);
-        pttBtn.addEventListener('mouseup', endTx);
-        // Suppression de 'mouseleave' pour éviter les bips intempestifs si la souris glisse
-        pttBtn.addEventListener('touchstart', (e) => { e.preventDefault(); startTx(); });
-        pttBtn.addEventListener('touchend', (e) => { e.preventDefault(); endTx(); });
+        function startTx() { if(state.audioMode !== 'ptt') return; state.isTalking = true; playRogerBeep('start'); setAudioTrackState(true); pttBtn.classList.add('active'); }
+        function endTx() { if(state.audioMode !== 'ptt') return; state.isTalking = false; setAudioTrackState(false); playRogerBeep('end'); pttBtn.classList.remove('active'); }
+        pttBtn.addEventListener('mousedown', startTx); pttBtn.addEventListener('mouseup', endTx);
+        pttBtn.addEventListener('touchstart', (e) => { e.preventDefault(); startTx(); }); pttBtn.addEventListener('touchend', (e) => { e.preventDefault(); endTx(); });
         document.addEventListener('keydown', (e) => { if(e.code === 'Space' && !state.isTalking && state.audioMode === 'ptt') startTx(); });
         document.addEventListener('keyup', (e) => { if(e.code === 'Space' && state.audioMode === 'ptt') endTx(); });
 
-        function updateConnectionStatus(connected) {
+        /* --- NETWORKING --- */
+        function updateConnectionStatus(connected, reconnecting = false) {
             const badge = document.getElementById('connectionStatus');
             const txt = document.getElementById('statusText');
-            if(connected) { badge.classList.add('status-connected'); txt.innerText = "SÉCURISÉ / EN LIGNE"; txt.style.color = "var(--text-main)"; }
-            else { badge.classList.remove('status-connected'); txt.innerText = "HORS LIGNE"; }
+            if(reconnecting) {
+                badge.className = 'status-badge status-reconnecting';
+                txt.innerText = "CONNEXION...";
+            } else if(connected) {
+                badge.className = 'status-badge status-connected';
+                txt.innerText = "EN LIGNE";
+                txt.style.color = "var(--text-main)";
+            } else {
+                badge.className = 'status-badge';
+                txt.innerText = "HORS LIGNE";
+            }
         }
 
         function createFrequency() {
             if(!state.localStream) { initAudio().then(ok => { if(ok) createFrequency(); }); return; }
             state.isHost = true; state.peer = new Peer(null, PEER_CONFIG);
-            state.peer.on('open', (id) => { state.myId = id; setupCommsUI(id); updateConnectionStatus(true); addPeerToList(id, state.callsign, true); });
-            state.peer.on('connection', (conn) => { handleDataConnection(conn); });
-            state.peer.on('call', (call) => { call.answer(state.localStream); handleMediaCall(call); });
-            state.peer.on('error', handlePeerError);
+            setupPeerEvents();
         }
 
         function joinFrequency() {
@@ -445,36 +516,100 @@
             if(!hostId) return showToast("ID invalide");
             if(!state.localStream) { initAudio().then(ok => { if(ok) joinFrequency(); }); return; }
             state.isHost = false; state.peer = new Peer(null, PEER_CONFIG);
-            state.peer.on('open', (id) => {
-                state.myId = id;
-                state.conn = state.peer.connect(hostId, { metadata: { callsign: state.callsign } });
-                state.conn.on('open', () => { updateConnectionStatus(true); setupCommsUI(hostId); const call = state.peer.call(hostId, state.localStream); handleMediaCall(call); });
-                state.conn.on('data', handleDataPacket); state.conn.on('close', leaveFrequency);
-            });
-            state.peer.on('error', handlePeerError);
+            setupPeerEvents(hostId);
         }
 
-        function handlePeerError(err) { console.error(err); showToast("Erreur coms: " + err.type); updateConnectionStatus(false); }
+        function setupPeerEvents(hostId = null) {
+            state.peer.on('open', (id) => {
+                state.myId = id;
+                if(hostId) {
+                    // Client Logic
+                    connectToHost(hostId);
+                } else {
+                    // Host Logic
+                    setupCommsUI(id);
+                    updateConnectionStatus(true);
+                    renderUserGrid([{ id: id, callsign: state.callsign, isHost: true }]);
+                    startSyncLoop();
+                }
+            });
+            state.peer.on('connection', (conn) => handleDataConnection(conn));
+            state.peer.on('call', (call) => { call.answer(state.localStream); handleMediaCall(call); });
+            state.peer.on('error', (err) => { 
+                console.error(err); 
+                // Ignore peer-unavailable error during reconnects
+                if(err.type !== 'peer-unavailable') showToast("Erreur: " + err.type); 
+            });
+            state.peer.on('disconnected', () => {
+                console.log("Peer disconnected (Network change?)");
+                updateConnectionStatus(false, true);
+                state.peer.reconnect();
+            });
+        }
+
+        function connectToHost(hostId) {
+            state.conn = state.peer.connect(hostId, { metadata: { callsign: state.callsign }, reliable: true });
+            state.conn.on('open', () => {
+                updateConnectionStatus(true);
+                setupCommsUI(hostId);
+                const call = state.peer.call(hostId, state.localStream);
+                handleMediaCall(call);
+                startSyncLoop(); // Start keeping alive
+            });
+            state.conn.on('data', handleDataPacket);
+            state.conn.on('close', () => {
+                 updateConnectionStatus(false, true);
+                 // La boucle de sync tentera de reconnecter
+            });
+        }
+
         function handleDataConnection(conn) {
             conn.on('open', () => {
                 const peerCallsign = conn.metadata ? conn.metadata.callsign : 'Inconnu';
-                state.peers[conn.peer] = { callsign: peerCallsign, conn: conn }; addPeerToList(conn.peer, peerCallsign);
+                state.peers[conn.peer] = { callsign: peerCallsign, conn: conn };
+                // En tant que Host, on force un sync immédiat
+                if(state.isHost) {
+                     // Petite attente pour stabilisation
+                     setTimeout(() => {
+                         const activePeers = Object.keys(state.peers).map(id => ({ id: id, callsign: state.peers[id].callsign }));
+                         activePeers.push({ id: state.myId, callsign: state.callsign, isHost: true });
+                         broadcastData({ type: 'sync_users', list: activePeers });
+                     }, 500);
+                }
             });
-            conn.on('data', (data) => { if(data.type === 'talking') updatePeerUI(conn.peer, data.val); });
-            conn.on('close', () => { removePeerFromList(conn.peer); });
+            conn.on('data', (data) => {
+                if(data.type === 'talking') updatePeerUI(conn.peer, data.val);
+                // Keepalive recu du client (Host side)
+                if(data.type === 'keepalive') { /* Timestamp update could go here */ }
+            });
+            conn.on('close', () => { delete state.peers[conn.peer]; });
         }
+
+        function broadcastData(data) {
+            Object.values(state.peers).forEach(p => { if(p.conn && p.conn.open) p.conn.send(data); });
+        }
+
         function handleMediaCall(call) {
             call.on('stream', (remoteStream) => {
-                const audio = document.createElement('audio'); audio.srcObject = remoteStream;
+                // IMPORTANT: Jouer le son pour garder le contexte actif
+                const audio = document.createElement('audio'); 
+                audio.srcObject = remoteStream;
                 audio.play().catch(e => console.log("Autoplay bloqué"));
             });
         }
-        function handleDataPacket(data) {} // Future use
 
+        function handleDataPacket(data) {
+            if(data.type === 'sync_users') {
+                renderUserGrid(data.list);
+            }
+        }
+
+        /* --- UI LOGIC --- */
         function updateMyStatusUI(isTalking) {
             const myItem = document.getElementById(`peer-${state.myId}`);
             if(myItem) { if(isTalking) myItem.classList.add('is-speaking'); else myItem.classList.remove('is-speaking'); }
             if(state.conn && state.conn.open) state.conn.send({ type: 'talking', val: isTalking });
+            if(state.isHost) broadcastData({ type: 'talking', val: isTalking }); // Host broadcast self status? (simplified: no direct broadcast needed if P2P logic, but here Host talks to everyone individually)
         }
 
         function setupCommsUI(freqId) {
@@ -484,21 +619,44 @@
         }
         function toggleQrDisplay() { document.getElementById('qrDisplay').classList.toggle('visible'); }
 
-        function addPeerToList(id, name, isMe = false) {
-            const list = document.getElementById('usersList');
-            if(document.getElementById(`peer-${id}`)) return;
-            const div = document.createElement('div'); div.className = 'user-item'; div.id = `peer-${id}`;
-            const shortName = name.substring(0, 2);
-            div.innerHTML = `<div class="user-avatar">${shortName}</div><div class="user-name">${name}</div><div class="user-status">${isMe && state.isHost ? 'HOST' : (isMe ? 'MOI' : 'OPR')}</div>`;
-            list.appendChild(div);
+        function renderUserGrid(userList) {
+            const listEl = document.getElementById('usersList');
+            // On ne vide pas tout brutalement pour garder les animations CSS si possible, 
+            // mais pour la sync v1.1 on va reconstruire proprement.
+            // On map les IDs actuels
+            const existingIds = Array.from(listEl.children).map(el => el.id.replace('peer-', ''));
+            const newIds = userList.map(u => u.id);
+
+            // Remove old
+            existingIds.forEach(id => {
+                if(!newIds.includes(id)) {
+                    const el = document.getElementById(`peer-${id}`);
+                    if(el) el.remove();
+                }
+            });
+
+            // Add/Update new
+            userList.forEach(u => {
+                let el = document.getElementById(`peer-${u.id}`);
+                const isMe = u.id === state.myId;
+                const statusText = isMe && state.isHost ? 'HOST (MOI)' : (u.isHost ? 'HOST' : (isMe ? 'MOI' : 'OPR'));
+                
+                if(!el) {
+                    el = document.createElement('div'); el.className = 'user-item'; el.id = `peer-${u.id}`;
+                    const shortName = u.callsign.substring(0, 2);
+                    el.innerHTML = `<div class="user-avatar">${shortName}</div><div class="user-name">${u.callsign}</div><div class="user-status">${statusText}</div>`;
+                    listEl.appendChild(el);
+                }
+            });
         }
-        function removePeerFromList(id) { const el = document.getElementById(`peer-${id}`); if(el) el.remove(); }
+        
         function updatePeerUI(id, isTalking) {
             const el = document.getElementById(`peer-${id}`);
             if(el) { if(isTalking) el.classList.add('is-speaking'); else el.classList.remove('is-speaking'); }
         }
         function leaveFrequency() { if(state.peer) state.peer.destroy(); location.reload(); }
 
+        /* --- VISUALIZER --- */
         function drawVisualizer() {
             requestAnimationFrame(drawVisualizer); if(!state.analyser) return;
             const bufferLength = state.analyser.frequencyBinCount; const dataArray = new Uint8Array(bufferLength);
@@ -515,6 +673,7 @@
             }
         }
 
+        /* --- QR SCANNER --- */
         function startQrScanner() {
             const modal = document.getElementById('scanner-modal'); modal.style.display = 'flex';
             if(state.html5QrcodeScanner) state.html5QrcodeScanner.clear();
@@ -528,6 +687,37 @@
         function onScanSuccess(decodedText) {
             playRogerBeep('start'); document.getElementById('joinIdInput').value = decodedText;
             stopQrScanner(); showToast("QR Code détecté !");
+        }
+
+        /* --- BRIDGE SERIAL --- */
+        async function connectSerial() {
+            if (!navigator.serial) return;
+            try {
+                state.serialPort = await navigator.serial.requestPort();
+                await state.serialPort.open({ baudRate: 115200 });
+                state.isSerialConnected = true;
+                document.getElementById('serialStatus').innerText = "STATUS: CONNECTÉ (115200 baud)";
+                document.getElementById('serialStatus').style.color = "var(--accent-green)";
+                document.getElementById('connectSerialBtn').classList.add('btn-primary');
+                logSerial("PORT OUVERT. ÉCOUTE EN COURS...");
+                const textDecoder = new TextDecoderStream();
+                const readableStreamClosed = state.serialPort.readable.pipeTo(textDecoder.writable);
+                const reader = textDecoder.readable.getReader();
+                state.serialReader = reader;
+                while (true) {
+                    const { value, done } = await reader.read();
+                    if (done) { break; }
+                    if (value) { logSerial(value); }
+                }
+            } catch (error) { console.error("Serial Error", error); logSerial("ERREUR: " + error.message); } 
+            finally { if(state.serialReader) state.serialReader.releaseLock(); state.isSerialConnected = false; }
+        }
+        function logSerial(msg) {
+            const term = document.getElementById('bridge-terminal');
+            const line = document.createElement('div'); line.className = 'serial-log';
+            const time = new Date().toLocaleTimeString().split(' ')[0];
+            line.innerHTML = `<span class="serial-ts">[${time}]</span> ${msg}`;
+            term.appendChild(line); term.scrollTop = term.scrollHeight;
         }
     </script>
 </body>
