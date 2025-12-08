@@ -795,6 +795,7 @@
         const NetService = {
             peer: null,
             hostId: null,
+            retryCount: 0,
             
             createSession: (id = null) => {
                 document.getElementById('btn-create-host').innerHTML = 'Connexion Satellite...';
@@ -822,6 +823,7 @@
                 
                 peer.on('open', (pid) => {
                     App.user.id = pid;
+                    NetService.retryCount = 0; // Reset retries on success
                     document.getElementById('txt-id-display').innerText = `ID: ${pid}`;
                     
                     if (App.isHost) {
@@ -865,14 +867,21 @@
                 
                 peer.on('error', (err) => {
                     if (err.type === 'unavailable-id' && App.isHost) {
-                        // ID taken? Retry without ID (generates new one), but clients will disconnect.
-                        // Ideally, we'd wait, but for now fallback:
-                        console.warn("[PEER] ID Taken, generating new...");
-                        NetService.peer.destroy();
-                        NetService.initPeer(null); 
+                        // ID Taken. Logic: If we are recovering our own ID, try again a few times.
+                        if (id && NetService.retryCount < 5) {
+                            console.warn(`[PEER] ID ${id} unavailable, retrying (${NetService.retryCount + 1}/5)...`);
+                            NetService.retryCount++;
+                            setTimeout(() => NetService.initPeer(id), 1500); // Wait 1.5s and retry
+                        } else {
+                            // Fallback: Generate new ID (Unavoidable if ID is stuck forever)
+                            console.warn("[PEER] ID Recovery Failed, generating new...");
+                            NetService.peer.destroy();
+                            NetService.initPeer(null); 
+                        }
                     } else if (err.type === 'peer-unavailable') {
                         App.toast("Hôte introuvable", true);
                     } else {
+                        console.error(err);
                         App.toast("Erreur Réseau", true);
                     }
                 });
@@ -1024,6 +1033,14 @@
                 await DBService.init();
                 App.initBattery();
                 App.checkSession();
+                
+                // --- CRITICAL FIX FOR F5 REFRESH ---
+                // Destroy peer on unload to free the ID immediately on the server
+                window.addEventListener('beforeunload', () => {
+                    if(NetService.peer) {
+                        NetService.peer.destroy();
+                    }
+                });
                 
                 const btn = document.getElementById('ptt-btn');
                 const start = (e) => { 
