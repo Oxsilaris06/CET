@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>COM TAC v10.2 // FIXED</title>
+    <title>COM TAC v10.3 // RELAY</title>
     
     <!-- ================= 1. EXTERNAL LIBRARIES (CDN) ================= -->
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Chakra+Petch:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -115,7 +115,6 @@
         .btn-block:active { background: var(--color-surface-light); }
 
         /* --- MAP (BFT) --- */
-        /* FIX: Ciblage correct de l'ID utilisé par Leaflet */
         #map-instance { width: 100%; height: 100%; background: #0b0b0b; z-index: 1; }
         
         /* Tactical Markers */
@@ -229,13 +228,12 @@
     <!-- UI STRUCTURE -->
     <header>
         <div class="brand">
-            <span class="material-symbols-outlined">satellite_alt</span> COM<span>TAC</span> v10.2
+            <span class="material-symbols-outlined">satellite_alt</span> COM<span>TAC</span> v10.3
         </div>
         <div class="nav-group">
             <div class="btn-nav" id="btn-toggle-map" onclick="App.toggleMap()">
                 <span class="material-symbols-outlined">map</span> CARTE
             </div>
-            <!-- FIX: ID corrigé et fonction corrigée -->
             <div class="btn-nav danger" id="btn-quit" onclick="App.leaveSession(true)" style="display:none;">
                 <span class="material-symbols-outlined">logout</span>
             </div>
@@ -308,7 +306,6 @@
 
     <!-- VIEW: MAP -->
     <div id="view-map" class="view">
-        <!-- FIX: ID doit correspondre à celui utilisé dans MapService.init() -->
         <div id="map-instance"></div>
     </div>
 
@@ -410,13 +407,11 @@
             init: () => {
                 if (MapService.map) return;
                 
-                // Initialize Leaflet Map
                 MapService.map = L.map('map-instance', {
                     zoomControl: false,
                     attributionControl: false
-                }).setView([48.85, 2.35], 13); // Default Paris
+                }).setView([48.85, 2.35], 13);
 
-                // Offline Tile Layer Logic
                 const OfflineLayer = L.TileLayer.extend({
                     createTile: function(coords, done) {
                         const tile = document.createElement('img');
@@ -433,7 +428,6 @@
                                     tile.src = URL.createObjectURL(blob);
                                     done(null, tile);
                                 }).catch(err => {
-                                    // Fallback if offline and no cache
                                     tile.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
                                     done(null, tile);
                                 });
@@ -605,7 +599,6 @@
             
             tx: (active) => {
                 if (!AudioService.stream) return;
-                
                 const allow = (AudioService.mode === 'ptt' || (AudioService.mode === 'vox' && active));
                 
                 if (allow) {
@@ -639,11 +632,8 @@
                     const rms = Math.sqrt(sum / buffer.length);
                     const db = 20 * Math.log10(rms);
                     
-                    if (db > AudioService.vadThreshold) {
-                        AudioService.tx(true);
-                    } else {
-                        if (AudioService.mode === 'vox') AudioService.tx(false);
-                    }
+                    if (db > AudioService.vadThreshold) AudioService.tx(true);
+                    else if (AudioService.mode === 'vox') AudioService.tx(false);
                 }
                 setTimeout(AudioService.vadLoop, 100);
             },
@@ -656,7 +646,7 @@
                 if (AudioService.mode === 'vox') {
                     icon.innerText = 'mic';
                     btn.classList.add('vox-active');
-                    App.toast("Mode VOX (Mains Libres)");
+                    App.toast("Mode VOX");
                 } else {
                     icon.innerText = 'mic_none';
                     btn.classList.remove('vox-active');
@@ -714,7 +704,7 @@
             }
         };
 
-        // --- MODULE 4: NETWORK (PeerJS) ---
+        // --- MODULE 4: NETWORK (PeerJS + RELAY PATCH) ---
         const NetService = {
             peer: null,
             hostId: null,
@@ -738,7 +728,6 @@
             
             initPeer: (id = null) => {
                 if (NetService.peer) NetService.peer.destroy();
-                
                 const peer = new Peer(id, CONFIG.peerConfig);
                 
                 peer.on('open', (pid) => {
@@ -750,12 +739,10 @@
                         App.saveSession(pid);
                         App.switchView('view-ops');
                     } else if (NetService.hostId) {
-                        // CLIENT: Connect to Host
                         const conn = peer.connect(NetService.hostId, { metadata: App.user });
-                        
                         conn.on('open', () => {
                             NetService.handleConn(conn);
-                            // FORCE HANDSHAKE for Host to see me
+                            // IMMEDIATE HANDSHAKE WITH FULL DATA
                             conn.send({ type: 'FULL', user: App.user });
                             
                             const call = peer.call(NetService.hostId, AudioService.stream);
@@ -784,7 +771,6 @@
                 });
                 
                 peer.on('error', (err) => {
-                    console.error("[PEER] Err", err);
                     if (err.type === 'unavailable-id' && App.isHost) {
                         NetService.peer.destroy();
                         NetService.initPeer(null);
@@ -795,25 +781,32 @@
                     }
                 });
                 
-                peer.on('disconnected', () => {
-                    console.log("[PEER] Disconnected, retry...");
-                    peer.reconnect();
-                });
-                
+                peer.on('disconnected', () => peer.reconnect());
                 NetService.peer = peer;
             },
             
             handleConn: (conn) => {
                 conn.on('data', (d) => {
-                    // Robust handling: update peer data regardless of packet type
-                    if (d.type === 'FULL' || d.type === 'UPDATE') NetService.updatePeer(d.user);
+                    if (d.type === 'FULL' || d.type === 'UPDATE') {
+                        NetService.updatePeer(d.user);
+                        
+                        // --- HOST RELAY LOGIC (CRITICAL FIX) ---
+                        if (App.isHost) {
+                            // Instant Relay to ALL other connected peers
+                            Object.values(App.peers).forEach(p => {
+                                if (p.conn && p.conn.open && p.conn.peer !== d.user.id) {
+                                    p.conn.send({ type: 'UPDATE', user: d.user });
+                                }
+                            });
+                        }
+                    }
                     if (d.type === 'SYNC') d.list.forEach(u => NetService.updatePeer(u));
                 });
                 
                 conn.on('open', () => {
                     if (!App.peers[conn.peer]) App.peers[conn.peer] = {};
                     App.peers[conn.peer].conn = conn;
-                    NetService.broadcast(); // Send my info back
+                    NetService.broadcast();
                 });
                 
                 conn.on('close', () => {
@@ -843,14 +836,13 @@
             startHeartbeat: () => {
                 setInterval(() => {
                     if (!App.isHost) return;
-                    // Gather valid users
                     const list = Object.values(App.peers).map(p => p.data).filter(d => d && d.id);
                     list.push(App.user);
                     
                     Object.values(App.peers).forEach(p => {
                         if (p.conn && p.conn.open) p.conn.send({ type: 'SYNC', list: list });
                     });
-                }, 1000); // 1Hz Sync
+                }, 1000);
             }
         };
 
@@ -863,11 +855,9 @@
                 setTimeout(() => {
                     if (QRService.scanner) try { QRService.scanner.clear(); } catch(e){}
                     QRService.scanner = new Html5Qrcode("scan-region");
-                    const config = { fps: 10, qrbox: { width: 250, height: 250 } };
-                    
                     QRService.scanner.start(
                         { facingMode: "environment" },
-                        config,
+                        { fps: 10, qrbox: { width: 250, height: 250 } },
                         (txt) => {
                             QRService.stop();
                             document.getElementById('input-join-id').value = txt;
@@ -876,7 +866,6 @@
                         },
                         (err) => {}
                     ).catch(err => {
-                        console.error("[QR] Err", err);
                         QRService.stop();
                         App.toast("Erreur Caméra", true);
                     });
@@ -914,11 +903,7 @@
             wakeLock: null,
             
             init: async () => {
-                console.log("[APP] Starting...");
-                if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
-                    alert("ATTENTION: Le module requiert HTTPS pour fonctionner.");
-                }
-
+                if (location.protocol !== 'https:' && location.hostname !== 'localhost') alert("HTTPS Requis");
                 await DBService.init();
                 App.initBattery();
                 App.checkSession();
@@ -963,21 +948,15 @@
                     if (val.length < 2) return App.toast("ID Invalide", true);
                     App.user.callsign = val;
                 }
-                
                 const btn = document.getElementById('btn-login-trigger');
                 if (btn) btn.innerText = "INIT AUDIO...";
-                
                 const audioOk = await AudioService.init();
                 if (btn) btn.innerText = "CONNEXION";
-                
                 if (!audioOk && !skipUI) return;
                 
                 App.saveSession();
                 App.switchView('view-menu');
-                
-                if ('wakeLock' in navigator) {
-                    try { App.wakeLock = await navigator.wakeLock.request('screen'); } catch(e){}
-                }
+                if ('wakeLock' in navigator) try { App.wakeLock = await navigator.wakeLock.request('screen'); } catch(e){}
             },
             
             saveSession: (freq = null) => {
@@ -997,21 +976,16 @@
             switchView: (id) => {
                 document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
                 document.getElementById(id).classList.add('active');
-                
                 const isOp = (id === 'view-ops' || id === 'view-map');
                 document.getElementById('hud').style.display = isOp ? 'block' : 'none';
-                
-                // FIX: Check if button exists before accessing style
                 const quitBtn = document.getElementById('btn-quit');
                 if(quitBtn) quitBtn.style.display = isOp ? 'flex' : 'none';
-                
                 if (id === 'view-map' && MapService.map) setTimeout(() => MapService.map.invalidateSize(), 200);
             },
             
             toggleMap: () => {
                 const btn = document.getElementById('btn-toggle-map');
                 const isMap = document.getElementById('view-map').classList.contains('active');
-                
                 if (isMap) {
                     App.switchView('view-ops');
                     btn.classList.remove('active');
@@ -1024,11 +998,9 @@
             
             setStatus: (s) => {
                 App.user.status = s;
-                // UI Highlight
                 document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
                 const c = document.querySelector(`.chip[data-val="${s}"]`);
                 if(c) c.classList.add('active');
-                
                 NetService.broadcast();
                 App.renderGrid();
                 MapService.updateMarker(App.user.id, App.user);
@@ -1036,35 +1008,22 @@
             
             renderGrid: () => {
                 const grid = document.getElementById('ops-container');
-                if (!grid) return; // Safety check
+                if (!grid) return;
                 grid.innerHTML = '';
-                
                 const all = [{...App.user, isMe: true}].concat(
                     Object.values(App.peers).map(p => p.data).filter(d => d && d.id)
                 );
-                
                 all.forEach(u => {
                     const div = document.createElement('div');
                     div.className = `op-card ${u.isMe ? 'is-me' : ''} ${u.isTx ? 'talking' : ''}`;
                     if(u.status === 'CONTACT') div.setAttribute('data-status', 'CONTACT');
-                    
                     let bat = u.bat ? `🔋 ${u.bat}%` : '🔋 --';
                     let col = '#aaa';
                     if(u.status === 'CONTACT') col = 'var(--color-red)';
                     else if(u.status === 'PROGRESSION') col = 'var(--color-blue)';
                     else if(u.status === 'CLEAR') col = 'var(--color-green)';
                     else if(u.status === 'APPUI') col = 'var(--color-yellow)';
-                    
-                    div.innerHTML = `
-                        <div class="op-header">
-                            <span class="op-role ${u.role === 'HOST' ? 'HOST' : ''}">${u.role}</span>
-                            ${u.isTx ? '<span class="material-symbols-outlined" style="color:var(--color-green); font-size:1rem;">graphic_eq</span>' : ''}
-                        </div>
-                        <div class="op-callsign">${u.callsign}</div>
-                        <div class="op-status" style="color:${col}">${u.status}</div>
-                        <div class="op-bat">${bat}</div>
-                        <div class="viz-bar"><div class="viz-fill" style="width:${u.isTx ? '100%' : '0%'}"></div></div>
-                    `;
+                    div.innerHTML = `<div class="op-header"><span class="op-role ${u.role === 'HOST' ? 'HOST' : ''}">${u.role}</span>${u.isTx ? '<span class="material-symbols-outlined" style="color:var(--color-green); font-size:1rem;">graphic_eq</span>' : ''}</div><div class="op-callsign">${u.callsign}</div><div class="op-status" style="color:${col}">${u.status}</div><div class="op-bat">${bat}</div><div class="viz-bar"><div class="viz-fill" style="width:${u.isTx ? '100%' : '0%'}"></div></div>`;
                     grid.appendChild(div);
                 });
             },
@@ -1072,12 +1031,8 @@
             initBattery: () => {
                 if ('getBattery' in navigator) {
                     navigator.getBattery().then(b => {
-                        const update = () => {
-                            App.user.bat = Math.floor(b.level * 100);
-                            NetService.broadcast();
-                        };
-                        update();
-                        b.addEventListener('levelchange', update);
+                        const update = () => { App.user.bat = Math.floor(b.level * 100); NetService.broadcast(); };
+                        update(); b.addEventListener('levelchange', update);
                     });
                 }
             },
@@ -1092,16 +1047,12 @@
             },
             
             copyID: () => {
-                if (App.user.id) {
-                    navigator.clipboard.writeText(App.user.id);
-                    App.toast("ID Copié");
-                }
+                if (App.user.id) { navigator.clipboard.writeText(App.user.id); App.toast("ID Copié"); }
             }
         };
 
         // BOOTSTRAP
         document.addEventListener('DOMContentLoaded', App.init);
-
     </script>
 </body>
 </html>
