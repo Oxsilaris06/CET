@@ -60,6 +60,7 @@
             background: rgba(5,5,5,0.95);
             border-bottom: 1px solid rgba(255,255,255,0.1);
             display: flex; justify-content: space-between; align-items: center;
+            position: fixed; top: 0; left: 0; right: 0;
             z-index: 1000;
         }
 
@@ -87,6 +88,7 @@
             display: flex; flex-direction: column;
             opacity: 0; pointer-events: none; z-index: 0;
             transition: opacity 0.3s ease;
+            padding-top: var(--header-height); /* Base padding */
         }
         .view.active { opacity: 1; pointer-events: all; z-index: 10; }
 
@@ -149,7 +151,10 @@
         /* --- OPS GRID --- */
         .ops-grid {
             display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;
-            padding: 15px; padding-bottom: 240px; overflow-y: auto; align-content: start;
+            padding: 15px;
+            padding-bottom: 240px; 
+            padding-top: 20px; /* Extra padding for header clearance */
+            overflow-y: auto; align-content: start;
             /* Center grid on larger screens */
             width: 100%; max-width: 600px; margin: 0 auto;
         }
@@ -439,7 +444,12 @@
             lastUpdate: 0,
             
             init: () => {
-                if (MapService.map) return;
+                if (MapService.map) {
+                    // Force catch-up render of markers when map is reopened
+                    Object.keys(App.peers).forEach(pid => MapService.updateMarker(pid, App.peers[pid].data));
+                    MapService.updateMarker(App.user.id, App.user);
+                    return;
+                }
                 
                 // Initialize Leaflet Map
                 MapService.map = L.map('map-instance', {
@@ -479,7 +489,9 @@
                     maxZoom: 19
                 }).addTo(MapService.map);
 
-                MapService.startGPS();
+                // Initialize existing markers
+                Object.keys(App.peers).forEach(pid => MapService.updateMarker(pid, App.peers[pid].data));
+                if(App.user.lat) MapService.updateMarker(App.user.id, App.user);
             },
             
             startGPS: () => {
@@ -524,10 +536,13 @@
                             el.style.color = accuracy < 20 ? 'var(--color-green)' : 'var(--color-yellow)';
                         }
                         
-                        MapService.updateMarker(App.user.id, App.user);
-                        
-                        // Broadcast update immediately if position changed
+                        // Update Data Model & Net always
                         NetService.broadcast();
+                        
+                        // Update Visual only if map is open
+                        if (MapService.map) {
+                            MapService.updateMarker(App.user.id, App.user);
+                        }
                     },
                     (err) => {
                         console.warn("[GPS] Error", err);
@@ -798,7 +813,9 @@
             initPeer: (id = null) => {
                 if (NetService.peer) NetService.peer.destroy();
                 
-                const peer = new Peer(id, CONFIG.peerConfig);
+                // HOST RECOVERY: If we are host and an ID was passed (from localStorage), use it.
+                // Otherwise, PeerJS generates one.
+                const peer = id ? new Peer(id, CONFIG.peerConfig) : new Peer(CONFIG.peerConfig);
                 
                 peer.on('open', (pid) => {
                     App.user.id = pid;
@@ -806,7 +823,8 @@
                     
                     if (App.isHost) {
                         NetService.startHeartbeat();
-                        App.saveSession(pid);
+                        // Host saves their OWN id to session for recovery
+                        App.saveSession(pid); 
                         App.switchView('view-ops');
                     } else if (NetService.hostId) {
                         const conn = peer.connect(NetService.hostId, { metadata: App.user });
@@ -819,6 +837,7 @@
                             const call = peer.call(NetService.hostId, AudioService.stream);
                             call.on('stream', s => AudioService.playRemote(s));
                             
+                            // Client saves HOST id to session for recovery
                             App.saveSession(NetService.hostId);
                             App.switchView('view-ops');
                             App.toast("Fréquence rejointe");
@@ -843,8 +862,11 @@
                 
                 peer.on('error', (err) => {
                     if (err.type === 'unavailable-id' && App.isHost) {
+                        // ID taken? Retry without ID (generates new one), but clients will disconnect.
+                        // Ideally, we'd wait, but for now fallback:
+                        console.warn("[PEER] ID Taken, generating new...");
                         NetService.peer.destroy();
-                        NetService.initPeer(null);
+                        NetService.initPeer(null); 
                     } else if (err.type === 'peer-unavailable') {
                         App.toast("Hôte introuvable", true);
                     } else {
@@ -918,7 +940,7 @@
                 App.peers[user.id].data = { ...App.peers[user.id].data, ...user };
                 
                 App.renderGrid();
-                MapService.updateMarker(user.id, App.peers[user.id].data);
+                if(MapService.map) MapService.updateMarker(user.id, App.peers[user.id].data);
             },
             
             startHeartbeat: () => {
@@ -1034,8 +1056,9 @@
                 if (s) {
                     App.user.callsign = s.callsign;
                     if (s.freq) {
+                        App.isHost = s.isHost; // Restore Host state
                         App.login(true).then(() => {
-                            if (s.isHost) NetService.createSession(s.freq);
+                            if (s.isHost) NetService.createSession(s.freq); // Try to reclaim old Host ID
                             else NetService.joinSession(s.freq);
                         });
                     } else {
@@ -1058,6 +1081,7 @@
                 
                 App.saveSession();
                 App.switchView('view-menu');
+                MapService.startGPS(); // Start GPS immediately in background
                 if ('wakeLock' in navigator) try { App.wakeLock = await navigator.wakeLock.request('screen'); } catch(e){}
             },
             
@@ -1115,7 +1139,7 @@
                 if(c) c.classList.add('active');
                 NetService.broadcast();
                 App.renderGrid();
-                MapService.updateMarker(App.user.id, App.user);
+                if(MapService.map) MapService.updateMarker(App.user.id, App.user);
             },
             
             renderGrid: () => {
