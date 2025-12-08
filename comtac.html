@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>COM TAC v10.5 // AUTONOMOUS</title>
+    <title>COM TAC v10.6 // AUTONOMOUS</title>
     
     <!-- ================= 1. EXTERNAL LIBRARIES (CDN) ================= -->
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Chakra+Petch:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -226,7 +226,23 @@
             display: flex; align-items: center; justify-content: center; cursor: pointer; font-weight: bold;
         }
         #scan-region { width: 300px; height: 300px; background: black; border-radius: 20px; overflow: hidden; border: 1px solid #333; }
-        #qr-code-region { background: white; padding: 25px; border-radius: 20px; }
+        
+        /* FIX: Responsive QR Code Region */
+        #qr-code-region { 
+            background: white; 
+            padding: 20px; 
+            border-radius: 20px; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center;
+            width: auto;
+            max-width: 85vw;
+        }
+        #qr-code-region img, #qr-code-region canvas {
+            display: block;
+            max-width: 100% !important;
+            height: auto !important;
+        }
 
         #visualizer { position: absolute; bottom: 120px; left: 0; width: 100%; height: 80px; pointer-events: none; opacity: 0.5; z-index: 400; }
         
@@ -243,7 +259,7 @@
     <!-- UI STRUCTURE -->
     <header>
         <div class="brand">
-            <span class="material-symbols-outlined">satellite_alt</span> COM<span>TAC</span> v10.5
+            <span class="material-symbols-outlined">satellite_alt</span> COM<span>TAC</span> v10.6
         </div>
         <div class="nav-group">
             <div class="btn-nav" id="btn-toggle-map" onclick="App.toggleMap()">
@@ -266,9 +282,9 @@
 
     <div id="overlay-generator" class="overlay" style="background: rgba(0,0,0,0.95);">
         <div class="close-overlay" onclick="QRService.hide()">✕</div>
-        <div style="text-align: center;">
+        <div style="text-align: center; width: 100%; padding: 20px; display: flex; flex-direction: column; align-items: center;">
             <div id="qr-code-region"></div>
-            <div id="qr-text-val" style="margin-top: 20px; font-family: var(--font-mono); color: var(--color-blue); font-size: 1.5rem;">...</div>
+            <div id="qr-text-val" style="margin-top: 20px; font-family: var(--font-mono); color: var(--color-blue); font-size: 1.5rem; word-break: break-all;">...</div>
         </div>
     </div>
 
@@ -647,42 +663,44 @@
             
             tx: (active) => {
                 if (!AudioService.stream) return;
-                const allow = (AudioService.mode === 'ptt' || (AudioService.mode === 'vox' && active));
                 
-                if (allow) {
-                    AudioService.stream.getAudioTracks().forEach(t => t.enabled = active);
-                    App.user.isTx = active;
-                    
-                    const btn = document.getElementById('ptt-btn');
-                    if (btn) {
-                        if (active) {
-                            btn.classList.add('active');
-                            if (navigator.vibrate) navigator.vibrate(30);
-                        } else {
-                            if (AudioService.mode !== 'vox') btn.classList.remove('active');
-                        }
+                // Allow if PTT, or if Vox is ON (Vox ignores 'active' arg here, it forces open)
+                const allow = (AudioService.mode === 'vox' || (AudioService.mode === 'ptt' && active));
+                
+                // Logic: If active is true, or mode is vox, we open.
+                // Wait, if active is false, but mode is vox, we still want it open.
+                const shouldBeOpen = (AudioService.mode === 'vox') ? true : active;
+
+                AudioService.stream.getAudioTracks().forEach(t => t.enabled = shouldBeOpen);
+                App.user.isTx = shouldBeOpen;
+                
+                const btn = document.getElementById('ptt-btn');
+                if (btn) {
+                    if (shouldBeOpen) {
+                        btn.classList.add('active');
+                        if (navigator.vibrate && AudioService.mode !== 'vox') navigator.vibrate(30);
+                    } else {
+                         btn.classList.remove('active');
                     }
-                    
-                    NetService.broadcast(); 
-                    App.renderGrid();
                 }
+                
+                NetService.broadcast(); 
+                App.renderGrid();
             },
             
             vadLoop: () => {
                 if (!AudioService.analyser) return;
                 
-                if (AudioService.mode === 'vox' || App.user.isTxRequest) {
-                    const buffer = new Float32Array(AudioService.analyser.fftSize);
-                    AudioService.analyser.getFloatTimeDomainData(buffer);
-                    
-                    let sum = 0;
-                    for(let i=0; i<buffer.length; i++) sum += buffer[i]*buffer[i];
-                    const rms = Math.sqrt(sum / buffer.length);
-                    const db = 20 * Math.log10(rms);
-                    
-                    if (db > AudioService.vadThreshold) AudioService.tx(true);
-                    else if (AudioService.mode === 'vox') AudioService.tx(false);
+                // If VOX is ON, we force TX open in toggleVox, so loop is only visual or PTT monitor
+                // We keep getting data for Visualizer
+                const buffer = new Float32Array(AudioService.analyser.fftSize);
+                AudioService.analyser.getFloatTimeDomainData(buffer);
+                
+                if (AudioService.mode === 'vox') {
+                    // Force Open if not already
+                    if (!App.user.isTx) AudioService.tx(true);
                 }
+                
                 setTimeout(AudioService.vadLoop, 100);
             },
             
@@ -694,11 +712,12 @@
                 if (AudioService.mode === 'vox') {
                     icon.innerText = 'mic';
                     btn.classList.add('vox-active');
-                    App.toast("Mode VOX (Mains Libres)");
+                    App.toast("Mode VOX (Micro Ouvert)");
+                    AudioService.tx(true); // Open immediately
                 } else {
                     icon.innerText = 'mic_none';
                     btn.classList.remove('vox-active');
-                    AudioService.tx(false);
+                    AudioService.tx(false); // Close immediately
                     App.toast("Mode PTT");
                 }
             },
@@ -791,13 +810,16 @@
                         const conn = peer.connect(NetService.hostId, { metadata: App.user });
                         conn.on('open', () => {
                             NetService.handleConn(conn);
-                            conn.send({ type: 'FULL', user: App.user }); // Handshake
+                            
+                            // FORCE UPDATE: Send current user state immediately upon connection
+                            conn.send({ type: 'FULL', user: App.user }); 
                             
                             const call = peer.call(NetService.hostId, AudioService.stream);
                             call.on('stream', s => AudioService.playRemote(s));
                             
                             App.saveSession(NetService.hostId);
                             App.switchView('view-ops');
+                            App.toast("Fréquence rejointe");
                         });
                         conn.on('error', () => App.toast("Hôte injoignable", true));
                     }
@@ -846,7 +868,7 @@
                     if (d.type === 'FULL' || d.type === 'UPDATE') {
                         NetService.updatePeer(d.user);
                         
-                        // HOST RELAY
+                        // HOST RELAY: If I am host, I must tell everyone else about this new user/update
                         if (App.isHost) {
                             Object.values(App.peers).forEach(p => {
                                 if (p.conn && p.conn.open && p.conn.peer !== d.user.id) {
@@ -861,6 +883,15 @@
                 conn.on('open', () => {
                     if (!App.peers[conn.peer]) App.peers[conn.peer] = {};
                     App.peers[conn.peer].conn = conn;
+                    
+                    // IMPORTANT: When a client opens connection to us (Host),
+                    // we immediately send them back the full list of everyone including ourselves.
+                    if (App.isHost) {
+                        const list = Object.values(App.peers).map(p => p.data).filter(d => d && d.id);
+                        list.push(App.user);
+                        conn.send({ type: 'SYNC', list: list });
+                    }
+                    
                     NetService.broadcast();
                 });
                 
@@ -945,7 +976,8 @@
                 if (!App.user.id) return;
                 const tgt = document.getElementById('qr-code-region');
                 tgt.innerHTML = '';
-                new QRCode(tgt, { text: App.user.id, width: 200, height: 200 });
+                // Generate larger, allow CSS to shrink it
+                new QRCode(tgt, { text: App.user.id, width: 400, height: 400 });
                 document.getElementById('qr-text-val').innerText = App.user.id;
                 document.getElementById('overlay-generator').style.display = 'flex';
             },
@@ -967,8 +999,18 @@
                 App.checkSession();
                 
                 const btn = document.getElementById('ptt-btn');
-                const start = (e) => { if(e.cancelable) e.preventDefault(); App.user.isTxRequest = true; AudioService.tx(true); };
-                const end = (e) => { if(e.cancelable) e.preventDefault(); App.user.isTxRequest = false; AudioService.tx(false); };
+                const start = (e) => { 
+                    if (AudioService.mode === 'vox') return; // Ignore PTT button in VOX mode
+                    if(e.cancelable) e.preventDefault(); 
+                    App.user.isTxRequest = true; 
+                    AudioService.tx(true); 
+                };
+                const end = (e) => { 
+                    if (AudioService.mode === 'vox') return; 
+                    if(e.cancelable) e.preventDefault(); 
+                    App.user.isTxRequest = false; 
+                    AudioService.tx(false); 
+                };
                 
                 btn.addEventListener('mousedown', start); btn.addEventListener('mouseup', end);
                 btn.addEventListener('mouseleave', end); btn.addEventListener('touchstart', start); btn.addEventListener('touchend', end);
