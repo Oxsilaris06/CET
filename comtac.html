@@ -3,736 +3,564 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>COM TAC v1.3 // PERSISTENT</title>
+    <meta name="theme-color" content="#000000">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>COM TAC v3.1 // BFT FIX</title>
     
     <!-- Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Oswald:wght@300;400;500&family=Saira+Stencil+One&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Chakra+Petch:wght@400;600;700&display=swap" rel="stylesheet">
     <!-- Icons -->
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,1,0" />
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 
-    <!-- PeerJS & Utils -->
+    <!-- External Libs -->
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
     <style>
-        /* --- THEME TACTIQUE --- */
+        /* --- DESIGN SYSTEM v3 --- */
         :root {
-            --bg-body: #050505;
-            --bg-glass: rgba(22, 22, 25, 0.85);
-            --bg-panel: rgba(10, 10, 12, 0.95);
-            --accent-blue: #3b82f6;
-            --accent-green: #22c55e;
-            --accent-red: #ef4444;
-            --accent-orange: #f59e0b;
-            --accent-glow: rgba(59, 130, 246, 0.4);
-            --text-main: #e0e0e0;
-            --text-muted: #94a3b8;
-            --font-ui: 'Oswald', sans-serif;
-            --font-data: 'JetBrains Mono', monospace;
-            --font-title: 'Saira Stencil One', cursive;
-            --radius-md: 12px;
+            --c-bg: #050505;
+            --c-surface: #121214;
+            --c-progression: #3b82f6;   /* Bleu */
+            --c-contact: #ef4444;       /* Rouge */
+            --c-clear: #22c55e;         /* Vert */
+            --c-appui: #eab308;         /* Jaune */
+            --c-text: #e0e0e0;
+            --c-text-dim: #6b7280;
+            --f-ui: 'Chakra Petch', sans-serif;
+            --f-mono: 'JetBrains Mono', monospace;
+            --radius: 16px;
         }
 
-        * { box-sizing: border-box; margin: 0; padding: 0; outline: none; -webkit-tap-highlight-color: transparent; user-select: none; }
+        * { box-sizing: border-box; margin: 0; padding: 0; outline: none; -webkit-tap-highlight-color: transparent; user-select: none; touch-action: manipulation; }
 
         body {
-            font-family: var(--font-ui);
-            background-color: var(--bg-body);
-            color: var(--text-main);
-            background-image: 
-                linear-gradient(rgba(59, 130, 246, 0.02) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(59, 130, 246, 0.02) 1px, transparent 1px);
-            background-size: 30px 30px;
-            height: 100vh;
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
+            font-family: var(--f-ui); background-color: var(--c-bg); color: var(--c-text);
+            height: 100vh; overflow: hidden; display: flex; flex-direction: column;
+        }
+
+        /* --- ANIMATIONS --- */
+        @keyframes pulse-red {
+            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); border-color: var(--c-contact); background: rgba(239, 68, 68, 0.1); }
+            70% { box-shadow: 0 0 0 20px rgba(239, 68, 68, 0); border-color: var(--c-contact); background: rgba(239, 68, 68, 0.2); }
+            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); border-color: var(--c-contact); background: rgba(239, 68, 68, 0.1); }
         }
 
         /* --- HEADER --- */
         header {
-            padding: 15px;
-            background: var(--bg-panel);
+            padding: 0 20px; height: 60px; background: rgba(5, 5, 5, 0.95);
             border-bottom: 1px solid rgba(255,255,255,0.1);
-            display: flex; justify-content: space-between; align-items: center;
-            z-index: 10;
+            display: flex; justify-content: space-between; align-items: center; z-index: 50;
         }
-        .app-title {
-            font-family: var(--font-title);
-            color: var(--accent-blue);
-            font-size: 1.5rem;
-            text-shadow: 0 0 10px var(--accent-glow);
-            letter-spacing: 2px;
+        .brand { font-weight: 700; font-size: 1.2rem; letter-spacing: 1px; display: flex; gap: 8px; }
+        .brand span { color: var(--c-progression); }
+        .map-toggle {
+            background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.1);
+            padding: 6px 12px; border-radius: 20px; font-size: 0.8rem; cursor: pointer;
+            display: flex; align-items: center; gap: 5px; color: var(--c-text);
         }
-        .status-badge {
-            font-family: var(--font-data);
-            font-size: 0.8rem;
-            padding: 4px 8px;
-            border-radius: 4px;
-            background: rgba(255,255,255,0.05);
-            border: 1px solid rgba(255,255,255,0.1);
-            color: var(--text-muted);
-            display: flex; align-items: center; gap: 5px;
-            transition: all 0.3s;
-        }
-        .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); transition: background 0.3s; }
-        .status-connected .status-dot { background: var(--accent-green); box-shadow: 0 0 8px var(--accent-green); }
-        .status-reconnecting { border-color: var(--accent-orange); color: var(--accent-orange); }
-        .status-reconnecting .status-dot { background: var(--accent-orange); animation: blink 1s infinite; }
-
-        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; } }
+        .map-toggle.active { background: var(--c-progression); color: black; border-color: var(--c-progression); }
 
         /* --- VIEWS --- */
         .view {
-            flex: 1;
-            display: none;
-            flex-direction: column;
-            padding: 20px;
-            overflow-y: auto;
-            align-items: center;
-            justify-content: center;
-            transition: opacity 0.3s;
+            position: absolute; inset: 0; top: 60px; /* Header height */
+            display: flex; flex-direction: column; background: var(--c-bg);
+            opacity: 0; pointer-events: none; transition: opacity 0.2s;
         }
-        .view.active { display: flex; animation: fadeIn 0.4s ease-out; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .view.active { opacity: 1; pointer-events: all; z-index: 10; }
 
-        /* --- FORMS & INPUTS --- */
-        .panel {
-            background: var(--bg-glass);
-            border: 1px solid rgba(255,255,255,0.1);
-            border-radius: var(--radius-md);
-            padding: 30px;
-            width: 100%; max-width: 450px;
-            text-align: center;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-            backdrop-filter: blur(10px);
-        }
-
-        h2 { margin-bottom: 20px; font-weight: 300; color: var(--accent-blue); text-transform: uppercase; letter-spacing: 1px; }
-
-        input {
-            width: 100%; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1);
-            border-radius: 6px; padding: 15px; color: white;
-            font-family: var(--font-data); font-size: 1.1rem; text-align: center;
-            margin-bottom: 20px; transition: border 0.3s;
-        }
-        input:focus { border-color: var(--accent-blue); }
-
-        .btn-group { display: flex; gap: 15px; margin-top: 10px; }
+        /* --- MAP VIEW --- */
+        #view-map { background: #111; }
+        #map-container { width: 100%; height: 100%; z-index: 1; }
         
-        button {
-            flex: 1;
-            padding: 15px;
-            border: none; border-radius: 6px;
-            font-family: var(--font-ui); font-size: 1rem; font-weight: bold; text-transform: uppercase;
-            cursor: pointer; transition: all 0.2s;
-            display: flex; align-items: center; justify-content: center; gap: 8px;
+        .tac-marker { transition: transform 0.3s; will-change: transform; }
+        .tac-arrow {
+            width: 0; height: 0; 
+            border-left: 8px solid transparent; border-right: 8px solid transparent;
+            border-bottom: 16px solid var(--c-progression);
+            filter: drop-shadow(0 0 4px var(--c-progression));
         }
-
-        .btn-primary { background: var(--accent-blue); color: white; box-shadow: 0 4px 15px var(--accent-glow); }
-        .btn-primary:active { transform: scale(0.98); }
-        .btn-secondary { background: rgba(255,255,255,0.05); color: var(--text-main); border: 1px solid rgba(255,255,255,0.1); }
-        .btn-secondary:hover { background: rgba(255,255,255,0.1); }
-        .btn-warning { background: rgba(245, 158, 11, 0.2); color: var(--accent-orange); border: 1px solid rgba(245, 158, 11, 0.4); }
-        .btn-danger { background: rgba(239, 68, 68, 0.2); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.3); }
-        .btn-danger:hover { background: rgba(239, 68, 68, 0.4); }
-
-        /* --- COMMS INTERFACE --- */
-        .comm-grid {
-            display: grid;
-            grid-template-rows: auto 1fr auto;
-            height: 100%; width: 100%; max-width: 600px;
-            gap: 20px;
-        }
-
-        .freq-panel {
-            background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: var(--radius-md);
-            padding: 15px; display: flex; justify-content: space-between; align-items: center;
-        }
-        .freq-code { font-family: var(--font-data); color: var(--accent-blue); font-size: 1.2rem; letter-spacing: 2px; }
-        .freq-label { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; display: block; }
-
-        #qrDisplay {
-            background: white; padding: 15px; border-radius: 8px; margin: 20px auto;
-            width: fit-content; display: none;
-        }
-        #qrDisplay.visible { display: block; }
-
-        /* --- USERS GRID --- */
-        .users-list {
-            background: rgba(0,0,0,0.2); 
-            border-radius: var(--radius-md);
-            padding: 15px; 
-            overflow-y: auto; 
-            flex: 1;
-            border: 1px solid rgba(255,255,255,0.05);
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-            grid-auto-rows: max-content;
-            gap: 15px;
-            align-content: start;
+        .tac-label {
+            position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+            background: rgba(0,0,0,0.7); color: white; padding: 2px 6px;
+            font-family: var(--f-mono); font-size: 10px; border-radius: 4px; white-space: nowrap;
+            border: 1px solid var(--c-progression); pointer-events: none;
         }
         
-        .user-item {
-            display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;
-            padding: 15px 10px; background: rgba(30, 30, 35, 0.6);
-            border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; 
-            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-            position: relative; min-height: 110px; box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-        }
-        .user-item:hover { background: rgba(40, 40, 45, 0.8); transform: translateY(-2px); }
-        
-        .user-avatar {
-            width: 45px; height: 45px; background: rgba(255,255,255,0.08); 
-            border-radius: 50%; display: flex; align-items: center; justify-content: center; 
-            margin-bottom: 10px; font-weight: 800; color: var(--text-muted); font-size: 1.2rem;
-            border: 2px solid rgba(255,255,255,0.1); transition: all 0.3s;
-        }
-        
-        .user-name { 
-            font-family: var(--font-data); font-size: 1.1rem; font-weight: 700; color: white;
-            letter-spacing: 0.5px; word-break: break-word; line-height: 1.2; width: 100%; 
-            text-shadow: 0 2px 4px rgba(0,0,0,0.8);
-        }
-        
-        .user-status { 
-            font-size: 0.7rem; color: var(--accent-blue); margin-top: 6px; 
-            text-transform: uppercase; font-weight: 500; background: rgba(59, 130, 246, 0.1);
-            padding: 2px 6px; border-radius: 4px;
-        }
-        
-        /* Highlight Speaking */
-        .is-speaking {
-            border-color: var(--accent-green); background: rgba(34, 197, 94, 0.15);
-            box-shadow: 0 0 20px rgba(34, 197, 94, 0.2); transform: scale(1.02);
-        }
-        .is-speaking .user-avatar { 
-            background: var(--accent-green); color: black; 
-            box-shadow: 0 0 15px var(--accent-green); border-color: white;
-        }
-        .is-speaking .user-name { color: var(--accent-green); }
+        .status-CONTACT .tac-arrow { border-bottom-color: var(--c-contact); filter: drop-shadow(0 0 8px red); }
+        .status-CONTACT .tac-label { border-color: var(--c-contact); color: var(--c-contact); }
+        .status-CLEAR .tac-arrow { border-bottom-color: var(--c-clear); }
+        .status-APPUI .tac-arrow { border-bottom-color: var(--c-appui); }
 
-        /* Host Special Style */
-        .is-host-badge .user-status { color: var(--accent-orange); background: rgba(245, 158, 11, 0.15); }
-        .is-host-badge { border: 1px solid rgba(245, 158, 11, 0.3); }
-
-        /* --- CONTROLS --- */
-        .controls-area {
-            display: flex; flex-direction: column; gap: 15px; align-items: center;
-            padding-bottom: 20px;
+        /* --- OPS GRID --- */
+        .grid-container {
+            display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;
+            padding: 15px; padding-bottom: 180px; overflow-y: auto; align-content: start;
         }
 
+        .op-card {
+            background: var(--c-surface); border: 1px solid rgba(255,255,255,0.1);
+            border-radius: var(--radius); padding: 12px; display: flex; flex-direction: column; gap: 6px;
+            min-height: 120px; position: relative;
+        }
+        .op-card.is-me { background: #1e1e24; border-color: rgba(255,255,255,0.2); }
+        
+        .op-card[data-status="CONTACT"] { animation: pulse-red 1s infinite; }
+        .op-card[data-status="CONTACT"] .status-display { color: var(--c-contact); font-weight: 900; }
+        .op-card[data-status="PROGRESSION"] { border-color: var(--c-progression); }
+        .op-card[data-status="PROGRESSION"] .status-display { color: var(--c-progression); }
+        .op-card[data-status="CLEAR"] { border-color: var(--c-clear); }
+        .op-card[data-status="CLEAR"] .status-display { color: var(--c-clear); }
+        .op-card[data-status="APPUI"] { border-color: var(--c-appui); }
+        .op-card[data-status="APPUI"] .status-display { color: var(--c-appui); }
+
+        .op-header { display: flex; justify-content: space-between; align-items: center; }
+        .op-id { font-family: var(--f-mono); font-weight: 800; font-size: 1.1rem; color: white; letter-spacing: -0.5px; }
+        .op-role { font-size: 0.65rem; font-weight: 700; background: #333; padding: 2px 6px; border-radius: 4px; color: #aaa; }
+        .is-host .op-role { background: var(--c-appui); color: black; }
+        
+        .status-display { font-size: 0.8rem; font-weight: 600; min-height: 1.2em; letter-spacing: 1px; }
+        .op-stats { display: flex; gap: 10px; font-size: 0.7rem; color: var(--c-text-dim); margin-top: auto; }
+        .mini-viz { height: 4px; width: 100%; background: #333; margin-top: 8px; border-radius: 2px; overflow: hidden; }
+        .mini-viz-bar { height: 100%; width: 0%; background: var(--c-clear); transition: width 0.1s; }
+
+        /* --- HUD --- */
+        .hud-panel {
+            position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
+            background: rgba(10, 10, 12, 0.95); backdrop-filter: blur(10px);
+            border-top: 1px solid rgba(255,255,255,0.1); padding: 15px 20px 30px;
+            border-radius: 24px 24px 0 0;
+        }
+        
+        .status-bar { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 10px; scrollbar-width: none; }
+        .status-chip {
+            padding: 8px 14px; border-radius: 8px; font-size: 0.75rem; font-weight: 700; white-space: nowrap;
+            border: 1px solid rgba(255,255,255,0.1); color: var(--c-text-dim); background: rgba(255,255,255,0.05); cursor: pointer;
+        }
+        .status-chip.active { background: var(--c-progression); color: black; border-color: transparent; }
+        .status-chip[data-s="CONTACT"].active { background: var(--c-contact); color: white; border-color: var(--c-contact); animation: blink 1s infinite; }
+        .status-chip[data-s="CLEAR"].active { background: var(--c-clear); color: black; border-color: var(--c-clear); }
+        .status-chip[data-s="APPUI"].active { background: var(--c-appui); color: black; border-color: var(--c-appui); }
+
+        .ptt-row { display: flex; justify-content: center; align-items: center; position: relative; height: 80px; }
         #pttBtn {
-            width: 200px; height: 200px;
-            border-radius: 50%;
-            border: 4px solid rgba(255,255,255,0.1);
-            background: radial-gradient(circle, #1a1a1a 0%, #000000 100%);
-            color: var(--text-muted);
-            font-size: 1.5rem; font-family: var(--font-title); letter-spacing: 3px;
-            cursor: pointer;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5), inset 0 5px 10px rgba(255,255,255,0.05);
-            transition: all 0.1s;
-            position: relative;
-            display: flex; align-items: center; justify-content: center; flex-direction: column;
-            user-select: none; -webkit-user-select: none;
+            width: 75px; height: 75px; border-radius: 24px; background: #222; border: 2px solid #444; color: #666;
+            display: flex; align-items: center; justify-content: center; font-size: 2rem; transition: 0.1s; cursor: pointer;
         }
-        #pttBtn::after { content: "PUSH TO TALK"; font-size: 0.8rem; font-family: var(--font-ui); color: var(--text-muted); margin-top: 5px; opacity: 0.5; }
-        #pttBtn:active, #pttBtn.active {
-            border-color: var(--accent-blue); color: white;
-            background: radial-gradient(circle, var(--accent-blue) 0%, #0f4c9c 100%);
-            box-shadow: 0 0 40px var(--accent-glow), inset 0 0 20px rgba(0,0,0,0.5);
-            transform: scale(0.95);
-        }
-        #pttBtn.mode-vox { border-color: var(--accent-green); background: radial-gradient(circle, #064e3b 0%, #000000 100%); color: var(--accent-green); }
-        #pttBtn.mode-vox::after { content: "VOX ACTIVE"; color: var(--accent-green); opacity: 1; }
-
-        .mode-selector {
-            display: flex; background: rgba(0,0,0,0.4); padding: 4px; border-radius: 30px;
-            border: 1px solid rgba(255,255,255,0.1);
-        }
-        .mode-opt {
-            padding: 8px 20px; border-radius: 20px; cursor: pointer;
-            font-size: 0.8rem; font-weight: bold; color: var(--text-muted);
-            transition: all 0.2s;
-        }
-        .mode-opt.active { background: var(--text-muted); color: black; }
-        .mode-opt[data-mode="vox"].active { background: var(--accent-green); color: black; box-shadow: 0 0 10px rgba(34, 197, 94, 0.4); }
-        .mode-opt[data-mode="ptt"].active { background: var(--accent-blue); color: white; box-shadow: 0 0 10px var(--accent-glow); }
+        #pttBtn.active { background: var(--c-progression); color: white; border-color: white; transform: scale(0.95); }
         
-        canvas#visualizer { width: 100%; height: 60px; background: rgba(0,0,0,0.2); border-radius: var(--radius-md); margin-bottom: 10px; }
+        .hud-btn {
+            position: absolute; width: 45px; height: 45px; border-radius: 50%; cursor: pointer;
+            background: rgba(255,255,255,0.05); display: flex; align-items: center; justify-content: center; color: #888;
+        }
+        .hud-btn.left { left: 20px; } .hud-btn.right { right: 20px; }
+
+        /* --- LOGIN & MENU --- */
+        .hero-input {
+            background: transparent; border: none; border-bottom: 2px solid #333; width: 100%;
+            font-size: 2rem; font-family: var(--f-mono); text-align: center; color: white; padding: 10px;
+        }
+        .menu-btn {
+            width: 100%; padding: 18px; margin-bottom: 12px; background: var(--c-surface); cursor: pointer;
+            border: 1px solid rgba(255,255,255,0.1); border-radius: var(--radius); color: white;
+            font-weight: 600; text-align: left; display: flex; align-items: center; gap: 15px;
+        }
+
+        /* --- OVERLAYS --- */
+        #qr-overlay, #scanner-overlay {
+            position: fixed; inset: 0; background: black; z-index: 5000; display: none;
+            flex-direction: column; align-items: center; justify-content: center;
+        }
+        .close-btn { position: absolute; top: 20px; right: 20px; padding: 10px; background: #333; border-radius: 50%; color: white; z-index: 5001; cursor: pointer; }
         .toast {
             position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
-            background: rgba(239, 68, 68, 0.9); color: white;
-            padding: 10px 20px; border-radius: 8px; font-family: var(--font-ui);
-            z-index: 100; display: none;
+            background: #222; border: 1px solid var(--c-progression); color: var(--c-progression);
+            padding: 10px 20px; border-radius: 30px; font-size: 0.8rem; z-index: 9999; display: none;
         }
-
-        #scanner-modal {
-            position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 2000; display: none;
-            flex-direction: column; align-items: center; justify-content: center; backdrop-filter: blur(5px);
-        }
-        .scanner-container {
-            width: 90%; max-width: 500px; background: var(--bg-panel); border: 1px solid var(--accent-blue);
-            border-radius: var(--radius-md); padding: 20px; box-shadow: 0 0 30px var(--accent-glow);
-        }
-        .scanner-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
-        .scanner-header h3 { color: white; margin: 0; font-family: var(--font-title); }
-        .close-btn { width: auto; background: none; color: var(--text-muted); padding: 5px; flex: 0; }
-        #reader { width: 100%; background: black; border-radius: 8px; overflow: hidden; }
-        #reader__dashboard_section_csr button {
-            background: var(--accent-blue) !important; color: white !important; border: none !important;
-            padding: 8px 15px !important; border-radius: 4px !important; margin-top: 10px; font-family: var(--font-ui);
-        }
-        #reader__dashboard_section_swaplink { display: none !important; }
-
-        /* --- RESTORE OVERLAY --- */
-        #restore-overlay {
-            position: fixed; inset: 0; background: rgba(0,0,0,0.95); z-index: 3000;
-            display: none; flex-direction: column; align-items: center; justify-content: center;
-        }
-
+        
+        .leaflet-container { background: #151515; }
+        .leaflet-control-attribution { display: none; }
     </style>
 </head>
 <body>
+
     <header>
-        <div class="app-title">COM <span style="color: white;">TAC</span></div>
-        <div class="status-badge" id="connectionStatus">
-            <div class="status-dot"></div>
-            <span id="statusText">HORS LIGNE</span>
+        <div class="brand"><span class="material-symbols-outlined">satellite_alt</span> COM<span>TAC</span></div>
+        <div class="map-toggle" id="viewToggleBtn" onclick="toggleMapView()">
+            <span class="material-symbols-outlined">map</span> CARTE
         </div>
     </header>
 
-    <div id="errorToast" class="toast">Erreur système</div>
+    <div id="toast" class="toast">Système Prêt</div>
 
-    <!-- SCANNER MODAL -->
-    <div id="scanner-modal">
-        <div class="scanner-container">
-            <div class="scanner-header">
-                <h3>SCAN TARGET</h3>
-                <button class="close-btn" onclick="stopQrScanner()"><span class="material-symbols-outlined">close</span></button>
-            </div>
-            <div id="reader"></div>
-            <p style="text-align: center; color: var(--text-muted); font-size: 0.8rem; margin-top: 15px;">Visez le QR Code du chef d'équipe</p>
+    <!-- OVERLAYS -->
+    <div id="scanner-overlay"><div class="close-btn" onclick="stopScanner()">✕</div><div id="reader" style="width:100%;height:100%"></div></div>
+    <div id="qr-overlay"><div class="close-btn" onclick="closeQR()">✕</div><div style="background:white;padding:20px;border-radius:10px;text-align:center"><div id="qrcode-target"></div><p style="color:black;margin:10px 0 0;">ID SÉCURISÉ</p></div></div>
+
+    <!-- LOGIN -->
+    <div id="view-login" class="view active" style="justify-content: center; padding: 20px; z-index: 200;">
+        <div style="text-align: center; margin-bottom: 40px;">
+            <span class="material-symbols-outlined" style="font-size: 4rem; color: var(--c-progression);">fingerprint</span>
+            <h2>IDENTIFICATION</h2>
+        </div>
+        <input type="text" id="callsignInput" class="hero-input" placeholder="CALLSIGN" maxlength="8">
+        <button class="menu-btn" onclick="login()" style="margin-top: 20px; justify-content: center; background: var(--c-progression); border:none;">CONNEXION</button>
+    </div>
+
+    <!-- MENU -->
+    <div id="view-menu" class="view" style="padding: 20px; z-index: 150;">
+        <h3 style="color: var(--c-text-dim);">DÉPLOIEMENT</h3>
+        <button class="menu-btn" onclick="createFreq()"><span class="material-symbols-outlined">add_circle</span> CRÉER FRÉQUENCE (HOST)</button>
+        <button class="menu-btn" onclick="startScanner()"><span class="material-symbols-outlined">qr_code_scanner</span> SCANNER QR</button>
+        <div style="display:flex; gap:10px;">
+            <input type="text" id="joinIdInput" placeholder="ID MANUEL..." style="flex:1; background:var(--c-surface); border:1px solid #333; color:white; padding:15px; border-radius:16px;">
+            <button onclick="joinFreq()" style="width:60px; background:var(--c-surface); border:1px solid #333; border-radius:16px; color:white;">➜</button>
         </div>
     </div>
 
-    <!-- RESTORE SESSION OVERLAY -->
-    <div id="restore-overlay">
-        <h2 style="color: white;">SESSION TROUVÉE</h2>
-        <p style="color: var(--text-muted); margin-bottom: 20px;">Retour au canal sécurisé ?</p>
-        <button class="btn-primary" onclick="confirmRestore()" style="width: 200px;">
-            <span class="material-symbols-outlined">refresh</span> RECONNEXION
-        </button>
-        <button class="btn-secondary" onclick="clearSession()" style="width: 200px; margin-top: 10px;">
-            <span class="material-symbols-outlined">cancel</span> ANNULER
-        </button>
+    <!-- OPS -->
+    <div id="view-ops" class="view">
+        <div class="grid-container" id="usersGrid"></div>
     </div>
 
-    <!-- VIEW 1: LOGIN -->
-    <div id="view-login" class="view active">
-        <div class="panel">
-            <h2>Identification</h2>
-            <p style="color: var(--text-muted); margin-bottom: 20px; font-size: 0.9rem;">Entrez votre indicatif opérationnel</p>
-            <input type="text" id="callsignInput" placeholder="EX: ALPHA-01" maxlength="10" autocomplete="off">
-            <button class="btn-primary" onclick="goToMenu()">VALIDER</button>
-        </div>
-        <div style="margin-top: 20px; font-size: 0.7rem; color: var(--text-muted); opacity: 0.5;">
-            ENCRYPTION: DTLS/SRTP (WebRTC)<br>ARCHITECTURE: P2P MESH<br>PERSISTENCE: ON
-        </div>
+    <!-- MAP -->
+    <div id="view-map" class="view">
+        <div id="map-container"></div>
     </div>
 
-    <!-- VIEW 2: MENU -->
-    <div id="view-menu" class="view">
-        <div class="panel">
-            <h2 id="welcomeText">BONJOUR</h2>
-            <div class="btn-group" style="flex-direction: column;">
-                <button class="btn-primary" onclick="createFrequency()"><span class="material-symbols-outlined">add_circle</span> CRÉER FRÉQUENCE</button>
-                <div style="text-align: center; color: var(--text-muted); font-size: 0.8rem; margin: 10px 0;">- OU -</div>
-                <input type="text" id="joinIdInput" placeholder="ID FRÉQUENCE" style="margin-bottom: 10px;">
-                <button class="btn-secondary" onclick="joinFrequency()"><span class="material-symbols-outlined">login</span> REJOINDRE</button>
-                <button class="btn-secondary" id="scanQrBtn" onclick="startQrScanner()"><span class="material-symbols-outlined">qr_code_scanner</span> SCANNER QR</button>
-            </div>
+    <!-- HUD -->
+    <div class="hud-panel" id="hudPanel" style="display:none;">
+        <div class="status-bar">
+            <div class="status-chip" onclick="setStatus('PROGRESSION')" data-s="PROGRESSION">PROGRESSION</div>
+            <div class="status-chip" onclick="setStatus('CONTACT')" data-s="CONTACT">CONTACT</div>
+            <div class="status-chip" onclick="setStatus('CLEAR')" data-s="CLEAR">CLEAR</div>
+            <div class="status-chip" onclick="setStatus('APPUI')" data-s="APPUI">EN APPUI</div>
         </div>
-    </div>
-
-    <!-- VIEW 3: COMMS -->
-    <div id="view-comms" class="view">
-        <div class="comm-grid">
-            <div>
-                <div class="freq-panel">
-                    <div><span class="freq-label">FRÉQUENCE SECURISEE</span><span class="freq-code" id="displayFreqId">...</span></div>
-                    <button style="background:none; border:none; color:white; padding:0;" onclick="toggleQrDisplay()"><span class="material-symbols-outlined" style="font-size: 2rem;">qr_code_2</span></button>
-                </div>
-                <div id="qrDisplay"></div>
-            </div>
-
-            <div class="users-list" id="usersList"></div>
-
-            <div class="controls-area">
-                <canvas id="visualizer"></canvas>
-                <div class="mode-selector">
-                    <div class="mode-opt active" data-mode="ptt" onclick="setAudioMode('ptt')">PTT</div>
-                    <div class="mode-opt" data-mode="vox" onclick="setAudioMode('vox')">VOX</div>
-                    <div class="mode-opt" data-mode="mute" onclick="setAudioMode('mute')">MUTE</div>
-                </div>
-                <button id="pttBtn"><span class="material-symbols-outlined" style="font-size: 3rem;">mic</span></button>
-                <button class="btn-danger" style="width: 100%; margin-top: 10px;" onclick="leaveFrequency(true)">
-                    <span class="material-symbols-outlined">logout</span> QUITTER CANAL
-                </button>
-            </div>
+        
+        <div class="ptt-row">
+            <div class="hud-btn left" onclick="toggleVox()"><span class="material-symbols-outlined" id="voxIcon">mic_none</span></div>
+            <div id="pttBtn"><span class="material-symbols-outlined">mic</span></div>
+            <div class="hud-btn right" onclick="showQR()"><span class="material-symbols-outlined">qr_code_2</span></div>
+        </div>
+        <div style="text-align:center; font-size:0.7rem; color:#666; margin-top:-5px;">
+            <span id="freqDisplay">ID: ...</span> | <span id="gpsStatus" onclick="initMap()">GPS OFF</span>
         </div>
     </div>
 
     <script>
-        const PEER_CONFIG = { debug: 1 };
-        const SESSION_KEY = "comtac_session_v1";
-
+        const APP = { key: 'comtac_v3_1_session', debug: 1 };
         let state = {
-            callsign: '', peer: null, myId: null, conn: null, currentCall: null, localStream: null,
-            audioMode: 'ptt', isTalking: false, peers: {}, audioContext: null, analyser: null, isHost: false, html5QrcodeScanner: null,
-            wakeLock: null, syncInterval: null, knownPeers: []
+            me: { id: null, callsign: '', status: 'CLEAR', lat: 0, lng: 0, head: 0, isTx: false },
+            isHost: false, audio: { stream: null, mode: 'ptt' },
+            peers: {},
+            map: null, geoId: null
         };
 
-        const views = { login: document.getElementById('view-login'), menu: document.getElementById('view-menu'), comms: document.getElementById('view-comms') };
-        const pttBtn = document.getElementById('pttBtn');
-        const visualizerCanvas = document.getElementById('visualizer');
+        // --- OFFLINE MAPS (IndexedDB) ---
+        const DB_NAME = 'ComTac_Maps_v3'; const DB_STORE = 'tiles';
+        const OfflineMaps = {
+            db: null,
+            init: async () => {
+                return new Promise((res, rej) => {
+                    const req = indexedDB.open(DB_NAME, 1);
+                    req.onupgradeneeded = e => e.target.result.createObjectStore(DB_STORE, { keyPath: 'key' });
+                    req.onsuccess = e => { OfflineMaps.db = e.target.result; res(); };
+                    req.onerror = e => rej(e);
+                });
+            },
+            getTile: async (key) => {
+                return new Promise(res => {
+                    const tx = OfflineMaps.db.transaction(DB_STORE, 'readonly');
+                    const req = tx.objectStore(DB_STORE).get(key);
+                    req.onsuccess = () => res(req.result ? req.result.blob : null);
+                    req.onerror = () => res(null);
+                });
+            },
+            saveTile: (key, blob) => {
+                const tx = OfflineMaps.db.transaction(DB_STORE, 'readwrite');
+                tx.objectStore(DB_STORE).put({ key, blob });
+            }
+        };
 
-        // --- SESSION PERSISTENCE ---
-        document.addEventListener('DOMContentLoaded', () => {
-            const savedSession = localStorage.getItem(SESSION_KEY);
-            if (savedSession) {
-                document.getElementById('restore-overlay').style.display = 'flex';
+        const OfflineLayer = L.TileLayer.extend({
+            createTile: function(coords, done) {
+                const tile = document.createElement('img');
+                const url = this.getTileUrl(coords);
+                const key = `${coords.z}/${coords.x}/${coords.y}`;
+                if(OfflineMaps.db) {
+                    OfflineMaps.getTile(key).then(blob => {
+                        if(blob) { tile.src = URL.createObjectURL(blob); done(null, tile); }
+                        else {
+                            fetch(url).then(res => res.blob()).then(blob => {
+                                OfflineMaps.saveTile(key, blob);
+                                tile.src = URL.createObjectURL(blob); done(null, tile);
+                            }).catch(() => { tile.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'; done(null, tile); });
+                        }
+                    });
+                } else { tile.src = url; done(null, tile); }
+                return tile;
             }
         });
 
-        function saveSession(mode, freqId) {
-            const session = { callsign: state.callsign, mode: mode, freqId: freqId };
-            localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+        // --- INIT ---
+        document.addEventListener('DOMContentLoaded', async () => {
+            await OfflineMaps.init();
+            const saved = localStorage.getItem(APP.key);
+            if(saved) {
+                const s = JSON.parse(saved); state.me.callsign = s.callsign;
+                if(s.freq) { await login(true); initAudio().then(() => { if(s.host) createFreq(s.freq); else joinFreq(s.freq); }); }
+                else { document.getElementById('callsignInput').value = s.callsign; }
+            }
+        });
+
+        async function login(skip = false) {
+            if(!skip) {
+                const val = document.getElementById('callsignInput').value.trim().toUpperCase();
+                if(val.length < 2) return toast("ID invalide", true);
+                state.me.callsign = val;
+            }
+            if(!skip) await initAudio();
+            saveSession(); showView('view-menu');
+        }
+        function saveSession(freq = null) { localStorage.setItem(APP.key, JSON.stringify({ callsign: state.me.callsign, freq: freq, host: state.isHost })); }
+
+        function showView(id) {
+            document.querySelectorAll('.view').forEach(e => e.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+            if(id === 'view-ops' || id === 'view-map') document.getElementById('hudPanel').style.display = 'block';
+            else document.getElementById('hudPanel').style.display = 'none';
+            if(id === 'view-map' && state.map) setTimeout(() => state.map.invalidateSize(), 200);
         }
 
-        function clearSession() {
-            localStorage.removeItem(SESSION_KEY);
-            document.getElementById('restore-overlay').style.display = 'none';
-            // If called from overlay, ensure we just reset UI
+        function toggleMapView() {
+            const btn = document.getElementById('viewToggleBtn');
+            if(document.getElementById('view-map').classList.contains('active')) {
+                showView('view-ops'); btn.classList.remove('active');
+            } else {
+                showView('view-map'); btn.classList.add('active');
+                if(!state.map) initMap();
+            }
         }
 
-        async function confirmRestore() {
-            document.getElementById('restore-overlay').style.display = 'none';
-            const saved = JSON.parse(localStorage.getItem(SESSION_KEY));
-            if(!saved) return;
+        // --- GPS FIX v3.1 ---
+        function initMap() {
+            state.map = L.map('map-container', { zoomControl: false }).setView([48.85, 2.35], 13);
+            new OfflineLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { subdomains: 'abcd', maxZoom: 19 }).addTo(state.map);
+            startGPS();
+        }
 
-            state.callsign = saved.callsign;
-            document.getElementById('welcomeText').innerText = `BONJOUR ${state.callsign}`;
+        function startGPS() {
+            if(!('geolocation' in navigator)) {
+                document.getElementById('gpsStatus').innerText = "GPS N/A";
+                return toast("GPS non supporté par ce navigateur", true);
+            }
+
+            const gpsOpts = { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 };
             
-            // Need user interaction for Audio
-            await initAudio();
-            requestWakeLock();
+            state.geoId = navigator.geolocation.watchPosition(
+                (pos) => {
+                    const { latitude, longitude, heading, accuracy } = pos.coords;
+                    state.me.lat = latitude;
+                    state.me.lng = longitude;
+                    // Garder le cap précédent si null (statique)
+                    if(heading !== null && !isNaN(heading)) state.me.head = heading;
+                    
+                    const statEl = document.getElementById('gpsStatus');
+                    statEl.innerText = `GPS: ±${Math.floor(accuracy)}m`;
+                    statEl.style.color = accuracy < 20 ? '#22c55e' : '#eab308';
 
-            if (saved.mode === 'host') {
-                // Try to restore host with same ID (might fail if taken, then new ID)
-                createFrequency(saved.freqId);
-            } else {
-                // Client rejoin
-                document.getElementById('joinIdInput').value = saved.freqId;
-                joinFrequency(saved.freqId);
-            }
-        }
-
-        // --- CORE FUNCTIONS ---
-        function showView(viewName) { Object.values(views).forEach(el => el.classList.remove('active')); views[viewName].classList.add('active'); }
-        
-        function goToMenu() {
-            const input = document.getElementById('callsignInput');
-            if(input.value.trim().length < 2) { showToast("Indicatif trop court"); return; }
-            state.callsign = input.value.toUpperCase();
-            document.getElementById('welcomeText').innerText = `BONJOUR ${state.callsign}`;
-            showView('menu'); initAudio(); requestWakeLock();
-        }
-
-        function showToast(msg) { const el = document.getElementById('errorToast'); el.innerText = msg; el.style.display = 'block'; setTimeout(() => el.style.display = 'none', 3000); }
-
-        async function requestWakeLock() {
-            if ('wakeLock' in navigator) {
-                try { state.wakeLock = await navigator.wakeLock.request('screen'); } catch (err) { console.error(err); }
-            }
-        }
-
-        async function initAudio() {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-                state.localStream = stream;
-                state.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                state.analyser = state.audioContext.createAnalyser();
-                state.audioContext.createMediaStreamSource(stream).connect(state.analyser);
-                state.analyser.fftSize = 256;
-                setAudioTrackState(false); drawVisualizer(); 
-                return true;
-            } catch (err) { console.error("Audio Error", err); showToast("Accès micro refusé"); return false; }
-        }
-
-        function setAudioTrackState(enabled) { if(state.localStream) state.localStream.getAudioTracks().forEach(track => track.enabled = enabled); if(state.myId) updateMyStatusUI(enabled); }
-        
-        function playRogerBeep(type) {
-            if(!state.audioContext) return;
-            if (state.audioContext.state === 'suspended') state.audioContext.resume();
-            const oscillator = state.audioContext.createOscillator();
-            const gainNode = state.audioContext.createGain();
-            oscillator.connect(gainNode); gainNode.connect(state.audioContext.destination);
-            if (type === 'start') { oscillator.frequency.value = 1200; } else { oscillator.frequency.value = 800; }
-            gainNode.gain.value = 0.1; oscillator.start(); setTimeout(() => oscillator.stop(), 80);
-        }
-
-        function setAudioMode(mode) {
-            state.audioMode = mode;
-            document.querySelectorAll('.mode-opt').forEach(el => el.classList.remove('active'));
-            document.querySelector(`.mode-opt[data-mode="${mode}"]`).classList.add('active');
-            pttBtn.classList.remove('mode-vox');
-            if(mode === 'vox') { pttBtn.classList.add('mode-vox'); setAudioTrackState(true); } else { setAudioTrackState(false); }
-        }
-
-        function startTx() { if(state.audioMode !== 'ptt') return; state.isTalking = true; playRogerBeep('start'); setAudioTrackState(true); pttBtn.classList.add('active'); }
-        function endTx() { if(state.audioMode !== 'ptt') return; state.isTalking = false; setAudioTrackState(false); playRogerBeep('end'); pttBtn.classList.remove('active'); }
-        
-        pttBtn.addEventListener('mousedown', startTx); pttBtn.addEventListener('mouseup', endTx);
-        pttBtn.addEventListener('touchstart', (e) => { e.preventDefault(); startTx(); }); pttBtn.addEventListener('touchend', (e) => { e.preventDefault(); endTx(); });
-        document.addEventListener('keydown', (e) => { if(e.code === 'Space' && !state.isTalking && state.audioMode === 'ptt') startTx(); });
-        document.addEventListener('keyup', (e) => { if(e.code === 'Space' && state.audioMode === 'ptt') endTx(); });
-
-        /* --- NETWORKING --- */
-        function updateConnectionStatus(connected, reconnecting = false) {
-            const badge = document.getElementById('connectionStatus');
-            const txt = document.getElementById('statusText');
-            if(reconnecting) {
-                badge.className = 'status-badge status-reconnecting'; txt.innerText = "CONNEXION...";
-            } else if(connected) {
-                badge.className = 'status-badge status-connected'; txt.innerText = "EN LIGNE"; txt.style.color = "var(--text-main)";
-            } else {
-                badge.className = 'status-badge'; txt.innerText = "HORS LIGNE";
-            }
-        }
-
-        function startSyncLoop() {
-            if(state.syncInterval) clearInterval(state.syncInterval);
-            state.syncInterval = setInterval(() => {
-                if(state.isHost) {
-                    // HOST: Build complete list INCLUDING SELF
-                    const activePeers = Object.keys(state.peers).map(id => ({
-                        id: id,
-                        callsign: state.peers[id].callsign,
-                        isHost: false
-                    }));
-                    // Add Host self
-                    activePeers.push({ id: state.myId, callsign: state.callsign, isHost: true });
-                    broadcastData({ type: 'sync_users', list: activePeers });
-                } else {
-                    if(state.conn && state.conn.open) state.conn.send({ type: 'keepalive' });
-                    else if(state.conn && !state.conn.open && state.myId) {
-                        updateConnectionStatus(false, true); state.peer.reconnect();
+                    updatePeerOnMap(state.me.id, state.me);
+                    broadcastState();
+                },
+                (err) => {
+                    console.warn("GPS Error:", err.code, err.message);
+                    let msg = "GPS ???";
+                    if(err.code === 1) msg = "GPS REFUSÉ"; // Permission denied
+                    else if(err.code === 2) msg = "SIGNAL PERDU"; // Position unavailable
+                    else if(err.code === 3) msg = "GPS TIMEOUT"; // Timeout
+                    
+                    const statEl = document.getElementById('gpsStatus');
+                    statEl.innerText = msg;
+                    statEl.style.color = '#ef4444';
+                    
+                    // Tentative de relance en mode basse précision si timeout
+                    if(err.code === 3) {
+                       toast("Tentative GPS basse précision...", true);
+                       // Logic could restart watchPosition with enableHighAccuracy: false
                     }
-                }
+                },
+                gpsOpts
+            );
+        }
+
+        function updatePeerOnMap(id, user) {
+            if(!state.map || !user.lat) return;
+            if(!state.peers[id]) state.peers[id] = { data: user };
+            const p = state.peers[id];
+
+            const iconHtml = `
+                <div class="tac-marker status-${user.status||'CLEAR'}" style="transform: rotate(${user.head||0}deg);">
+                    <div class="tac-arrow"></div>
+                </div>
+                <div class="tac-label">${user.callsign}</div>
+            `;
+            const icon = L.divIcon({ className: 'custom', html: iconHtml, iconSize: [40, 40], iconAnchor: [20, 20] });
+
+            if(p.marker) { p.marker.setLatLng([user.lat, user.lng]); p.marker.setIcon(icon); }
+            else { p.marker = L.marker([user.lat, user.lng], { icon: icon }).addTo(state.map); }
+
+            if(!p.trailData) p.trailData = [];
+            const last = p.trailData[p.trailData.length-1];
+            // Update trail if moved > 5m
+            if(!last || Math.sqrt(Math.pow(last[0]-user.lat, 2) + Math.pow(last[1]-user.lng, 2)) > 0.00005) {
+                p.trailData.push([user.lat, user.lng]);
+                if(p.trailData.length > 20) p.trailData.shift();
+                if(p.trail) p.trail.setLatLngs(p.trailData);
+                else p.trail = L.polyline(p.trailData, { color: user.id===state.me.id?'#3b82f6':'#22c55e', weight:2, dashArray:'5,5', opacity:0.6 }).addTo(state.map);
+            }
+        }
+
+        // --- PEERJS ---
+        function initPeer(id=null) {
+            const peer = new Peer(id, APP.peerConfig);
+            peer.on('open', pid => {
+                state.me.id = pid; 
+                document.getElementById('freqDisplay').innerText = `ID: ${pid}`;
+                document.getElementById('connectionStatus').style.color = '#22c55e';
+                document.querySelector('.status-led').style.background = '#22c55e';
+                if(state.isHost) { startHeartbeat(); updateGrid(); }
+                saveSession(pid); showView('view-ops');
+                if('wakeLock' in navigator) navigator.wakeLock.request('screen').then(w => state.wakeLock = w);
+            });
+            peer.on('connection', conn => setupConn(conn));
+            peer.on('call', call => { call.answer(state.audio.stream); call.on('stream', playAudio); });
+            peer.on('error', err => toast("Erreur: " + err.type, true));
+            peer.on('disconnected', () => { document.getElementById('connectionStatus').style.color = 'gray'; peer.reconnect(); });
+            return peer;
+        }
+
+        function createFreq(id=null) { state.isHost = true; state.me.role = 'HOST'; state.peer = initPeer(id); }
+        function joinFreq(id) { 
+            if(!id) id = document.getElementById('joinIdInput').value;
+            state.isHost = false; state.peer = initPeer();
+            const conn = state.peer.connect(id, { metadata: state.me });
+            conn.on('open', () => { setupConn(conn); state.peer.call(id, state.audio.stream).on('stream', playAudio); });
+        }
+
+        function setupConn(conn) {
+            conn.on('data', d => {
+                if(d.t === 'STATE') handleUpdate(d.p);
+                if(d.t === 'SYNC') d.l.forEach(u => handleUpdate(u));
+            });
+            conn.on('open', () => { 
+                if(!state.peers[conn.peer]) state.peers[conn.peer] = {};
+                state.peers[conn.peer].conn = conn; broadcastState(); 
+            });
+        }
+
+        function broadcastState() {
+            const p = { ...state.me };
+            Object.values(state.peers).forEach(peer => { if(peer.conn && peer.conn.open) peer.conn.send({ t: 'STATE', p: p }); });
+            if(state.isHost) updateGrid();
+        }
+
+        function handleUpdate(user) {
+            if(user.id === state.me.id) return;
+            if(!state.peers[user.id]) state.peers[user.id] = {};
+            state.peers[user.id].data = user;
+            updateGrid(); updatePeerOnMap(user.id, user);
+        }
+
+        function startHeartbeat() {
+            setInterval(() => {
+                if(!state.isHost) return;
+                const list = Object.values(state.peers).map(p => p.data).filter(d => d);
+                list.push(state.me);
+                Object.values(state.peers).forEach(p => { if(p.conn) p.conn.send({ t: 'SYNC', l: list }); });
             }, 2000);
         }
 
-        function createFrequency(restoreId = null) {
-            if(!state.localStream) { initAudio().then(ok => { if(ok) createFrequency(restoreId); }); return; }
-            state.isHost = true;
-            // Attempt to restore specific ID if passed (for host persistence)
-            state.peer = restoreId ? new Peer(restoreId, PEER_CONFIG) : new Peer(null, PEER_CONFIG);
-            setupPeerEvents();
+        // --- AUDIO ---
+        async function initAudio() {
+            try {
+                const s = await navigator.mediaDevices.getUserMedia({ audio: true });
+                state.audio.stream = s;
+                const AudioContext = window.AudioContext || window.webkitAudioContext; state.audio.context = new AudioContext();
+                const src = state.audio.context.createMediaStreamSource(s);
+                const filter = state.audio.context.createBiquadFilter(); filter.type = "highpass"; filter.frequency.value = 300;
+                const comp = state.audio.context.createDynamicsCompressor();
+                src.connect(filter); filter.connect(comp);
+                const dst = state.audio.context.createMediaStreamDestination(); comp.connect(dst);
+                state.audio.processedStream = dst.stream; // Not used in this simplified version but ready
+                s.getAudioTracks().forEach(t => t.enabled = false);
+                return true;
+            } catch(e) { toast("Micro bloqué", true); return false; }
         }
+        function playAudio(s) { const a = new Audio(); a.srcObject = s; a.play(); }
 
-        function joinFrequency(overrideId = null) {
-            const hostId = overrideId || document.getElementById('joinIdInput').value.trim();
-            if(!hostId) return showToast("ID invalide");
-            if(!state.localStream) { initAudio().then(ok => { if(ok) joinFrequency(hostId); }); return; }
-            state.isHost = false; 
-            state.peer = new Peer(null, PEER_CONFIG);
-            setupPeerEvents(hostId);
-        }
-
-        function setupPeerEvents(hostId = null) {
-            state.peer.on('open', (id) => {
-                state.myId = id;
-                if(hostId) {
-                    // Client Mode
-                    saveSession('client', hostId); // Save session
-                    connectToHost(hostId);
-                } else {
-                    // Host Mode
-                    saveSession('host', id); // Save session
-                    setupCommsUI(id);
-                    updateConnectionStatus(true);
-                    renderUserGrid([{ id: id, callsign: state.callsign, isHost: true }]); // Initial Render
-                    startSyncLoop();
-                }
-            });
-            state.peer.on('connection', (conn) => handleDataConnection(conn));
-            state.peer.on('call', (call) => { call.answer(state.localStream); handleMediaCall(call); });
-            state.peer.on('error', (err) => { 
-                // Handle ID taken if restoring host
-                if(err.type === 'unavailable-id') {
-                    console.warn("ID session pris, génération nouveau...");
-                    state.peer = new Peer(null, PEER_CONFIG);
-                    setupPeerEvents(hostId); // Retry without ID
-                    return;
-                }
-                if(err.type !== 'peer-unavailable') showToast("Erreur: " + err.type); 
-            });
-            state.peer.on('disconnected', () => {
-                updateConnectionStatus(false, true);
-                state.peer.reconnect();
+        // --- UI ---
+        function updateGrid() {
+            const grid = document.getElementById('usersGrid'); grid.innerHTML = '';
+            const all = [{...state.me, isMe: true}].concat(Object.values(state.peers).map(p => p.data).filter(d => d));
+            all.forEach(u => {
+                const div = document.createElement('div');
+                div.className = 'op-card ' + (u.isMe?'is-me':'');
+                if(u.isTx) div.style.borderColor = '#22c55e';
+                if(u.status) div.setAttribute('data-status', u.status);
+                let batC = '#aaa'; if(u.battery<20) batC='#ef4444';
+                div.innerHTML = `
+                    <div class="op-header"><span class="op-role">${u.role||'OPR'}</span>${u.isTx?'<span style="color:#22c55e">🔊</span>':''}</div>
+                    <div class="op-id">${u.callsign}</div>
+                    <div class="status-display" style="color:var(--c-${u.status?u.status.toLowerCase():'text'})">${u.status||''}</div>
+                    <div class="op-stats"><div style="color:${batC}">🔋 ${u.battery||'?'}%</div></div>
+                    <div class="mini-viz"><div class="mini-viz-bar" style="width:${u.isTx?'100%':'0%'}"></div></div>
+                `;
+                grid.appendChild(div);
             });
         }
 
-        function connectToHost(hostId) {
-            state.conn = state.peer.connect(hostId, { metadata: { callsign: state.callsign }, reliable: true });
-            state.conn.on('open', () => {
-                updateConnectionStatus(true);
-                setupCommsUI(hostId);
-                const call = state.peer.call(hostId, state.localStream);
-                handleMediaCall(call);
-                startSyncLoop();
-            });
-            state.conn.on('data', handleDataPacket);
-            state.conn.on('close', () => { updateConnectionStatus(false, true); });
+        function setStatus(s) { 
+            state.me.status = s; broadcastState(); updateGrid();
+            document.querySelectorAll('.status-chip').forEach(el => el.classList.remove('active'));
+            const chip = document.querySelector(`.status-chip[data-s="${s}"]`);
+            if(chip) chip.classList.add('active');
+            // Auto clear contact after 10s? No, sticky status for V3.1
         }
 
-        function handleDataConnection(conn) {
-            conn.on('open', () => {
-                const peerCallsign = conn.metadata ? conn.metadata.callsign : 'Inconnu';
-                state.peers[conn.peer] = { callsign: peerCallsign, conn: conn };
-                if(state.isHost) {
-                     // Fast Sync for new client
-                     setTimeout(() => {
-                         const activePeers = Object.keys(state.peers).map(id => ({ id: id, callsign: state.peers[id].callsign, isHost: false }));
-                         activePeers.push({ id: state.myId, callsign: state.callsign, isHost: true });
-                         broadcastData({ type: 'sync_users', list: activePeers });
-                     }, 300);
-                }
-            });
-            conn.on('data', (data) => {
-                if(data.type === 'talking') updatePeerUI(conn.peer, data.val);
-            });
-            conn.on('close', () => { delete state.peers[conn.peer]; });
-        }
-
-        function broadcastData(data) {
-            Object.values(state.peers).forEach(p => { if(p.conn && p.conn.open) p.conn.send(data); });
-        }
-
-        function handleMediaCall(call) {
-            call.on('stream', (remoteStream) => {
-                const audio = document.createElement('audio'); audio.srcObject = remoteStream;
-                audio.play().catch(e => console.log("Autoplay bloqué"));
-            });
-        }
-
-        function handleDataPacket(data) {
-            if(data.type === 'sync_users') { renderUserGrid(data.list); }
-            if(data.type === 'talking') { /* Host broadcast already handled by updatePeerUI if we receive ID */ }
-        }
-
-        /* --- UI LOGIC --- */
-        function updateMyStatusUI(isTalking) {
-            const myItem = document.getElementById(`peer-${state.myId}`);
-            if(myItem) { if(isTalking) myItem.classList.add('is-speaking'); else myItem.classList.remove('is-speaking'); }
-            if(state.conn && state.conn.open) state.conn.send({ type: 'talking', val: isTalking });
-            if(state.isHost) broadcastData({ type: 'talking', val: isTalking });
-        }
-
-        function setupCommsUI(freqId) {
-            showView('comms'); document.getElementById('displayFreqId').innerText = freqId;
-            const qrContainer = document.getElementById('qrDisplay'); qrContainer.innerHTML = '';
-            new QRCode(qrContainer, { text: freqId, width: 128, height: 128, colorDark : "#000000", colorLight : "#ffffff", correctLevel : QRCode.CorrectLevel.H });
-        }
-        function toggleQrDisplay() { document.getElementById('qrDisplay').classList.toggle('visible'); }
-
-        function renderUserGrid(userList) {
-            const listEl = document.getElementById('usersList');
-            const existingIds = Array.from(listEl.children).map(el => el.id.replace('peer-', ''));
-            const newIds = userList.map(u => u.id);
-
-            // Remove ghost users
-            existingIds.forEach(id => { if(!newIds.includes(id)) { const el = document.getElementById(`peer-${id}`); if(el) el.remove(); } });
-
-            // Add/Update
-            userList.forEach(u => {
-                let el = document.getElementById(`peer-${u.id}`);
-                const isMe = u.id === state.myId;
-                
-                // Determine Label
-                let roleLabel = 'OPR';
-                let hostClass = '';
-                
-                if (u.isHost) {
-                    roleLabel = 'HOST';
-                    hostClass = 'is-host-badge';
-                }
-                if (isMe) roleLabel += ' (MOI)';
-
-                if(!el) {
-                    el = document.createElement('div'); 
-                    el.className = `user-item ${hostClass}`; 
-                    el.id = `peer-${u.id}`;
-                    const shortName = u.callsign.substring(0, 2);
-                    el.innerHTML = `
-                        <div class="user-avatar">${shortName}</div>
-                        <div class="user-name">${u.callsign}</div>
-                        <div class="user-status">${roleLabel}</div>
-                    `;
-                    listEl.appendChild(el);
-                } else {
-                    // Update role label if changed (e.g. host identification late arrival)
-                    el.querySelector('.user-status').innerText = roleLabel;
-                    if(u.isHost && !el.classList.contains('is-host-badge')) el.classList.add('is-host-badge');
-                }
-            });
-        }
+        const btn = document.getElementById('pttBtn');
+        const tx = (on) => {
+            state.me.isTx = on; state.audio.stream.getAudioTracks().forEach(t => t.enabled = on);
+            if(on) { btn.classList.add('active'); if(navigator.vibrate) navigator.vibrate(30); } else btn.classList.remove('active');
+            broadcastState(); updateGrid();
+        };
+        btn.onmousedown = () => tx(true); btn.onmouseup = () => tx(false);
+        btn.ontouchstart = (e) => { e.preventDefault(); tx(true); }; btn.ontouchend = (e) => { e.preventDefault(); tx(false); };
         
-        function updatePeerUI(id, isTalking) {
-            const el = document.getElementById(`peer-${id}`);
-            if(el) { if(isTalking) el.classList.add('is-speaking'); else el.classList.remove('is-speaking'); }
+        function toggleVox() {
+            state.audio.mode = state.audio.mode === 'ptt' ? 'vox' : 'ptt';
+            document.getElementById('voxIcon').innerText = state.audio.mode === 'vox' ? 'mic' : 'mic_none';
+            if(state.audio.mode === 'vox') tx(true); else tx(false);
         }
 
-        function leaveFrequency(fullExit = false) {
-            if (fullExit) {
-                clearSession();
-            }
-            if(state.peer) state.peer.destroy();
-            location.reload();
+        // --- UTILS ---
+        function toast(m, e) { const t = document.getElementById('toast'); t.innerText = m; t.style.borderColor = e?'red':'#22c55e'; t.style.display='block'; setTimeout(()=>t.style.display='none', 3000); }
+        function showQR() { if(!state.me.id) return; new QRCode(document.getElementById("qrcode-target"), {text:state.me.id,width:150,height:150}); document.getElementById('qr-overlay').style.display='flex'; }
+        function closeQR() { document.getElementById('qr-overlay').style.display='none'; document.getElementById('qrcode-target').innerHTML=''; }
+        
+        let qrScanner;
+        function startScanner() { 
+            document.getElementById('scanner-overlay').style.display='flex';
+            qrScanner = new Html5Qrcode("reader");
+            qrScanner.start({facingMode:"environment"}, {fps:10}, t => { stopScanner(); document.getElementById('joinIdInput').value = t; joinFreq(t); });
         }
+        function stopScanner() { if(qrScanner) qrScanner.stop().then(()=>document.getElementById('scanner-overlay').style.display='none'); }
+        function leave() { localStorage.removeItem(APP.key); location.reload(); }
 
-        function drawVisualizer() {
-            requestAnimationFrame(drawVisualizer); if(!state.analyser) return;
-            const bufferLength = state.analyser.frequencyBinCount; const dataArray = new Uint8Array(bufferLength);
-            state.analyser.getByteFrequencyData(dataArray);
-            const canvas = visualizerCanvas; const ctx = canvas.getContext('2d');
-            const width = canvas.width; const height = canvas.height;
-            ctx.clearRect(0, 0, width, height);
-            const barWidth = (width / bufferLength) * 2.5; let barHeight; let x = 0;
-            for(let i = 0; i < bufferLength; i++) {
-                barHeight = dataArray[i] / 2;
-                if(state.isTalking || state.audioMode === 'vox') ctx.fillStyle = `rgb(${barHeight + 50}, 200, 50)`; 
-                else ctx.fillStyle = `rgba(59, 130, 246, 0.5)`;
-                ctx.fillRect(x, height - barHeight, barWidth, barHeight); x += barWidth + 1;
-            }
-        }
-
-        function startQrScanner() {
-            const modal = document.getElementById('scanner-modal'); modal.style.display = 'flex';
-            if(state.html5QrcodeScanner) state.html5QrcodeScanner.clear();
-            state.html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: {width: 250, height: 250} });
-            state.html5QrcodeScanner.render(onScanSuccess);
-        }
-        function stopQrScanner() {
-            if(state.html5QrcodeScanner) { state.html5QrcodeScanner.clear().then(() => { document.getElementById('scanner-modal').style.display = 'none'; }).catch(err => { document.getElementById('scanner-modal').style.display = 'none'; }); } 
-            else { document.getElementById('scanner-modal').style.display = 'none'; }
-        }
-        function onScanSuccess(decodedText) {
-            playRogerBeep('start'); document.getElementById('joinIdInput').value = decodedText;
-            stopQrScanner(); showToast("QR Code détecté !");
-        }
     </script>
 </body>
 </html>
