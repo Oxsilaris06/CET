@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>COM TAC v10.4 // FULL LINK</title>
+    <title>COM TAC v10.5 // AUTONOMOUS</title>
     
     <!-- ================= 1. EXTERNAL LIBRARIES (CDN) ================= -->
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Chakra+Petch:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -123,7 +123,7 @@
             width: 0; height: 0;
             border-left: 10px solid transparent;
             border-right: 10px solid transparent;
-            border-bottom: 24px solid var(--color-blue);
+            border-bottom: 24px solid var(--color-blue); /* Default Blue (Progression) */
             filter: drop-shadow(0 0 4px var(--color-blue));
         }
         .tac-label {
@@ -133,8 +133,18 @@
             white-space: nowrap; border: 1px solid var(--color-blue);
         }
         
+        /* Status Colors for Markers */
         .status-CONTACT .tac-arrow { border-bottom-color: var(--color-red); filter: drop-shadow(0 0 10px red); }
         .status-CONTACT .tac-label { border-color: var(--color-red); color: var(--color-red); }
+        
+        .status-CLEAR .tac-arrow { border-bottom-color: var(--color-green); filter: drop-shadow(0 0 4px var(--color-green)); }
+        .status-CLEAR .tac-label { border-color: var(--color-green); color: var(--color-green); }
+        
+        .status-APPUI .tac-arrow { border-bottom-color: var(--color-yellow); filter: drop-shadow(0 0 4px var(--color-yellow)); }
+        .status-APPUI .tac-label { border-color: var(--color-yellow); color: var(--color-yellow); }
+        
+        .status-PROGRESSION .tac-arrow { border-bottom-color: var(--color-blue); }
+        .status-PROGRESSION .tac-label { border-color: var(--color-blue); color: var(--color-blue); }
 
         /* --- OPS GRID --- */
         .ops-grid {
@@ -173,7 +183,12 @@
             color: var(--color-dim); cursor: pointer;
         }
         .chip.active { background: var(--color-blue); color: black; border-color: transparent; }
+        
         .chip[data-val="CONTACT"].active { background: var(--color-red); color: white; }
+        .chip[data-val="CLEAR"].active { background: var(--color-green); color: black; }
+        .chip[data-val="APPUI"].active { background: var(--color-yellow); color: black; }
+        .chip[data-val="PROGRESSION"].active { background: var(--color-blue); color: black; }
+
 
         .ptt-container { display: flex; align-items: center; justify-content: center; position: relative; height: 90px; }
         
@@ -228,13 +243,12 @@
     <!-- UI STRUCTURE -->
     <header>
         <div class="brand">
-            <span class="material-symbols-outlined">satellite_alt</span> COM<span>TAC</span> v10.4
+            <span class="material-symbols-outlined">satellite_alt</span> COM<span>TAC</span> v10.5
         </div>
         <div class="nav-group">
             <div class="btn-nav" id="btn-toggle-map" onclick="App.toggleMap()">
                 <span class="material-symbols-outlined">map</span> CARTE
             </div>
-            <!-- FIX: ID corrigé et fonction corrigée -->
             <div class="btn-nav danger" id="btn-quit" onclick="App.leaveSession(true)" style="display:none;">
                 <span class="material-symbols-outlined">logout</span>
             </div>
@@ -404,6 +418,7 @@
             geoId: null,
             lastLat: 0,
             lastLng: 0,
+            lastUpdate: 0,
             
             init: () => {
                 if (MapService.map) return;
@@ -456,16 +471,28 @@
                     return;
                 }
                 
+                // High Accuracy for Autonomous Ops
                 const options = { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 };
                 
                 MapService.geoId = navigator.geolocation.watchPosition(
                     (pos) => {
                         const { latitude, longitude, heading, accuracy } = pos.coords;
+                        const now = Date.now();
                         
+                        // Calculate Heading if device doesn't provide it
                         if (MapService.lastLat !== 0 && (!heading || isNaN(heading))) {
                             App.user.head = MapService.calcHeading(MapService.lastLat, MapService.lastLng, latitude, longitude);
                         } else if (heading) {
                             App.user.head = heading;
+                        }
+
+                        // Auto-Progression Logic
+                        const distanceMoved = MapService.dist(MapService.lastLat, MapService.lastLng, latitude, longitude);
+                        
+                        // If moved > 15m AND status not CONTACT (don't override combat status)
+                        if (distanceMoved > 0.00015 && App.user.status !== 'CONTACT' && App.user.status !== 'PROGRESSION') {
+                            App.setStatus('PROGRESSION');
+                            App.toast("Mode Progression Auto");
                         }
 
                         MapService.lastLat = latitude;
@@ -480,6 +507,8 @@
                         }
                         
                         MapService.updateMarker(App.user.id, App.user);
+                        
+                        // Broadcast update immediately if position changed
                         NetService.broadcast();
                     },
                     (err) => {
@@ -492,6 +521,12 @@
                     },
                     options
                 );
+            },
+            
+            centerMap: () => {
+                if(MapService.map && App.user.lat) {
+                    MapService.map.setView([App.user.lat, App.user.lng], 16, { animate: true });
+                }
             },
             
             updateMarker: (id, data) => {
@@ -529,15 +564,24 @@
                 
                 const dist = last ? MapService.dist(last[0], last[1], data.lat, data.lng) : 1;
                 
-                if (dist > 0.0001) { 
+                if (dist > 0.00005) { // Trace point threshold
                     storage.trailPts.push([data.lat, data.lng]);
                     if (storage.trailPts.length > 50) storage.trailPts.shift();
                     
+                    // Determine trail color based on status
+                    let trailColor = '#22c55e'; // Default Green (Clear/Appui/Progression)
+                    if (status === 'CONTACT') trailColor = '#ef4444'; // Red for Contact
+                    
                     if (storage.trail) {
                         storage.trail.setLatLngs(storage.trailPts);
+                        storage.trail.setStyle({ color: trailColor });
                     } else {
-                        const color = (id === App.user.id) ? '#3b82f6' : '#22c55e';
-                        storage.trail = L.polyline(storage.trailPts, { color: color, weight: 2, dashArray: '4,8', opacity: 0.6 }).addTo(MapService.map);
+                        storage.trail = L.polyline(storage.trailPts, { 
+                            color: trailColor, 
+                            weight: 2, 
+                            dashArray: '4,8', 
+                            opacity: 0.6 
+                        }).addTo(MapService.map);
                     }
                 }
             },
@@ -732,6 +776,7 @@
             
             initPeer: (id = null) => {
                 if (NetService.peer) NetService.peer.destroy();
+                
                 const peer = new Peer(id, CONFIG.peerConfig);
                 
                 peer.on('open', (pid) => {
@@ -783,15 +828,15 @@
                     }
                 });
                 
-                peer.on('disconnected', () => peer.reconnect());
+                peer.on('disconnected', () => {
+                    console.log("[PEER] Disconnected, retry...");
+                    peer.reconnect();
+                });
+                
                 NetService.peer = peer;
             },
             
             handleConn: (conn) => {
-                // Register logic moved to initPeer (for initiator) and connection event (for receiver) to capture metadata
-                // But we must ensure registration if metadata was missing or connection was fast
-                
-                // Ensure peer is registered if connection is already open
                 if (conn.open) {
                     if (!App.peers[conn.peer]) App.peers[conn.peer] = {};
                     App.peers[conn.peer].conn = conn;
@@ -865,9 +910,11 @@
                 setTimeout(() => {
                     if (QRService.scanner) try { QRService.scanner.clear(); } catch(e){}
                     QRService.scanner = new Html5Qrcode("scan-region");
+                    const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+                    
                     QRService.scanner.start(
                         { facingMode: "environment" },
-                        { fps: 10, qrbox: { width: 250, height: 250 } },
+                        config,
                         (txt) => {
                             QRService.stop();
                             document.getElementById('input-join-id').value = txt;
@@ -876,6 +923,7 @@
                         },
                         (err) => {}
                     ).catch(err => {
+                        console.error("[QR] Err", err);
                         QRService.stop();
                         App.toast("Erreur Caméra", true);
                     });
@@ -990,7 +1038,12 @@
                 document.getElementById('hud').style.display = isOp ? 'block' : 'none';
                 const quitBtn = document.getElementById('btn-quit');
                 if(quitBtn) quitBtn.style.display = isOp ? 'flex' : 'none';
-                if (id === 'view-map' && MapService.map) setTimeout(() => MapService.map.invalidateSize(), 200);
+                if (id === 'view-map') {
+                    MapService.init(); // Init map if first time
+                    // Center on user immediately
+                    if(MapService.map && App.user.lat) MapService.map.setView([App.user.lat, App.user.lng], 16);
+                    setTimeout(() => MapService.map.invalidateSize(), 200);
+                }
             },
             
             toggleMap: () => {
@@ -1002,7 +1055,6 @@
                 } else {
                     App.switchView('view-map');
                     btn.classList.add('active');
-                    MapService.init(); 
                 }
             },
             
