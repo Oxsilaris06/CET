@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>COM TAC v10.3 // RELAY</title>
+    <title>COM TAC v10.4 // FULL LINK</title>
     
     <!-- ================= 1. EXTERNAL LIBRARIES (CDN) ================= -->
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Chakra+Petch:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -228,12 +228,13 @@
     <!-- UI STRUCTURE -->
     <header>
         <div class="brand">
-            <span class="material-symbols-outlined">satellite_alt</span> COM<span>TAC</span> v10.3
+            <span class="material-symbols-outlined">satellite_alt</span> COM<span>TAC</span> v10.4
         </div>
         <div class="nav-group">
             <div class="btn-nav" id="btn-toggle-map" onclick="App.toggleMap()">
                 <span class="material-symbols-outlined">map</span> CARTE
             </div>
+            <!-- FIX: ID corrigé et fonction corrigée -->
             <div class="btn-nav danger" id="btn-quit" onclick="App.leaveSession(true)" style="display:none;">
                 <span class="material-symbols-outlined">logout</span>
             </div>
@@ -407,11 +408,13 @@
             init: () => {
                 if (MapService.map) return;
                 
+                // Initialize Leaflet Map
                 MapService.map = L.map('map-instance', {
                     zoomControl: false,
                     attributionControl: false
-                }).setView([48.85, 2.35], 13);
+                }).setView([48.85, 2.35], 13); // Default Paris
 
+                // Offline Tile Layer Logic
                 const OfflineLayer = L.TileLayer.extend({
                     createTile: function(coords, done) {
                         const tile = document.createElement('img');
@@ -428,6 +431,7 @@
                                     tile.src = URL.createObjectURL(blob);
                                     done(null, tile);
                                 }).catch(err => {
+                                    // Fallback if offline and no cache
                                     tile.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
                                     done(null, tile);
                                 });
@@ -646,7 +650,7 @@
                 if (AudioService.mode === 'vox') {
                     icon.innerText = 'mic';
                     btn.classList.add('vox-active');
-                    App.toast("Mode VOX");
+                    App.toast("Mode VOX (Mains Libres)");
                 } else {
                     icon.innerText = 'mic_none';
                     btn.classList.remove('vox-active');
@@ -704,7 +708,7 @@
             }
         };
 
-        // --- MODULE 4: NETWORK (PeerJS + RELAY PATCH) ---
+        // --- MODULE 4: NETWORK (PeerJS) ---
         const NetService = {
             peer: null,
             hostId: null,
@@ -742,8 +746,7 @@
                         const conn = peer.connect(NetService.hostId, { metadata: App.user });
                         conn.on('open', () => {
                             NetService.handleConn(conn);
-                            // IMMEDIATE HANDSHAKE WITH FULL DATA
-                            conn.send({ type: 'FULL', user: App.user });
+                            conn.send({ type: 'FULL', user: App.user }); // Handshake
                             
                             const call = peer.call(NetService.hostId, AudioService.stream);
                             call.on('stream', s => AudioService.playRemote(s));
@@ -756,7 +759,6 @@
                 });
 
                 peer.on('connection', (conn) => {
-                    // HOST: Register connection immediately
                     if (conn.metadata && conn.metadata.id) {
                         if (!App.peers[conn.metadata.id]) App.peers[conn.metadata.id] = { data: conn.metadata };
                         App.peers[conn.metadata.id].conn = conn;
@@ -786,13 +788,21 @@
             },
             
             handleConn: (conn) => {
+                // Register logic moved to initPeer (for initiator) and connection event (for receiver) to capture metadata
+                // But we must ensure registration if metadata was missing or connection was fast
+                
+                // Ensure peer is registered if connection is already open
+                if (conn.open) {
+                    if (!App.peers[conn.peer]) App.peers[conn.peer] = {};
+                    App.peers[conn.peer].conn = conn;
+                }
+
                 conn.on('data', (d) => {
                     if (d.type === 'FULL' || d.type === 'UPDATE') {
                         NetService.updatePeer(d.user);
                         
-                        // --- HOST RELAY LOGIC (CRITICAL FIX) ---
+                        // HOST RELAY
                         if (App.isHost) {
-                            // Instant Relay to ALL other connected peers
                             Object.values(App.peers).forEach(p => {
                                 if (p.conn && p.conn.open && p.conn.peer !== d.user.id) {
                                     p.conn.send({ type: 'UPDATE', user: d.user });
@@ -1053,6 +1063,7 @@
 
         // BOOTSTRAP
         document.addEventListener('DOMContentLoaded', App.init);
+
     </script>
 </body>
 </html>
