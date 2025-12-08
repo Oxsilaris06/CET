@@ -1173,7 +1173,10 @@
                     const div = document.createElement('div');
                     div.className = `op-card ${u.isMe ? 'is-me' : ''} ${u.isTx ? 'talking' : ''}`;
                     if(u.status === 'CONTACT') div.setAttribute('data-status', 'CONTACT');
-                    let bat = u.bat ? `🔋 ${u.bat}%` : '🔋 --';
+                    
+                    // FIX: Allow 0% battery to be displayed correctly
+                    let bat = (u.bat !== null && u.bat !== undefined) ? `🔋 ${u.bat}%` : '🔋 --';
+                    
                     let col = '#aaa';
                     if(u.status === 'CONTACT') col = 'var(--color-red)';
                     else if(u.status === 'PROGRESSION') col = 'var(--color-blue)';
@@ -1187,8 +1190,14 @@
             initBattery: () => {
                 if ('getBattery' in navigator) {
                     navigator.getBattery().then(b => {
-                        const update = () => { App.user.bat = Math.floor(b.level * 100); NetService.broadcast(); };
-                        update(); b.addEventListener('levelchange', update);
+                        const update = () => { 
+                            App.user.bat = Math.floor(b.level * 100); 
+                            NetService.broadcast(); 
+                            App.renderGrid(); // FIX: Force local UI update
+                        };
+                        update(); 
+                        b.addEventListener('levelchange', update);
+                        b.addEventListener('chargingchange', update); // FIX: Watch charging status too
                     });
                 }
             },
