@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>COM TAC v10.1 // PATCHED</title>
+    <title>COM TAC v10.2 // FIXED</title>
     
     <!-- ================= 1. EXTERNAL LIBRARIES (CDN) ================= -->
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Chakra+Petch:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -115,7 +115,8 @@
         .btn-block:active { background: var(--color-surface-light); }
 
         /* --- MAP (BFT) --- */
-        #map-container { width: 100%; height: 100%; background: #0b0b0b; }
+        /* FIX: Ciblage correct de l'ID utilisé par Leaflet */
+        #map-instance { width: 100%; height: 100%; background: #0b0b0b; z-index: 1; }
         
         /* Tactical Markers */
         .tac-wrapper { transition: transform 0.5s linear; will-change: transform; }
@@ -228,7 +229,7 @@
     <!-- UI STRUCTURE -->
     <header>
         <div class="brand">
-            <span class="material-symbols-outlined">satellite_alt</span> COM<span>TAC</span> v10.1
+            <span class="material-symbols-outlined">satellite_alt</span> COM<span>TAC</span> v10.2
         </div>
         <div class="nav-group">
             <div class="btn-nav" id="btn-toggle-map" onclick="App.toggleMap()">
@@ -307,6 +308,7 @@
 
     <!-- VIEW: MAP -->
     <div id="view-map" class="view">
+        <!-- FIX: ID doit correspondre à celui utilisé dans MapService.init() -->
         <div id="map-instance"></div>
     </div>
 
@@ -431,6 +433,7 @@
                                     tile.src = URL.createObjectURL(blob);
                                     done(null, tile);
                                 }).catch(err => {
+                                    // Fallback if offline and no cache
                                     tile.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
                                     done(null, tile);
                                 });
@@ -450,7 +453,8 @@
             
             startGPS: () => {
                 if (!navigator.geolocation) {
-                    document.getElementById('txt-gps-display').innerText = "GPS N/A";
+                    const el = document.getElementById('txt-gps-display');
+                    if(el) el.innerText = "GPS N/A";
                     return;
                 }
                 
@@ -746,10 +750,12 @@
                         App.saveSession(pid);
                         App.switchView('view-ops');
                     } else if (NetService.hostId) {
+                        // CLIENT: Connect to Host
                         const conn = peer.connect(NetService.hostId, { metadata: App.user });
                         
                         conn.on('open', () => {
                             NetService.handleConn(conn);
+                            // FORCE HANDSHAKE for Host to see me
                             conn.send({ type: 'FULL', user: App.user });
                             
                             const call = peer.call(NetService.hostId, AudioService.stream);
@@ -763,8 +769,10 @@
                 });
 
                 peer.on('connection', (conn) => {
+                    // HOST: Register connection immediately
                     if (conn.metadata && conn.metadata.id) {
-                        App.peers[conn.metadata.id] = { data: conn.metadata, conn: conn };
+                        if (!App.peers[conn.metadata.id]) App.peers[conn.metadata.id] = { data: conn.metadata };
+                        App.peers[conn.metadata.id].conn = conn;
                         App.renderGrid();
                     }
                     NetService.handleConn(conn);
@@ -797,6 +805,7 @@
             
             handleConn: (conn) => {
                 conn.on('data', (d) => {
+                    // Robust handling: update peer data regardless of packet type
                     if (d.type === 'FULL' || d.type === 'UPDATE') NetService.updatePeer(d.user);
                     if (d.type === 'SYNC') d.list.forEach(u => NetService.updatePeer(u));
                 });
@@ -804,7 +813,7 @@
                 conn.on('open', () => {
                     if (!App.peers[conn.peer]) App.peers[conn.peer] = {};
                     App.peers[conn.peer].conn = conn;
-                    NetService.broadcast();
+                    NetService.broadcast(); // Send my info back
                 });
                 
                 conn.on('close', () => {
@@ -834,13 +843,14 @@
             startHeartbeat: () => {
                 setInterval(() => {
                     if (!App.isHost) return;
+                    // Gather valid users
                     const list = Object.values(App.peers).map(p => p.data).filter(d => d && d.id);
                     list.push(App.user);
                     
                     Object.values(App.peers).forEach(p => {
                         if (p.conn && p.conn.open) p.conn.send({ type: 'SYNC', list: list });
                     });
-                }, 1000);
+                }, 1000); // 1Hz Sync
             }
         };
 
@@ -991,7 +1001,7 @@
                 const isOp = (id === 'view-ops' || id === 'view-map');
                 document.getElementById('hud').style.display = isOp ? 'block' : 'none';
                 
-                // FIX v10.1: Utilisation du bon ID btn-quit + vérification d'existence
+                // FIX: Check if button exists before accessing style
                 const quitBtn = document.getElementById('btn-quit');
                 if(quitBtn) quitBtn.style.display = isOp ? 'flex' : 'none';
                 
@@ -1014,6 +1024,7 @@
             
             setStatus: (s) => {
                 App.user.status = s;
+                // UI Highlight
                 document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
                 const c = document.querySelector(`.chip[data-val="${s}"]`);
                 if(c) c.classList.add('active');
@@ -1025,6 +1036,7 @@
             
             renderGrid: () => {
                 const grid = document.getElementById('ops-container');
+                if (!grid) return; // Safety check
                 grid.innerHTML = '';
                 
                 const all = [{...App.user, isMe: true}].concat(
