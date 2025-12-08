@@ -7,13 +7,13 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>COM TAC Beta</title>
+    <title>COM TAC v11.0 // COMMAND</title>
     
     <!-- ================= 1. EXTERNAL LIBRARIES (CDN) ================= -->
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Chakra+Petch:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,1,0" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <link rel="icon" href="favicon.ico" sizes="any" type="image/png"> <!-- Favicon fix -->
+    <link rel="icon" href="favicon.ico" sizes="any" type="image/png">
 
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -23,7 +23,6 @@
     <!-- ================= 2. STYLES CSS (TACTICAL UI) ================= -->
     <style>
         :root {
-            /* Colors */
             --color-bg: #050505;
             --color-surface: #121214;
             --color-surface-light: #1c1c1f;
@@ -33,16 +32,10 @@
             --color-yellow: #eab308;
             --color-text: #e4e4e7;
             --color-dim: #71717a;
-            
-            /* Typography */
             --font-ui: 'Chakra Petch', sans-serif;
             --font-mono: 'JetBrains Mono', monospace;
-            
-            /* Layout */
             --header-height: 60px;
             --radius: 12px;
-            
-            /* iOS Safe Areas */
             --safe-top: env(safe-area-inset-top, 0px);
             --safe-bottom: env(safe-area-inset-bottom, 20px);
         }
@@ -53,19 +46,14 @@
             font-family: var(--font-ui);
             background-color: var(--color-bg);
             color: var(--color-text);
-            /* iOS Height Fix */
-            height: 100vh; 
-            height: 100dvh; 
-            width: 100vw;
+            height: 100dvh; width: 100vw;
             overflow: hidden;
             display: flex; flex-direction: column;
-            /* Prevent bounce effect on iOS */
             overscroll-behavior: none;
         }
 
         /* --- HEADER --- */
         header {
-            /* Add safe area to height calculation */
             height: calc(var(--header-height) + var(--safe-top));
             padding: var(--safe-top) 16px 0 16px;
             background: rgba(5,5,5,0.95);
@@ -73,14 +61,15 @@
             display: flex; justify-content: space-between; align-items: center;
             position: fixed; top: 0; left: 0; right: 0;
             z-index: 1000;
+            transition: background 0.3s;
         }
+        
+        /* Silence Radio Header Style */
+        body.silence-active header { border-bottom: 1px solid var(--color-red); background: rgba(50, 0, 0, 0.9); }
+        body.silence-active .brand span { color: var(--color-red); }
 
-        .brand {
-            font-weight: 800; font-size: 1.2rem; letter-spacing: 1px;
-            display: flex; align-items: center; gap: 8px;
-        }
+        .brand { font-weight: 800; font-size: 1.2rem; letter-spacing: 1px; display: flex; align-items: center; gap: 8px; }
         .brand span { color: var(--color-blue); }
-
         .nav-group { display: flex; gap: 8px; }
         
         .btn-nav {
@@ -96,29 +85,18 @@
         .view-container { position: relative; flex: 1; overflow: hidden; }
         .view {
             position: absolute; inset: 0; background: var(--color-bg);
-            display: flex; flex-direction: column;
-            opacity: 0; pointer-events: none; z-index: 0;
-            transition: opacity 0.3s ease;
-            /* Adjust padding for new header height including safe area */
-            padding-top: calc(var(--header-height) + var(--safe-top));
+            display: flex; flex-direction: column; opacity: 0; pointer-events: none; z-index: 0;
+            transition: opacity 0.3s ease; padding-top: calc(var(--header-height) + var(--safe-top));
         }
         .view.active { opacity: 1; pointer-events: all; z-index: 10; }
 
-        /* --- LOGIN & MENU --- */
-        .center-content {
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
-            height: 100%; padding: 30px; text-align: center;
-        }
+        .center-content { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; padding: 30px; text-align: center; }
         
         .input-large {
             background: transparent; border: none; border-bottom: 2px solid #333;
             width: 100%; font-size: 2rem; font-family: var(--font-mono);
             color: white; text-align: center; padding: 15px; margin: 30px 0;
-            border-radius: 0; outline: none;
-            /* iOS Input Reset */
-            -webkit-appearance: none;
-            appearance: none;
-            border-radius: 0;
+            border-radius: 0; outline: none; -webkit-appearance: none; appearance: none;
         }
         .input-large:focus { border-color: var(--color-blue); }
 
@@ -135,14 +113,24 @@
         /* --- MAP (BFT) --- */
         #map-instance { width: 100%; height: 100%; background: #0b0b0b; z-index: 1; }
         
+        .map-controls {
+            position: absolute; top: calc(var(--header-height) + var(--safe-top) + 10px); right: 10px;
+            display: flex; flex-direction: column; gap: 10px; z-index: 400;
+        }
+        .map-btn {
+            width: 44px; height: 44px; background: rgba(0,0,0,0.8); border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 50%; color: white; display: flex; align-items: center; justify-content: center;
+            cursor: pointer; backdrop-filter: blur(4px);
+        }
+        .map-btn.active { background: var(--color-blue); color: black; border-color: var(--color-blue); }
+        .map-btn.alert { background: var(--color-red); color: white; border-color: var(--color-red); animation: pulse-btn 1s infinite; }
+
         /* Tactical Markers */
         .tac-wrapper { transition: transform 0.5s linear; will-change: transform; }
         .tac-arrow {
             width: 0; height: 0;
-            border-left: 10px solid transparent;
-            border-right: 10px solid transparent;
-            border-bottom: 24px solid var(--color-blue); 
-            filter: drop-shadow(0 0 4px var(--color-blue));
+            border-left: 10px solid transparent; border-right: 10px solid transparent;
+            border-bottom: 24px solid var(--color-blue); filter: drop-shadow(0 0 4px var(--color-blue));
         }
         .tac-label {
             position: absolute; top: 28px; left: 50%; transform: translateX(-50%);
@@ -151,26 +139,41 @@
             white-space: nowrap; border: 1px solid var(--color-blue);
         }
         
-        /* Status Colors */
-        .status-CONTACT .tac-arrow { border-bottom-color: var(--color-red); filter: drop-shadow(0 0 10px red); }
+        /* Status & Pulsing */
+        .status-CONTACT .tac-arrow { 
+            border-bottom-color: var(--color-red); 
+            filter: drop-shadow(0 0 10px red); 
+            animation: pulse-arrow 0.8s infinite; /* PULSING ARROW ONLY IN CONTACT */
+        }
         .status-CONTACT .tac-label { border-color: var(--color-red); color: var(--color-red); }
-        .status-CLEAR .tac-arrow { border-bottom-color: var(--color-green); filter: drop-shadow(0 0 4px var(--color-green)); }
+        
+        @keyframes pulse-arrow {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.3); opacity: 0.8; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .status-CLEAR .tac-arrow { border-bottom-color: var(--color-green); }
         .status-CLEAR .tac-label { border-color: var(--color-green); color: var(--color-green); }
-        .status-APPUI .tac-arrow { border-bottom-color: var(--color-yellow); filter: drop-shadow(0 0 4px var(--color-yellow)); }
+        .status-APPUI .tac-arrow { border-bottom-color: var(--color-yellow); }
         .status-APPUI .tac-label { border-color: var(--color-yellow); color: var(--color-yellow); }
         .status-PROGRESSION .tac-arrow { border-bottom-color: var(--color-blue); }
         .status-PROGRESSION .tac-label { border-color: var(--color-blue); color: var(--color-blue); }
 
+        /* PING MARKER STYLE */
+        .ping-marker { text-align: center; }
+        .ping-icon { color: var(--color-red); font-size: 30px; filter: drop-shadow(0 0 5px black); animation: bounce 1s infinite; }
+        .ping-msg { 
+            background: var(--color-red); color: white; padding: 2px 6px; 
+            font-size: 10px; border-radius: 4px; font-weight: bold; font-family: var(--font-mono);
+        }
+        @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+
         /* --- OPS GRID --- */
         .ops-grid {
             display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;
-            padding: 15px; 
-            /* Add safe area to bottom padding so content isn't hidden behind HUD or home bar */
-            padding-bottom: calc(240px + var(--safe-bottom)); 
-            padding-top: 20px;
-            overflow-y: auto; align-content: start;
-            width: 100%; max-width: 600px; margin: 0 auto;
-            /* iOS Scrolling Momentum */
+            padding: 15px; padding-bottom: calc(240px + var(--safe-bottom)); padding-top: 20px;
+            overflow-y: auto; align-content: start; width: 100%; max-width: 600px; margin: 0 auto;
             -webkit-overflow-scrolling: touch;
         }
         
@@ -181,7 +184,6 @@
         }
         .op-card.is-me { background: rgba(59, 130, 246, 0.08); border-color: rgba(59, 130, 246, 0.3); }
         .op-card.talking { border-color: var(--color-green); box-shadow: inset 0 0 20px rgba(34, 197, 94, 0.2); }
-        
         .op-card[data-status="CONTACT"] { animation: pulse-red 1s infinite; }
         @keyframes pulse-red { 0%, 100% { border-color: var(--color-red); } 50% { border-color: transparent; } }
 
@@ -193,12 +195,14 @@
         .hud-panel {
             position: fixed; bottom: 0; left: 0; right: 0; z-index: 500;
             background: rgba(10,10,10,0.95); backdrop-filter: blur(20px);
-            border-top: 1px solid rgba(255,255,255,0.1);
-            border-radius: 24px 24px 0 0; 
-            /* Add safe area to bottom padding */
+            border-top: 1px solid rgba(255,255,255,0.1); border-radius: 24px 24px 0 0; 
             padding: 15px 20px calc(30px + var(--safe-bottom));
             display: none; box-shadow: 0 -10px 50px rgba(0,0,0,0.8);
+            transition: background 0.3s, border-color 0.3s;
         }
+        
+        /* Silence Mode HUD */
+        body.silence-active .hud-panel { border-top: 2px solid var(--color-red); background: rgba(20, 0, 0, 0.95); }
 
         .status-bar { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 12px; margin-bottom: 10px; scrollbar-width: none; }
         .chip {
@@ -212,6 +216,11 @@
         .chip[data-val="CLEAR"].active { background: var(--color-green); color: black; }
         .chip[data-val="APPUI"].active { background: var(--color-yellow); color: black; }
         .chip[data-val="PROGRESSION"].active { background: var(--color-blue); color: black; }
+        
+        /* Silence Button Style */
+        .chip.silence-btn { border-color: var(--color-red); color: var(--color-red); }
+        .chip.silence-btn.active { background: var(--color-red); color: white; animation: pulse-btn 1s infinite; }
+        @keyframes pulse-btn { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
 
         .ptt-container { display: flex; align-items: center; justify-content: center; position: relative; height: 90px; }
         
@@ -221,8 +230,7 @@
             display: flex; align-items: center; justify-content: center;
             font-size: 2.5rem; cursor: pointer; user-select: none;
             box-shadow: 0 5px 20px rgba(0,0,0,0.5);
-            transition: transform 0.1s;
-            /* Prevent iOS tap highlight */
+            transition: transform 0.1s, background 0.3s;
             -webkit-tap-highlight-color: transparent;
         }
         #ptt-btn:active, #ptt-btn.active { 
@@ -230,6 +238,16 @@
             box-shadow: 0 0 30px rgba(59, 130, 246, 0.4);
         }
         #ptt-btn.vox-active { border-color: var(--color-green); color: var(--color-green); }
+        
+        /* Silence Mode PTT */
+        body.silence-active #ptt-btn { border-color: #333; color: #333; cursor: not-allowed; }
+        body.silence-active #ptt-btn:active { transform: none; background: #222; box-shadow: none; color: #333; }
+        
+        /* Host PTT override during Silence */
+        body.silence-active.is-host #ptt-btn { border-color: var(--color-red); color: var(--color-red); cursor: pointer; }
+        body.silence-active.is-host #ptt-btn:active, body.silence-active.is-host #ptt-btn.active { 
+            background: var(--color-red); color: white; box-shadow: 0 0 30px rgba(239, 68, 68, 0.4); 
+        }
 
         .side-btn {
             position: absolute; width: 50px; height: 50px; border-radius: 50%;
@@ -251,15 +269,8 @@
             display: flex; align-items: center; justify-content: center; cursor: pointer; font-weight: bold;
         }
         #scan-region { width: 300px; height: 300px; background: black; border-radius: 20px; overflow: hidden; border: 1px solid #333; }
-        
-        #qr-code-region { 
-            background: white; padding: 20px; border-radius: 20px; 
-            display: flex; align-items: center; justify-content: center;
-            width: auto; max-width: 85vw;
-        }
-        #qr-code-region img, #qr-code-region canvas {
-            display: block; max-width: 100% !important; height: auto !important;
-        }
+        #qr-code-region { background: white; padding: 20px; border-radius: 20px; display: flex; align-items: center; justify-content: center; width: auto; max-width: 85vw; }
+        #qr-code-region img { display: block; max-width: 100% !important; height: auto !important; }
 
         #visualizer { position: absolute; bottom: 120px; left: 0; width: 100%; height: 80px; pointer-events: none; opacity: 0.5; z-index: 400; }
         
@@ -269,6 +280,13 @@
             padding: 12px 24px; border-radius: 30px; font-weight: 700; font-size: 0.85rem;
             z-index: 9999; display: none; box-shadow: 0 10px 40px rgba(0,0,0,0.8);
         }
+        
+        #silence-banner {
+            position: fixed; top: calc(var(--header-height) + var(--safe-top)); width: 100%;
+            background: var(--color-red); color: white; text-align: center; font-weight: 800;
+            padding: 5px; font-size: 0.8rem; z-index: 900; display: none; animation: pulse-btn 2s infinite;
+        }
+        body.silence-active #silence-banner { display: block; }
     </style>
 </head>
 <body>
@@ -288,6 +306,7 @@
         </div>
     </header>
 
+    <div id="silence-banner">SILENCE RADIO ACTIF - ÉCOUTE SEULE</div>
     <div id="toast-msg">Système Prêt</div>
 
     <!-- OVERLAYS -->
@@ -354,6 +373,16 @@
 
     <!-- VIEW: MAP -->
     <div id="view-map" class="view">
+        <div class="map-controls">
+            <!-- Day/Night Switch -->
+            <div class="map-btn" onclick="MapService.toggleMode()">
+                <span class="material-symbols-outlined" id="icon-map-mode">light_mode</span>
+            </div>
+            <!-- Ping Mode Switch -->
+            <div class="map-btn" id="btn-ping-mode" onclick="App.togglePingMode()">
+                <span class="material-symbols-outlined">ads_click</span>
+            </div>
+        </div>
         <div id="map-instance"></div>
     </div>
 
@@ -366,6 +395,8 @@
             <div class="chip" onclick="App.setStatus('CONTACT')" data-val="CONTACT">CONTACT</div>
             <div class="chip" onclick="App.setStatus('CLEAR')" data-val="CLEAR">CLEAR</div>
             <div class="chip" onclick="App.setStatus('APPUI')" data-val="APPUI">EN APPUI</div>
+            <!-- HOST ONLY SILENCE BUTTON -->
+            <div class="chip silence-btn" id="btn-silence" onclick="App.toggleSilence()" style="display:none;">SILENCE</div>
         </div>
 
         <div class="ptt-container">
@@ -414,10 +445,7 @@
                         DBService.db = event.target.result;
                         resolve();
                     };
-                    request.onerror = (event) => {
-                        console.error("[DB] Error", event);
-                        resolve(); 
-                    };
+                    request.onerror = (event) => { console.error("[DB]", event); resolve(); };
                 });
             },
             
@@ -425,20 +453,17 @@
                 if (!DBService.db) return;
                 try {
                     const tx = DBService.db.transaction('tiles', 'readwrite');
-                    const store = tx.objectStore('tiles');
-                    store.put({ key: key, blob: blob });
-                } catch(e) { console.warn("[DB] Put Error", e); }
+                    tx.objectStore('tiles').put({ key: key, blob: blob });
+                } catch(e) {}
             },
             
             getTile: async (key) => {
                 if (!DBService.db) return null;
                 return new Promise((resolve) => {
                     try {
-                        const tx = DBService.db.transaction('tiles', 'readonly');
-                        const store = tx.objectStore('tiles');
-                        const request = store.get(key);
-                        request.onsuccess = () => resolve(request.result ? request.result.blob : null);
-                        request.onerror = () => resolve(null);
+                        const req = DBService.db.transaction('tiles', 'readonly').objectStore('tiles').get(key);
+                        req.onsuccess = () => resolve(req.result ? req.result.blob : null);
+                        req.onerror = () => resolve(null);
                     } catch(e) { resolve(null); }
                 });
             }
@@ -446,28 +471,38 @@
 
         // --- MODULE 2: MAP & GPS ---
         const MapService = {
-            map: null,
-            geoId: null,
-            lastLat: 0,
-            lastLng: 0,
+            map: null, layer: null, geoId: null, lastLat: 0, lastLng: 0,
+            mode: 'dark', // 'dark' or 'light'
             
             init: () => {
                 if (MapService.map) {
-                    Object.keys(App.peers).forEach(pid => MapService.updateMarker(pid, App.peers[pid].data));
-                    MapService.updateMarker(App.user.id, App.user);
+                    MapService.refreshMarkers();
                     return;
                 }
                 
-                MapService.map = L.map('map-instance', {
-                    zoomControl: false,
-                    attributionControl: false
-                }).setView([48.85, 2.35], 13); 
+                MapService.map = L.map('map-instance', { zoomControl: false, attributionControl: false }).setView([48.85, 2.35], 13); 
+                
+                // Add click listener for Pings
+                MapService.map.on('click', (e) => {
+                    if (App.pingMode) App.sendPing(e.latlng);
+                });
+
+                MapService.loadLayer();
+                MapService.refreshMarkers();
+            },
+            
+            loadLayer: () => {
+                if (MapService.layer) MapService.map.removeLayer(MapService.layer);
+                
+                const url = MapService.mode === 'dark' 
+                    ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+                    : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'; // High Vis Layer
 
                 const OfflineLayer = L.TileLayer.extend({
                     createTile: function(coords, done) {
                         const tile = document.createElement('img');
                         const url = this.getTileUrl(coords);
-                        const key = `${coords.z}_${coords.x}_${coords.y}`;
+                        const key = `${MapService.mode}_${coords.z}_${coords.x}_${coords.y}`; // Separate cache keys
 
                         DBService.getTile(key).then(blob => {
                             if (blob) {
@@ -478,7 +513,7 @@
                                     DBService.putTile(key, blob);
                                     tile.src = URL.createObjectURL(blob);
                                     done(null, tile);
-                                }).catch(err => {
+                                }).catch(() => {
                                     tile.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
                                     done(null, tile);
                                 });
@@ -488,90 +523,66 @@
                     }
                 });
 
-                new OfflineLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-                    subdomains: 'abcd',
-                    maxZoom: 19
-                }).addTo(MapService.map);
+                MapService.layer = new OfflineLayer(url, { subdomains: 'abcd', maxZoom: 19 }).addTo(MapService.map);
+            },
+            
+            toggleMode: () => {
+                MapService.mode = MapService.mode === 'dark' ? 'light' : 'dark';
+                document.getElementById('icon-map-mode').innerText = MapService.mode === 'dark' ? 'light_mode' : 'dark_mode';
+                MapService.loadLayer();
+            },
 
+            refreshMarkers: () => {
                 Object.keys(App.peers).forEach(pid => MapService.updateMarker(pid, App.peers[pid].data));
                 if(App.user.lat) MapService.updateMarker(App.user.id, App.user);
             },
             
             startGPS: () => {
-                if (!navigator.geolocation) {
-                    document.getElementById('txt-gps-display').innerText = "GPS N/A";
-                    return;
-                }
+                if (!navigator.geolocation) { document.getElementById('txt-gps-display').innerText = "GPS N/A"; return; }
                 
-                // iOS Fix: Fallback Logic
-                const tryGPS = (enableHighAccuracy) => {
-                    const options = { 
-                        enableHighAccuracy: enableHighAccuracy, 
-                        timeout: enableHighAccuracy ? 10000 : 20000, 
-                        maximumAge: 0 
-                    };
-                    
+                const tryGPS = (highAcc) => {
                     MapService.geoId = navigator.geolocation.watchPosition(
                         (pos) => {
                             const { latitude, longitude, heading, accuracy } = pos.coords;
-                            
                             if (MapService.lastLat !== 0 && (!heading || isNaN(heading))) {
                                 App.user.head = MapService.calcHeading(MapService.lastLat, MapService.lastLng, latitude, longitude);
-                            } else if (heading) {
-                                App.user.head = heading;
-                            }
+                            } else if (heading) App.user.head = heading;
 
-                            const distanceMoved = MapService.dist(MapService.lastLat, MapService.lastLng, latitude, longitude);
-                            
-                            if (distanceMoved > 0.00015 && App.user.status !== 'CONTACT' && App.user.status !== 'PROGRESSION') {
+                            if (MapService.dist(MapService.lastLat, MapService.lastLng, latitude, longitude) > 0.00015 && App.user.status !== 'CONTACT') {
                                 App.setStatus('PROGRESSION');
-                                App.toast("Mode Progression Auto");
                             }
 
-                            MapService.lastLat = latitude;
-                            MapService.lastLng = longitude;
-                            App.user.lat = latitude;
-                            App.user.lng = longitude;
+                            MapService.lastLat = latitude; MapService.lastLng = longitude;
+                            App.user.lat = latitude; App.user.lng = longitude;
                             
                             const el = document.getElementById('txt-gps-display');
                             if(el) {
                                 el.innerText = `GPS ±${Math.floor(accuracy)}m`;
                                 el.style.color = accuracy < 20 ? 'var(--color-green)' : 'var(--color-yellow)';
                             }
-                            
                             NetService.broadcast();
                             if (MapService.map) MapService.updateMarker(App.user.id, App.user);
                         },
                         (err) => {
-                            console.warn("[GPS] Error", err);
-                            if (enableHighAccuracy) {
-                                console.log("[GPS] Retrying with low accuracy for iOS/Indoor...");
-                                navigator.geolocation.clearWatch(MapService.geoId);
-                                tryGPS(false); // Retry with low accuracy
-                            } else {
+                            console.warn("[GPS]", err);
+                            if (highAcc) { navigator.geolocation.clearWatch(MapService.geoId); tryGPS(false); }
+                            else { 
                                 const el = document.getElementById('txt-gps-display');
-                                if(el) {
-                                    el.innerText = "GPS ERR";
-                                    el.style.color = 'var(--color-red)';
-                                }
+                                if(el) { el.innerText = "GPS ERR"; el.style.color = 'var(--color-red)'; }
                             }
                         },
-                        options
+                        { enableHighAccuracy: highAcc, timeout: highAcc ? 10000 : 20000, maximumAge: 0 }
                     );
                 };
-
-                tryGPS(true); // Start trying high accuracy
+                tryGPS(true);
             },
             
             centerMap: () => {
-                if(MapService.map && App.user.lat) {
-                    MapService.map.setView([App.user.lat, App.user.lng], 16, { animate: true });
-                }
+                if(MapService.map && App.user.lat) MapService.map.setView([App.user.lat, App.user.lng], 16, { animate: true });
             },
             
             updateMarker: (id, data) => {
                 if (!MapService.map || !data.lat) return;
-                
                 const storage = (id === App.user.id) ? MapService : App.peers[id];
                 if (!storage) return;
 
@@ -585,12 +596,7 @@
                     <div class="tac-label status-${status}">${data.callsign}</div>
                 `;
                 
-                const icon = L.divIcon({
-                    className: 'custom-div-icon',
-                    html: html,
-                    iconSize: [40, 40],
-                    iconAnchor: [20, 20]
-                });
+                const icon = L.divIcon({ className: 'custom-div-icon', html: html, iconSize: [40, 40], iconAnchor: [20, 20] });
 
                 if (storage.marker) {
                     storage.marker.setLatLng([data.lat, data.lng]);
@@ -599,120 +605,87 @@
                     storage.marker = L.marker([data.lat, data.lng], { icon: icon }).addTo(MapService.map);
                 }
                 
+                // Trail logic
                 if (!storage.trailPts) storage.trailPts = [];
                 const last = storage.trailPts[storage.trailPts.length - 1];
-                const dist = last ? MapService.dist(last[0], last[1], data.lat, data.lng) : 1;
-                
-                if (dist > 0.00005) { 
+                if (!last || MapService.dist(last[0], last[1], data.lat, data.lng) > 0.00005) {
                     storage.trailPts.push([data.lat, data.lng]);
                     if (storage.trailPts.length > 50) storage.trailPts.shift();
                     
-                    let trailColor = '#22c55e';
-                    if (status === 'CONTACT') trailColor = '#ef4444';
-                    
+                    let color = status === 'CONTACT' ? '#ef4444' : '#22c55e';
                     if (storage.trail) {
                         storage.trail.setLatLngs(storage.trailPts);
-                        storage.trail.setStyle({ color: trailColor });
+                        storage.trail.setStyle({ color: color });
                     } else {
-                        storage.trail = L.polyline(storage.trailPts, { 
-                            color: trailColor, 
-                            weight: 2, 
-                            dashArray: '4,8', 
-                            opacity: 0.6 
-                        }).addTo(MapService.map);
+                        storage.trail = L.polyline(storage.trailPts, { color: color, weight: 2, dashArray: '4,8', opacity: 0.6 }).addTo(MapService.map);
                     }
                 }
             },
-            
-            dist: (lat1, lng1, lat2, lng2) => {
-                return Math.sqrt(Math.pow(lat2 - lat1, 2) + Math.pow(lng2 - lng1, 2));
+
+            showPing: (ping) => {
+                if (!MapService.map) return;
+                const icon = L.divIcon({
+                    className: 'custom-div-icon',
+                    html: `<div class="ping-marker"><div class="ping-msg">${ping.sender}: ${ping.msg}</div><span class="material-symbols-outlined ping-icon">location_on</span></div>`,
+                    iconSize: [100, 60], iconAnchor: [50, 50]
+                });
+                const marker = L.marker([ping.lat, ping.lng], { icon: icon }).addTo(MapService.map);
+                setTimeout(() => MapService.map.removeLayer(marker), 10000); // Remove after 10s
+                App.toast(`PING: ${ping.sender}`);
             },
             
+            dist: (lat1, lng1, lat2, lng2) => Math.sqrt(Math.pow(lat2 - lat1, 2) + Math.pow(lng2 - lng1, 2)),
             calcHeading: (lat1, lng1, lat2, lng2) => {
                 const y = Math.sin(lng2 - lng1) * Math.cos(lat2);
                 const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(lng2 - lng1);
-                const brng = Math.atan2(y, x) * 180 / Math.PI;
-                return (brng + 360) % 360;
+                return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
             }
         };
 
         // --- MODULE 3: AUDIO ENGINE ---
         const AudioService = {
-            ctx: null, stream: null, analyser: null, mode: 'ptt', visuCtx: null, vadThreshold: -50,
+            ctx: null, stream: null, analyser: null, mode: 'ptt', visuCtx: null,
             
             init: async () => {
                 try {
-                    const stream = await navigator.mediaDevices.getUserMedia({
-                        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
-                    });
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
                     AudioService.stream = stream;
                     
-                    const AudioContext = window.AudioContext || window.webkitAudioContext;
-                    AudioService.ctx = new AudioContext();
-                    
+                    const AC = window.AudioContext || window.webkitAudioContext;
+                    AudioService.ctx = new AC();
                     const src = AudioService.ctx.createMediaStreamSource(stream);
-                    const filter = AudioService.ctx.createBiquadFilter();
-                    filter.type = 'highpass'; filter.frequency.value = 300; 
-                    
-                    const compressor = AudioService.ctx.createDynamicsCompressor();
-                    compressor.threshold.value = -20;
-                    compressor.knee.value = 40;
-                    
+                    const comp = AudioService.ctx.createDynamicsCompressor();
                     AudioService.analyser = AudioService.ctx.createAnalyser();
-                    AudioService.analyser.fftSize = 256;
                     
-                    src.connect(filter);
-                    filter.connect(compressor);
-                    compressor.connect(AudioService.analyser);
-                    
+                    src.connect(comp).connect(AudioService.analyser);
                     AudioService.tx(false);
                     AudioService.setupViz();
-                    AudioService.vadLoop();
                     
                     if ('mediaSession' in navigator) {
-                        navigator.mediaSession.metadata = new MediaMetadata({ title: 'ComTac Channel' });
                         navigator.mediaSession.setActionHandler('play', AudioService.toggleHeadset);
                         navigator.mediaSession.setActionHandler('pause', AudioService.toggleHeadset);
                     }
-                    
                     return true;
-                } catch(e) {
-                    console.error("[AUDIO] Init Failed", e);
-                    App.toast("Erreur Micro", true);
-                    return false;
-                }
+                } catch(e) { App.toast("Erreur Micro", true); return false; }
             },
             
             tx: (active) => {
                 if (!AudioService.stream) return;
-                const allow = (AudioService.mode === 'vox' || (AudioService.mode === 'ptt' && active));
-                const shouldBeOpen = (AudioService.mode === 'vox') ? true : active;
+                // SILENCE CHECK: Only Host can talk if silence is active
+                if (App.silenceActive && !App.isHost) active = false;
 
-                AudioService.stream.getAudioTracks().forEach(t => t.enabled = shouldBeOpen);
-                App.user.isTx = shouldBeOpen;
+                const shouldOpen = (AudioService.mode === 'vox') ? true : active;
+                AudioService.stream.getAudioTracks().forEach(t => t.enabled = shouldOpen);
+                App.user.isTx = shouldOpen;
                 
                 const btn = document.getElementById('ptt-btn');
                 if (btn) {
-                    if (shouldBeOpen) {
+                    if (shouldOpen) {
                         btn.classList.add('active');
                         if (navigator.vibrate && AudioService.mode !== 'vox') navigator.vibrate(30);
-                    } else {
-                         btn.classList.remove('active');
-                    }
+                    } else btn.classList.remove('active');
                 }
-                NetService.broadcast(); 
-                App.renderGrid();
-            },
-            
-            vadLoop: () => {
-                if (!AudioService.analyser) return;
-                const buffer = new Float32Array(AudioService.analyser.fftSize);
-                AudioService.analyser.getFloatTimeDomainData(buffer);
-                
-                if (AudioService.mode === 'vox') {
-                    if (!App.user.isTx) AudioService.tx(true);
-                }
-                setTimeout(AudioService.vadLoop, 100);
+                NetService.broadcast(); App.renderGrid();
             },
             
             toggleVox: () => {
@@ -721,255 +694,169 @@
                 const btn = document.getElementById('ptt-btn');
                 
                 if (AudioService.mode === 'vox') {
-                    icon.innerText = 'mic';
-                    btn.classList.add('vox-active');
-                    App.toast("Mode VOX (Micro Ouvert)");
-                    AudioService.tx(true);
+                    icon.innerText = 'mic'; btn.classList.add('vox-active');
+                    App.toast("Mode VOX"); AudioService.tx(true);
                 } else {
-                    icon.innerText = 'mic_none';
-                    btn.classList.remove('vox-active');
-                    AudioService.tx(false);
-                    App.toast("Mode PTT");
+                    icon.innerText = 'mic_none'; btn.classList.remove('vox-active');
+                    AudioService.tx(false); App.toast("Mode PTT");
                 }
             },
             
             toggleHeadset: () => {
                 if (AudioService.mode === 'ptt') {
-                    const newState = !App.user.isTx;
-                    App.user.isTxRequest = newState;
-                    AudioService.tx(newState);
+                    App.user.isTxRequest = !App.user.isTx; AudioService.tx(App.user.isTxRequest);
                 }
             },
             
             playRemote: (stream) => {
-                const a = new Audio();
-                a.srcObject = stream;
-                a.playsInline = true; // iOS fix
-                a.play().catch(e => console.log("Autoplay block", e));
+                const a = new Audio(); a.srcObject = stream; a.playsInline = true;
+                a.play().catch(e => console.log("Autoplay", e));
             },
             
             setupViz: () => {
-                const cvs = document.getElementById('visualizer');
-                if(!cvs) return;
+                const cvs = document.getElementById('visualizer'); if(!cvs) return;
                 AudioService.visuCtx = cvs.getContext('2d');
-                cvs.width = cvs.offsetWidth;
-                cvs.height = cvs.offsetHeight;
+                cvs.width = cvs.offsetWidth; cvs.height = cvs.offsetHeight;
                 AudioService.drawLoop();
             },
             
             drawLoop: () => {
                 requestAnimationFrame(AudioService.drawLoop);
                 if (!AudioService.analyser || !AudioService.visuCtx) return;
-                
                 const buffer = AudioService.analyser.frequencyBinCount;
                 const data = new Uint8Array(buffer);
                 AudioService.analyser.getByteFrequencyData(data);
-                
-                const ctx = AudioService.visuCtx;
-                const w = ctx.canvas.width;
-                const h = ctx.canvas.height;
-                
+                const ctx = AudioService.visuCtx; const w = ctx.canvas.width; const h = ctx.canvas.height;
                 ctx.clearRect(0, 0, w, h);
                 if (!App.user.isTx) return;
-                
-                const bw = (w / buffer) * 2.5;
-                let x = 0;
+                const bw = (w / buffer) * 2.5; let x = 0;
                 for(let i=0; i<buffer; i++) {
                     const bh = data[i] / 2;
                     ctx.fillStyle = `rgba(59, 130, 246, ${bh/255})`;
-                    ctx.fillRect(x, h - bh, bw, bh);
-                    x += bw + 1;
+                    ctx.fillRect(x, h - bh, bw, bh); x += bw + 1;
                 }
             }
         };
 
         // --- MODULE 4: NETWORK (PeerJS) ---
         const NetService = {
-            peer: null,
-            hostId: null,
-            retryCount: 0,
+            peer: null, hostId: null, retryCount: 0,
             
             createSession: (id = null) => {
-                document.getElementById('btn-create-host').innerHTML = 'Connexion Satellite...';
-                App.isHost = true;
-                App.user.role = 'HOST';
+                document.getElementById('btn-create-host').innerHTML = 'Init...';
+                App.isHost = true; App.user.role = 'HOST';
+                document.body.classList.add('is-host'); // CSS hook
+                document.getElementById('btn-silence').style.display = 'block'; // Show Silence Btn
                 NetService.initPeer(id);
             },
             
             resetJoinUI: () => {
                 const btn = document.getElementById('btn-join-trigger');
-                if (btn) {
-                    btn.innerHTML = 'REJOINDRE';
-                    btn.disabled = false;
-                }
+                if (btn) { btn.innerHTML = 'REJOINDRE'; btn.disabled = false; }
             },
 
             joinSession: (id = null) => {
                 if (!id) id = document.getElementById('input-join-id').value.trim();
                 if (!id) return App.toast("ID requis", true);
-                
                 const btn = document.getElementById('btn-join-trigger');
-                btn.innerHTML = 'Connexion...';
-                btn.disabled = true;
-                
-                setTimeout(() => {
-                    if (btn.innerText === 'Connexion...' || btn.disabled) {
-                        NetService.resetJoinUI();
-                        if(!App.isHost && !NetService.peer?.open) App.toast("Temps écoulé", true);
-                    }
-                }, 10000);
-
-                App.isHost = false;
-                NetService.hostId = id;
+                btn.innerHTML = '...'; btn.disabled = true;
+                setTimeout(() => { if (btn.disabled) { NetService.resetJoinUI(); if(!NetService.peer?.open) App.toast("Timeout", true); } }, 10000);
+                App.isHost = false; NetService.hostId = id;
+                document.body.classList.remove('is-host');
                 NetService.initPeer();
             },
             
             initPeer: (id = null) => {
                 if (NetService.peer) NetService.peer.destroy();
-                
                 const peer = id ? new Peer(id, CONFIG.peerConfig) : new Peer(CONFIG.peerConfig);
                 
                 peer.on('open', (pid) => {
-                    App.user.id = pid;
-                    NetService.retryCount = 0;
-                    
-                    // HOST: Displays OWN ID. CLIENT: Displays HOST ID (FREQ).
-                    const displayId = App.isHost ? pid : NetService.hostId;
-                    document.getElementById('txt-id-display').innerText = `CANAL: ${displayId}`;
+                    App.user.id = pid; NetService.retryCount = 0;
+                    document.getElementById('txt-id-display').innerText = `CANAL: ${App.isHost ? pid : NetService.hostId}`;
                     
                     if (App.isHost) {
-                        NetService.startHeartbeat();
-                        App.saveSession(pid); 
-                        App.switchView('view-ops');
+                        NetService.startHeartbeat(); App.saveSession(pid); App.switchView('view-ops');
                     } else if (NetService.hostId) {
                         const conn = peer.connect(NetService.hostId, { metadata: App.user });
-                        
                         conn.on('open', () => {
                             NetService.handleConn(conn);
                             conn.send({ type: 'FULL', user: App.user }); 
-                            
                             const call = peer.call(NetService.hostId, AudioService.stream);
                             call.on('stream', s => AudioService.playRemote(s));
-                            
-                            App.saveSession(NetService.hostId);
-                            App.switchView('view-ops');
-                            App.toast("Fréquence rejointe");
-                            NetService.resetJoinUI();
+                            App.saveSession(NetService.hostId); App.switchView('view-ops'); App.toast("Connecté"); NetService.resetJoinUI();
                         });
-                        
-                        conn.on('error', () => {
-                            App.toast("Hôte injoignable", true);
-                            NetService.resetJoinUI();
-                        });
+                        conn.on('error', () => { App.toast("Hôte HS", true); NetService.resetJoinUI(); });
                         conn.on('close', () => NetService.resetJoinUI());
                     }
                 });
 
                 peer.on('connection', (conn) => {
-                    if (conn.metadata && conn.metadata.id) {
+                    if (conn.metadata?.id) {
                         if (!App.peers[conn.metadata.id]) App.peers[conn.metadata.id] = { data: conn.metadata };
-                        App.peers[conn.metadata.id].conn = conn;
-                        App.renderGrid();
+                        App.peers[conn.metadata.id].conn = conn; App.renderGrid();
                     }
                     NetService.handleConn(conn);
                 });
                 
-                peer.on('call', (call) => {
-                    call.answer(AudioService.stream);
-                    call.on('stream', s => AudioService.playRemote(s));
-                });
+                peer.on('call', (call) => { call.answer(AudioService.stream); call.on('stream', s => AudioService.playRemote(s)); });
                 
                 peer.on('error', (err) => {
                     if (err.type === 'unavailable-id' && App.isHost) {
-                        if (id && NetService.retryCount < 5) {
-                            NetService.retryCount++;
-                            setTimeout(() => NetService.initPeer(id), 1500);
-                        } else {
-                            NetService.peer.destroy();
-                            NetService.initPeer(null); 
-                        }
-                    } else if (err.type === 'peer-unavailable') {
-                        App.toast("Hôte introuvable", true);
-                        NetService.resetJoinUI();
-                    } else {
-                        App.toast("Erreur Réseau", true);
-                        NetService.resetJoinUI();
-                    }
+                        if (id && NetService.retryCount < 5) { NetService.retryCount++; setTimeout(() => NetService.initPeer(id), 1500); }
+                        else { NetService.peer.destroy(); NetService.initPeer(null); }
+                    } else { App.toast("Err Réseau", true); NetService.resetJoinUI(); }
                 });
                 
-                peer.on('disconnected', () => {
-                    console.log("[PEER] Disconnected, retry...");
-                    peer.reconnect();
-                });
-                
+                peer.on('disconnected', () => peer.reconnect());
                 NetService.peer = peer;
             },
             
             handleConn: (conn) => {
-                if (conn.open) {
-                    if (!App.peers[conn.peer]) App.peers[conn.peer] = {};
-                    App.peers[conn.peer].conn = conn;
-                }
-
+                if (conn.open) { if (!App.peers[conn.peer]) App.peers[conn.peer] = {}; App.peers[conn.peer].conn = conn; }
                 conn.on('data', (d) => {
                     if (d.type === 'FULL' || d.type === 'UPDATE') {
                         NetService.updatePeer(d.user);
-                        if (App.isHost) {
-                            Object.values(App.peers).forEach(p => {
-                                if (p.conn && p.conn.open && p.conn.peer !== d.user.id) {
-                                    p.conn.send({ type: 'UPDATE', user: d.user });
-                                }
-                            });
-                        }
+                        if (App.isHost) Object.values(App.peers).forEach(p => { if (p.conn?.open && p.conn.peer !== d.user.id) p.conn.send({ type: 'UPDATE', user: d.user }); });
                     }
-                    if (d.type === 'SYNC') d.list.forEach(u => NetService.updatePeer(u));
+                    if (d.type === 'SYNC') {
+                        d.list.forEach(u => NetService.updatePeer(u));
+                        if(d.silence !== undefined) App.setSilence(d.silence); // Sync silence state
+                    }
+                    if (d.type === 'PING') {
+                        MapService.showPing(d.ping);
+                        if (App.isHost) Object.values(App.peers).forEach(p => { if(p.conn?.open && p.conn.peer !== conn.peer) p.conn.send(d); });
+                    }
+                    if (d.type === 'SILENCE') App.setSilence(d.state);
                 });
-                
                 conn.on('open', () => {
-                    if (!App.peers[conn.peer]) App.peers[conn.peer] = {};
-                    App.peers[conn.peer].conn = conn;
-                    
+                    if (!App.peers[conn.peer]) App.peers[conn.peer] = {}; App.peers[conn.peer].conn = conn;
                     if (App.isHost) {
-                        const list = Object.values(App.peers).map(p => p.data).filter(d => d && d.id);
-                        list.push(App.user);
-                        conn.send({ type: 'SYNC', list: list });
+                        const list = Object.values(App.peers).map(p => p.data).filter(d => d && d.id); list.push(App.user);
+                        conn.send({ type: 'SYNC', list: list, silence: App.silenceActive });
                     }
                     NetService.broadcast();
                 });
-                
-                conn.on('close', () => {
-                    delete App.peers[conn.peer];
-                    App.renderGrid();
-                });
+                conn.on('close', () => { delete App.peers[conn.peer]; App.renderGrid(); });
             },
             
-            broadcast: () => {
-                const msg = { type: 'UPDATE', user: App.user };
-                Object.values(App.peers).forEach(p => {
-                    if (p.conn && p.conn.open) p.conn.send(msg);
-                });
-                if (App.isHost) App.renderGrid();
+            broadcast: (msg) => {
+                if(!msg) msg = { type: 'UPDATE', user: App.user };
+                Object.values(App.peers).forEach(p => { if (p.conn?.open) p.conn.send(msg); });
+                if (App.isHost && msg.type === 'UPDATE') App.renderGrid();
             },
             
             updatePeer: (user) => {
                 if (user.id === App.user.id) return;
-                
                 if (!App.peers[user.id]) App.peers[user.id] = { data: {} };
                 App.peers[user.id].data = { ...App.peers[user.id].data, ...user };
-                
-                App.renderGrid();
-                if(MapService.map) MapService.updateMarker(user.id, App.peers[user.id].data);
+                App.renderGrid(); MapService.updateMarker(user.id, App.peers[user.id].data);
             },
             
             startHeartbeat: () => {
                 setInterval(() => {
                     if (!App.isHost) return;
-                    const list = Object.values(App.peers).map(p => p.data).filter(d => d && d.id);
-                    list.push(App.user);
-                    
-                    Object.values(App.peers).forEach(p => {
-                        if (p.conn && p.conn.open) p.conn.send({ type: 'SYNC', list: list });
-                    });
+                    const list = Object.values(App.peers).map(p => p.data).filter(d => d && d.id); list.push(App.user);
+                    Object.values(App.peers).forEach(p => { if (p.conn?.open) p.conn.send({ type: 'SYNC', list: list, silence: App.silenceActive }); });
                 }, 1000);
             }
         };
@@ -977,104 +864,54 @@
         // --- MODULE 5: QR SERVICE ---
         const QRService = {
             scanner: null,
-            
             start: () => {
                 document.getElementById('overlay-scanner').style.display = 'flex';
                 setTimeout(() => {
                     if (QRService.scanner) try { QRService.scanner.clear(); } catch(e){}
                     QRService.scanner = new Html5Qrcode("scan-region");
-                    const config = { fps: 10, qrbox: { width: 250, height: 250 } };
-                    
-                    QRService.scanner.start(
-                        { facingMode: "environment" },
-                        config,
-                        (txt) => {
-                            QRService.stop();
-                            document.getElementById('input-join-id').value = txt;
-                            NetService.joinSession(txt);
-                            App.toast("QR Validé");
-                        },
+                    QRService.scanner.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: 250, height: 250 } },
+                        (txt) => { QRService.stop(); document.getElementById('input-join-id').value = txt; NetService.joinSession(txt); App.toast("QR OK"); },
                         (err) => {}
-                    ).catch(err => {
-                        console.error("[QR] Err", err);
-                        QRService.stop();
-                        App.toast("Erreur Caméra", true);
-                    });
+                    ).catch(err => { QRService.stop(); App.toast("Erreur Caméra", true); });
                 }, 100);
             },
-            
-            stop: () => {
-                if (QRService.scanner) {
-                    QRService.scanner.stop().then(() => {
-                        QRService.scanner.clear();
-                        document.getElementById('overlay-scanner').style.display = 'none';
-                    }).catch(() => document.getElementById('overlay-scanner').style.display = 'none');
-                } else {
-                    document.getElementById('overlay-scanner').style.display = 'none';
-                }
-            },
-            
+            stop: () => { if (QRService.scanner) QRService.scanner.stop().catch(()=>{}); document.getElementById('overlay-scanner').style.display = 'none'; },
             show: () => {
-                // Modified: Show Host ID if we are a client, so sharing works
                 const idToShow = App.isHost ? App.user.id : NetService.hostId;
                 if (!idToShow) return;
-                
-                const tgt = document.getElementById('qr-code-region');
-                tgt.innerHTML = '';
-                new QRCode(tgt, { text: idToShow, width: 400, height: 400 });
+                document.getElementById('qr-code-region').innerHTML = '';
+                new QRCode(document.getElementById('qr-code-region'), { text: idToShow, width: 400, height: 400 });
                 document.getElementById('qr-text-val').innerText = idToShow;
                 document.getElementById('overlay-generator').style.display = 'flex';
             },
-            
             hide: () => document.getElementById('overlay-generator').style.display = 'none'
         };
 
         // --- MODULE 6: APP CONTROLLER ---
         const App = {
-            user: { id: null, callsign: '', role: 'OPR', status: 'CLEAR', lat: 0, lng: 0, head: 0, bat: null, isTx: false, isTxRequest: false },
-            peers: {}, 
-            isHost: false,
-            wakeLock: null,
+            user: { id: null, callsign: '', role: 'OPR', status: 'CLEAR', lat: 0, lng: 0, head: 0, bat: null, isTx: false },
+            peers: {}, isHost: false, pingMode: false, silenceActive: false,
             
             init: async () => {
                 if (location.protocol !== 'https:' && location.hostname !== 'localhost') alert("HTTPS Requis");
-                await DBService.init();
-                App.initBattery();
-                App.checkSession();
-                
-                window.addEventListener('beforeunload', () => {
-                    if(NetService.peer) {
-                        NetService.peer.destroy();
-                    }
-                });
+                await DBService.init(); App.initBattery(); App.checkSession();
+                window.addEventListener('beforeunload', () => { if(NetService.peer) NetService.peer.destroy(); });
                 
                 const btn = document.getElementById('ptt-btn');
                 const start = (e) => { 
                     if (AudioService.mode === 'vox') return; 
                     if(e.cancelable) e.preventDefault(); 
-                    App.user.isTxRequest = true; 
-                    AudioService.tx(true); 
+                    if (App.silenceActive && !App.isHost) { App.toast("SILENCE RADIO ACTIF", true); return; }
+                    App.user.isTxRequest = true; AudioService.tx(true); 
                 };
                 const end = (e) => { 
                     if (AudioService.mode === 'vox') return; 
                     if(e.cancelable) e.preventDefault(); 
-                    App.user.isTxRequest = false; 
-                    AudioService.tx(false); 
+                    App.user.isTxRequest = false; AudioService.tx(false); 
                 };
                 
                 btn.addEventListener('mousedown', start); btn.addEventListener('mouseup', end);
                 btn.addEventListener('mouseleave', end); btn.addEventListener('touchstart', start); btn.addEventListener('touchend', end);
-                
-                document.addEventListener('keydown', (e) => {
-                    if(e.code === 'Space' && !App.user.isTxRequest && AudioService.mode === 'ptt') {
-                        App.user.isTxRequest = true; AudioService.tx(true);
-                    }
-                });
-                document.addEventListener('keyup', (e) => {
-                    if(e.code === 'Space' && AudioService.mode === 'ptt') {
-                        App.user.isTxRequest = false; AudioService.tx(false);
-                    }
-                });
             },
             
             checkSession: () => {
@@ -1084,12 +921,9 @@
                     if (s.freq) {
                         App.isHost = s.isHost; 
                         App.login(true).then(() => {
-                            if (s.isHost) NetService.createSession(s.freq); 
-                            else NetService.joinSession(s.freq);
+                            if (s.isHost) NetService.createSession(s.freq); else NetService.joinSession(s.freq);
                         });
-                    } else {
-                        document.getElementById('input-callsign').value = s.callsign;
-                    }
+                    } else document.getElementById('input-callsign').value = s.callsign;
                 }
             },
             
@@ -1100,23 +934,17 @@
                     App.user.callsign = val;
                 }
                 const btn = document.getElementById('btn-login-trigger');
-                if (btn) btn.innerText = "INIT AUDIO...";
+                if(btn) btn.innerText = "...";
                 const audioOk = await AudioService.init();
-                if (btn) btn.innerText = "CONNEXION";
+                if(btn) btn.innerText = "CONNEXION";
                 if (!audioOk && !skipUI) return;
                 
-                App.saveSession();
-                App.switchView('view-menu');
-                MapService.startGPS(); 
-                if ('wakeLock' in navigator) try { App.wakeLock = await navigator.wakeLock.request('screen'); } catch(e){}
+                App.saveSession(); App.switchView('view-menu'); MapService.startGPS();
+                if ('wakeLock' in navigator) navigator.wakeLock.request('screen').catch(()=>{});
             },
             
             saveSession: (freq = null) => {
-                localStorage.setItem(CONFIG.sessionKey, JSON.stringify({
-                    callsign: App.user.callsign,
-                    freq: freq,
-                    isHost: App.isHost
-                }));
+                localStorage.setItem(CONFIG.sessionKey, JSON.stringify({ callsign: App.user.callsign, freq: freq, isHost: App.isHost }));
             },
             
             leaveSession: (full = false) => {
@@ -1130,57 +958,70 @@
                 document.getElementById(id).classList.add('active');
                 const isOp = (id === 'view-ops' || id === 'view-map');
                 document.getElementById('hud').style.display = isOp ? 'block' : 'none';
-                const quitBtn = document.getElementById('btn-quit');
-                if(quitBtn) quitBtn.style.display = isOp ? 'flex' : 'none';
+                document.getElementById('btn-quit').style.display = isOp ? 'flex' : 'none';
                 if (id === 'view-map') {
                     MapService.init(); 
-                    setTimeout(() => {
-                        if(MapService.map) {
-                            MapService.map.invalidateSize();
-                            if(App.user.lat) {
-                                MapService.map.setView([App.user.lat, App.user.lng], 16, { animate: true });
-                            }
-                        }
-                    }, 150);
+                    setTimeout(() => { if(MapService.map) { MapService.map.invalidateSize(); if(App.user.lat) MapService.map.setView([App.user.lat, App.user.lng], 16); } }, 200);
                 }
             },
             
             toggleMap: () => {
-                const btn = document.getElementById('btn-toggle-map');
                 const isMap = document.getElementById('view-map').classList.contains('active');
-                if (isMap) {
-                    App.switchView('view-ops');
-                    btn.classList.remove('active');
-                } else {
-                    App.switchView('view-map');
-                    btn.classList.add('active');
-                }
+                App.switchView(isMap ? 'view-ops' : 'view-map');
+                document.getElementById('btn-toggle-map').classList.toggle('active', !isMap);
             },
             
             setStatus: (s) => {
                 App.user.status = s;
                 document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
-                const c = document.querySelector(`.chip[data-val="${s}"]`);
-                if(c) c.classList.add('active');
-                NetService.broadcast();
-                App.renderGrid();
+                const c = document.querySelector(`.chip[data-val="${s}"]`); if(c) c.classList.add('active');
+                NetService.broadcast(); App.renderGrid();
                 if(MapService.map) MapService.updateMarker(App.user.id, App.user);
+            },
+
+            // --- NEW FEATURES LOGIC ---
+            togglePingMode: () => {
+                App.pingMode = !App.pingMode;
+                document.getElementById('btn-ping-mode').classList.toggle('alert', App.pingMode);
+                App.toast(App.pingMode ? "MODE PING: CLIQUEZ SUR CARTE" : "MODE PING DÉSACTIVÉ");
+            },
+
+            sendPing: (latlng) => {
+                App.togglePingMode(); // Turn off after click
+                const msg = prompt("Message du Ping:", "CIBLE");
+                if (!msg) return;
+                const pingData = { lat: latlng.lat, lng: latlng.lng, msg: msg, sender: App.user.callsign };
+                MapService.showPing(pingData);
+                NetService.broadcast({ type: 'PING', ping: pingData });
+            },
+
+            toggleSilence: () => {
+                if (!App.isHost) return;
+                App.setSilence(!App.silenceActive);
+                NetService.broadcast({ type: 'SILENCE', state: App.silenceActive });
+            },
+
+            setSilence: (active) => {
+                App.silenceActive = active;
+                if (active) {
+                    document.body.classList.add('silence-active');
+                    document.getElementById('btn-silence').classList.add('active');
+                    if(!App.isHost && App.user.isTx) AudioService.tx(false); // Cut client mic
+                } else {
+                    document.body.classList.remove('silence-active');
+                    document.getElementById('btn-silence').classList.remove('active');
+                }
             },
             
             renderGrid: () => {
-                const grid = document.getElementById('ops-container');
-                if (!grid) return;
+                const grid = document.getElementById('ops-container'); if (!grid) return;
                 grid.innerHTML = '';
-                const all = [{...App.user, isMe: true}].concat(
-                    Object.values(App.peers).map(p => p.data).filter(d => d && d.id)
-                );
+                const all = [{...App.user, isMe: true}].concat(Object.values(App.peers).map(p => p.data).filter(d => d && d.id));
                 all.forEach(u => {
                     const div = document.createElement('div');
                     div.className = `op-card ${u.isMe ? 'is-me' : ''} ${u.isTx ? 'talking' : ''}`;
                     if(u.status === 'CONTACT') div.setAttribute('data-status', 'CONTACT');
-                    
-                    let bat = (u.bat !== null && u.bat !== undefined) ? `🔋 ${u.bat}%` : '🔋 --';
-                    
+                    const bat = (u.bat != null) ? `🔋 ${u.bat}%` : '🔋 --';
                     let col = '#aaa';
                     if(u.status === 'CONTACT') col = 'var(--color-red)';
                     else if(u.status === 'PROGRESSION') col = 'var(--color-blue)';
@@ -1192,31 +1033,19 @@
             },
             
             initBattery: () => {
-                if ('getBattery' in navigator) {
-                    navigator.getBattery().then(b => {
-                        const update = () => { 
-                            App.user.bat = Math.floor(b.level * 100); 
-                            NetService.broadcast(); 
-                            App.renderGrid(); 
-                        };
-                        update(); 
-                        b.addEventListener('levelchange', update);
-                        b.addEventListener('chargingchange', update); 
-                    });
-                }
+                if ('getBattery' in navigator) navigator.getBattery().then(b => {
+                    const up = () => { App.user.bat = Math.floor(b.level * 100); NetService.broadcast(); App.renderGrid(); };
+                    up(); b.addEventListener('levelchange', up); b.addEventListener('chargingchange', up);
+                });
             },
             
             toast: (msg, err = false) => {
                 const t = document.getElementById('toast-msg');
-                t.innerText = msg;
-                t.style.borderColor = err ? 'var(--color-red)' : 'var(--color-blue)';
-                t.style.color = err ? 'var(--color-red)' : 'var(--color-blue)';
-                t.style.display = 'block';
-                setTimeout(() => t.style.display = 'none', 3000);
+                t.innerText = msg; t.style.color = err ? 'var(--color-red)' : 'var(--color-blue)'; t.style.borderColor = t.style.color;
+                t.style.display = 'block'; setTimeout(() => t.style.display = 'none', 3000);
             },
             
             copyID: () => {
-                // FIX: Copy the displayed ID (Host/Canal ID), not necessarily user ID
                 const txt = document.getElementById('txt-id-display').innerText.replace('CANAL: ', '');
                 if (txt) { navigator.clipboard.writeText(txt); App.toast("ID Copié"); }
             }
