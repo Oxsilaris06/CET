@@ -804,11 +804,30 @@
                 NetService.initPeer(id);
             },
             
+            resetJoinUI: () => {
+                const btn = document.getElementById('btn-join-trigger');
+                if (btn) {
+                    btn.innerHTML = 'REJOINDRE';
+                    btn.disabled = false;
+                }
+            },
+
             joinSession: (id = null) => {
                 if (!id) id = document.getElementById('input-join-id').value.trim();
                 if (!id) return App.toast("ID requis", true);
                 
-                document.getElementById('btn-join-trigger').innerHTML = 'Connexion...';
+                const btn = document.getElementById('btn-join-trigger');
+                btn.innerHTML = 'Connexion...';
+                btn.disabled = true;
+                
+                // FORCE UI RESET after 10s if stuck
+                setTimeout(() => {
+                    if (btn.innerText === 'Connexion...' || btn.disabled) {
+                        NetService.resetJoinUI();
+                        if(!App.isHost && !NetService.peer?.open) App.toast("Temps écoulé", true);
+                    }
+                }, 10000);
+
                 App.isHost = false;
                 NetService.hostId = id;
                 NetService.initPeer();
@@ -833,6 +852,7 @@
                         App.switchView('view-ops');
                     } else if (NetService.hostId) {
                         const conn = peer.connect(NetService.hostId, { metadata: App.user });
+                        
                         conn.on('open', () => {
                             NetService.handleConn(conn);
                             
@@ -846,8 +866,16 @@
                             App.saveSession(NetService.hostId);
                             App.switchView('view-ops');
                             App.toast("Fréquence rejointe");
+                            NetService.resetJoinUI(); // Success: reset UI for next time
                         });
-                        conn.on('error', () => App.toast("Hôte injoignable", true));
+                        
+                        conn.on('error', () => {
+                            App.toast("Hôte injoignable", true);
+                            NetService.resetJoinUI();
+                        });
+                        
+                        // Close triggers if host disconnects
+                        conn.on('close', () => NetService.resetJoinUI());
                     }
                 });
 
@@ -880,9 +908,11 @@
                         }
                     } else if (err.type === 'peer-unavailable') {
                         App.toast("Hôte introuvable", true);
+                        NetService.resetJoinUI(); // CRITICAL FIX: Unlock UI
                     } else {
                         console.error(err);
                         App.toast("Erreur Réseau", true);
+                        NetService.resetJoinUI(); // CRITICAL FIX: Unlock UI
                     }
                 });
                 
