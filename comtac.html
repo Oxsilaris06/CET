@@ -5,49 +5,71 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#000000">
     <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>COM TAC v10.5 // AUTONOMOUS</title>
+    <meta name="description" content="Système de Communication Tactique & BFT Tracker - Version Lourde">
     
-    <!-- ================= 1. EXTERNAL LIBRARIES (CDN) ================= -->
+    <title>COM TAC v12.0 // HEAVY DUTY</title>
+    
+    <!-- ================================================================= -->
+    <!-- 1. RESSOURCES EXTERNES (LIBS & ASSETS)                            -->
+    <!-- ================================================================= -->
+    
+    <!-- Typographie Tactique -->
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Chakra+Petch:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Iconographie -->
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,1,0" />
+    
+    <!-- Cartographie Leaflet -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 
+    <!-- Moteurs Logiques -->
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-    <!-- ================= 2. STYLES CSS (TACTICAL UI) ================= -->
+    <!-- ================================================================= -->
+    <!-- 2. FEUILLE DE STYLE (DESIGN SYSTEM MIL-SPEC)                      -->
+    <!-- ================================================================= -->
     <style>
         :root {
-            /* Colors */
-            --color-bg: #050505;
-            --color-surface: #121214;
-            --color-surface-light: #1c1c1f;
-            --color-blue: #3b82f6;
-            --color-red: #ef4444;
-            --color-green: #22c55e;
-            --color-yellow: #eab308;
-            --color-text: #e4e4e7;
-            --color-dim: #71717a;
+            /* Palette Dark Ops */
+            --bg-body: #050505;
+            --bg-panel: #0a0a0c;
+            --bg-surface: #141416;
+            --bg-surface-active: #1e1e22;
             
-            /* Typography */
-            --font-ui: 'Chakra Petch', sans-serif;
-            --font-mono: 'JetBrains Mono', monospace;
+            --border-dim: rgba(255, 255, 255, 0.15);
+            --border-light: rgba(255, 255, 255, 0.3);
+
+            /* Couleurs Tactiques (Standard OTAN) */
+            --c-blue: #3b82f6;   /* Ami / Mouvement */
+            --c-red: #ef4444;    /* Hostile / Contact */
+            --c-green: #22c55e;  /* Actif / Clear */
+            --c-yellow: #eab308; /* Warning / Host */
+            --c-text: #e4e4e7;
+            --c-dim: #a1a1aa;
             
-            /* Layout */
-            --header-height: 60px;
-            --radius: 12px;
+            /* UI Metrics */
+            --f-ui: 'Chakra Petch', sans-serif;
+            --f-data: 'JetBrains Mono', monospace;
+            --radius-sm: 8px;
+            --radius-md: 12px;
+            --radius-lg: 24px;
+            --header-h: 60px;
+            --hud-h: 240px; /* Espace réservé pour le HUD */
         }
 
-        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-tap-highlight-color: transparent; }
+        /* --- RESET & BASE --- */
+        * { box-sizing: border-box; margin: 0; padding: 0; outline: none; -webkit-tap-highlight-color: transparent; user-select: none; touch-action: manipulation; }
         
         body {
-            font-family: var(--font-ui);
-            background-color: var(--color-bg);
-            color: var(--color-text);
+            font-family: var(--f-ui);
+            background-color: var(--bg-body);
+            color: var(--c-text);
             height: 100vh; width: 100vw;
             overflow: hidden;
             display: flex; flex-direction: column;
@@ -55,198 +77,277 @@
 
         /* --- HEADER --- */
         header {
-            height: var(--header-height);
+            height: var(--header-h);
             padding: 0 16px;
             background: rgba(5,5,5,0.95);
-            border-bottom: 1px solid rgba(255,255,255,0.1);
+            border-bottom: 1px solid var(--border-dim);
             display: flex; justify-content: space-between; align-items: center;
             z-index: 1000;
+            backdrop-filter: blur(10px);
+            position: relative;
         }
 
         .brand {
             font-weight: 800; font-size: 1.2rem; letter-spacing: 1px;
-            display: flex; align-items: center; gap: 8px;
+            display: flex; align-items: center; gap: 10px; text-transform: uppercase;
         }
-        .brand span { color: var(--color-blue); }
+        .brand span { color: var(--c-blue); text-shadow: 0 0 15px rgba(59, 130, 246, 0.4); }
 
-        .nav-group { display: flex; gap: 8px; }
-        
+        .nav-controls { display: flex; gap: 10px; }
+
         .btn-nav {
-            background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.1);
-            color: var(--color-text); padding: 6px 12px; border-radius: 20px;
-            font-size: 0.7rem; font-weight: 700; cursor: pointer;
-            display: flex; align-items: center; gap: 5px;
+            background: rgba(255,255,255,0.08);
+            border: 1px solid var(--border-dim);
+            color: var(--c-text);
+            padding: 8px 16px; border-radius: 8px;
+            font-size: 0.75rem; font-weight: 700;
+            cursor: pointer; display: flex; align-items: center; gap: 6px;
+            transition: all 0.2s ease;
         }
-        .btn-nav.active { background: var(--color-blue); color: black; border-color: var(--color-blue); }
-        .btn-nav.danger { border-color: rgba(239, 68, 68, 0.5); color: var(--color-red); }
+        .btn-nav:hover { background: rgba(255,255,255,0.15); border-color: var(--border-light); }
+        .btn-nav.active { background: var(--c-blue); color: #000; border-color: var(--c-blue); box-shadow: 0 0 15px rgba(59, 130, 246, 0.4); }
+        .btn-nav.danger { border-color: rgba(239, 68, 68, 0.5); color: var(--c-red); }
+        .btn-nav.danger:active { background: var(--c-red); color: white; }
 
-        /* --- VIEWS --- */
-        .view-container { position: relative; flex: 1; overflow: hidden; }
+        /* --- VUES (GESTION DES ÉCRANS) --- */
+        .view-stack { position: relative; flex: 1; width: 100%; height: 100%; overflow: hidden; }
+        
         .view {
-            position: absolute; inset: 0; background: var(--color-bg);
+            position: absolute; inset: 0;
+            background: var(--bg-body);
             display: flex; flex-direction: column;
             opacity: 0; pointer-events: none; z-index: 0;
-            transition: opacity 0.3s ease;
+            transition: opacity 0.25s ease-in-out;
+            padding-top: 0;
         }
         .view.active { opacity: 1; pointer-events: all; z-index: 10; }
 
-        /* --- LOGIN & MENU --- */
-        .center-content {
+        /* --- CARTE (LEAFLET & BFT) --- */
+        #view-map { background: #050505; }
+        #map-instance { width: 100%; height: 100%; z-index: 1; }
+        
+        /* Overrides Leaflet pour le look sombre */
+        .leaflet-container { background: #050505; font-family: var(--f-data); }
+        .leaflet-control-attribution { display: none; }
+        .leaflet-bar { border: none; }
+        .leaflet-bar a { background-color: var(--bg-surface); color: var(--c-text); border-bottom: 1px solid var(--border-dim); }
+        .leaflet-bar a:hover { background-color: var(--bg-surface-active); }
+
+        /* Marqueurs Tactiques SVG */
+        .tac-marker-wrapper { transition: transform 0.3s linear; will-change: transform; }
+        .tac-arrow {
+            width: 0; height: 0;
+            border-left: 12px solid transparent;
+            border-right: 12px solid transparent;
+            border-bottom: 24px solid var(--c-blue);
+            filter: drop-shadow(0 0 3px black);
+            transform-origin: center center;
+        }
+        .tac-label {
+            position: absolute; top: 35px; left: 50%; transform: translateX(-50%);
+            background: rgba(0,0,0,0.8); color: white;
+            padding: 3px 8px; border-radius: 4px;
+            font-family: var(--f-data); font-size: 11px; font-weight: 800;
+            white-space: nowrap; border: 1px solid var(--c-blue);
+            box-shadow: 0 2px 5px black;
+            z-index: 1000;
+        }
+        
+        /* États Dynamiques des Marqueurs */
+        .status-CONTACT .tac-arrow { border-bottom-color: var(--c-red); filter: drop-shadow(0 0 10px red); }
+        .status-CONTACT .tac-label { border-color: var(--c-red); color: var(--c-red); animation: blink-text 1s infinite; }
+        .status-CLEAR .tac-arrow { border-bottom-color: var(--c-green); }
+        .status-CLEAR .tac-label { border-color: var(--c-green); color: var(--c-green); }
+        .status-APPUI .tac-arrow { border-bottom-color: var(--c-yellow); }
+        .status-APPUI .tac-label { border-color: var(--c-yellow); color: var(--c-yellow); }
+        .status-PROGRESSION .tac-arrow { border-bottom-color: var(--c-blue); }
+        .status-PROGRESSION .tac-label { border-color: var(--c-blue); color: var(--c-blue); }
+
+        /* --- GRILLE OPÉRATEURS --- */
+        .grid-container {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr); /* 2 colonnes fixes mobile */
+            gap: 12px; padding: 16px;
+            padding-bottom: var(--hud-h); /* Espace pour ne pas être caché par le HUD */
+            overflow-y: auto; align-content: start;
+        }
+
+        .op-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-dim);
+            border-radius: var(--radius-md);
+            padding: 12px; display: flex; flex-direction: column;
+            min-height: 125px; position: relative;
+            transition: all 0.2s ease;
+        }
+        .op-card.is-me { background: rgba(59, 130, 246, 0.05); border-color: rgba(59, 130, 246, 0.3); }
+        
+        /* Indicateur TX (Transmission) */
+        .op-card[data-tx="true"] { 
+            border-color: var(--c-green); 
+            box-shadow: inset 0 0 20px rgba(34, 197, 94, 0.2); 
+        }
+        
+        /* Alerte CONTACT */
+        @keyframes pulse-red { 
+            0% { box-shadow: inset 0 0 0 0 transparent; border-color: var(--c-red); } 
+            50% { box-shadow: inset 0 0 30px rgba(239, 68, 68, 0.6); border-color: var(--c-red); } 
+            100% { box-shadow: inset 0 0 0 0 transparent; border-color: var(--c-red); } 
+        }
+        @keyframes blink-text { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+        .op-card[data-status="CONTACT"] { animation: pulse-red 1s infinite; background: rgba(239, 68, 68, 0.05); }
+
+        .op-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .op-callsign { font-family: var(--f-data); font-size: 1.2rem; font-weight: 800; letter-spacing: -0.5px; color: #fff; }
+        .op-role { font-size: 0.65rem; font-weight: 700; background: #333; padding: 2px 6px; border-radius: 4px; color: #aaa; text-transform: uppercase; }
+        .op-role.HOST { background: var(--c-yellow); color: black; }
+        
+        .op-status { font-size: 0.85rem; font-weight: 700; letter-spacing: 1px; min-height: 1.2em; margin-bottom: auto; margin-top: 5px; }
+        .op-meta { display: flex; gap: 10px; font-size: 0.75rem; color: var(--c-dim); margin-top: 12px; align-items: center; }
+        
+        /* Visualizer Bar dans la carte */
+        .viz-bar { height: 4px; background: #222; margin-top: 8px; border-radius: 2px; overflow: hidden; width: 100%; }
+        .viz-fill { height: 100%; width: 0%; background: var(--c-green); transition: width 0.05s linear; }
+
+        /* --- HUD (HEADS UP DISPLAY) --- */
+        .hud-panel {
+            position: fixed; bottom: 0; left: 0; right: 0; z-index: 500;
+            background: rgba(16, 16, 18, 0.95);
+            backdrop-filter: blur(20px);
+            border-top: 1px solid var(--border-dim);
+            padding: 15px 20px 30px 20px;
+            border-radius: 24px 24px 0 0;
+            display: none; /* Activé via JS */
+            box-shadow: 0 -10px 60px rgba(0,0,0,0.8);
+        }
+
+        /* Barre de Status Défilante */
+        .status-scroller {
+            display: flex; gap: 10px; overflow-x: auto;
+            padding-bottom: 12px; margin-bottom: 15px;
+            scrollbar-width: none; -ms-overflow-style: none;
+        }
+        .status-scroller::-webkit-scrollbar { display: none; }
+        
+        .status-btn {
+            padding: 10px 18px; border-radius: 12px;
+            font-size: 0.8rem; font-weight: 700; white-space: nowrap;
+            background: rgba(255,255,255,0.05); border: 1px solid var(--border-dim);
+            color: var(--c-dim); cursor: pointer; transition: all 0.2s;
+        }
+        .status-btn.active { background: var(--c-blue); color: black; border-color: transparent; box-shadow: 0 0 15px rgba(59, 130, 246, 0.3); }
+        .status-btn[data-val="CONTACT"].active { background: var(--c-red); color: white; animation: blink-text 1s infinite; }
+        
+        /* Contrôles PTT */
+        .ptt-controls { display: flex; align-items: center; justify-content: center; position: relative; height: 100px; }
+        
+        #ptt-trigger {
+            width: 90px; height: 90px;
+            border-radius: 30px; /* Squircle */
+            background: #222; border: 2px solid #444; color: #666;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 3rem; cursor: pointer;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            transition: all 0.1s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            user-select: none; -webkit-touch-callout: none;
+        }
+        #ptt-trigger:active, #ptt-trigger.active {
+            transform: scale(0.92);
+            background: var(--c-blue); border-color: white; color: white;
+            box-shadow: 0 0 40px rgba(59, 130, 246, 0.6);
+        }
+        #ptt-trigger.mode-vox { border-color: var(--c-green); color: var(--c-green); background: rgba(34, 197, 94, 0.1); }
+        #ptt-trigger.mode-vox.active { background: var(--c-green); color: black; box-shadow: 0 0 40px rgba(34, 197, 94, 0.6); }
+
+        .cluster-btn {
+            position: absolute; width: 54px; height: 54px; border-radius: 50%;
+            background: rgba(255,255,255,0.05); color: var(--c-dim);
+            border: 1px solid transparent;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; transition: 0.2s;
+        }
+        .cluster-btn:active { background: rgba(255,255,255,0.15); color: white; border-color: var(--c-blue); }
+        .cluster-btn.left { left: 10px; }
+        .cluster-btn.right { right: 10px; }
+
+        .hud-info { text-align: center; font-size: 0.75rem; color: #555; margin-top: 10px; font-family: var(--f-data); }
+
+        /* --- MENUS & INPUTS --- */
+        .centered-container {
             display: flex; flex-direction: column; align-items: center; justify-content: center;
             height: 100%; padding: 30px; text-align: center;
         }
-        
-        .input-large {
+
+        .input-hero {
             background: transparent; border: none; border-bottom: 2px solid #333;
-            width: 100%; font-size: 2rem; font-family: var(--font-mono);
-            color: white; text-align: center; padding: 15px; margin: 30px 0;
-            border-radius: 0; outline: none;
+            width: 100%; font-size: 2.5rem; font-family: var(--f-data);
+            color: white; text-align: center; padding: 15px; margin: 40px 0;
+            border-radius: 0; transition: border-color 0.3s;
         }
-        .input-large:focus { border-color: var(--color-blue); }
+        .input-hero:focus { border-color: var(--c-blue); }
 
         .btn-block {
             width: 100%; padding: 20px; margin-bottom: 15px;
-            background: var(--color-surface); border: 1px solid rgba(255,255,255,0.1);
-            border-radius: var(--radius); color: white;
+            background: var(--bg-surface); border: 1px solid var(--border-dim);
+            border-radius: var(--radius-md); color: white;
             font-weight: 700; text-align: left; font-size: 1.1rem;
             display: flex; align-items: center; gap: 15px; cursor: pointer;
-            transition: background 0.2s;
+            transition: all 0.2s;
         }
-        .btn-block:active { background: var(--color-surface-light); }
-
-        /* --- MAP (BFT) --- */
-        #map-instance { width: 100%; height: 100%; background: #0b0b0b; z-index: 1; }
+        .btn-block:active { transform: scale(0.98); background: var(--bg-surface-active); border-color: var(--c-blue); }
         
-        /* Tactical Markers */
-        .tac-wrapper { transition: transform 0.5s linear; will-change: transform; }
-        .tac-arrow {
-            width: 0; height: 0;
-            border-left: 10px solid transparent;
-            border-right: 10px solid transparent;
-            border-bottom: 24px solid var(--color-blue); /* Default Blue (Progression) */
-            filter: drop-shadow(0 0 4px var(--color-blue));
-        }
-        .tac-label {
-            position: absolute; top: 28px; left: 50%; transform: translateX(-50%);
-            background: rgba(0,0,0,0.85); color: white; padding: 2px 6px;
-            border-radius: 4px; font-family: var(--font-mono); font-size: 10px; font-weight: bold;
-            white-space: nowrap; border: 1px solid var(--color-blue);
-        }
-        
-        /* Status Colors for Markers */
-        .status-CONTACT .tac-arrow { border-bottom-color: var(--color-red); filter: drop-shadow(0 0 10px red); }
-        .status-CONTACT .tac-label { border-color: var(--color-red); color: var(--color-red); }
-        
-        .status-CLEAR .tac-arrow { border-bottom-color: var(--color-green); filter: drop-shadow(0 0 4px var(--color-green)); }
-        .status-CLEAR .tac-label { border-color: var(--color-green); color: var(--color-green); }
-        
-        .status-APPUI .tac-arrow { border-bottom-color: var(--color-yellow); filter: drop-shadow(0 0 4px var(--color-yellow)); }
-        .status-APPUI .tac-label { border-color: var(--color-yellow); color: var(--color-yellow); }
-        
-        .status-PROGRESSION .tac-arrow { border-bottom-color: var(--color-blue); }
-        .status-PROGRESSION .tac-label { border-color: var(--color-blue); color: var(--color-blue); }
-
-        /* --- OPS GRID --- */
-        .ops-grid {
-            display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;
-            padding: 15px; padding-bottom: 240px; overflow-y: auto; align-content: start;
-        }
-        
-        .op-card {
-            background: var(--color-surface); border: 1px solid rgba(255,255,255,0.1);
-            border-radius: var(--radius); padding: 12px; display: flex; flex-direction: column;
-            min-height: 120px; position: relative; transition: all 0.2s;
-        }
-        .op-card.is-me { background: rgba(59, 130, 246, 0.08); border-color: rgba(59, 130, 246, 0.3); }
-        .op-card.talking { border-color: var(--color-green); box-shadow: inset 0 0 20px rgba(34, 197, 94, 0.2); }
-        
-        .op-card[data-status="CONTACT"] { animation: pulse-red 1s infinite; }
-        @keyframes pulse-red { 0%, 100% { border-color: var(--color-red); } 50% { border-color: transparent; } }
-
-        .op-callsign { font-family: var(--font-mono); font-size: 1.2rem; font-weight: 800; margin-bottom: 5px; }
-        .op-status { font-size: 0.8rem; font-weight: 700; text-transform: uppercase; margin-top: auto; }
-        .op-bat { font-size: 0.7rem; color: var(--color-dim); margin-top: 5px; }
-
-        /* --- HUD --- */
-        .hud-panel {
-            position: fixed; bottom: 0; left: 0; right: 0; z-index: 500;
-            background: rgba(10,10,10,0.95); backdrop-filter: blur(20px);
-            border-top: 1px solid rgba(255,255,255,0.1);
-            border-radius: 24px 24px 0 0; padding: 15px 20px 30px;
-            display: none; box-shadow: 0 -10px 50px rgba(0,0,0,0.8);
+        .join-group { display: flex; gap: 10px; width: 100%; margin-bottom: 20px; }
+        .input-std {
+            flex: 1; background: var(--bg-surface); border: 1px solid var(--border-dim);
+            color: white; padding: 15px; border-radius: var(--radius-md);
+            font-family: var(--f-data); font-size: 1rem;
         }
 
-        .status-bar { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 12px; margin-bottom: 10px; scrollbar-width: none; }
-        .chip {
-            padding: 8px 16px; border-radius: 8px; font-size: 0.75rem; font-weight: 700; white-space: nowrap;
-            background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
-            color: var(--color-dim); cursor: pointer;
-        }
-        .chip.active { background: var(--color-blue); color: black; border-color: transparent; }
-        
-        .chip[data-val="CONTACT"].active { background: var(--color-red); color: white; }
-        .chip[data-val="CLEAR"].active { background: var(--color-green); color: black; }
-        .chip[data-val="APPUI"].active { background: var(--color-yellow); color: black; }
-        .chip[data-val="PROGRESSION"].active { background: var(--color-blue); color: black; }
-
-
-        .ptt-container { display: flex; align-items: center; justify-content: center; position: relative; height: 90px; }
-        
-        #ptt-btn {
-            width: 85px; height: 85px; border-radius: 28px;
-            background: #222; border: 2px solid #444; color: #666;
-            display: flex; align-items: center; justify-content: center;
-            font-size: 2.5rem; cursor: pointer; user-select: none;
-            box-shadow: 0 5px 20px rgba(0,0,0,0.5);
-            transition: transform 0.1s;
-        }
-        #ptt-btn:active, #ptt-btn.active { 
-            transform: scale(0.95); background: var(--color-blue); border-color: white; color: white; 
-            box-shadow: 0 0 30px rgba(59, 130, 246, 0.4);
-        }
-        #ptt-btn.vox-active { border-color: var(--color-green); color: var(--color-green); }
-
-        .side-btn {
-            position: absolute; width: 50px; height: 50px; border-radius: 50%;
-            background: rgba(255,255,255,0.05); display: flex; align-items: center; justify-content: center;
-            color: var(--color-dim); cursor: pointer;
-        }
-        .side-btn.left { left: 10px; } .side-btn.right { right: 10px; }
-
-        .hud-footer { text-align: center; font-size: 0.7rem; color: #555; margin-top: 10px; font-family: var(--font-mono); }
-
-        /* --- OVERLAYS --- */
-        .overlay {
+        /* --- OVERLAYS (MODALS) --- */
+        .modal-overlay {
             position: fixed; inset: 0; background: #000; z-index: 5000;
             display: none; flex-direction: column; align-items: center; justify-content: center;
         }
-        .close-overlay {
-            position: absolute; top: 30px; right: 30px; width: 50px; height: 50px;
-            background: rgba(255,255,255,0.2); border-radius: 50%; color: white;
-            display: flex; align-items: center; justify-content: center; cursor: pointer; font-weight: bold;
+        .fab-close {
+            position: absolute; top: 30px; right: 30px;
+            width: 50px; height: 50px; border-radius: 50%;
+            background: rgba(255,255,255,0.15); color: white;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; z-index: 5001; font-weight: bold; border: 1px solid rgba(255,255,255,0.2);
         }
-        #scan-region { width: 300px; height: 300px; background: black; border-radius: 20px; overflow: hidden; border: 1px solid #333; }
-        #qr-code-region { background: white; padding: 25px; border-radius: 20px; }
-
-        #visualizer { position: absolute; bottom: 120px; left: 0; width: 100%; height: 80px; pointer-events: none; opacity: 0.5; z-index: 400; }
         
-        #toast-msg {
+        #qr-canvas-target { background: white; padding: 25px; border-radius: 20px; margin-bottom: 20px; }
+        #scanner-box { width: 300px; height: 300px; background: #000; border: 1px solid #333; overflow: hidden; border-radius: 20px; }
+        
+        /* Canvas Visualizer Background */
+        #visualizer-canvas {
+            position: absolute; bottom: 110px; left: 0; width: 100%; height: 80px;
+            pointer-events: none; opacity: 0.6; z-index: 400;
+        }
+
+        /* Notifications Toast */
+        #sys-toast {
             position: fixed; top: 30px; left: 50%; transform: translateX(-50%);
-            background: #1a1a1a; border: 1px solid var(--color-blue); color: var(--color-blue);
-            padding: 12px 24px; border-radius: 30px; font-weight: 700; font-size: 0.85rem;
+            background: #1a1a1a; border: 1px solid var(--c-blue); color: var(--c-blue);
+            padding: 12px 30px; border-radius: 30px; font-weight: 700; font-size: 0.9rem;
             z-index: 9999; display: none; box-shadow: 0 10px 40px rgba(0,0,0,0.8);
         }
     </style>
 </head>
 <body>
 
-    <!-- UI STRUCTURE -->
+    <!-- ================================================================= -->
+    <!-- 3. STRUCTURE UI                                                  -->
+    <!-- ================================================================= -->
+    
     <header>
         <div class="brand">
-            <span class="material-symbols-outlined">satellite_alt</span> COM<span>TAC</span> v10.5
+            <span class="material-symbols-outlined" style="font-size: 1.5rem;">satellite_alt</span> 
+            COM<span>TAC</span> v12
         </div>
-        <div class="nav-group">
-            <div class="btn-nav" id="btn-toggle-map" onclick="App.toggleMap()">
+        <div class="nav-controls">
+            <div class="btn-nav" id="btn-toggle-map" onclick="UI.toggleMap()">
                 <span class="material-symbols-outlined">map</span> CARTE
             </div>
             <div class="btn-nav danger" id="btn-quit" onclick="App.leaveSession(true)" style="display:none;">
@@ -255,865 +356,898 @@
         </div>
     </header>
 
-    <div id="toast-msg">Système Prêt</div>
+    <div id="sys-toast">Système Prêt</div>
 
-    <!-- OVERLAYS -->
-    <div id="overlay-scanner" class="overlay">
-        <div class="close-overlay" onclick="QRService.stop()">✕</div>
-        <div id="scan-region"></div>
-        <div style="margin-top: 20px; color: #777;">Visez le QR Code</div>
+    <!-- OVERLAYS: SCANNER & GENERATOR -->
+    <div id="overlay-scan" class="modal-overlay">
+        <div class="fab-close" onclick="Svc_QR.stop()">✕</div>
+        <div id="scanner-box"></div>
+        <div style="margin-top: 25px; color: #777; font-family: var(--f-ui);">VISEZ LE QR CODE DE L'HÔTE</div>
     </div>
 
-    <div id="overlay-generator" class="overlay" style="background: rgba(0,0,0,0.95);">
-        <div class="close-overlay" onclick="QRService.hide()">✕</div>
+    <div id="overlay-gen" class="modal-overlay" style="background: rgba(0,0,0,0.98);">
+        <div class="fab-close" onclick="Svc_QR.hide()">✕</div>
         <div style="text-align: center;">
-            <div id="qr-code-region"></div>
-            <div id="qr-text-val" style="margin-top: 20px; font-family: var(--font-mono); color: var(--color-blue); font-size: 1.5rem;">...</div>
+            <div id="qr-canvas-target"></div>
+            <div style="font-family: var(--f-data); color: var(--c-blue); font-size: 1.5rem; margin-top: 15px;" id="qr-text-id">...</div>
+            <p style="color: #555; font-size: 0.9rem; margin-top: 10px;">ID SÉCURISÉ</p>
         </div>
     </div>
 
-    <!-- VIEW: LOGIN -->
-    <div id="view-login" class="view active">
-        <div class="center-content">
-            <span class="material-symbols-outlined" style="font-size: 5rem; color: var(--color-blue); margin-bottom: 30px; opacity: 0.8;">fingerprint</span>
-            <h2 style="color:white; margin-bottom: 10px;">IDENTIFICATION</h2>
-            <input type="text" id="input-callsign" class="input-large" placeholder="CALLSIGN" maxlength="8" autocomplete="off">
-            <button class="btn-block" id="btn-login-trigger" onclick="App.login()" style="justify-content: center; background: var(--color-blue); border:none; margin-top: 20px;">
-                CONNEXION
-            </button>
-        </div>
-    </div>
-
-    <!-- VIEW: MENU -->
-    <div id="view-menu" class="view">
-        <div class="center-content" style="justify-content: flex-start; padding-top: 60px;">
-            <h3 style="color: var(--color-dim); width: 100%; text-align: left; margin-bottom: 20px;">DÉPLOIEMENT</h3>
-            
-            <button class="btn-block" id="btn-create-host" onclick="NetService.createSession()">
-                <span class="material-symbols-outlined" style="font-size: 1.8rem;">add_circle</span>
-                <div><div>Créer Fréquence</div><div style="font-size: 0.7rem; color: var(--color-dim);">Hôte (Squad Leader)</div></div>
-            </button>
-            
-            <button class="btn-block" onclick="QRService.start()">
-                <span class="material-symbols-outlined" style="font-size: 1.8rem;">qr_code_scanner</span>
-                <div><div>Scanner QR</div><div style="font-size: 0.7rem; color: var(--color-dim);">Caméra</div></div>
-            </button>
-
-            <div style="width: 100%; margin-top: 40px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.1);">
-                <div style="text-align: left; color: var(--color-dim); font-size: 0.8rem; margin-bottom: 15px;">MANUEL</div>
-                <div style="display: flex; gap: 10px; margin-bottom: 15px;">
-                    <input type="text" id="input-join-id" class="input-large" placeholder="ID CANAL..." style="margin: 0; font-size: 1rem; text-align: left;">
-                    <button onclick="navigator.clipboard.readText().then(t => document.getElementById('input-join-id').value = t)" style="width: 60px; background: var(--color-surface); border: 1px solid rgba(255,255,255,0.1); border-radius: var(--radius); color: white; cursor: pointer;">
-                        <span class="material-symbols-outlined">content_paste</span>
-                    </button>
-                </div>
-                <button class="btn-block" id="btn-join-trigger" onclick="NetService.joinSession()" style="justify-content: center; background: rgba(255,255,255,0.05);">
-                    REJOINDRE
+    <!-- VIEW-STACK -->
+    <div class="view-stack">
+        
+        <!-- VIEW: LOGIN -->
+        <div id="view-login" class="view active">
+            <div class="centered-container">
+                <span class="material-symbols-outlined" style="font-size: 5rem; color: var(--c-blue); margin-bottom: 30px; opacity: 0.8;">fingerprint</span>
+                <h2 style="color:white; margin-bottom: 10px; font-size: 1.5rem;">IDENTIFICATION</h2>
+                <input type="text" id="inp-callsign" class="input-hero" placeholder="CALLSIGN" maxlength="8" autocomplete="off" spellcheck="false">
+                <button class="btn-block" id="btn-login-action" onclick="App.login()" style="justify-content: center; background: var(--c-blue); border:none; margin-top: 20px;">
+                    CONNEXION
                 </button>
             </div>
         </div>
-    </div>
 
-    <!-- VIEW: OPS -->
-    <div id="view-ops" class="view">
-        <div id="ops-container" class="ops-grid"></div>
-    </div>
+        <!-- VIEW: MENU -->
+        <div id="view-menu" class="view">
+            <div class="centered-container" style="justify-content: flex-start; padding-top: 60px;">
+                <h3 style="color: var(--c-dim); width: 100%; text-align: left; margin-bottom: 25px; border-bottom: 1px solid #333; padding-bottom: 10px;">DÉPLOIEMENT</h3>
+                
+                <button class="btn-block" id="btn-create" onclick="Svc_Comms.create()">
+                    <span class="material-symbols-outlined" style="font-size: 1.8rem;">add_circle</span>
+                    <div><div>Créer Fréquence</div><div style="font-size: 0.7rem; color: var(--c-dim); font-weight: 400;">Devenir Hôte (Squad Leader)</div></div>
+                </button>
+                
+                <button class="btn-block" onclick="Svc_QR.start()">
+                    <span class="material-symbols-outlined" style="font-size: 1.8rem;">qr_code_scanner</span>
+                    <div><div>Scanner QR</div><div style="font-size: 0.7rem; color: var(--c-dim); font-weight: 400;">Rejoindre via Caméra</div></div>
+                </button>
 
-    <!-- VIEW: MAP -->
-    <div id="view-map" class="view">
-        <div id="map-instance"></div>
-    </div>
-
-    <!-- HUD -->
-    <div id="hud" class="hud-panel">
-        <canvas id="visualizer"></canvas>
-        
-        <div class="status-bar">
-            <div class="chip" onclick="App.setStatus('PROGRESSION')" data-val="PROGRESSION">PROGRESSION</div>
-            <div class="chip" onclick="App.setStatus('CONTACT')" data-val="CONTACT">CONTACT</div>
-            <div class="chip" onclick="App.setStatus('CLEAR')" data-val="CLEAR">CLEAR</div>
-            <div class="chip" onclick="App.setStatus('APPUI')" data-val="APPUI">EN APPUI</div>
+                <div style="width: 100%; margin-top: 40px; padding-top: 20px;">
+                    <div style="text-align: left; color: var(--c-dim); font-size: 0.8rem; margin-bottom: 15px;">REJOINDRE MANUELLEMENT</div>
+                    <div class="join-box">
+                        <input type="text" id="inp-join" class="input-std" placeholder="ID CANAL..." autocomplete="off">
+                        <button onclick="navigator.clipboard.readText().then(t => document.getElementById('inp-join').value = t)" style="width: 60px; background: var(--bg-surface); border: 1px solid var(--border-dim); border-radius: var(--radius); color: white; cursor: pointer;">
+                            <span class="material-symbols-outlined">content_paste</span>
+                        </button>
+                    </div>
+                    <button class="btn-block" id="btn-join-action" onclick="Svc_Comms.join()" style="justify-content: center; background: rgba(255,255,255,0.05);">
+                        REJOINDRE
+                    </button>
+                </div>
+            </div>
         </div>
 
-        <div class="ptt-container">
-            <div class="side-btn left" onclick="AudioService.toggleVox()">
-                <span class="material-symbols-outlined" id="icon-mic">mic_none</span>
+        <!-- VIEW: OPS (GRID) -->
+        <div id="view-ops" class="view">
+            <div id="grid" class="grid-container"></div>
+        </div>
+
+        <!-- VIEW: MAP (BFT) -->
+        <div id="view-map" class="view">
+            <div id="map-instance"></div>
+        </div>
+
+    </div> <!-- End View Stack -->
+
+    <!-- HUD TACTIQUE (OVERLAY FIXE) -->
+    <div id="hud" class="hud-panel">
+        <!-- Visualizer Audio Waves -->
+        <canvas id="visualizer-canvas"></canvas>
+        
+        <!-- Status Bar -->
+        <div class="status-scroller">
+            <div class="status-btn" onclick="UI.status('PROGRESSION')" data-val="PROGRESSION">PROGRESSION</div>
+            <div class="status-btn" onclick="UI.status('CONTACT')" data-val="CONTACT">CONTACT</div>
+            <div class="status-btn" onclick="UI.status('CLEAR')" data-val="CLEAR">CLEAR</div>
+            <div class="status-btn" onclick="UI.status('APPUI')" data-val="APPUI">EN APPUI</div>
+        </div>
+
+        <!-- PTT Cluster -->
+        <div class="ptt-controls">
+            <div class="cluster-btn left" onclick="Svc_Audio.toggleVox()">
+                <span class="material-symbols-outlined" id="icon-mic-mode">mic_none</span>
             </div>
             
-            <div id="ptt-btn">
+            <div id="ptt-trigger">
                 <span class="material-symbols-outlined">mic</span>
             </div>
             
-            <div class="side-btn right" onclick="QRService.show()">
+            <div class="cluster-btn right" onclick="Svc_QR.show()">
                 <span class="material-symbols-outlined">qr_code_2</span>
             </div>
         </div>
 
-        <div class="hud-footer">
-            <span id="txt-id-display" onclick="App.copyID()" style="cursor: pointer; border-bottom: 1px dotted #555;">ID: ...</span> 
+        <!-- Footer Info -->
+        <div class="hud-info">
+            <span id="txt-freq-id" onclick="UI.copy()" style="cursor: pointer; border-bottom: 1px dotted #555;">ID: ...</span> 
             <span style="margin: 0 10px; color: #333;">|</span>
-            <span id="txt-gps-display" onclick="MapService.init()" style="cursor: pointer;">GPS: OFF</span>
+            <span id="txt-gps-stat" onclick="Svc_Map.init()" style="cursor: pointer;">GPS: OFF</span>
         </div>
     </div>
 
-    <!-- ================= 3. LOGIC MODULES ================= -->
+    <!-- ================================================================= -->
+    <!-- 4. LOGIQUE JAVASCRIPT MASTER                                      -->
+    <!-- ================================================================= -->
     <script>
-        const CONFIG = {
-            sessionKey: 'comtac_v10_session',
-            peerConfig: { debug: 1 }
+        /**
+         * COMTAC v12.0 HEAVY DUTY
+         * Architecture Service-Oriented pour fiabilité maximale.
+         * * MODULES:
+         * - CONF: Configuration globale
+         * - Svc_DB: Base de données Offline (IndexedDB)
+         * - Svc_Audio: Moteur Audio + DSP + VAD + PTT + Visualizer
+         * - Svc_Map: Moteur Cartographique + GPS + Markers + Trails
+         * - Svc_Comms: Réseau P2P + Protocole de Synchro + Relais
+         * - Svc_QR: Scanner & Générateur
+         * - UI: Gestionnaire d'Interface (Render, Toasts, Views)
+         * - App: Contrôleur Principal (State, Login, Battery)
+         */
+
+        const CONF = {
+            sessionKey: 'comtac_v12_heavy_session',
+            peerConfig: { 
+                debug: 1 // Niveau de log. Pour la prod, ajouter un serveur TURN ici.
+            }
         };
 
-        // --- MODULE 1: DATABASE (IndexedDB) ---
-        const DBService = {
+        // --- 1. SERVICE DB (Offline Mapping) ---
+        const Svc_DB = {
             db: null,
-            name: 'ComTac_DB_v10',
+            name: 'ComTac_DB_Master_v12',
+            store: 'tiles',
             
             init: async () => {
                 return new Promise((resolve, reject) => {
-                    const request = indexedDB.open(DBService.name, 1);
-                    request.onupgradeneeded = (event) => {
-                        const db = event.target.result;
-                        if (!db.objectStoreNames.contains('tiles')) {
-                            db.createObjectStore('tiles', { keyPath: 'key' });
+                    const req = indexedDB.open(Svc_DB.name, 1);
+                    req.onupgradeneeded = e => {
+                        if (!e.target.result.objectStoreNames.contains('tiles')) {
+                            e.target.result.createObjectStore('tiles', { keyPath: 'key' });
                         }
                     };
-                    request.onsuccess = (event) => {
-                        DBService.db = event.target.result;
-                        console.log("[DB] IndexedDB Ready");
-                        resolve();
-                    };
-                    request.onerror = (event) => {
-                        console.error("[DB] Error", event);
+                    req.onsuccess = e => { 
+                        Svc_DB.db = e.target.result; 
+                        console.log("[DB] Ready");
                         resolve(); 
+                    };
+                    req.onerror = e => {
+                        console.error("[DB] Fail", e);
+                        resolve(); // On continue même sans DB
                     };
                 });
             },
             
             putTile: (key, blob) => {
-                if (!DBService.db) return;
+                if(!Svc_DB.db) return;
                 try {
-                    const tx = DBService.db.transaction('tiles', 'readwrite');
-                    const store = tx.objectStore('tiles');
-                    store.put({ key: key, blob: blob });
-                } catch(e) { console.warn("[DB] Put Error", e); }
+                    const tx = Svc_DB.db.transaction('tiles', 'readwrite');
+                    tx.objectStore('tiles').put({ key, blob });
+                } catch(e) { console.warn("[DB] Write Error", e); }
             },
             
             getTile: async (key) => {
-                if (!DBService.db) return null;
-                return new Promise((resolve) => {
-                    try {
-                        const tx = DBService.db.transaction('tiles', 'readonly');
-                        const store = tx.objectStore('tiles');
-                        const request = store.get(key);
-                        request.onsuccess = () => resolve(request.result ? request.result.blob : null);
-                        request.onerror = () => resolve(null);
-                    } catch(e) { resolve(null); }
+                if(!Svc_DB.db) return null;
+                return new Promise(resolve => {
+                    const tx = Svc_DB.db.transaction('tiles', 'readonly');
+                    const req = tx.objectStore('tiles').get(key);
+                    req.onsuccess = () => resolve(req.result ? req.result.blob : null);
+                    req.onerror = () => resolve(null);
                 });
             }
         };
 
-        // --- MODULE 2: MAP & GPS ---
-        const MapService = {
-            map: null,
-            geoId: null,
-            lastLat: 0,
-            lastLng: 0,
-            lastUpdate: 0,
-            
-            init: () => {
-                if (MapService.map) return;
-                
-                // Initialize Leaflet Map
-                MapService.map = L.map('map-instance', {
-                    zoomControl: false,
-                    attributionControl: false
-                }).setView([48.85, 2.35], 13); // Default Paris
+        // Custom Leaflet Layer for Caching
+        const OfflineLayer = L.TileLayer.extend({
+            createTile: function(coords, done) {
+                const tile = document.createElement('img');
+                const url = this.getTileUrl(coords);
+                const key = `${coords.z}_${coords.x}_${coords.y}`;
 
-                // Offline Tile Layer Logic
-                const OfflineLayer = L.TileLayer.extend({
-                    createTile: function(coords, done) {
-                        const tile = document.createElement('img');
-                        const url = this.getTileUrl(coords);
-                        const key = `${coords.z}_${coords.x}_${coords.y}`;
-
-                        DBService.getTile(key).then(blob => {
-                            if (blob) {
-                                tile.src = URL.createObjectURL(blob);
-                                done(null, tile);
-                            } else {
-                                fetch(url).then(res => res.blob()).then(blob => {
-                                    DBService.putTile(key, blob);
-                                    tile.src = URL.createObjectURL(blob);
-                                    done(null, tile);
-                                }).catch(err => {
-                                    // Fallback if offline and no cache
-                                    tile.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
-                                    done(null, tile);
-                                });
-                            }
-                        });
-                        return tile;
-                    }
-                });
-
-                new OfflineLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-                    subdomains: 'abcd',
-                    maxZoom: 19
-                }).addTo(MapService.map);
-
-                MapService.startGPS();
-            },
-            
-            startGPS: () => {
-                if (!navigator.geolocation) {
-                    const el = document.getElementById('txt-gps-display');
-                    if(el) el.innerText = "GPS N/A";
-                    return;
-                }
-                
-                // High Accuracy for Autonomous Ops
-                const options = { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 };
-                
-                MapService.geoId = navigator.geolocation.watchPosition(
-                    (pos) => {
-                        const { latitude, longitude, heading, accuracy } = pos.coords;
-                        const now = Date.now();
-                        
-                        // Calculate Heading if device doesn't provide it
-                        if (MapService.lastLat !== 0 && (!heading || isNaN(heading))) {
-                            App.user.head = MapService.calcHeading(MapService.lastLat, MapService.lastLng, latitude, longitude);
-                        } else if (heading) {
-                            App.user.head = heading;
-                        }
-
-                        // Auto-Progression Logic
-                        const distanceMoved = MapService.dist(MapService.lastLat, MapService.lastLng, latitude, longitude);
-                        
-                        // If moved > 15m AND status not CONTACT (don't override combat status)
-                        if (distanceMoved > 0.00015 && App.user.status !== 'CONTACT' && App.user.status !== 'PROGRESSION') {
-                            App.setStatus('PROGRESSION');
-                            App.toast("Mode Progression Auto");
-                        }
-
-                        MapService.lastLat = latitude;
-                        MapService.lastLng = longitude;
-                        App.user.lat = latitude;
-                        App.user.lng = longitude;
-                        
-                        const el = document.getElementById('txt-gps-display');
-                        if(el) {
-                            el.innerText = `GPS ±${Math.floor(accuracy)}m`;
-                            el.style.color = accuracy < 20 ? 'var(--color-green)' : 'var(--color-yellow)';
-                        }
-                        
-                        MapService.updateMarker(App.user.id, App.user);
-                        
-                        // Broadcast update immediately if position changed
-                        NetService.broadcast();
-                    },
-                    (err) => {
-                        console.warn("[GPS] Error", err);
-                        const el = document.getElementById('txt-gps-display');
-                        if(el) {
-                            el.innerText = "GPS ERR";
-                            el.style.color = 'var(--color-red)';
-                        }
-                    },
-                    options
-                );
-            },
-            
-            centerMap: () => {
-                if(MapService.map && App.user.lat) {
-                    MapService.map.setView([App.user.lat, App.user.lng], 16, { animate: true });
-                }
-            },
-            
-            updateMarker: (id, data) => {
-                if (!MapService.map || !data.lat) return;
-                
-                const storage = (id === App.user.id) ? MapService : App.peers[id];
-                if (!storage) return;
-
-                const rot = data.head || 0;
-                const status = data.status || 'CLEAR';
-                
-                const html = `
-                    <div class="tac-wrapper status-${status}" style="transform: rotate(${rot}deg);">
-                        <div class="tac-arrow"></div>
-                    </div>
-                    <div class="tac-label status-${status}">${data.callsign}</div>
-                `;
-                
-                const icon = L.divIcon({
-                    className: 'custom-div-icon',
-                    html: html,
-                    iconSize: [40, 40],
-                    iconAnchor: [20, 20]
-                });
-
-                if (storage.marker) {
-                    storage.marker.setLatLng([data.lat, data.lng]);
-                    storage.marker.setIcon(icon);
-                } else {
-                    storage.marker = L.marker([data.lat, data.lng], { icon: icon }).addTo(MapService.map);
-                }
-                
-                if (!storage.trailPts) storage.trailPts = [];
-                const last = storage.trailPts[storage.trailPts.length - 1];
-                
-                const dist = last ? MapService.dist(last[0], last[1], data.lat, data.lng) : 1;
-                
-                if (dist > 0.00005) { // Trace point threshold
-                    storage.trailPts.push([data.lat, data.lng]);
-                    if (storage.trailPts.length > 50) storage.trailPts.shift();
-                    
-                    // Determine trail color based on status
-                    let trailColor = '#22c55e'; // Default Green (Clear/Appui/Progression)
-                    if (status === 'CONTACT') trailColor = '#ef4444'; // Red for Contact
-                    
-                    if (storage.trail) {
-                        storage.trail.setLatLngs(storage.trailPts);
-                        storage.trail.setStyle({ color: trailColor });
+                Svc_DB.getTile(key).then(blob => {
+                    if (blob) {
+                        // Cache Hit
+                        tile.src = URL.createObjectURL(blob);
+                        done(null, tile);
                     } else {
-                        storage.trail = L.polyline(storage.trailPts, { 
-                            color: trailColor, 
-                            weight: 2, 
-                            dashArray: '4,8', 
-                            opacity: 0.6 
-                        }).addTo(MapService.map);
+                        // Cache Miss -> Fetch
+                        fetch(url).then(res => res.blob()).then(blob => {
+                            Svc_DB.putTile(key, blob);
+                            tile.src = URL.createObjectURL(blob);
+                            done(null, tile);
+                        }).catch(err => {
+                            // Offline & No Cache -> Transparent fallback
+                            tile.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+                            done(null, tile);
+                        });
                     }
-                }
-            },
-            
-            dist: (lat1, lng1, lat2, lng2) => {
-                return Math.sqrt(Math.pow(lat2 - lat1, 2) + Math.pow(lng2 - lng1, 2));
-            },
-            
-            calcHeading: (lat1, lng1, lat2, lng2) => {
-                const y = Math.sin(lng2 - lng1) * Math.cos(lat2);
-                const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(lng2 - lng1);
-                const brng = Math.atan2(y, x) * 180 / Math.PI;
-                return (brng + 360) % 360;
+                });
+                return tile;
             }
-        };
+        });
 
-        // --- MODULE 3: AUDIO ENGINE ---
-        const AudioService = {
-            ctx: null, stream: null, analyser: null, mode: 'ptt', visuCtx: null, vadThreshold: -50,
+        // --- 2. SERVICE AUDIO (DSP + VAD + PTT) ---
+        const Svc_Audio = {
+            ctx: null,
+            stream: null,
+            analyser: null,
+            mode: 'ptt', // 'ptt' | 'vox'
+            visuCanvas: null,
+            visuCtx: null,
+            
+            // Voice Activity Detection vars
+            vadThreshold: -50, // dB
+            vadActive: false,
             
             init: async () => {
                 try {
-                    const stream = await navigator.mediaDevices.getUserMedia({
-                        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+                    // 1. Get User Media
+                    const stream = await navigator.mediaDevices.getUserMedia({ 
+                        audio: { 
+                            echoCancellation: true, 
+                            noiseSuppression: true, 
+                            autoGainControl: true,
+                            channelCount: 1 
+                        } 
                     });
-                    AudioService.stream = stream;
+                    Svc_Audio.stream = stream;
                     
+                    // 2. Init WebAudio
                     const AudioContext = window.AudioContext || window.webkitAudioContext;
-                    AudioService.ctx = new AudioContext();
+                    Svc_Audio.ctx = new AudioContext();
                     
-                    const src = AudioService.ctx.createMediaStreamSource(stream);
-                    const filter = AudioService.ctx.createBiquadFilter();
-                    filter.type = 'highpass'; filter.frequency.value = 300; 
+                    // 3. Build DSP Chain
+                    const src = Svc_Audio.ctx.createMediaStreamSource(stream);
                     
-                    const compressor = AudioService.ctx.createDynamicsCompressor();
+                    // Filtre Passe-Haut (Coupe le vent)
+                    const highPass = Svc_Audio.ctx.createBiquadFilter(); 
+                    highPass.type = 'highpass'; 
+                    highPass.frequency.value = 300; 
+                    
+                    // Compresseur (Nivelle le volume)
+                    const compressor = Svc_Audio.ctx.createDynamicsCompressor();
                     compressor.threshold.value = -20;
                     compressor.knee.value = 40;
+                    compressor.ratio.value = 12;
                     
-                    AudioService.analyser = AudioService.ctx.createAnalyser();
-                    AudioService.analyser.fftSize = 256;
+                    // Analyseur (Pour VAD & Visualiseur)
+                    Svc_Audio.analyser = Svc_Audio.ctx.createAnalyser();
+                    Svc_Audio.analyser.fftSize = 256;
                     
-                    src.connect(filter);
-                    filter.connect(compressor);
-                    compressor.connect(AudioService.analyser);
+                    // Connexions
+                    src.connect(highPass);
+                    highPass.connect(compressor);
+                    compressor.connect(Svc_Audio.analyser);
                     
-                    AudioService.tx(false);
-                    AudioService.setupViz();
-                    AudioService.vadLoop();
+                    // Mute par défaut
+                    Svc_Audio.tx(false);
                     
-                    if ('mediaSession' in navigator) {
-                        navigator.mediaSession.metadata = new MediaMetadata({ title: 'ComTac Channel' });
-                        navigator.mediaSession.setActionHandler('play', AudioService.toggleHeadset);
-                        navigator.mediaSession.setActionHandler('pause', AudioService.toggleHeadset);
+                    // Keep Alive (Oscillateur inaudible pour empêcher le freeze)
+                    Svc_Audio.startKeepAlive();
+
+                    // 4. Setup UI Viz
+                    Svc_Audio.setupVisualizer();
+                    Svc_Audio.vadLoop(); // Start VAD monitor
+                    
+                    // 5. Hardware Buttons Support (Headset)
+                    if('mediaSession' in navigator) {
+                        navigator.mediaSession.metadata = new MediaMetadata({ title: 'ComTac Channel', artist: 'Secure Link' });
+                        navigator.mediaSession.setActionHandler('play', () => Svc_Audio.toggleHeadset());
+                        navigator.mediaSession.setActionHandler('pause', () => Svc_Audio.toggleHeadset());
                     }
                     
                     return true;
                 } catch(e) {
-                    console.error("[AUDIO] Init Failed", e);
-                    App.toast("Erreur Micro", true);
+                    console.error("[AUDIO] Fail", e);
+                    UI.toast("Micro inaccessible", true);
                     return false;
                 }
             },
+
+            startKeepAlive: () => {
+                if(!Svc_Audio.ctx) return;
+                const osc = Svc_Audio.ctx.createOscillator();
+                const gain = Svc_Audio.ctx.createGain();
+                gain.gain.value = 0.001; // Quasi-silence
+                osc.connect(gain);
+                gain.connect(Svc_Audio.ctx.destination);
+                osc.start();
+            },
             
+            // Gestionnaire de Transmission
             tx: (active) => {
-                if (!AudioService.stream) return;
-                const allow = (AudioService.mode === 'ptt' || (AudioService.mode === 'vox' && active));
+                if(!Svc_Audio.stream) return;
                 
-                if (allow) {
-                    AudioService.stream.getAudioTracks().forEach(t => t.enabled = active);
-                    App.user.isTx = active;
+                const shouldTransmit = (Svc_Audio.mode === 'ptt' || (Svc_Audio.mode === 'vox' && active));
+                
+                if(shouldTransmit) {
+                    Svc_Audio.stream.getAudioTracks().forEach(t => t.enabled = active);
+                    App.state.me.isTx = active;
                     
-                    const btn = document.getElementById('ptt-btn');
-                    if (btn) {
-                        if (active) {
-                            btn.classList.add('active');
-                            if (navigator.vibrate) navigator.vibrate(30);
-                        } else {
-                            if (AudioService.mode !== 'vox') btn.classList.remove('active');
-                        }
+                    const btn = document.getElementById('ptt-trigger');
+                    if(active) {
+                        btn.classList.add('active');
+                        Svc_Audio.playBeep('start');
+                        if(navigator.vibrate) navigator.vibrate(30);
+                    } else {
+                        if(Svc_Audio.mode !== 'vox') btn.classList.remove('active');
                     }
                     
-                    NetService.broadcast(); 
-                    App.renderGrid();
+                    // Broadcast immédiat
+                    Svc_Comms.broadcast();
+                    UI.render();
                 }
             },
             
+            // Voice Activity Detection Loop
             vadLoop: () => {
-                if (!AudioService.analyser) return;
+                if(!Svc_Audio.analyser) return;
                 
-                if (AudioService.mode === 'vox' || App.user.isTxRequest) {
-                    const buffer = new Float32Array(AudioService.analyser.fftSize);
-                    AudioService.analyser.getFloatTimeDomainData(buffer);
+                if(App.state.me.isTxRequest) { // Si l'utilisateur VEUT parler
+                    const buffer = new Float32Array(Svc_Audio.analyser.fftSize);
+                    Svc_Audio.analyser.getFloatTimeDomainData(buffer);
                     
                     let sum = 0;
                     for(let i=0; i<buffer.length; i++) sum += buffer[i]*buffer[i];
                     const rms = Math.sqrt(sum / buffer.length);
                     const db = 20 * Math.log10(rms);
                     
-                    if (db > AudioService.vadThreshold) AudioService.tx(true);
-                    else if (AudioService.mode === 'vox') AudioService.tx(false);
+                    // Si on parle assez fort
+                    if(db > Svc_Audio.vadThreshold) {
+                        Svc_Audio.tx(true); 
+                    } else {
+                        // Mode VOX coupe
+                        if(Svc_Audio.mode === 'vox') Svc_Audio.tx(false);
+                    }
                 }
-                setTimeout(AudioService.vadLoop, 100);
+                setTimeout(Svc_Audio.vadLoop, 100);
+            },
+            
+            playBeep: (type) => {
+                if(!Svc_Audio.ctx) return;
+                const o = Svc_Audio.ctx.createOscillator();
+                const g = Svc_Audio.ctx.createGain();
+                o.connect(g); g.connect(Svc_Audio.ctx.destination);
+                o.frequency.value = type==='start' ? 800 : 600;
+                g.gain.value = 0.1;
+                o.start(); setTimeout(()=>o.stop(), 80);
             },
             
             toggleVox: () => {
-                AudioService.mode = AudioService.mode === 'ptt' ? 'vox' : 'ptt';
-                const icon = document.getElementById('icon-mic');
-                const btn = document.getElementById('ptt-btn');
+                Svc_Audio.mode = Svc_Audio.mode === 'ptt' ? 'vox' : 'ptt';
+                const ico = document.getElementById('icon-mic-mode');
+                const btn = document.getElementById('ptt-trigger');
                 
-                if (AudioService.mode === 'vox') {
-                    icon.innerText = 'mic';
-                    btn.classList.add('vox-active');
-                    App.toast("Mode VOX (Mains Libres)");
+                if(Svc_Audio.mode === 'vox') {
+                    ico.innerText = 'mic';
+                    btn.classList.add('mode-vox');
+                    // En VOX, on transmet tout le temps (le VAD coupera si silence)
+                    App.state.me.isTxRequest = true; 
+                    Svc_Audio.tx(true);
+                    UI.toast("Mode VOX (Auto)");
                 } else {
-                    icon.innerText = 'mic_none';
-                    btn.classList.remove('vox-active');
-                    AudioService.tx(false);
-                    App.toast("Mode PTT");
+                    ico.innerText = 'mic_none';
+                    btn.classList.remove('mode-vox');
+                    App.state.me.isTxRequest = false;
+                    Svc_Audio.tx(false);
+                    UI.toast("Mode PTT (Manuel)");
                 }
             },
             
             toggleHeadset: () => {
-                if (AudioService.mode === 'ptt') {
-                    const newState = !App.user.isTx;
-                    App.user.isTxRequest = newState;
-                    AudioService.tx(newState);
+                if(Svc_Audio.mode === 'ptt') {
+                    App.state.me.isTxRequest = !App.state.me.isTxRequest;
+                    Svc_Audio.tx(App.state.me.isTxRequest);
                 }
             },
             
             playRemote: (stream) => {
                 const a = new Audio();
                 a.srcObject = stream;
-                a.play().catch(e => console.log("Autoplay block", e));
+                a.play().catch(e => console.log("Auto-play blocked", e));
             },
             
-            setupViz: () => {
-                const cvs = document.getElementById('visualizer');
-                if(!cvs) return;
-                AudioService.visuCtx = cvs.getContext('2d');
-                cvs.width = cvs.offsetWidth;
-                cvs.height = cvs.offsetHeight;
-                AudioService.drawLoop();
+            setupVisualizer: () => {
+                Svc_Audio.visuCanvas = document.getElementById('visualizer-canvas');
+                Svc_Audio.visuCtx = Svc_Audio.visuCanvas.getContext('2d');
+                Svc_Audio.visuCanvas.width = Svc_Audio.visuCanvas.offsetWidth;
+                Svc_Audio.visuCanvas.height = Svc_Audio.visuCanvas.offsetHeight;
+                Svc_Audio.drawLoop();
             },
             
             drawLoop: () => {
-                requestAnimationFrame(AudioService.drawLoop);
-                if (!AudioService.analyser || !AudioService.visuCtx) return;
+                requestAnimationFrame(Svc_Audio.drawLoop);
+                if(!Svc_Audio.analyser) return;
                 
-                const buffer = AudioService.analyser.frequencyBinCount;
-                const data = new Uint8Array(buffer);
-                AudioService.analyser.getByteFrequencyData(data);
+                const bufferLength = Svc_Audio.analyser.frequencyBinCount;
+                const dataArray = new Uint8Array(bufferLength);
+                Svc_Audio.analyser.getByteFrequencyData(dataArray);
                 
-                const ctx = AudioService.visuCtx;
-                const w = ctx.canvas.width;
-                const h = ctx.canvas.height;
+                const ctx = Svc_Audio.visuCtx;
+                const w = Svc_Audio.visuCanvas.width;
+                const h = Svc_Audio.visuCanvas.height;
                 
                 ctx.clearRect(0, 0, w, h);
-                if (!App.user.isTx) return;
                 
-                const bw = (w / buffer) * 2.5;
+                if(!App.state.me.isTx) return;
+                
+                const barWidth = (w / bufferLength) * 2.5;
                 let x = 0;
-                for(let i=0; i<buffer; i++) {
-                    const bh = data[i] / 2;
-                    ctx.fillStyle = `rgba(59, 130, 246, ${bh/255})`;
-                    ctx.fillRect(x, h - bh, bw, bh);
-                    x += bw + 1;
+                
+                for(let i = 0; i < bufferLength; i++) {
+                    const barHeight = dataArray[i] / 2;
+                    ctx.fillStyle = `rgba(59, 130, 246, ${barHeight/255})`;
+                    ctx.fillRect(x, h - barHeight, barWidth, barHeight);
+                    x += barWidth + 1;
                 }
             }
         };
 
-        // --- MODULE 4: NETWORK (PeerJS) ---
-        const NetService = {
+        // --- 3. SERVICE MAP (Leaflet Custom + GPS) ---
+        const Svc_Map = {
+            map: null,
+            geoId: null,
+            lastLat: 0,
+            lastLng: 0,
+            
+            init: () => {
+                if(Svc_Map.map) return;
+                
+                // Initialize Leaflet
+                Svc_Map.map = L.map('map-instance', { 
+                    zoomControl: false, 
+                    attributionControl: false 
+                }).setView([48.85, 2.35], 13);
+                
+                // Add Offline-Ready Layer (CartoDB Dark)
+                new OfflineLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                    subdomains: 'abcd',
+                    maxZoom: 19
+                }).addTo(Svc_Map.map);
+                
+                Svc_Map.startGPS();
+            },
+            
+            startGPS: () => {
+                if(!('geolocation' in navigator)) {
+                    document.getElementById('txt-gps-stat').innerText = "GPS N/A";
+                    return;
+                }
+                
+                const options = { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 };
+                
+                Svc_Map.geoId = navigator.geolocation.watchPosition(
+                    (pos) => {
+                        const { latitude, longitude, heading, accuracy } = pos.coords;
+                        
+                        // Calcul Cap si manquant
+                        if(Svc_Map.lastLat !== 0 && (!heading || isNaN(heading))) {
+                            App.state.me.head = Svc_Map.calcHeading(Svc_Map.lastLat, Svc_Map.lastLng, latitude, longitude);
+                        } else if(heading) {
+                            App.state.me.head = heading;
+                        }
+
+                        // Auto Progression (10.5 Rule)
+                        const dist = Svc_Map.dist(Svc_Map.lastLat, Svc_Map.lastLng, latitude, longitude);
+                        if (dist > 0.00015 && App.state.me.status !== 'CONTACT' && App.state.me.status !== 'PROGRESSION') {
+                            App.setStatus('PROGRESSION');
+                            UI.toast("Mode Progression Auto");
+                        }
+                        
+                        Svc_Map.lastLat = latitude;
+                        Svc_Map.lastLng = longitude;
+                        App.state.me.lat = latitude;
+                        App.state.me.lng = longitude;
+                        
+                        // Update UI
+                        const el = document.getElementById('txt-gps-stat');
+                        el.innerText = `GPS ±${Math.floor(accuracy)}m`;
+                        el.style.color = accuracy < 20 ? 'var(--c-green)' : 'var(--c-yellow)';
+                        
+                        Svc_Map.updateUser(App.state.me.id, App.state.me);
+                        Svc_Comms.broadcast();
+                    },
+                    (err) => {
+                        console.warn("[GPS] Error", err.code);
+                        const el = document.getElementById('txt-gps-stat');
+                        el.innerText = "GPS ERR";
+                        el.style.color = 'var(--c-red)';
+                    },
+                    options
+                );
+            },
+            
+            updateUser: (id, u) => {
+                if(!Svc_Map.map || !u.lat) return;
+                
+                const store = (id === App.state.me.id) ? Svc_Map : App.state.peers[id];
+                if(!store) return;
+                
+                // Construct Icon
+                const rot = u.head || 0;
+                const status = u.status || 'CLEAR';
+                const html = `
+                    <div class="tac-icon-wrapper">
+                        <div class="tac-rotator" style="transform: rotate(${rot}deg);">
+                            <div class="tac-arrow"></div>
+                        </div>
+                        <div class="tac-label status-${status}">${u.cal}</div>
+                    </div>`;
+                
+                const icon = L.divIcon({ className: 'custom', html: html, iconSize: [50,50], iconAnchor: [25,25] });
+                
+                if(store.mk) {
+                    store.mk.setLatLng([u.lat, u.lng]);
+                    store.mk.setIcon(icon);
+                } else {
+                    store.mk = L.marker([u.lat, u.lng], { icon: icon }).addTo(Svc_Map.map);
+                }
+                
+                // Trail Logic
+                if(!store.tr) {
+                    const c = (id === App.state.me.id) ? '#3b82f6' : '#22c55e';
+                    store.tr = L.polyline([], { color: c, weight: 2, dashArray: '4,8', opacity: 0.5 }).addTo(Svc_Map.map);
+                }
+                
+                const pts = store.tr.getLatLngs();
+                const last = pts.length > 0 ? pts[pts.length-1] : null;
+                
+                if(!last || Svc_Map.dist(last.lat, last.lng, u.lat, u.lng) > 0.0001) {
+                    store.tr.addLatLng([u.lat, u.lng]);
+                    // Color based on status
+                    if(status === 'CONTACT') store.tr.setStyle({ color: '#ef4444' });
+                    else store.tr.setStyle({ color: (id === App.state.me.id ? '#3b82f6' : '#22c55e') });
+
+                    if(pts.length > 50) store.tr.setLatLngs(pts.slice(1));
+                }
+                
+                // Auto Center if me
+                if(id === App.state.me.id && document.getElementById('view-map').classList.contains('active')) {
+                   // Optional: Svc_Map.map.panTo([u.lat, u.lng]); // Keep centered
+                }
+            },
+            
+            dist: (lat1, lng1, lat2, lng2) => Math.sqrt(Math.pow(lat2-lat1,2) + Math.pow(lng2-lng1,2)),
+            
+            calcHeading: (lat1, lng1, lat2, lng2) => {
+                const y = Math.sin(lng2-lng1) * Math.cos(lat2);
+                const x = Math.cos(lat1)*Math.sin(lat2) - Math.sin(lat1)*Math.cos(lat2)*Math.cos(lng2-lng1);
+                return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+            }
+        };
+
+        // --- 4. SERVICE COMMS (PeerJS + Data Relay) ---
+        const Svc_Comms = {
             peer: null,
             hostId: null,
             
-            createSession: (id = null) => {
-                document.getElementById('btn-create-host').innerHTML = 'Connexion Satellite...';
-                App.isHost = true;
-                App.user.role = 'HOST';
-                NetService.initPeer(id);
+            create: (id = null) => {
+                document.getElementById('btn-create').innerHTML = 'Connexion Satellite...';
+                App.state.isHost = true;
+                App.state.me.role = 'HOST';
+                Svc_Comms.initPeer(id);
             },
             
-            joinSession: (id = null) => {
-                if (!id) id = document.getElementById('input-join-id').value.trim();
-                if (!id) return App.toast("ID requis", true);
+            join: (id = null) => {
+                if(!id) id = document.getElementById('inp-join').value.trim();
+                if(!id) return UI.toast("ID requis", true);
                 
-                document.getElementById('btn-join-trigger').innerHTML = 'Connexion...';
-                App.isHost = false;
-                NetService.hostId = id;
-                NetService.initPeer();
+                document.getElementById('btn-join').innerHTML = 'Connexion...';
+                App.state.isHost = false;
+                Svc_Comms.hostId = id;
+                Svc_Comms.initPeer();
             },
             
             initPeer: (id = null) => {
-                if (NetService.peer) NetService.peer.destroy();
+                if(Svc_Comms.peer) Svc_Comms.peer.destroy();
+                const peer = new Peer(id, CONF.peerConfig);
                 
-                const peer = new Peer(id, CONFIG.peerConfig);
-                
-                peer.on('open', (pid) => {
-                    App.user.id = pid;
-                    document.getElementById('txt-id-display').innerText = `ID: ${pid}`;
+                peer.on('open', pid => {
+                    App.state.me.id = pid;
+                    document.getElementById('txt-id').innerText = pid.substring(0,8)+'...';
                     
-                    if (App.isHost) {
-                        NetService.startHeartbeat();
+                    if(App.state.isHost) {
+                        Svc_Comms.startHeartbeat();
                         App.saveSession(pid);
-                        App.switchView('view-ops');
-                    } else if (NetService.hostId) {
-                        const conn = peer.connect(NetService.hostId, { metadata: App.user });
+                        UI.view('v-ops');
+                    } else if(Svc_Comms.hostId) {
+                        // CLIENT: Connect to Host
+                        const conn = peer.connect(Svc_Comms.hostId, { metadata: App.state.me });
+                        
                         conn.on('open', () => {
-                            NetService.handleConn(conn);
-                            conn.send({ type: 'FULL', user: App.user }); // Handshake
+                            Svc_Comms.handleConn(conn);
+                            // HANDSHAKE: IMMEDIATE FULL SEND
+                            conn.send({ t: 'FULL', p: App.state.me });
                             
-                            const call = peer.call(NetService.hostId, AudioService.stream);
-                            call.on('stream', s => AudioService.playRemote(s));
+                            const call = peer.call(Svc_Comms.hostId, Svc_Audio.stream);
+                            call.on('stream', s => Svc_Audio.playRemote(s));
                             
-                            App.saveSession(NetService.hostId);
-                            App.switchView('view-ops');
+                            App.saveSession(Svc_Comms.hostId);
+                            UI.view('v-ops');
                         });
-                        conn.on('error', () => App.toast("Hôte injoignable", true));
+                        conn.on('error', () => {
+                            UI.toast("Hôte Injoignable", true);
+                            setTimeout(() => Svc_Comms.join(Svc_Comms.hostId), 3000); // Retry logic
+                        });
                     }
                 });
 
-                peer.on('connection', (conn) => {
-                    if (conn.metadata && conn.metadata.id) {
-                        if (!App.peers[conn.metadata.id]) App.peers[conn.metadata.id] = { data: conn.metadata };
-                        App.peers[conn.metadata.id].conn = conn;
-                        App.renderGrid();
+                peer.on('connection', conn => {
+                    // HOST: Register immediately if meta available
+                    if(conn.metadata && conn.metadata.id) {
+                        if(!App.state.peers[conn.metadata.id]) App.state.peers[conn.metadata.id] = { data: conn.metadata };
+                        App.state.peers[conn.metadata.id].conn = conn;
+                        UI.render();
                     }
-                    NetService.handleConn(conn);
+                    Svc_Comms.handleConn(conn);
                 });
                 
-                peer.on('call', (call) => {
-                    call.answer(AudioService.stream);
-                    call.on('stream', s => AudioService.playRemote(s));
+                peer.on('call', call => {
+                    call.answer(Svc_Audio.stream);
+                    call.on('stream', s => Svc_Audio.playRemote(s));
                 });
                 
-                peer.on('error', (err) => {
-                    if (err.type === 'unavailable-id' && App.isHost) {
-                        NetService.peer.destroy();
-                        NetService.initPeer(null);
-                    } else if (err.type === 'peer-unavailable') {
-                        App.toast("Hôte introuvable", true);
+                peer.on('error', err => {
+                    if(err.type === 'unavailable-id' && App.state.isHost) {
+                        Svc_Comms.peer.destroy();
+                        Svc_Comms.initPeer(null); // Retry with new ID
+                    } else if(err.type === 'peer-unavailable') {
+                        UI.toast("Cible introuvable", true);
                     } else {
-                        App.toast("Erreur Réseau", true);
+                        UI.toast("Erreur Réseau", true);
                     }
                 });
                 
-                peer.on('disconnected', () => {
-                    console.log("[PEER] Disconnected, retry...");
-                    peer.reconnect();
-                });
+                peer.on('disconnected', () => peer.reconnect());
                 
-                NetService.peer = peer;
+                Svc_Comms.peer = peer;
             },
             
             handleConn: (conn) => {
-                if (conn.open) {
-                    if (!App.peers[conn.peer]) App.peers[conn.peer] = {};
-                    App.peers[conn.peer].conn = conn;
+                // Ensure registration
+                if(conn.open) {
+                    if(!App.state.peers[conn.peer]) App.state.peers[conn.peer] = {};
+                    App.state.peers[conn.peer].conn = conn;
                 }
 
-                conn.on('data', (d) => {
-                    if (d.type === 'FULL' || d.type === 'UPDATE') {
-                        NetService.updatePeer(d.user);
+                conn.on('data', d => {
+                    if(d.t === 'FULL' || d.t === 'STATE') {
+                        Svc_Comms.updatePeer(d.p);
                         
-                        // HOST RELAY
-                        if (App.isHost) {
-                            Object.values(App.peers).forEach(p => {
-                                if (p.conn && p.conn.open && p.conn.peer !== d.user.id) {
-                                    p.conn.send({ type: 'UPDATE', user: d.user });
+                        // --- RELAY LOGIC (CRITICAL FIX) ---
+                        if(App.state.isHost) {
+                            Object.values(App.state.peers).forEach(p => {
+                                if(p.conn && p.conn.open && p.conn.peer !== d.p.id) {
+                                    p.conn.send({ t: 'STATE', p: d.p });
                                 }
                             });
                         }
                     }
-                    if (d.type === 'SYNC') d.list.forEach(u => NetService.updatePeer(u));
+                    if(d.t === 'SYNC') d.l.forEach(u => Svc_Comms.updatePeer(u));
                 });
                 
                 conn.on('open', () => {
-                    if (!App.peers[conn.peer]) App.peers[conn.peer] = {};
-                    App.peers[conn.peer].conn = conn;
-                    NetService.broadcast();
+                    if(!App.state.peers[conn.peer]) App.state.peers[conn.peer] = {};
+                    App.state.peers[conn.peer].conn = conn;
+                    Svc_Comms.broadcast();
                 });
                 
                 conn.on('close', () => {
-                    delete App.peers[conn.peer];
-                    App.renderGrid();
+                    delete App.state.peers[conn.peer];
+                    UI.render();
                 });
             },
             
             broadcast: () => {
-                const msg = { type: 'UPDATE', user: App.user };
-                Object.values(App.peers).forEach(p => {
-                    if (p.conn && p.conn.open) p.conn.send(msg);
+                const payload = { ...App.state.me };
+                Object.values(App.state.peers).forEach(p => {
+                    if(p.conn && p.conn.open) p.conn.send({ t: 'STATE', p: payload });
                 });
-                if (App.isHost) App.renderGrid();
+                if(App.state.isHost) UI.render();
             },
             
             updatePeer: (user) => {
-                if (user.id === App.user.id) return;
+                if(user.id === App.state.me.id) return;
                 
-                if (!App.peers[user.id]) App.peers[user.id] = { data: {} };
-                App.peers[user.id].data = { ...App.peers[user.id].data, ...user };
+                if(!App.state.peers[user.id]) App.state.peers[user.id] = { data: {} };
+                App.state.peers[user.id].data = { ...App.state.peers[user.id].data, ...user };
                 
-                App.renderGrid();
-                MapService.updateMarker(user.id, App.peers[user.id].data);
+                UI.render();
+                Svc_Map.upd(user.id, App.state.peers[user.id].data);
             },
             
             startHeartbeat: () => {
                 setInterval(() => {
-                    if (!App.isHost) return;
-                    const list = Object.values(App.peers).map(p => p.data).filter(d => d && d.id);
-                    list.push(App.user);
+                    if(!App.state.isHost) return;
+                    const list = Object.values(App.state.peers).map(p => p.data).filter(d => d && d.id);
+                    list.push(App.state.me);
                     
-                    Object.values(App.peers).forEach(p => {
-                        if (p.conn && p.conn.open) p.conn.send({ type: 'SYNC', list: list });
+                    Object.values(App.state.peers).forEach(p => {
+                        if(p.conn && p.conn.open) p.conn.send({ t: 'SYNC', l: list });
                     });
                 }, 1000);
             }
         };
 
-        // --- MODULE 5: QR SERVICE ---
-        const QRService = {
-            scanner: null,
-            
+        // --- 5. SERVICE QR ---
+        const Svc_QR = {
+            scan: null,
             start: () => {
-                document.getElementById('overlay-scanner').style.display = 'flex';
+                document.getElementById('ov-scan').style.display = 'flex';
                 setTimeout(() => {
-                    if (QRService.scanner) try { QRService.scanner.clear(); } catch(e){}
-                    QRService.scanner = new Html5Qrcode("scan-region");
-                    const config = { fps: 10, qrbox: { width: 250, height: 250 } };
-                    
-                    QRService.scanner.start(
-                        { facingMode: "environment" },
-                        config,
-                        (txt) => {
-                            QRService.stop();
-                            document.getElementById('input-join-id').value = txt;
-                            NetService.joinSession(txt);
-                            App.toast("QR Validé");
+                    if(Svc_QR.scan) try{Svc_QR.scan.clear()}catch(e){}
+                    Svc_QR.scan = new Html5Qrcode("scan-box");
+                    Svc_QR.scan.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: 250, height: 250 } }, 
+                        t => {
+                            Svc_QR.stop();
+                            document.getElementById('inp-join').value = t;
+                            Svc_Comms.join(t);
+                            UI.toast("QR OK");
                         },
                         (err) => {}
-                    ).catch(err => {
-                        console.error("[QR] Err", err);
-                        QRService.stop();
-                        App.toast("Erreur Caméra", true);
-                    });
+                    ).catch(e => { Svc_QR.stop(); UI.toast("Caméra HS", true); });
                 }, 100);
             },
-            
             stop: () => {
-                if (QRService.scanner) {
-                    QRService.scanner.stop().then(() => {
-                        QRService.scanner.clear();
-                        document.getElementById('overlay-scanner').style.display = 'none';
-                    }).catch(() => document.getElementById('overlay-scanner').style.display = 'none');
-                } else {
-                    document.getElementById('overlay-scanner').style.display = 'none';
-                }
+                if(Svc_QR.scan) Svc_QR.scan.stop().then(() => { Svc_QR.scan.clear(); document.getElementById('ov-scan').style.display='none'; }).catch(()=>document.getElementById('ov-scan').style.display='none');
+                else document.getElementById('ov-scan').style.display='none';
             },
-            
             show: () => {
-                if (!App.user.id) return;
-                const tgt = document.getElementById('qr-code-region');
-                tgt.innerHTML = '';
-                new QRCode(tgt, { text: App.user.id, width: 200, height: 200 });
-                document.getElementById('qr-text-val').innerText = App.user.id;
-                document.getElementById('overlay-generator').style.display = 'flex';
+                if(!App.state.me.id) return;
+                document.getElementById('qr-canvas-target').innerHTML = '';
+                new QRCode(document.getElementById('qr-canvas-target'), { text: App.state.me.id, width: 200, height: 200 });
+                document.getElementById('qr-text-id').innerText = App.state.me.id;
+                document.getElementById('ov-gen').style.display = 'flex';
             },
-            
-            hide: () => document.getElementById('overlay-generator').style.display = 'none'
+            hide: () => document.getElementById('ov-gen').style.display = 'none'
         };
 
-        // --- MODULE 6: APP CONTROLLER ---
+        // --- 6. UI & APP CONTROLLER ---
+        const UI = {
+            toast: (m, e) => {
+                const t = document.getElementById('sys-toast');
+                t.innerText = m;
+                t.style.borderColor = e ? 'var(--c-red)' : 'var(--c-blue)';
+                t.style.color = e ? 'var(--c-red)' : 'var(--c-blue)';
+                t.style.display = 'block';
+                setTimeout(() => t.style.display = 'none', 3000);
+            },
+            view: (id) => {
+                document.querySelectorAll('.view').forEach(e => e.classList.remove('active'));
+                document.getElementById(id).classList.add('active');
+                
+                const isOp = (id === 'v-ops' || id === 'v-map');
+                document.getElementById('hud').style.display = isOp ? 'block' : 'none';
+                document.getElementById('btn-quit').style.display = isOp ? 'flex' : 'none';
+                
+                if(id === 'v-map') {
+                    Svc_Map.init(); // Auto-init map
+                    // Auto-center
+                    if(Svc_Map.map && App.state.me.lat) Svc_Map.map.setView([App.state.me.lat, App.state.me.lng], 16);
+                    setTimeout(() => Svc_Map.map.invalidateSize(), 200);
+                }
+            },
+            toggleMap: () => {
+                const mapV = document.getElementById('v-map');
+                if(mapV.classList.contains('active')) {
+                    UI.view('v-ops'); document.getElementById('btn-toggle-map').classList.remove('active');
+                } else {
+                    UI.view('v-map'); document.getElementById('btn-toggle-map').classList.add('active');
+                }
+            },
+            status: (s) => {
+                App.state.me.status = s;
+                document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+                const c = document.querySelector(`.chip[data-v="${s}"]`);
+                if(c) c.classList.add('active');
+                Svc_Comms.broadcast();
+                UI.render();
+                Svc_Map.upd(App.state.me.id, App.state.me);
+            },
+            copy: () => { navigator.clipboard.writeText(App.state.me.id); UI.toast("ID Copié"); },
+            render: () => {
+                const g = document.getElementById('grid'); g.innerHTML = '';
+                const all = [{...App.state.me, isMe: true}].concat(
+                    Object.values(App.state.peers).map(p => p.data).filter(d => d && d.id)
+                );
+                
+                all.forEach(u => {
+                    const d = document.createElement('div');
+                    d.className = `op-card ${u.isMe?'is-me':''}`;
+                    if(u.status === 'CONTACT') d.setAttribute('data-status', 'CONTACT');
+                    if(u.isTx) d.setAttribute('data-tx', 'true');
+                    
+                    let bat = u.bat ? `🔋 ${u.bat}%` : '🔋 --';
+                    let c = '#aaa';
+                    if(u.status==='CONTACT') c = 'var(--c-red)';
+                    else if(u.status==='PROGRESSION') c = 'var(--c-blue)';
+                    else if(u.status==='CLEAR') c = 'var(--c-green)';
+                    else if(u.status==='APPUI') c = 'var(--c-yellow)';
+                    
+                    d.innerHTML = `
+                        <div class="op-header"><span class="op-role ${u.role}">${u.role||'OPR'}</span>${u.isTx?'<span style="color:var(--c-green)">🔊</span>':''}</div>
+                        <div class="op-callsign">${u.cal}</div>
+                        <div class="op-status" style="color:${c}">${u.status}</div>
+                        <div class="op-meta">${bat}</div>
+                        <div class="viz-bar"><div class="viz-fill" style="width:${u.isTx?'100%':'0%'}"></div></div>
+                    `;
+                    g.appendChild(d);
+                });
+            }
+        };
+
         const App = {
-            user: { id: null, callsign: '', role: 'OPR', status: 'CLEAR', lat: 0, lng: 0, head: 0, bat: null, isTx: false, isTxRequest: false },
-            peers: {}, 
-            isHost: false,
-            wakeLock: null,
+            state: { me: { id: null, cal: '', role: 'OPR', status: 'CLEAR', lat: 0, lng: 0, head: 0, bat: null, isTxRequest: false, isTx: false }, peers: {}, isHost: false },
             
             init: async () => {
-                if (location.protocol !== 'https:' && location.hostname !== 'localhost') alert("HTTPS Requis");
-                await DBService.init();
+                if(location.protocol!=='https:' && location.hostname!=='localhost') alert("HTTPS Requis");
+                window.addEventListener('beforeunload', (e) => { if (App.state.me.id) { e.preventDefault(); e.returnValue = ''; } });
+
+                await Svc_DB.init();
                 App.initBattery();
                 App.checkSession();
                 
+                // PTT
                 const btn = document.getElementById('ptt-btn');
-                const start = (e) => { if(e.cancelable) e.preventDefault(); App.user.isTxRequest = true; AudioService.tx(true); };
-                const end = (e) => { if(e.cancelable) e.preventDefault(); App.user.isTxRequest = false; AudioService.tx(false); };
+                const start = (e) => { if(e.cancelable) e.preventDefault(); App.state.me.isTxRequest=true; Svc_Audio.tx(true); };
+                const end = (e) => { if(e.cancelable) e.preventDefault(); App.state.me.isTxRequest=false; Svc_Audio.tx(false); };
                 
                 btn.addEventListener('mousedown', start); btn.addEventListener('mouseup', end);
                 btn.addEventListener('mouseleave', end); btn.addEventListener('touchstart', start); btn.addEventListener('touchend', end);
                 
-                document.addEventListener('keydown', (e) => {
-                    if(e.code === 'Space' && !App.user.isTxRequest && AudioService.mode === 'ptt') {
-                        App.user.isTxRequest = true; AudioService.tx(true);
-                    }
-                });
-                document.addEventListener('keyup', (e) => {
-                    if(e.code === 'Space' && AudioService.mode === 'ptt') {
-                        App.user.isTxRequest = false; AudioService.tx(false);
-                    }
-                });
+                document.addEventListener('keydown', (e) => { if(e.code==='Space' && Svc_Audio.mode==='ptt' && !App.state.me.isTx) { App.state.me.isTxRequest=true; Svc_Audio.tx(true); } });
+                document.addEventListener('keyup', (e) => { if(e.code==='Space' && Svc_Audio.mode==='ptt') { App.state.me.isTxRequest=false; Svc_Audio.tx(false); } });
             },
             
             checkSession: () => {
-                const s = JSON.parse(localStorage.getItem(CONFIG.sessionKey));
-                if (s) {
-                    App.user.callsign = s.callsign;
-                    if (s.freq) {
-                        App.login(true).then(() => {
-                            if (s.isHost) NetService.createSession(s.freq);
-                            else NetService.joinSession(s.freq);
-                        });
-                    } else {
-                        document.getElementById('input-callsign').value = s.callsign;
-                    }
+                const s = JSON.parse(localStorage.getItem(CONF.sessionKey));
+                if(s) {
+                    App.state.me.cal = s.cal;
+                    if(s.freq) App.login(true).then(() => { if(s.host) Svc_Comms.create(s.freq); else Svc_Comms.join(s.freq); });
+                    else document.getElementById('inp-cal').value = s.cal;
                 }
             },
             
-            login: async (skipUI = false) => {
-                if (!skipUI) {
-                    const val = document.getElementById('input-callsign').value.trim().toUpperCase();
-                    if (val.length < 2) return App.toast("ID Invalide", true);
-                    App.user.callsign = val;
+            login: async (skip = false) => {
+                if(!skip) {
+                    const v = document.getElementById('inp-cal').value.trim().toUpperCase();
+                    if(v.length < 2) return UI.toast("ID Invalide", true);
+                    App.state.me.cal = v;
                 }
-                const btn = document.getElementById('btn-login-trigger');
-                if (btn) btn.innerText = "INIT AUDIO...";
-                const audioOk = await AudioService.init();
-                if (btn) btn.innerText = "CONNEXION";
-                if (!audioOk && !skipUI) return;
+                
+                const btn = document.getElementById('btn-login');
+                if(btn) btn.innerText = "INIT AUDIO...";
+                const ok = await Svc_Audio.init();
+                if(btn) btn.innerText = "CONNEXION";
+                
+                if(!ok && !skip) return;
                 
                 App.saveSession();
-                App.switchView('view-menu');
-                if ('wakeLock' in navigator) try { App.wakeLock = await navigator.wakeLock.request('screen'); } catch(e){}
+                UI.view('v-menu');
+                if('wakeLock' in navigator) try{navigator.wakeLock.request('screen');}catch(e){}
             },
             
             saveSession: (freq = null) => {
-                localStorage.setItem(CONFIG.sessionKey, JSON.stringify({
-                    callsign: App.user.callsign,
-                    freq: freq,
-                    isHost: App.isHost
-                }));
+                localStorage.setItem(CONF.sessionKey, JSON.stringify({ cal: App.state.me.cal, freq: freq, host: App.state.isHost }));
             },
             
             leaveSession: (full = false) => {
-                if (NetService.peer) NetService.peer.destroy();
-                if (full) localStorage.removeItem(CONFIG.sessionKey);
+                if(Svc_Comms.peer) Svc_Comms.peer.destroy();
+                if(full) localStorage.removeItem(CONF.sessionKey);
                 location.reload();
             },
             
-            switchView: (id) => {
-                document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
-                document.getElementById(id).classList.add('active');
-                const isOp = (id === 'view-ops' || id === 'view-map');
-                document.getElementById('hud').style.display = isOp ? 'block' : 'none';
-                const quitBtn = document.getElementById('btn-quit');
-                if(quitBtn) quitBtn.style.display = isOp ? 'flex' : 'none';
-                if (id === 'view-map') {
-                    MapService.init(); // Init map if first time
-                    // Center on user immediately
-                    if(MapService.map && App.user.lat) MapService.map.setView([App.user.lat, App.user.lng], 16);
-                    setTimeout(() => MapService.map.invalidateSize(), 200);
-                }
-            },
-            
-            toggleMap: () => {
-                const btn = document.getElementById('btn-toggle-map');
-                const isMap = document.getElementById('view-map').classList.contains('active');
-                if (isMap) {
-                    App.switchView('view-ops');
-                    btn.classList.remove('active');
-                } else {
-                    App.switchView('view-map');
-                    btn.classList.add('active');
-                }
-            },
-            
-            setStatus: (s) => {
-                App.user.status = s;
-                document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
-                const c = document.querySelector(`.chip[data-val="${s}"]`);
-                if(c) c.classList.add('active');
-                NetService.broadcast();
-                App.renderGrid();
-                MapService.updateMarker(App.user.id, App.user);
-            },
-            
-            renderGrid: () => {
-                const grid = document.getElementById('ops-container');
-                if (!grid) return;
-                grid.innerHTML = '';
-                const all = [{...App.user, isMe: true}].concat(
-                    Object.values(App.peers).map(p => p.data).filter(d => d && d.id)
-                );
-                all.forEach(u => {
-                    const div = document.createElement('div');
-                    div.className = `op-card ${u.isMe ? 'is-me' : ''} ${u.isTx ? 'talking' : ''}`;
-                    if(u.status === 'CONTACT') div.setAttribute('data-status', 'CONTACT');
-                    let bat = u.bat ? `🔋 ${u.bat}%` : '🔋 --';
-                    let col = '#aaa';
-                    if(u.status === 'CONTACT') col = 'var(--color-red)';
-                    else if(u.status === 'PROGRESSION') col = 'var(--color-blue)';
-                    else if(u.status === 'CLEAR') col = 'var(--color-green)';
-                    else if(u.status === 'APPUI') col = 'var(--color-yellow)';
-                    div.innerHTML = `<div class="op-header"><span class="op-role ${u.role === 'HOST' ? 'HOST' : ''}">${u.role}</span>${u.isTx ? '<span class="material-symbols-outlined" style="color:var(--color-green); font-size:1rem;">graphic_eq</span>' : ''}</div><div class="op-callsign">${u.callsign}</div><div class="op-status" style="color:${col}">${u.status}</div><div class="op-bat">${bat}</div><div class="viz-bar"><div class="viz-fill" style="width:${u.isTx ? '100%' : '0%'}"></div></div>`;
-                    grid.appendChild(div);
-                });
-            },
-            
             initBattery: () => {
-                if ('getBattery' in navigator) {
+                if('getBattery' in navigator) {
                     navigator.getBattery().then(b => {
-                        const update = () => { App.user.bat = Math.floor(b.level * 100); NetService.broadcast(); };
-                        update(); b.addEventListener('levelchange', update);
+                        const up = () => { App.state.me.bat = Math.floor(b.level * 100); Svc_Comms.broadcast(); };
+                        up(); b.addEventListener('levelchange', up);
                     });
                 }
-            },
-            
-            toast: (msg, err = false) => {
-                const t = document.getElementById('toast-msg');
-                t.innerText = msg;
-                t.style.borderColor = err ? 'var(--color-red)' : 'var(--color-blue)';
-                t.style.color = err ? 'var(--color-red)' : 'var(--color-blue)';
-                t.style.display = 'block';
-                setTimeout(() => t.style.display = 'none', 3000);
-            },
-            
-            copyID: () => {
-                if (App.user.id) { navigator.clipboard.writeText(App.user.id); App.toast("ID Copié"); }
             }
         };
 
-        // BOOTSTRAP
+        // BOOT
         document.addEventListener('DOMContentLoaded', App.init);
 
     </script>
