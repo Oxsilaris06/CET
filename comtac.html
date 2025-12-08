@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>COM TAC v10.0 // GOLD MASTER</title>
+    <title>COM TAC v10.1 // PATCHED</title>
     
     <!-- ================= 1. EXTERNAL LIBRARIES (CDN) ================= -->
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Chakra+Petch:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -228,13 +228,14 @@
     <!-- UI STRUCTURE -->
     <header>
         <div class="brand">
-            <span class="material-symbols-outlined">satellite_alt</span> COM<span>TAC</span> v10
+            <span class="material-symbols-outlined">satellite_alt</span> COM<span>TAC</span> v10.1
         </div>
         <div class="nav-group">
             <div class="btn-nav" id="btn-toggle-map" onclick="App.toggleMap()">
                 <span class="material-symbols-outlined">map</span> CARTE
             </div>
-            <div class="btn-nav danger" id="btn-logout" onclick="App.logout(true)" style="display:none;">
+            <!-- FIX: ID corrigé et fonction corrigée -->
+            <div class="btn-nav danger" id="btn-quit" onclick="App.leaveSession(true)" style="display:none;">
                 <span class="material-symbols-outlined">logout</span>
             </div>
         </div>
@@ -345,7 +346,7 @@
     <script>
         const CONFIG = {
             sessionKey: 'comtac_v10_session',
-            peerConfig: { debug: 1 } // Use public server. For prod, add { host: '...', port: ... }
+            peerConfig: { debug: 1 }
         };
 
         // --- MODULE 1: DATABASE (IndexedDB) ---
@@ -369,7 +370,7 @@
                     };
                     request.onerror = (event) => {
                         console.error("[DB] Error", event);
-                        resolve(); // Resolve anyway to allow app to run without cache
+                        resolve(); 
                     };
                 });
             },
@@ -430,7 +431,6 @@
                                     tile.src = URL.createObjectURL(blob);
                                     done(null, tile);
                                 }).catch(err => {
-                                    // Fallback if offline and no cache
                                     tile.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
                                     done(null, tile);
                                 });
@@ -460,7 +460,6 @@
                     (pos) => {
                         const { latitude, longitude, heading, accuracy } = pos.coords;
                         
-                        // Calculate Heading if device doesn't provide it
                         if (MapService.lastLat !== 0 && (!heading || isNaN(heading))) {
                             App.user.head = MapService.calcHeading(MapService.lastLat, MapService.lastLng, latitude, longitude);
                         } else if (heading) {
@@ -473,8 +472,10 @@
                         App.user.lng = longitude;
                         
                         const el = document.getElementById('txt-gps-display');
-                        el.innerText = `GPS ±${Math.floor(accuracy)}m`;
-                        el.style.color = accuracy < 20 ? 'var(--color-green)' : 'var(--color-yellow)';
+                        if(el) {
+                            el.innerText = `GPS ±${Math.floor(accuracy)}m`;
+                            el.style.color = accuracy < 20 ? 'var(--color-green)' : 'var(--color-yellow)';
+                        }
                         
                         MapService.updateMarker(App.user.id, App.user);
                         NetService.broadcast();
@@ -482,8 +483,10 @@
                     (err) => {
                         console.warn("[GPS] Error", err);
                         const el = document.getElementById('txt-gps-display');
-                        el.innerText = "GPS ERR";
-                        el.style.color = 'var(--color-red)';
+                        if(el) {
+                            el.innerText = "GPS ERR";
+                            el.style.color = 'var(--color-red)';
+                        }
                     },
                     options
                 );
@@ -492,14 +495,12 @@
             updateMarker: (id, data) => {
                 if (!MapService.map || !data.lat) return;
                 
-                // Determine storage object (Self or Peer)
                 const storage = (id === App.user.id) ? MapService : App.peers[id];
                 if (!storage) return;
 
                 const rot = data.head || 0;
                 const status = data.status || 'CLEAR';
                 
-                // Create Custom Icon
                 const html = `
                     <div class="tac-wrapper status-${status}" style="transform: rotate(${rot}deg);">
                         <div class="tac-arrow"></div>
@@ -521,16 +522,14 @@
                     storage.marker = L.marker([data.lat, data.lng], { icon: icon }).addTo(MapService.map);
                 }
                 
-                // Trail (Breadcrumbs)
                 if (!storage.trailPts) storage.trailPts = [];
                 const last = storage.trailPts[storage.trailPts.length - 1];
                 
-                // Add point if distance > 10m
                 const dist = last ? MapService.dist(last[0], last[1], data.lat, data.lng) : 1;
                 
-                if (dist > 0.0001) { // Approx 10m
+                if (dist > 0.0001) { 
                     storage.trailPts.push([data.lat, data.lng]);
-                    if (storage.trailPts.length > 50) storage.trailPts.shift(); // Max 50 points
+                    if (storage.trailPts.length > 50) storage.trailPts.shift();
                     
                     if (storage.trail) {
                         storage.trail.setLatLngs(storage.trailPts);
@@ -553,14 +552,9 @@
             }
         };
 
-        // --- MODULE 3: AUDIO ENGINE (DSP + PTT + VAD) ---
+        // --- MODULE 3: AUDIO ENGINE ---
         const AudioService = {
-            ctx: null,
-            stream: null,
-            analyser: null,
-            mode: 'ptt', // 'ptt' | 'vox'
-            visuCtx: null,
-            vadThreshold: -50,
+            ctx: null, stream: null, analyser: null, mode: 'ptt', visuCtx: null, vadThreshold: -50,
             
             init: async () => {
                 try {
@@ -572,10 +566,9 @@
                     const AudioContext = window.AudioContext || window.webkitAudioContext;
                     AudioService.ctx = new AudioContext();
                     
-                    // DSP: Source -> Filter -> Compressor -> Analyser -> Dest
                     const src = AudioService.ctx.createMediaStreamSource(stream);
                     const filter = AudioService.ctx.createBiquadFilter();
-                    filter.type = 'highpass'; filter.frequency.value = 300; // Radio filter
+                    filter.type = 'highpass'; filter.frequency.value = 300; 
                     
                     const compressor = AudioService.ctx.createDynamicsCompressor();
                     compressor.threshold.value = -20;
@@ -588,16 +581,10 @@
                     filter.connect(compressor);
                     compressor.connect(AudioService.analyser);
                     
-                    // Mute tracks initially
                     AudioService.tx(false);
-                    
-                    // Visualizer init
                     AudioService.setupViz();
-                    
-                    // VAD Loop start
                     AudioService.vadLoop();
                     
-                    // Headset buttons
                     if ('mediaSession' in navigator) {
                         navigator.mediaSession.metadata = new MediaMetadata({ title: 'ComTac Channel' });
                         navigator.mediaSession.setActionHandler('play', AudioService.toggleHeadset);
@@ -615,7 +602,6 @@
             tx: (active) => {
                 if (!AudioService.stream) return;
                 
-                // Allow TX if PTT pressed OR (VOX mode AND voice detected)
                 const allow = (AudioService.mode === 'ptt' || (AudioService.mode === 'vox' && active));
                 
                 if (allow) {
@@ -623,22 +609,23 @@
                     App.user.isTx = active;
                     
                     const btn = document.getElementById('ptt-btn');
-                    if (active) {
-                        btn.classList.add('active');
-                        if (navigator.vibrate) navigator.vibrate(30);
-                    } else {
-                        if (AudioService.mode !== 'vox') btn.classList.remove('active');
+                    if (btn) {
+                        if (active) {
+                            btn.classList.add('active');
+                            if (navigator.vibrate) navigator.vibrate(30);
+                        } else {
+                            if (AudioService.mode !== 'vox') btn.classList.remove('active');
+                        }
                     }
                     
-                    NetService.broadcast(); // Update others
-                    App.renderGrid(); // Update self
+                    NetService.broadcast(); 
+                    App.renderGrid();
                 }
             },
             
             vadLoop: () => {
                 if (!AudioService.analyser) return;
                 
-                // Only analyze if user has requested TX (e.g. VOX enabled)
                 if (AudioService.mode === 'vox' || App.user.isTxRequest) {
                     const buffer = new Float32Array(AudioService.analyser.fftSize);
                     AudioService.analyser.getFloatTimeDomainData(buffer);
@@ -651,7 +638,6 @@
                     if (db > AudioService.vadThreshold) {
                         AudioService.tx(true);
                     } else {
-                        // In VOX mode, we cut. In PTT mode, we rely on button release.
                         if (AudioService.mode === 'vox') AudioService.tx(false);
                     }
                 }
@@ -676,10 +662,9 @@
             },
             
             toggleHeadset: () => {
-                // Headset play/pause button acts as PTT toggle
                 if (AudioService.mode === 'ptt') {
                     const newState = !App.user.isTx;
-                    App.user.isTxRequest = newState; // Simulate button press
+                    App.user.isTxRequest = newState;
                     AudioService.tx(newState);
                 }
             },
@@ -692,6 +677,7 @@
             
             setupViz: () => {
                 const cvs = document.getElementById('visualizer');
+                if(!cvs) return;
                 AudioService.visuCtx = cvs.getContext('2d');
                 cvs.width = cvs.offsetWidth;
                 cvs.height = cvs.offsetHeight;
@@ -700,7 +686,7 @@
             
             drawLoop: () => {
                 requestAnimationFrame(AudioService.drawLoop);
-                if (!AudioService.analyser) return;
+                if (!AudioService.analyser || !AudioService.visuCtx) return;
                 
                 const buffer = AudioService.analyser.frequencyBinCount;
                 const data = new Uint8Array(buffer);
@@ -728,7 +714,6 @@
         const NetService = {
             peer: null,
             hostId: null,
-            interval: null,
             
             createSession: (id = null) => {
                 document.getElementById('btn-create-host').innerHTML = 'Connexion Satellite...';
@@ -761,15 +746,12 @@
                         App.saveSession(pid);
                         App.switchView('view-ops');
                     } else if (NetService.hostId) {
-                        // Client Connection Logic
                         const conn = peer.connect(NetService.hostId, { metadata: App.user });
                         
                         conn.on('open', () => {
                             NetService.handleConn(conn);
-                            // HANDSHAKE: Send full profile immediately
                             conn.send({ type: 'FULL', user: App.user });
                             
-                            // Audio Call
                             const call = peer.call(NetService.hostId, AudioService.stream);
                             call.on('stream', s => AudioService.playRemote(s));
                             
@@ -781,8 +763,6 @@
                 });
 
                 peer.on('connection', (conn) => {
-                    // HOST LOGIC: Receive connection
-                    // Read metadata for instant display
                     if (conn.metadata && conn.metadata.id) {
                         App.peers[conn.metadata.id] = { data: conn.metadata, conn: conn };
                         App.renderGrid();
@@ -798,7 +778,6 @@
                 peer.on('error', (err) => {
                     console.error("[PEER] Err", err);
                     if (err.type === 'unavailable-id' && App.isHost) {
-                        // Retry with new ID if ghost session
                         NetService.peer.destroy();
                         NetService.initPeer(null);
                     } else if (err.type === 'peer-unavailable') {
@@ -825,7 +804,7 @@
                 conn.on('open', () => {
                     if (!App.peers[conn.peer]) App.peers[conn.peer] = {};
                     App.peers[conn.peer].conn = conn;
-                    NetService.broadcast(); // Send my info back
+                    NetService.broadcast();
                 });
                 
                 conn.on('close', () => {
@@ -861,7 +840,7 @@
                     Object.values(App.peers).forEach(p => {
                         if (p.conn && p.conn.open) p.conn.send({ type: 'SYNC', list: list });
                     });
-                }, 1000); // 1Hz Sync
+                }, 1000);
             }
         };
 
@@ -871,7 +850,6 @@
             
             start: () => {
                 document.getElementById('overlay-scanner').style.display = 'flex';
-                // Wait for layout
                 setTimeout(() => {
                     if (QRService.scanner) try { QRService.scanner.clear(); } catch(e){}
                     QRService.scanner = new Html5Qrcode("scan-region");
@@ -921,14 +899,12 @@
         // --- MODULE 6: APP CONTROLLER ---
         const App = {
             user: { id: null, callsign: '', role: 'OPR', status: 'CLEAR', lat: 0, lng: 0, head: 0, bat: null, isTx: false, isTxRequest: false },
-            peers: {}, // { id: { conn, data } }
+            peers: {}, 
             isHost: false,
             wakeLock: null,
             
             init: async () => {
                 console.log("[APP] Starting...");
-                
-                // HTTPS Check
                 if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
                     alert("ATTENTION: Le module requiert HTTPS pour fonctionner.");
                 }
@@ -937,7 +913,6 @@
                 App.initBattery();
                 App.checkSession();
                 
-                // PTT Bindings (Mouse & Touch)
                 const btn = document.getElementById('ptt-btn');
                 const start = (e) => { if(e.cancelable) e.preventDefault(); App.user.isTxRequest = true; AudioService.tx(true); };
                 const end = (e) => { if(e.cancelable) e.preventDefault(); App.user.isTxRequest = false; AudioService.tx(false); };
@@ -945,7 +920,6 @@
                 btn.addEventListener('mousedown', start); btn.addEventListener('mouseup', end);
                 btn.addEventListener('mouseleave', end); btn.addEventListener('touchstart', start); btn.addEventListener('touchend', end);
                 
-                // Keyboard Binding (Space)
                 document.addEventListener('keydown', (e) => {
                     if(e.code === 'Space' && !App.user.isTxRequest && AudioService.mode === 'ptt') {
                         App.user.isTxRequest = true; AudioService.tx(true);
@@ -991,7 +965,6 @@
                 App.saveSession();
                 App.switchView('view-menu');
                 
-                // Request Wake Lock
                 if ('wakeLock' in navigator) {
                     try { App.wakeLock = await navigator.wakeLock.request('screen'); } catch(e){}
                 }
@@ -1012,12 +985,15 @@
             },
             
             switchView: (id) => {
-                document.querySelectorAll('.view').forEach(e => e.classList.remove('active'));
+                document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
                 document.getElementById(id).classList.add('active');
                 
                 const isOp = (id === 'view-ops' || id === 'view-map');
                 document.getElementById('hud').style.display = isOp ? 'block' : 'none';
-                document.getElementById('btn-quit').style.display = isOp ? 'flex' : 'none';
+                
+                // FIX v10.1: Utilisation du bon ID btn-quit + vérification d'existence
+                const quitBtn = document.getElementById('btn-quit');
+                if(quitBtn) quitBtn.style.display = isOp ? 'flex' : 'none';
                 
                 if (id === 'view-map' && MapService.map) setTimeout(() => MapService.map.invalidateSize(), 200);
             },
@@ -1032,13 +1008,12 @@
                 } else {
                     App.switchView('view-map');
                     btn.classList.add('active');
-                    MapService.init(); // Lazy init
+                    MapService.init(); 
                 }
             },
             
             setStatus: (s) => {
                 App.user.status = s;
-                // UI Highlight
                 document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
                 const c = document.querySelector(`.chip[data-val="${s}"]`);
                 if(c) c.classList.add('active');
@@ -1052,7 +1027,6 @@
                 const grid = document.getElementById('ops-container');
                 grid.innerHTML = '';
                 
-                // List: Me + Peers
                 const all = [{...App.user, isMe: true}].concat(
                     Object.values(App.peers).map(p => p.data).filter(d => d && d.id)
                 );
