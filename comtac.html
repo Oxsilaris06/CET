@@ -829,18 +829,19 @@
                 }
             },
             
+            // --- MISE À JOUR : Détection plus agressive du Casque ---
             setupHeadsetControl: () => {
                 if ('mediaSession' in navigator) { 
-                    // Les deux actions PLAY/PAUSE appellent la même fonction de bascule
-                    // pour s'adapter aux différentes implémentations de casque (comme le OnePlus)
+                    // 1. Media Session API: Événements universels
                     navigator.mediaSession.setActionHandler('play', AudioService.toggleTxState); 
                     navigator.mediaSession.setActionHandler('pause', AudioService.toggleTxState); 
                     
-                    // Tenter d'intercepter la commande Media Key (ex: Vol+/Vol- ou bouton Action)
+                    // 2. Media Session API: Événements de contrôle non universels (pour OnePlus ou gestes avancés)
+                    // Certains casques envoient ces commandes au lieu de play/pause
                     navigator.mediaSession.setActionHandler('nexttrack', AudioService.toggleTxState); 
                     navigator.mediaSession.setActionHandler('previoustrack', AudioService.toggleTxState); 
 
-                    // Optionnel: Définir les métadonnées pour encourager le navigateur à écouter
+                    // Définir les métadonnées pour encourager le navigateur à écouter
                     navigator.mediaSession.metadata = new MediaMetadata({
                         title: 'COM TAC Radio',
                         artist: App.user.callsign,
@@ -848,17 +849,18 @@
                     });
                 }
                 
-                // Tentative d'utiliser l'élément audio (invisible) pour capter les événements
+                // 3. Événement Audio NATIVE (le plus agressif)
                 const dummyAudio = new Audio();
                 dummyAudio.loop = true;
                 dummyAudio.volume = 0; // Muet
-                // L'appel à play() est critique pour demander au navigateur de devenir l'acteur média
+                // Tente de démarrer la lecture pour devenir le "Media Player" actif
                 dummyAudio.play().catch(e => console.log("Dummy audio play failed, likely due to autoplay restrictions."));
                 
-                // Ces événements sont parfois déclenchés par les casques modernes même sans MediaSession
-                dummyAudio.addEventListener('pause', AudioService.toggleTxState);
-                dummyAudio.addEventListener('play', AudioService.toggleTxState);
+                // Ajout de gestionnaires directs aux événements HTMLMediaElement
+                dummyAudio.onpause = AudioService.toggleTxState;
+                dummyAudio.onplay = AudioService.toggleTxState;
             },
+            // -------------------------------------------------------------
             
             playRemote: (stream) => { 
                 const a = new Audio(); a.srcObject = stream; a.playsInline = true; 
