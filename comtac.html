@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>COM TAC v11.1</title>
+    <title>COM TAC v11.2</title>
     
     <!-- ================= 1. EXTERNAL LIBRARIES (CDN) ================= -->
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Chakra+Petch:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -151,7 +151,7 @@
         .status-PROGRESSION .tac-label { border-color: var(--color-blue); color: var(--color-blue); }
 
         /* PING MARKER */
-        .ping-marker { text-align: center; pointer-events: none; } /* Content pointer events none, but marker receives events */
+        .ping-marker { text-align: center; pointer-events: none; }
         .ping-icon { color: var(--color-red); font-size: 30px; filter: drop-shadow(0 0 5px black); animation: bounce 1s infinite; }
         .ping-msg { background: var(--color-red); color: white; padding: 2px 6px; font-size: 10px; border-radius: 4px; font-weight: bold; font-family: var(--font-mono); }
         @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
@@ -399,9 +399,21 @@
 
     <!-- ================= 3. LOGIC MODULES ================= -->
     <script>
+        // NETWORK CONFIGURATION WITH ROBUST STUN SERVERS
         const CONFIG = {
             sessionKey: 'comtac_v10_session',
-            peerConfig: { debug: 1 }
+            peerConfig: { 
+                debug: 1,
+                config: {
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun1.l.google.com:19302' },
+                        { urls: 'stun:stun2.l.google.com:19302' },
+                        { urls: 'stun:stun3.l.google.com:19302' },
+                        { urls: 'stun:stun4.l.google.com:19302' },
+                    ]
+                }
+            }
         };
 
         const DBService = {
@@ -458,7 +470,6 @@
             refreshMarkers: () => {
                 Object.keys(App.peers).forEach(pid => MapService.updateMarker(pid, App.peers[pid].data));
                 if(App.user.lat) MapService.updateMarker(App.user.id, App.user);
-                // Refresh existing pings if any
                 Object.values(MapService.pings).forEach(p => p.marker.addTo(MapService.map));
             },
             
@@ -504,10 +515,9 @@
                 }
             },
 
-            // --- PING SYSTEM (Create, Move, Delete) ---
             addPingMarker: (ping) => {
                 if (!MapService.map) return;
-                if (MapService.pings[ping.id]) { MapService.pings[ping.id].marker.setLatLng([ping.lat, ping.lng]); return; } // Move existing
+                if (MapService.pings[ping.id]) { MapService.pings[ping.id].marker.setLatLng([ping.lat, ping.lng]); return; } 
 
                 const isOwner = App.isHost || ping.sender === App.user.callsign;
                 const icon = L.divIcon({
@@ -518,13 +528,11 @@
                 
                 const marker = L.marker([ping.lat, ping.lng], { icon: icon, draggable: isOwner }).addTo(MapService.map);
                 
-                // DRAG TO MOVE
                 if (isOwner) {
                     marker.on('dragend', (e) => {
                         const newPos = e.target.getLatLng();
                         NetService.broadcast({ type: 'PING_MOVE', id: ping.id, lat: newPos.lat, lng: newPos.lng });
                     });
-                    // LONG PRESS / CONTEXT MENU TO DELETE
                     marker.on('contextmenu', () => {
                         if (confirm(`Supprimer le point "${ping.msg}" ?`)) {
                             NetService.broadcast({ type: 'PING_DELETE', id: ping.id });
@@ -571,10 +579,9 @@
             },
             tx: (active) => {
                 if (!AudioService.stream) return;
-                // STRICT SILENCE CHECK
                 if (App.silenceActive && !App.isHost) active = false; 
 
-                const open = (AudioService.mode === 'vox' && !App.silenceActive) || active; // Block VOX if silence
+                const open = (AudioService.mode === 'vox' && !App.silenceActive) || active;
                 AudioService.stream.getAudioTracks().forEach(t => t.enabled = open);
                 App.user.isTx = open;
                 const btn = document.getElementById('ptt-btn');
@@ -589,7 +596,7 @@
                 const icon = document.getElementById('icon-mic'); const btn = document.getElementById('ptt-btn');
                 if (AudioService.mode === 'vox') {
                     icon.innerText = 'mic'; btn.classList.add('vox-active'); App.toast("Mode VOX");
-                    if (!App.silenceActive) AudioService.tx(true); // Only open if no silence
+                    if (!App.silenceActive) AudioService.tx(true);
                 } else {
                     icon.innerText = 'mic_none'; btn.classList.remove('vox-active'); AudioService.tx(false); App.toast("Mode PTT");
                 }
@@ -607,8 +614,8 @@
                 
                 // VOX & SILENCE MONITORING IN LOOP
                 if (AudioService.mode === 'vox') {
-                    if (App.silenceActive && !App.isHost) { if(App.user.isTx) AudioService.tx(false); } // Force cut
-                    else if (!App.user.isTx) AudioService.tx(true); // Force open if allowed
+                    if (App.silenceActive && !App.isHost) { if(App.user.isTx) AudioService.tx(false); } 
+                    else if (!App.user.isTx) AudioService.tx(true); 
                 }
 
                 const buffer = AudioService.analyser.frequencyBinCount; const data = new Uint8Array(buffer);
@@ -694,7 +701,6 @@
                     if (App.isHost) {
                         const list = Object.values(App.peers).map(p => p.data).filter(d => d && d.id); list.push(App.user);
                         conn.send({ type: 'SYNC', list: list, silence: App.silenceActive });
-                        // Sync existing pings to new user
                         Object.values(MapService.pings).forEach(p => conn.send({ type: 'PING', ping: p.data }));
                     }
                     NetService.broadcast();
