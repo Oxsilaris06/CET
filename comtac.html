@@ -767,9 +767,8 @@
                     src.connect(comp).connect(AudioService.analyser);
                     AudioService.tx(false); AudioService.setupViz(); 
                     
-                    // --- NOUVELLE LOGIQUE POUR LES COMMANDES CASQUE ---
+                    // Configuration du contrôle casque (Media Session API)
                     AudioService.setupHeadsetControl();
-                    // -------------------------------------------------
                     
                     return true;
                 } catch(e) { App.toast("Erreur Micro", true); return false; }
@@ -783,7 +782,8 @@
                 if (App.silenceActive && !App.isHost) active = false; 
 
                 // Logique VOX ou PTT
-                const open = (AudioService.mode === 'vox' && !App.silenceActive) || active;
+                // En mode VOX, l'activation ne doit se faire que si le HeadsetMode le permet (VOX ON)
+                const open = (AudioService.mode === 'vox' && App.headsetMode === 'vox') || active;
                 
                 AudioService.stream.getAudioTracks().forEach(t => t.enabled = open);
                 App.user.isTx = open;
@@ -804,48 +804,61 @@
                 const icon = document.getElementById('icon-mic'); const btn = document.getElementById('ptt-btn');
                 
                 if (AudioService.mode === 'vox') {
-                    icon.innerText = 'mic'; btn.classList.add('vox-active'); App.toast("Mode VOX");
-                    if (!App.silenceActive) AudioService.tx(true); // Ouvre direct si pas de silence
+                    icon.innerText = 'mic'; btn.classList.add('vox-active'); 
+                    App.toast("Mode VOX (Micro coupé. Clic Casque pour Activer)");
+                    App.headsetMode = 'silent'; // Passe en mode silence après activation VOX
+                    AudioService.tx(false); // Coupe micro immédiat
                 } else {
-                    icon.innerText = 'mic_none'; btn.classList.remove('vox-active'); AudioService.tx(false); App.toast("Mode PTT");
+                    icon.innerText = 'mic_none'; btn.classList.remove('vox-active'); 
+                    AudioService.tx(false); 
+                    App.headsetMode = 'silent';
+                    App.toast("Mode PTT");
                 }
             },
             
-            // --- MISE À JOUR : FONCTION DE BASCULEMENT CASQUE PLUS UNIVERSELLE ---
+            // Fonction appelée par le clic du casque
             toggleTxState: () => {
                 if (AudioService.mode === 'ptt') { 
+                    // En PTT, le casque agit comme un PTT momentané
                     App.user.isTxRequest = !App.user.isTx; 
                     AudioService.tx(App.user.isTxRequest); 
                     App.toast(App.user.isTx ? "PTT Activé (Casque)" : "PTT Désactivé (Casque)");
+                } else if (AudioService.mode === 'vox') {
+                    // En VOX, le casque agit comme un interrupteur silence/VOX
+                    App.toggleHeadsetMode();
                 }
-                // Ignorer en mode VOX, où le micro est géré par la détection de bruit ou le silence radio
             },
-
+            
             setupHeadsetControl: () => {
                 if ('mediaSession' in navigator) { 
                     // Les deux actions PLAY/PAUSE appellent la même fonction de bascule
+                    // pour s'adapter aux différentes implémentations de casque (comme le OnePlus)
                     navigator.mediaSession.setActionHandler('play', AudioService.toggleTxState); 
                     navigator.mediaSession.setActionHandler('pause', AudioService.toggleTxState); 
                     
+                    // Tenter d'intercepter la commande Media Key (ex: Vol+/Vol- ou bouton Action)
+                    navigator.mediaSession.setActionHandler('nexttrack', AudioService.toggleTxState); 
+                    navigator.mediaSession.setActionHandler('previoustrack', AudioService.toggleTxState); 
+
                     // Optionnel: Définir les métadonnées pour encourager le navigateur à écouter
                     navigator.mediaSession.metadata = new MediaMetadata({
                         title: 'COM TAC Radio',
                         artist: App.user.callsign,
-                        album: 'Session PTT',
+                        album: 'Session PTT/VOX',
                     });
                 }
                 
-                // IMPORTANT: Tentative d'utiliser l'élément audio (invisible) pour capter les événements média
+                // Tentative d'utiliser l'élément audio (invisible) pour capter les événements
                 const dummyAudio = new Audio();
                 dummyAudio.loop = true;
                 dummyAudio.volume = 0; // Muet
+                // L'appel à play() est critique pour demander au navigateur de devenir l'acteur média
                 dummyAudio.play().catch(e => console.log("Dummy audio play failed, likely due to autoplay restrictions."));
                 
-                // Ces événements sont parfois déclenchés par les casques modernes
+                // Ces événements sont parfois déclenchés par les casques modernes même sans MediaSession
                 dummyAudio.addEventListener('pause', AudioService.toggleTxState);
                 dummyAudio.addEventListener('play', AudioService.toggleTxState);
             },
-            // ----------------------------------------------------------------------
             
             playRemote: (stream) => { 
                 const a = new Audio(); a.srcObject = stream; a.playsInline = true; 
@@ -866,10 +879,16 @@
                 
                 // SURVEILLANCE CONTINUE DU VOX ET DU SILENCE
                 if (AudioService.mode === 'vox') {
-                    if (App.silenceActive && !App.isHost) { 
-                        if(App.user.isTx) AudioService.tx(false); // Coupe forcé
-                    } else if (!App.user.isTx) {
-                        AudioService.tx(true); // Ouvre forcé
+                    // SI mode VOX et micro coupé par le casque, on force le OFF
+                    if (App.headsetMode === 'silent' && App.user.isTx) {
+                        AudioService.tx(false);
+                    }
+                    // SI mode VOX et micro actif par le casque, on surveille la détection de bruit
+                    else if (App.headsetMode === 'vox') {
+                        // Logique de détection de bruit à implémenter ici si nécessaire,
+                        // mais pour le moment, on laisse le micro ouvert comme si le VOX était actif en continu
+                        // Le micro doit être "open" pour pouvoir utiliser le WebRTC stream
+                        if (!App.user.isTx) AudioService.tx(true); 
                     }
                 }
 
@@ -879,7 +898,8 @@
                 const ctx = AudioService.visuCtx; const w = ctx.canvas.width; const h = ctx.canvas.height;
                 ctx.clearRect(0, 0, w, h);
                 
-                if (!App.user.isTx) return; // Rien à dessiner si muet
+                // Si le micro est effectivement en transmission (isTx est l'état réel)
+                if (!App.user.isTx) return; 
                 
                 const bw = (w / buffer) * 2.5; let x = 0;
                 for(let i=0; i<buffer; i++) { 
@@ -1162,7 +1182,11 @@
         // --- CONTRÔLEUR PRINCIPAL ---
         const App = {
             user: { id: null, callsign: '', role: 'OPR', status: 'CLEAR', lat: 0, lng: 0, head: 0, bat: null, isTx: false },
-            peers: {}, isHost: false, pingMode: false, silenceActive: false,
+            peers: {}, 
+            isHost: false, 
+            pingMode: false, 
+            silenceActive: false,
+            headsetMode: 'silent', // NOUVEAU: 'silent' (micro off) ou 'vox' (micro surveillé)
             
             init: async () => {
                 if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
@@ -1193,6 +1217,19 @@
                 btn.addEventListener('mouseleave', end); btn.addEventListener('touchstart', start); btn.addEventListener('touchend', end);
             },
             
+            // Logique de bascule du mode Casque (Silence/VOX)
+            toggleHeadsetMode: () => {
+                if(App.headsetMode === 'silent') {
+                    App.headsetMode = 'vox';
+                    AudioService.tx(true); // Ouvre le micro pour la surveillance VOX
+                    App.toast("Mode VOX Casque ACTIVÉ (Mains libres)");
+                } else {
+                    App.headsetMode = 'silent';
+                    AudioService.tx(false); // Coupe le micro
+                    App.toast("Mode VOX Casque DÉSACTIVÉ (Micro coupé)");
+                }
+            },
+
             // Restauration de session (F5)
             checkSession: () => {
                 const s = JSON.parse(localStorage.getItem(CONFIG.sessionKey));
