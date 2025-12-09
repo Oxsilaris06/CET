@@ -8,7 +8,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>COM TAC v11.2 STABLE</title>
+    <title>COM TAC v11.3 STABLE</title>
     
     <!-- ================= 1. LIBRAIRIES EXTERNES (CDN) ================= -->
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Chakra+Petch:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -475,39 +475,37 @@
 
     <!-- ================= 3. MODULES LOGIQUES (JavaScript) ================= -->
     <script>
-        // --- CONFIGURATION RÉSEAU (FIABILISÉE POUR 4G/5G) ---
-        // Liste de serveurs STUN robustes pour traverser les NAT (4G/Pare-feu)
+        // --- CONFIGURATION RÉSEAU (FIABILITÉ MAXIMALE PAR TURN) ---
+        // Configuration optimisée pour garantir la traversée des NAT Symétriques (4G/5G).
         const CONFIG = {
             sessionKey: 'comtac_v10_session',
             peerConfig: { 
                 debug: 2, // Mode debug pour voir les erreurs NAT
                 config: {
                     iceServers: [
-                        // --- 1. CONFIGURATION TURN (RELAI DE SECOURS ESSENTIEL POUR LES NATS RESTRICTIFS) ---
-                        // Utilise la configuration openrelay trouvée par l'utilisateur, avec le port 80 pour la traversée pare-feu.
+                        // --- 1. CONFIGURATION TURN (PRIORITÉ À LA FIABILITÉ ABSOLUE) ---
+                        // Utilise le serveur TURN public avec authentification sur ports 80 et 443 pour la traversée de pare-feu.
                         {
                             urls: 'turn:openrelay.metered.ca:80',
-                            username: 'openrelayproject', // Utilisé pour l'authentification
-                            credentials: 'openrelayproject' // Note: 'credentials' est le nom de propriété correct
+                            username: 'openrelayproject',
+                            credentials: 'openrelayproject'
                         },
-                        // Autre port TURN de secours (443)
                         {
                             urls: 'turn:openrelay.metered.ca:443',
                             username: 'openrelayproject',
                             credentials: 'openrelayproject'
                         },
 
-                        // --- 2. CONFIGURATION STUN (ESSAIS DE CONNEXION DIRECTE) ---
-                        // Serveurs STUN standards recommandés
+                        // --- 2. CONFIGURATION STUN (PRIORITÉ À L'EFFICACITÉ/FAIBLE LATENCE) ---
+                        // Ces serveurs tentent d'établir un lien P2P direct ultra-rapide si le NAT le permet.
                         { urls: 'stun:stun.l.google.com:19302' },
                         { urls: 'stun:stun1.l.google.com:19302' },
                         { urls: 'stun:stun.services.mozilla.com' },
-                        // STUN sur ports 80/443 pour contourner les pare-feu restrictifs qui bloquent 3478/19302
                         { urls: 'stun:stun.l.google.com:443' },
                         { urls: 'stun:stun.stunprotocol.org:80' }, 
                         
                     ],
-                    iceCandidatePoolSize: 15, // Augmenté pour générer plus de candidats rapidement
+                    iceCandidatePoolSize: 15, // Augmenté pour générer plus de chemins candidats rapidement
                 }
             }
         };
@@ -909,7 +907,7 @@
                 });
             },
 
-            // Fonction de relance agressive pour les clients
+            // Fonction de relance agressive pour les clients (Reverse Connection Logic)
             retryConnection: () => {
                 if (NetService.retryCount < 5) {
                     NetService.retryCount++;
@@ -984,8 +982,8 @@
                 // Réception connexion (Host ou P2P Mesh)
                 peer.on('connection', (conn) => {
                     if (conn.metadata?.id) { 
-                        if (!App.peers[conn.peer]) App.peers[conn.peer] = {}; App.peers[conn.peer].conn = conn; 
-                        App.peers[conn.peer].data = conn.metadata; // S'assurer que les données initiales sont stockées
+                        if (!App.peers[conn.metadata.id]) App.peers[conn.metadata.id] = { data: conn.metadata }; 
+                        App.peers[conn.metadata.id].conn = conn; App.peers[conn.metadata.id].data = conn.metadata; // S'assurer que les données initiales sont stockées
                         App.renderGrid(); 
                         App.toast(`Nouveau contact: ${conn.metadata.callsign}`);
                     }
@@ -1214,7 +1212,7 @@
                 if(MapService.map) MapService.updateMarker(App.user.id, App.user);
             },
             
-            // --- FONCTIONS NOUVELLES v11.2 ---
+            // --- FONCTIONS NOUVELLES v11.3 ---
             togglePingMode: () => { 
                 App.pingMode = !App.pingMode; 
                 document.getElementById('btn-ping-mode').classList.toggle('alert', App.pingMode); 
