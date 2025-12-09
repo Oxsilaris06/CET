@@ -610,7 +610,11 @@
             startGPS: () => {
                 if (!navigator.geolocation) { document.getElementById('txt-gps-display').innerText = "GPS N/A"; return; }
                 
+                // Fonction récursive pour essayer la haute précision, puis la basse, puis recommencer
                 const tryGPS = (high) => {
+                    // Si un suivi existe, on l'arrête pour éviter les fuites de mémoire
+                    if (MapService.geoId) navigator.geolocation.clearWatch(MapService.geoId);
+
                     MapService.geoId = navigator.geolocation.watchPosition(
                         (pos) => {
                             const { latitude, longitude, heading, accuracy } = pos.coords;
@@ -638,14 +642,22 @@
                             if (MapService.map) MapService.updateMarker(App.user.id, App.user);
                         },
                         (err) => { 
-                            // Si haute précision échoue, on tente la basse précision (pour iOS/Indoor)
-                            if (high) { navigator.geolocation.clearWatch(MapService.geoId); tryGPS(false); } 
+                            console.error(`GPS Error (High Acc: ${high}):`, err);
+                            // Logique de repli et de redémarrage agressif
+                            if (high) { 
+                                App.toast("GPS: Haute précision refusée, repli.", true);
+                                tryGPS(false); // Passe à la basse précision
+                            } 
                             else { 
+                                // Échec basse précision, on réessaie complètement après un délai
                                 const el = document.getElementById('txt-gps-display'); 
                                 if(el) { el.innerText = "GPS ERR"; el.style.color = 'var(--color-red)'; } 
+                                App.toast("GPS: Échec total. Réessai dans 5s.", true);
+                                setTimeout(() => tryGPS(true), 5000);
                             } 
                         },
-                        { enableHighAccuracy: high, timeout: high ? 10000 : 20000, maximumAge: 0 }
+                        // iOS/WebKit exige souvent des timeouts longs et enableHighAccuracy=false
+                        { enableHighAccuracy: high, timeout: high ? 15000 : 30000, maximumAge: 0 } 
                     );
                 };
                 tryGPS(true);
@@ -810,7 +822,8 @@
             // Visualiseur Audio (Waveform)
             setupViz: () => {
                 const cvs = document.getElementById('visualizer'); if(!cvs) return;
-                AudioService.visuCtx = cvs.getContext('2d'); cvs.width = cvs.offsetWidth; cvs.height = cvs.offsetHeight;
+                cvs.width = cvs.offsetWidth; cvs.height = cvs.offsetHeight;
+                AudioService.visuCtx = cvs.getContext('2d'); 
                 AudioService.drawLoop();
             },
             
@@ -1220,8 +1233,8 @@
             
             sendPing: (latlng) => {
                 App.togglePingMode(); 
-                // Remplacé prompt() par une logique non-bloquante pour un environnement embarqué
-                const msg = window.prompt("Message du Ping:", "CIBLE"); 
+                // Utilisation de window.prompt ici car c'est un mécanisme synchrone simple.
+                const msg = prompt("Message du Ping:", "CIBLE"); 
                 if (!msg) return;
 
                 const pingData = { 
@@ -1259,7 +1272,10 @@
                     const div = document.createElement('div');
                     div.className = `op-card ${u.isMe ? 'is-me' : ''} ${u.isTx ? 'talking' : ''}`;
                     if(u.status === 'CONTACT') div.setAttribute('data-status', 'CONTACT');
-                    const bat = (u.bat != null) ? `🔋 ${u.bat}%` : '🔋 --';
+                    
+                    // Affiche -- si bat est null (cas iOS/API non supportée)
+                    const bat = (u.bat != null) ? `🔋 ${u.bat}%` : '🔋 --'; 
+
                     let col = '#aaa';
                     if(u.status === 'CONTACT') col = 'var(--color-red)';
                     else if(u.status === 'PROGRESSION') col = 'var(--color-blue)';
@@ -1270,14 +1286,25 @@
                 });
             },
             
+            // Logique de la batterie mise à jour pour garantir l'envoi immédiat
             initBattery: () => { 
                 if ('getBattery' in navigator) navigator.getBattery().then(b => { 
                     const up = () => { 
                         App.user.bat = Math.floor(b.level * 100); 
-                        NetService.broadcast(); App.renderGrid(); 
+                        NetService.broadcast(); // Diffuse immédiatement le niveau
+                        App.renderGrid(); 
                     }; 
-                    up(); b.addEventListener('levelchange', up); b.addEventListener('chargingchange', up); 
+                    up(); // Appel initial pour définir et diffuser l'état
+                    b.addEventListener('levelchange', up); 
+                    b.addEventListener('chargingchange', up); 
+                }).catch(e => {
+                    console.warn("Battery API restricted/failed:", e);
+                    App.user.bat = null; // S'assure que bat est null si l'API échoue
+                    NetService.broadcast(); 
                 }); 
+                else {
+                    App.user.bat = null; // Non supporté
+                }
             },
             
             toast: (msg, err = false) => { 
