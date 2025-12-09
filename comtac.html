@@ -8,7 +8,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>COM TAC v11.2 STABLE</title>
+    <title>COM TAC v11.3 BT OPS</title>
     
     <!-- ================= 1. LIBRAIRIES EXTERNES (CDN) ================= -->
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Chakra+Petch:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -347,7 +347,7 @@
     <!-- STRUCTURE UI -->
     <header>
         <div class="brand">
-            <span class="material-symbols-outlined">satellite_alt</span> COM<span>TAC</span> Beta
+            <span class="material-symbols-outlined">satellite_alt</span> COM<span>TAC</span> v11.3
         </div>
         <div class="nav-group">
             <div class="btn-nav" id="btn-toggle-map" onclick="App.toggleMap()">
@@ -483,28 +483,16 @@
                 debug: 2, // Mode debug pour voir les erreurs NAT
                 config: {
                     iceServers: [
-                        // --- 1. OPTIMISATION STUN PAR PORT ET VARIANTE ---
-                        // Serveurs STUN Google sur ports standards (19302)
                         { urls: 'stun:stun.l.google.com:19302' },
                         { urls: 'stun:stun1.l.google.com:19302' },
-                        
-                        // Serveurs STUN Google sur ports TCP/UDP 443 et 80 (Passage de Pare-Feux)
                         { urls: 'stun:stun.l.google.com:443' },
                         { urls: 'stun:stun.stunprotocol.org:80' }, 
-
-                        // Serveurs STUN alternatifs pour une plus grande variété
                         { urls: 'stun:stun.services.mozilla.com' },
                         { urls: 'stun:stunserver.org' },
                         { urls: 'stun:stun.nextcloud.com:443' }, 
                         { urls: 'stun:stun.voip.blackberry.com:3478' }, 
-                        
-                        /*
-                          NOTE IMPORTANTE : Les serveurs TURN ont été délibérément retirés
-                          pour répondre à l'exigence "pas de serveur relais".
-                          La fiabilité dépendra entièrement du succès du "STUN hole punching".
-                        */
                     ],
-                    iceCandidatePoolSize: 20, // AUGMENTÉ pour générer PLUS de candidats plus rapidement
+                    iceCandidatePoolSize: 20, 
                 }
             }
         };
@@ -513,7 +501,6 @@
         const DBService = {
             db: null, name: 'ComTac_DB_v10',
             
-            // Initialisation IndexedDB
             init: async () => {
                 return new Promise((resolve) => {
                     const r = indexedDB.open(DBService.name, 1);
@@ -526,12 +513,10 @@
                 });
             },
             
-            // Sauvegarder une tuile
             putTile: (k, b) => { 
                 try { DBService.db.transaction('tiles', 'readwrite').objectStore('tiles').put({ key: k, blob: b }); } catch(e){} 
             },
             
-            // Récupérer une tuile
             getTile: async (k) => {
                 if (!DBService.db) return null;
                 return new Promise((res) => { 
@@ -547,30 +532,21 @@
             map: null, layer: null, geoId: null, 
             lastLat: 0, lastLng: 0, 
             mode: 'dark', // 'dark' ou 'light'
-            pings: {}, // Stockage local des pings
+            pings: {}, 
             
-            // Initialisation de la carte
             init: () => {
                 if (MapService.map) { MapService.refreshMarkers(); return; }
-                
-                // Création Leaflet
                 MapService.map = L.map('map-instance', { zoomControl: false, attributionControl: false }).setView([48.85, 2.35], 13);
-                
-                // Gestionnaire de clic pour le mode Ping
                 MapService.map.on('click', (e) => { if (App.pingMode) App.sendPing(e.latlng); });
-                
                 MapService.loadLayer(); MapService.refreshMarkers();
             },
             
-            // Chargement de la couche de tuiles (Jour/Nuit) avec Cache
             loadLayer: () => {
                 if (MapService.layer) MapService.map.removeLayer(MapService.layer);
-                
                 const url = MapService.mode === 'dark' 
                     ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png' 
                     : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
                 
-                // Classe personnalisée pour le cache offline
                 const OfflineLayer = L.TileLayer.extend({
                     createTile: function(coords, done) {
                         const tile = document.createElement('img');
@@ -583,80 +559,65 @@
                                 DBService.putTile(k, b); 
                                 tile.src = URL.createObjectURL(b); 
                                 done(null, tile); 
-                            }).catch(() => done(null, tile)); // Fallback erreur
+                            }).catch(() => done(null, tile)); 
                         });
                         return tile;
                     }
                 });
-                
                 MapService.layer = new OfflineLayer(url, { subdomains: 'abcd', maxZoom: 19 }).addTo(MapService.map);
             },
             
-            // Basculer mode Jour/Nuit
             toggleMode: () => {
                 MapService.mode = MapService.mode === 'dark' ? 'light' : 'dark';
                 document.getElementById('icon-map-mode').innerText = MapService.mode === 'dark' ? 'light_mode' : 'dark_mode';
                 MapService.loadLayer();
             },
 
-            // Rafraîchir tous les marqueurs
             refreshMarkers: () => {
                 Object.keys(App.peers).forEach(pid => MapService.updateMarker(pid, App.peers[pid].data));
                 if(App.user.lat) MapService.updateMarker(App.user.id, App.user);
                 Object.values(MapService.pings).forEach(p => p.marker.addTo(MapService.map));
             },
             
-            // Démarrage GPS Intelligent (Haute Précision -> Repli Basse Précision)
             startGPS: () => {
                 if (!navigator.geolocation) { document.getElementById('txt-gps-display').innerText = "GPS N/A"; return; }
-                
-                // Fonction récursive pour essayer la haute précision, puis la basse, puis recommencer
                 const tryGPS = (high) => {
-                    // Si un suivi existe, on l'arrête pour éviter les fuites de mémoire
                     if (MapService.geoId) navigator.geolocation.clearWatch(MapService.geoId);
 
                     MapService.geoId = navigator.geolocation.watchPosition(
                         (pos) => {
                             const { latitude, longitude, heading, accuracy } = pos.coords;
-                            
-                            // Calcul du cap si non fourni
                             if (MapService.lastLat !== 0 && (!heading || isNaN(heading))) 
                                 App.user.head = MapService.calcHeading(MapService.lastLat, MapService.lastLng, latitude, longitude);
                             else if (heading) App.user.head = heading;
                             
-                            // Détection mouvement pour statut auto
                             if (MapService.dist(MapService.lastLat, MapService.lastLng, latitude, longitude) > 0.00015 && App.user.status !== 'CONTACT') 
                                 App.setStatus('PROGRESSION');
                             
                             MapService.lastLat = latitude; MapService.lastLng = longitude; 
                             App.user.lat = latitude; App.user.lng = longitude;
                             
-                            // UI GPS
                             const el = document.getElementById('txt-gps-display');
                             if(el) { 
                                 el.innerText = `GPS ±${Math.floor(accuracy)}m`; 
                                 el.style.color = accuracy < 20 ? 'var(--color-green)' : 'var(--color-yellow)'; 
                             }
-                            
                             NetService.broadcast(); 
                             if (MapService.map) MapService.updateMarker(App.user.id, App.user);
                         },
                         (err) => { 
                             console.error(`GPS Error (High Acc: ${high}):`, err);
-                            // Logique de repli et de redémarrage agressif
                             if (high) { 
                                 App.toast("GPS: Haute précision refusée, repli.", true);
-                                tryGPS(false); // Passe à la basse précision
+                                tryGPS(false); 
                             } 
                             else { 
-                                // Échec basse précision, on réessaie complètement après un délai
                                 const el = document.getElementById('txt-gps-display'); 
                                 if(el) { el.innerText = "GPS ERR"; el.style.color = 'var(--color-red)'; } 
                                 App.toast("GPS: Échec total. Réessai dans 5s.", true);
                                 setTimeout(() => tryGPS(true), 5000);
                             } 
                         },
-                        // iOS/WebKit exige souvent des timeouts longs et enableHighAccuracy=false
                         { enableHighAccuracy: high, timeout: high ? 15000 : 30000, maximumAge: 0 } 
                     );
                 };
@@ -667,20 +628,17 @@
                 if(MapService.map && App.user.lat) MapService.map.setView([App.user.lat, App.user.lng], 16, { animate: true }); 
             },
             
-            // Mise à jour visuelle d'un opérateur
             updateMarker: (id, data) => {
                 if (!MapService.map || !data.lat) return;
                 const storage = (id === App.user.id) ? MapService : App.peers[id];
                 if (!storage) return;
                 
-                // HTML du marqueur (Flèche rotative)
                 const html = `<div class="tac-wrapper status-${data.status||'CLEAR'}" style="transform: rotate(${data.head||0}deg);"><div class="tac-arrow"></div></div><div class="tac-label status-${data.status||'CLEAR'}">${data.callsign}</div>`;
                 const icon = L.divIcon({ className: 'custom-div-icon', html: html, iconSize: [40, 40], iconAnchor: [20, 20] });
                 
                 if (storage.marker) { storage.marker.setLatLng([data.lat, data.lng]); storage.marker.setIcon(icon); }
                 else storage.marker = L.marker([data.lat, data.lng], { icon: icon }).addTo(MapService.map);
                 
-                // Trace (Historique déplacement)
                 if (!storage.trailPts) storage.trailPts = [];
                 const last = storage.trailPts[storage.trailPts.length - 1];
                 
@@ -694,40 +652,31 @@
                 }
             },
 
-            // --- SYSTÈME DE PING (AJOUT / DÉPLACEMENT / SUPPRESSION) ---
             addPingMarker: (ping) => {
                 if (!MapService.map) return;
-                // Si le ping existe déjà, on le déplace juste
                 if (MapService.pings[ping.id]) { MapService.pings[ping.id].marker.setLatLng([ping.lat, ping.lng]); return; } 
 
-                // Est-ce que je suis le propriétaire (ou l'hôte) ?
                 const isOwner = App.isHost || ping.sender === App.user.callsign;
-                
                 const icon = L.divIcon({
                     className: 'custom-div-icon',
                     html: `<div class="ping-marker"><div class="ping-msg">${ping.sender}: ${ping.msg}</div><span class="material-symbols-outlined ping-icon">location_on</span></div>`,
                     iconSize: [100, 60], iconAnchor: [50, 50]
                 });
                 
-                // Rendre draggable si propriétaire
                 const marker = L.marker([ping.lat, ping.lng], { icon: icon, draggable: isOwner }).addTo(MapService.map);
                 
                 if (isOwner) {
-                    // Événement: Fin de glisser-déposer -> Envoyer nouvelle position
                     marker.on('dragend', (e) => {
                         const newPos = e.target.getLatLng();
                         NetService.broadcast({ type: 'PING_MOVE', id: ping.id, lat: newPos.lat, lng: newPos.lng });
                     });
-                    // Événement: Clic Droit / Appui Long -> Supprimer
                     marker.on('contextmenu', () => {
-                        // Remplacé confirm() par une simple action (car confirm() est bloquant et doit être évité)
-                        if (true) { // Dans un contexte réel, utiliser une modale custom. Ici, on simplifie l'action.
+                        if (true) { 
                             NetService.broadcast({ type: 'PING_DELETE', id: ping.id });
                             MapService.removePing(ping.id);
                         }
                     });
                 }
-
                 MapService.pings[ping.id] = { marker: marker, data: ping };
                 App.toast(`Nouveau Ping: ${ping.msg}`);
             },
@@ -739,7 +688,6 @@
                 }
             },
             
-            // Utilitaires Géo
             dist: (lat1, lng1, lat2, lng2) => Math.sqrt(Math.pow(lat2 - lat1, 2) + Math.pow(lng2 - lng1, 2)),
             calcHeading: (lat1, lng1, lat2, lng2) => {
                 const y = Math.sin(lng2 - lng1) * Math.cos(lat2);
@@ -748,32 +696,59 @@
             }
         };
 
-        // --- MODULE AUDIO (Web Audio API) ---
+        // --- MODULE AUDIO (Web Audio API & Bluetooth) ---
         const AudioService = {
             ctx: null, stream: null, analyser: null, mode: 'ptt', visuCtx: null,
+            backgroundAudio: null,
             
-            // Initialisation Micro & DSP
             init: async () => {
                 try {
+                    // 1. Initialisation Flux Micro
                     const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
                     AudioService.stream = stream;
                     
                     const AC = window.AudioContext || window.webkitAudioContext;
                     AudioService.ctx = new AC();
                     const src = AudioService.ctx.createMediaStreamSource(stream);
-                    const comp = AudioService.ctx.createDynamicsCompressor(); // Compresseur pour égaliser le volume
+                    const comp = AudioService.ctx.createDynamicsCompressor(); 
                     AudioService.analyser = AudioService.ctx.createAnalyser();
                     
                     src.connect(comp).connect(AudioService.analyser);
-                    AudioService.tx(false); AudioService.setupViz(); 
                     
-                    // Support boutons casques bluetooth
+                    // Initialiser à fermé
+                    AudioService.tx(false); 
+                    AudioService.setupViz(); 
+                    
+                    // 2. Initialisation Hack Audio pour Arrière-plan (Silent Loop)
+                    // Cela force le navigateur à garder le contexte audio actif pour recevoir les commandes casque
+                    const silentBlob = new Blob([new Uint8Array([82,73,70,70,44,0,0,0,87,65,86,69,102,109,116,32,16,0,0,0,1,0,1,0,68,172,0,0,136,88,1,0,2,0,16,0,100,97,116,97,0,0,0,0])], {type: 'audio/wav'});
+                    AudioService.backgroundAudio = new Audio(URL.createObjectURL(silentBlob));
+                    AudioService.backgroundAudio.loop = true;
+                    AudioService.backgroundAudio.volume = 0.01; // Juste assez pour que l'OS considère l'app "active"
+                    AudioService.backgroundAudio.play().catch(e => console.log("Silent Play blocked until user interact"));
+
+                    // 3. Support Boutons Casques Bluetooth (Media Session API)
                     if ('mediaSession' in navigator) { 
-                        navigator.mediaSession.setActionHandler('play', AudioService.toggleHeadset); 
-                        navigator.mediaSession.setActionHandler('pause', AudioService.toggleHeadset); 
+                        navigator.mediaSession.metadata = new MediaMetadata({
+                            title: "COM TAC",
+                            artist: "Canal Sécurisé",
+                            album: "v11.3 Active",
+                            artwork: [{ src: 'favicon.ico', sizes: '96x96', type: 'image/png' }]
+                        });
+
+                        const toggleAction = () => {
+                            if (AudioService.mode === 'vox' || AudioService.mode === 'ptt') {
+                                AudioService.toggleHeadset();
+                            }
+                        };
+
+                        // On intercepte TOUTES les commandes possibles du casque pour le même but
+                        ['play', 'pause', 'stop', 'previoustrack', 'nexttrack'].forEach(evt => {
+                            try { navigator.mediaSession.setActionHandler(evt, toggleAction); } catch(e){}
+                        });
                     }
                     return true;
-                } catch(e) { App.toast("Erreur Micro", true); return false; }
+                } catch(e) { App.toast("Erreur Micro: " + e.message, true); return false; }
             },
             
             // Transmission (TX)
@@ -781,10 +756,13 @@
                 if (!AudioService.stream) return;
                 
                 // VÉRIFICATION STRICTE SILENCE RADIO
+                // Si silence actif et pas Host, on force false, peu importe la demande
                 if (App.silenceActive && !App.isHost) active = false; 
 
-                // Logique VOX ou PTT
-                const open = (AudioService.mode === 'vox' && !App.silenceActive) || active;
+                // Note: Dans cette version, VOX ne force plus l'ouverture. 
+                // Il se comporte comme un "Headset Latch" (Verrouillage Casque).
+                // On applique simplement l'état demandé.
+                const open = active;
                 
                 AudioService.stream.getAudioTracks().forEach(t => t.enabled = open);
                 App.user.isTx = open;
@@ -793,33 +771,56 @@
                 if (btn) {
                     if (open) { 
                         btn.classList.add('active'); 
-                        if (navigator.vibrate && AudioService.mode !== 'vox') navigator.vibrate(30); 
                     } else btn.classList.remove('active');
                 }
+                
+                // Feedback visuel OS (Mise à jour du statut lecture pour le casque)
+                if ('mediaSession' in navigator) {
+                    navigator.mediaSession.playbackState = open ? "playing" : "paused";
+                }
+
                 NetService.broadcast(); App.renderGrid();
             },
             
-            // Bascule VOX/PTT
             toggleVox: () => {
                 AudioService.mode = AudioService.mode === 'ptt' ? 'vox' : 'ptt';
                 const icon = document.getElementById('icon-mic'); const btn = document.getElementById('ptt-btn');
                 
                 if (AudioService.mode === 'vox') {
-                    icon.innerText = 'mic'; btn.classList.add('vox-active'); App.toast("Mode VOX");
-                    if (!App.silenceActive) AudioService.tx(true); // Ouvre direct si pas de silence
+                    icon.innerText = 'mic'; btn.classList.add('vox-active'); 
+                    App.toast("Mode VOX (Casque)");
+                    // En mode VOX v11.3, on commence fermé, l'utilisateur clique sur le casque pour parler.
+                    AudioService.tx(false); 
                 } else {
-                    icon.innerText = 'mic_none'; btn.classList.remove('vox-active'); AudioService.tx(false); App.toast("Mode PTT");
+                    icon.innerText = 'mic_none'; btn.classList.remove('vox-active'); 
+                    AudioService.tx(false); 
+                    App.toast("Mode PTT");
                 }
             },
             
-            toggleHeadset: () => { if (AudioService.mode === 'ptt') { App.user.isTxRequest = !App.user.isTx; AudioService.tx(App.user.isTxRequest); } },
+            // Appelé par le clic bouton casque
+            toggleHeadset: () => { 
+                // Logique Toggle (Ouverture / Fermeture)
+                const newState = !App.user.isTx;
+                
+                // Mise à jour de la demande utilisateur
+                App.user.isTxRequest = newState; 
+                
+                // Application
+                AudioService.tx(newState);
+                
+                // Feedback Sonore/Visuel (utile si téléphone dans la poche)
+                App.toast(newState ? "MICRO OUVERT (Casque)" : "MICRO FERMÉ (Casque)");
+                
+                // Vibration courte pour confirmer (si supporté)
+                if (navigator.vibrate) navigator.vibrate(newState ? [50, 50, 50] : [200]);
+            },
             
             playRemote: (stream) => { 
                 const a = new Audio(); a.srcObject = stream; a.playsInline = true; 
                 a.play().catch(()=>{}); 
             },
             
-            // Visualiseur Audio (Waveform)
             setupViz: () => {
                 const cvs = document.getElementById('visualizer'); if(!cvs) return;
                 cvs.width = cvs.offsetWidth; cvs.height = cvs.offsetHeight;
@@ -831,13 +832,11 @@
                 requestAnimationFrame(AudioService.drawLoop);
                 if (!AudioService.analyser || !AudioService.visuCtx) return;
                 
-                // SURVEILLANCE CONTINUE DU VOX ET DU SILENCE
-                if (AudioService.mode === 'vox') {
-                    if (App.silenceActive && !App.isHost) { 
-                        if(App.user.isTx) AudioService.tx(false); // Coupe forcé
-                    } else if (!App.user.isTx) {
-                        AudioService.tx(true); // Ouvre forcé
-                    }
+                // En v11.3, on retire la logique VOX "Always On" qui forçait tx(true).
+                // Désormais, le mode VOX obéit au toggle manuel du casque (géré par toggleHeadset).
+                // Seule contrainte restante : Le Silence Radio.
+                if (App.silenceActive && !App.isHost && App.user.isTx) {
+                     AudioService.tx(false); // Coupe forcé sécurité
                 }
 
                 // Dessin du spectre audio
@@ -846,7 +845,7 @@
                 const ctx = AudioService.visuCtx; const w = ctx.canvas.width; const h = ctx.canvas.height;
                 ctx.clearRect(0, 0, w, h);
                 
-                if (!App.user.isTx) return; // Rien à dessiner si muet
+                if (!App.user.isTx) return; 
                 
                 const bw = (w / buffer) * 2.5; let x = 0;
                 for(let i=0; i<buffer; i++) { 
@@ -876,77 +875,60 @@
             joinSession: (id = null) => {
                 if (!id) id = document.getElementById('input-join-id').value.trim();
                 if (!id) return App.toast("ID requis", true);
-                
                 const btn = document.getElementById('btn-join-trigger'); 
                 btn.innerHTML = 'Connexion...'; btn.disabled = true;
-                
                 App.isHost = false; NetService.hostId = id; NetService.retryCount = 0;
                 document.body.classList.remove('is-host'); 
-                
                 NetService.initPeer();
             },
             
-            // Logique de connexion et de reconnexion pour les clients
             tryConnectToHost: () => {
                 if (!NetService.peer?.open || !NetService.hostId) return;
-
                 const hostConn = NetService.peer.connect(NetService.hostId, { metadata: App.user });
-                App.toast(`Tentative de connexion #${NetService.retryCount} vers ${NetService.hostId}...`);
+                App.toast(`Connexion #${NetService.retryCount} vers ${NetService.hostId}...`);
 
-                // Gestion de la connexion Data
                 hostConn.on('open', () => {
                     NetService.handleConn(hostConn); 
-                    hostConn.send({ type: 'FULL', user: App.user }); // Envoi état initial
+                    hostConn.send({ type: 'FULL', user: App.user }); 
                     NetService.resetJoinUI();
-                    NetService.retryCount = 0; // Succès, reset le compteur
+                    NetService.retryCount = 0; 
                     App.toast("Connecté"); 
                     App.saveSession(NetService.hostId); 
                     App.switchView('view-ops'); 
                     NetService.callHostForAudio(NetService.hostId);
                 });
                 
-                // Gestion de l'échec de connexion (très important pour le reverse logic/retry)
                 hostConn.on('error', (err) => { 
-                    console.error("Erreur de connexion Data au Host:", err);
+                    console.error("Erreur Data Host:", err);
                     NetService.retryConnection();
                 });
                 
                 hostConn.on('close', () => { 
-                    if (NetService.retryCount === 0) { // Si close arrive après une connexion stable
-                        App.toast("Déconnexion de l'hôte.", true);
-                    }
-                    // Le retry se fera uniquement via hostConn.on('error') ou par le heartbeat.
+                    if (NetService.retryCount === 0) App.toast("Déconnexion Host.", true);
                 });
             },
 
-            // Fonction de relance agressive pour les clients
             retryConnection: () => {
                 if (NetService.retryCount < 5) {
                     NetService.retryCount++;
-                    const delay = NetService.retryCount * 2000; // 2s, 4s, 6s...
-                    App.toast(`Échec connexion. Réessai dans ${delay/1000}s... (Tentative ${NetService.retryCount}/5)`, true);
+                    const delay = NetService.retryCount * 2000;
+                    App.toast(`Échec. Réessai dans ${delay/1000}s... (${NetService.retryCount}/5)`, true);
                     setTimeout(NetService.tryConnectToHost, delay);
                 } else {
-                    App.toast("Échec connexion après 5 tentatives. Hôte injoignable ou NAT trop restrictif.", true);
+                    App.toast("Hôte injoignable.", true);
                     NetService.resetJoinUI();
                 }
             },
 
-            // Appel audio séparé (nécessite le flux audio)
             callHostForAudio: (hostId) => {
                 const call = NetService.peer.call(hostId, AudioService.stream); 
                 call.on('stream', s => AudioService.playRemote(s));
-                call.on('error', (err) => console.error("Erreur d'appel audio", err));
-                // Stocker l'appel si on voulait le fermer proprement
+                call.on('error', (err) => console.error("Erreur Audio Call", err));
             },
             
             initPeer: (id = null) => {
                 if (NetService.peer) NetService.peer.destroy();
-                
-                // Si Client et Peer est anonyme (pas d'ID), on utilise un ID temporaire unique
                 const peerId = id || (App.isHost ? null : NetService.hostId ? null : crypto.randomUUID());
-
-                // Création du Peer avec configuration STUN/TURN
                 const peer = new Peer(peerId, CONFIG.peerConfig);
                 
                 peer.on('open', (pid) => {
@@ -954,55 +936,43 @@
                     document.getElementById('txt-id-display').innerText = `CANAL: ${App.isHost ? pid : NetService.hostId}`;
                     
                     if (App.isHost) { 
-                        // L'hôte est prêt à recevoir
                         NetService.startHeartbeat(); 
                         App.saveSession(pid); 
                         App.switchView('view-ops'); 
                         App.toast(`Hôte actif. ID: ${pid}`);
                     } else if (NetService.hostId) {
-                        // Le client PeerJS est ouvert, il tente de se connecter
                         NetService.tryConnectToHost();
                     }
                 });
 
-                // Gérer les erreurs de création de Peer (ex: ID déjà pris)
                 peer.on('error', (err) => {
                     if (err.type === 'unavailable-id' && App.isHost && id) { 
-                        // Retry logic pour récupérer l'ID Host
                         if (NetService.retryCount < 5) { 
                             NetService.retryCount++; 
-                            App.toast(`ID Hôte indisponible. Réessai... (${NetService.retryCount}/5)`, true);
                             setTimeout(() => NetService.initPeer(id), 1500); 
                         } else { 
-                            // Si 5 échecs, on tente un ID aléatoire (ID différent pour Host)
-                            App.toast("Échec de l'ID Hôte. Essai d'un nouvel ID.", true);
                             NetService.peer.destroy(); NetService.initPeer(null); 
                         } 
-                    } else if (err.type === 'peer-unavailable') {
-                        // Cela sera géré par tryConnectToHost (pour les clients)
-                        console.warn("Peer indisponible (normal en début de tentative)");
-                    } else { 
+                    } else if (err.type !== 'peer-unavailable') { 
                         App.toast(`Err Réseau: ${err.type}`, true); NetService.resetJoinUI(); 
                     }
                 });
                 
                 peer.on('disconnected', () => { 
-                    App.toast("PeerJS déconnecté. Tente de reconnecter...");
+                    App.toast("PeerJS déconnecté. Reco...");
                     peer.reconnect();
                 });
 
-                // Réception connexion (Host ou P2P Mesh)
                 peer.on('connection', (conn) => {
                     if (conn.metadata?.id) { 
                         if (!App.peers[conn.peer]) App.peers[conn.peer] = {}; App.peers[conn.peer].conn = conn; 
-                        App.peers[conn.peer].data = conn.metadata; // S'assurer que les données initiales sont stockées
+                        App.peers[conn.peer].data = conn.metadata; 
                         App.renderGrid(); 
                         App.toast(`Nouveau contact: ${conn.metadata.callsign}`);
                     }
                     NetService.handleConn(conn);
                 });
                 
-                // Réception appel audio
                 peer.on('call', (call) => { 
                     call.answer(AudioService.stream); 
                     call.on('stream', s => AudioService.playRemote(s)); 
@@ -1011,41 +981,33 @@
                 NetService.peer = peer;
             },
             
-            // Gestion des données reçues
             handleConn: (conn) => {
                 if (!App.peers[conn.peer]) App.peers[conn.peer] = {}; 
                 App.peers[conn.peer].conn = conn; 
                 
                 conn.on('data', (d) => {
-                    // Mise à jour position/statut
                     if (d.type === 'FULL' || d.type === 'UPDATE') {
                         NetService.updatePeer(d.user);
-                        // Relais Host
                         if (App.isHost) Object.values(App.peers).forEach(p => { 
                             if (p.conn?.open && p.conn.peer !== d.user.id) p.conn.send({ type: 'UPDATE', user: d.user }); 
                         });
                     }
-                    // Synchro complète
                     if (d.type === 'SYNC') { 
                         d.list.forEach(u => NetService.updatePeer(u)); 
                         if(d.silence !== undefined) App.setSilence(d.silence); 
                     }
-                    // Ping Nouveau
                     if (d.type === 'PING') {
                         MapService.addPingMarker(d.ping);
                         if (App.isHost) Object.values(App.peers).forEach(p => { if(p.conn?.open && p.conn.peer !== conn.peer) p.conn.send(d); });
                     }
-                    // Ping Déplacement
                     if (d.type === 'PING_MOVE') {
                         if (MapService.pings[d.id]) MapService.pings[d.id].marker.setLatLng([d.lat, d.lng]);
                         if (App.isHost) Object.values(App.peers).forEach(p => { if(p.conn?.open && p.conn.peer !== conn.peer) p.conn.send(d); });
                     }
-                    // Ping Suppression
                     if (d.type === 'PING_DELETE') {
                         MapService.removePing(d.id);
                         if (App.isHost) Object.values(App.peers).forEach(p => { if(p.conn?.open && p.conn.peer !== conn.peer) p.conn.send(d); });
                     }
-                    // Silence Radio
                     if (d.type === 'SILENCE') App.setSilence(d.state);
                 });
                 
@@ -1054,7 +1016,6 @@
                     if (App.isHost) {
                         const list = Object.values(App.peers).map(p => p.data).filter(d => d && d.id); list.push(App.user);
                         conn.send({ type: 'SYNC', list: list, silence: App.silenceActive });
-                        // Synchro pings existants
                         Object.values(MapService.pings).forEach(p => conn.send({ type: 'PING', ping: p.data }));
                     }
                     NetService.broadcast();
@@ -1064,14 +1025,10 @@
                     App.toast(`Contact perdu: ${App.peers[conn.peer]?.data?.callsign || conn.peer}`, true);
                     delete App.peers[conn.peer]; App.renderGrid(); 
                 });
-                conn.on('error', (err) => {
-                    console.error(`Erreur de connexion avec ${conn.peer}:`, err);
-                });
             },
             
             broadcast: (msg) => {
                 if(!msg) msg = { type: 'UPDATE', user: App.user };
-                // Envoyer uniquement aux connexions ouvertes
                 Object.values(App.peers).forEach(p => { if (p.conn?.open) p.conn.send(msg); });
                 if (App.isHost && msg.type === 'UPDATE') App.renderGrid();
             },
@@ -1079,7 +1036,6 @@
             updatePeer: (user) => {
                 if (user.id === App.user.id) return;
                 if (!App.peers[user.id]) App.peers[user.id] = { data: {} };
-                // Fusionner les données pour ne pas écraser la connexion si elle existe
                 App.peers[user.id].data = { ...App.peers[user.id].data, ...user };
                 App.renderGrid(); MapService.updateMarker(user.id, App.peers[user.id].data);
             },
@@ -1087,12 +1043,9 @@
             startHeartbeat: () => {
                 setInterval(() => {
                     if (!App.isHost) return;
-                    // Heartbeat pour vérifier l'état et synchroniser les nouveaux clients
                     const list = Object.values(App.peers).map(p => p.data).filter(d => d && d.id); list.push(App.user);
                     Object.values(App.peers).forEach(p => { 
                         if (p.conn?.open) p.conn.send({ type: 'SYNC', list: list, silence: App.silenceActive }); 
-                        // Le P2P peut mourir silencieusement, un message vide peut aider
-                        // p.conn.send({ type: 'HEARTBEAT' }); 
                     });
                 }, 1000);
             }
@@ -1118,7 +1071,6 @@
                 if (!idToShow) return App.toast("Pas de canal actif pour QR", true);
                 
                 document.getElementById('qr-code-region').innerHTML = '';
-                // Petite taille pour mobile
                 new QRCode(document.getElementById('qr-code-region'), { text: idToShow, width: 256, height: 256 });
                 document.getElementById('qr-text-val').innerText = idToShow;
                 document.getElementById('overlay-generator').style.display = 'flex';
@@ -1133,34 +1085,32 @@
             
             init: async () => {
                 if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
-                    // Remplacé 'alert()' par App.toast pour être non-bloquant
                     App.toast("HTTPS Requis pour le Micro et le GPS", true);
                 }
                 await DBService.init(); App.initBattery(); App.checkSession();
                 
-                // Destruction propre pour libérer l'ID au refresh
                 window.addEventListener('beforeunload', () => { if(NetService.peer) NetService.peer.destroy(); });
                 
-                // Gestion PTT
                 const btn = document.getElementById('ptt-btn');
                 const start = (e) => { 
-                    if (AudioService.mode === 'vox') return; 
+                    // En mode VOX, le bouton PTT écran reste actif (en parallèle du casque)
+                    // mais il fonctionne en "Push" classique, pas en Toggle.
                     if(e.cancelable) e.preventDefault(); 
                     if (App.silenceActive && !App.isHost) { App.toast("SILENCE RADIO ACTIF", true); return; }
                     App.user.isTxRequest = true; AudioService.tx(true); 
                 };
                 const end = (e) => { 
-                    if (AudioService.mode === 'vox') return; 
                     if(e.cancelable) e.preventDefault(); 
+                    // Si on est en VOX, le bouton PTT ne doit pas couper le micro si c'était ouvert par le casque
+                    // Sauf si on veut un comportement "Emergency Cut".
+                    // Ici on coupe.
                     App.user.isTxRequest = false; AudioService.tx(false); 
                 };
                 
-                // Événements souris & touch
                 btn.addEventListener('mousedown', start); btn.addEventListener('mouseup', end);
                 btn.addEventListener('mouseleave', end); btn.addEventListener('touchstart', start); btn.addEventListener('touchend', end);
             },
             
-            // Restauration de session (F5)
             checkSession: () => {
                 const s = JSON.parse(localStorage.getItem(CONFIG.sessionKey));
                 if (s) {
@@ -1178,10 +1128,13 @@
             login: async (skipUI = false) => {
                 if (!skipUI) {
                     const val = document.getElementById('input-callsign').value.trim().toUpperCase();
-                    if (val.length < 2) return App.toast("ID Invalide (min 2 chars)", true);
+                    if (val.length < 2) return App.toast("ID Invalide", true);
                     App.user.callsign = val;
                 }
                 const btn = document.getElementById('btn-login-trigger'); if(btn) btn.innerText = "...";
+                
+                // IMPORTANT: AudioService.init doit être déclenché par une interaction utilisateur 
+                // pour que le "Silent Loop" d'arrière plan démarre correctement.
                 const audioOk = await AudioService.init(); if(btn) btn.innerText = "CONNEXION";
                 if (!audioOk && !skipUI) return;
                 
@@ -1224,7 +1177,6 @@
                 if(MapService.map) MapService.updateMarker(App.user.id, App.user);
             },
             
-            // --- FONCTIONS NOUVELLES v11.2 ---
             togglePingMode: () => { 
                 App.pingMode = !App.pingMode; 
                 document.getElementById('btn-ping-mode').classList.toggle('alert', App.pingMode); 
@@ -1233,7 +1185,6 @@
             
             sendPing: (latlng) => {
                 App.togglePingMode(); 
-                // Utilisation de window.prompt ici car c'est un mécanisme synchrone simple.
                 const msg = prompt("Message du Ping:", "CIBLE"); 
                 if (!msg) return;
 
@@ -1257,7 +1208,7 @@
                 if (active) { 
                     document.body.classList.add('silence-active'); 
                     document.getElementById('btn-silence').classList.add('active'); 
-                    if(!App.isHost) AudioService.tx(false); // Coupe micro client
+                    if(!App.isHost) AudioService.tx(false); 
                 } else { 
                     document.body.classList.remove('silence-active'); 
                     document.getElementById('btn-silence').classList.remove('active'); 
@@ -1273,7 +1224,6 @@
                     div.className = `op-card ${u.isMe ? 'is-me' : ''} ${u.isTx ? 'talking' : ''}`;
                     if(u.status === 'CONTACT') div.setAttribute('data-status', 'CONTACT');
                     
-                    // Affiche -- si bat est null (cas iOS/API non supportée)
                     const bat = (u.bat != null) ? `🔋 ${u.bat}%` : '🔋 --'; 
 
                     let col = '#aaa';
@@ -1286,25 +1236,21 @@
                 });
             },
             
-            // Logique de la batterie mise à jour pour garantir l'envoi immédiat
             initBattery: () => { 
                 if ('getBattery' in navigator) navigator.getBattery().then(b => { 
                     const up = () => { 
                         App.user.bat = Math.floor(b.level * 100); 
-                        NetService.broadcast(); // Diffuse immédiatement le niveau
+                        NetService.broadcast(); 
                         App.renderGrid(); 
                     }; 
-                    up(); // Appel initial pour définir et diffuser l'état
+                    up(); 
                     b.addEventListener('levelchange', up); 
                     b.addEventListener('chargingchange', up); 
                 }).catch(e => {
-                    console.warn("Battery API restricted/failed:", e);
-                    App.user.bat = null; // S'assure que bat est null si l'API échoue
+                    App.user.bat = null; 
                     NetService.broadcast(); 
                 }); 
-                else {
-                    App.user.bat = null; // Non supporté
-                }
+                else { App.user.bat = null; }
             },
             
             toast: (msg, err = false) => { 
@@ -1321,7 +1267,6 @@
                         navigator.clipboard.writeText(txt); 
                         App.toast("ID Copié"); 
                     } catch (e) {
-                        // Fallback pour iFrame
                         const el = document.createElement('textarea');
                         el.value = txt;
                         document.body.appendChild(el);
@@ -1334,9 +1279,9 @@
             }
         };
 
-        // BOOTSTRAP (Démarrage)
         document.addEventListener('DOMContentLoaded', App.init);
 
     </script>
 </body>
 </html>
+
