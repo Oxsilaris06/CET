@@ -767,11 +767,10 @@
                     src.connect(comp).connect(AudioService.analyser);
                     AudioService.tx(false); AudioService.setupViz(); 
                     
-                    // Support boutons casques bluetooth
-                    if ('mediaSession' in navigator) { 
-                        navigator.mediaSession.setActionHandler('play', AudioService.toggleHeadset); 
-                        navigator.mediaSession.setActionHandler('pause', AudioService.toggleHeadset); 
-                    }
+                    // --- NOUVELLE LOGIQUE POUR LES COMMANDES CASQUE ---
+                    AudioService.setupHeadsetControl();
+                    // -------------------------------------------------
+                    
                     return true;
                 } catch(e) { App.toast("Erreur Micro", true); return false; }
             },
@@ -812,7 +811,41 @@
                 }
             },
             
-            toggleHeadset: () => { if (AudioService.mode === 'ptt') { App.user.isTxRequest = !App.user.isTx; AudioService.tx(App.user.isTxRequest); } },
+            // --- MISE À JOUR : FONCTION DE BASCULEMENT CASQUE PLUS UNIVERSELLE ---
+            toggleTxState: () => {
+                if (AudioService.mode === 'ptt') { 
+                    App.user.isTxRequest = !App.user.isTx; 
+                    AudioService.tx(App.user.isTxRequest); 
+                    App.toast(App.user.isTx ? "PTT Activé (Casque)" : "PTT Désactivé (Casque)");
+                }
+                // Ignorer en mode VOX, où le micro est géré par la détection de bruit ou le silence radio
+            },
+
+            setupHeadsetControl: () => {
+                if ('mediaSession' in navigator) { 
+                    // Les deux actions PLAY/PAUSE appellent la même fonction de bascule
+                    navigator.mediaSession.setActionHandler('play', AudioService.toggleTxState); 
+                    navigator.mediaSession.setActionHandler('pause', AudioService.toggleTxState); 
+                    
+                    // Optionnel: Définir les métadonnées pour encourager le navigateur à écouter
+                    navigator.mediaSession.metadata = new MediaMetadata({
+                        title: 'COM TAC Radio',
+                        artist: App.user.callsign,
+                        album: 'Session PTT',
+                    });
+                }
+                
+                // IMPORTANT: Tentative d'utiliser l'élément audio (invisible) pour capter les événements média
+                const dummyAudio = new Audio();
+                dummyAudio.loop = true;
+                dummyAudio.volume = 0; // Muet
+                dummyAudio.play().catch(e => console.log("Dummy audio play failed, likely due to autoplay restrictions."));
+                
+                // Ces événements sont parfois déclenchés par les casques modernes
+                dummyAudio.addEventListener('pause', AudioService.toggleTxState);
+                dummyAudio.addEventListener('play', AudioService.toggleTxState);
+            },
+            // ----------------------------------------------------------------------
             
             playRemote: (stream) => { 
                 const a = new Audio(); a.srcObject = stream; a.playsInline = true; 
