@@ -23,6 +23,7 @@
             --bg-glass: rgba(22, 22, 25, 0.8);
             --bg-glass-heavy: rgba(15, 15, 20, 0.95);
             --bg-input: rgba(0, 0, 0, 0.4);
+            --bg-modal: #101010;
             --border-glass: rgba(255, 255, 255, 0.1);
             
             --font-ui: 'Oswald', sans-serif;
@@ -44,20 +45,21 @@
             --radius-md: 12px;
             --radius-sm: 6px;
             
-            --bg-btn-secondary: rgba(255, 255, 255, 0.1); /* Default Dark Mode */
+            --bg-btn-secondary: rgba(255, 255, 255, 0.1);
         }
 
         body.light-mode {
             --bg-body: #f1f5f9;
             --bg-glass: rgba(255, 255, 255, 0.95);
             --bg-glass-heavy: #ffffff;
-            --bg-input: rgba(255, 255, 255, 0.8);
+            --bg-input: #ffffff; /* Fond blanc opaque pour inputs */
+            --bg-modal: #ffffff;
             --border-glass: rgba(0, 0, 0, 0.15);
             --text-main: #1e293b;
             --text-muted: #64748b;
             --text-inverse: #ffffff;
             --accent-blue: #0f4c9c;
-            --bg-btn-secondary: rgba(0, 0, 0, 0.08); /* Light Mode adjustment */
+            --bg-btn-secondary: #e2e8f0; 
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; outline: none; -webkit-tap-highlight-color: transparent; }
@@ -92,7 +94,7 @@
 
         #live-status-badge {
             position: absolute; top: 0; right: 0;
-            background: rgba(0,0,0,0.4); border: 1px solid var(--border-glass);
+            background: rgba(0,0,0,0.05); border: 1px solid var(--border-glass);
             padding: 5px 10px; border-radius: 20px;
             font-size: 0.75rem; font-family: var(--font-data);
             display: flex; align-items: center; gap: 6px;
@@ -158,7 +160,7 @@
             flex: 1; padding: 10px; background: rgba(255,255,255,0.05);
             border: 1px solid var(--border-glass); border-radius: var(--radius-sm);
             cursor: pointer; text-align: center; font-size: 0.9em; min-width: 70px;
-            color: var(--text-main); /* Ensure readability in light mode */
+            color: var(--text-main); 
         }
         .pax-select-option.selected { transform: scale(1.05); border-color: transparent; opacity: 1; }
         .pax-select-option[data-pax="Adversaire"].selected { background: var(--danger-red); color: white; }
@@ -226,7 +228,7 @@
         .custom-modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 2000; display: none; backdrop-filter: blur(5px); }
         .custom-modal {
             position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            background: var(--bg-body); border: 1px solid var(--border-glass); border-radius: var(--radius-md);
+            background: var(--bg-modal); border: 1px solid var(--border-glass); border-radius: var(--radius-md);
             padding: 25px; width: 95%; max-width: 450px; z-index: 2001; display: none;
             box-shadow: 0 20px 50px rgba(0,0,0,0.6);
             max-height: 90vh; overflow-y: auto; color: var(--text-main);
@@ -267,7 +269,7 @@
         .transfer-tabs { display: flex; gap: 10px; margin-bottom: 20px; }
         .transfer-tab-btn {
             flex: 1; padding: 10px; background: var(--bg-btn-secondary); border: 1px solid var(--border-glass);
-            color: var(--text-muted); cursor: pointer; border-radius: var(--radius-sm); font-family: var(--font-ui);
+            color: var(--text-main); cursor: pointer; border-radius: var(--radius-sm); font-family: var(--font-ui);
         }
         .transfer-tab-btn.active { background: var(--accent-blue); color: white; border-color: transparent; }
         .transfer-content { display: none; }
@@ -284,7 +286,6 @@
         .qr-nav-btn {
             background: var(--bg-glass); border: 1px solid var(--border-glass); color: var(--text-main);
             width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer;
-            font-size: 1.2em; font-weight: bold; /* Pour les flèches Unicode */
         }
         .qr-nav-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 
@@ -350,10 +351,9 @@
             </div>
             
             <div id="qr-nav-controls" style="display: none;">
-                <!-- Utilisation de caractères Unicode pour les flèches pour garantir l'affichage PC -->
-                <button class="qr-nav-btn" id="prevQrBtn">❮</button>
+                <button class="qr-nav-btn" id="prevQrBtn"><span class="material-symbols-outlined">arrow_back</span></button>
                 <span id="qr-counter" style="font-family: var(--font-data); font-weight: bold;">1/1</span>
-                <button class="qr-nav-btn" id="nextQrBtn">❯</button>
+                <button class="qr-nav-btn" id="nextQrBtn"><span class="material-symbols-outlined">arrow_forward</span></button>
             </div>
             
             <p id="qr-status-text" style="color: var(--text-muted); font-size: 0.85em; margin-top: 10px; text-align: center;">Cliquez sur Envoyer pour générer les QR codes.</p>
@@ -1248,16 +1248,20 @@
         }
         
         function closeQrImportModal() {
-            stopScannerInstance();
-            qrImportModal.style.display = 'none';
-            document.getElementById('modalBackdrop').style.display = 'none';
+            stopScannerInstance().then(() => {
+                qrImportModal.style.display = 'none';
+                document.getElementById('modalBackdrop').style.display = 'none';
+            });
         }
 
-        function stopScannerInstance() {
+        async function stopScannerInstance() {
             if(html5QrCodeScanner) {
-                html5QrCodeScanner.stop().catch(err => console.log("Stop scan failed:", err)).then(() => {
-                     html5QrCodeScanner.clear();
-                });
+                try {
+                    await html5QrCodeScanner.stop();
+                    html5QrCodeScanner.clear();
+                } catch(e) {
+                    console.log("Scanner stop warning:", e);
+                }
                 html5QrCodeScanner = null;
             }
         }
@@ -1267,13 +1271,13 @@
             document.querySelectorAll('.transfer-content').forEach(c => c.classList.remove('active'));
             document.getElementById(`qr-transfer-${tabName}`).classList.add('active');
             
-            stopScannerInstance(); // Seulement arrêter le scanner, ne pas fermer la modale
-            
-            if (tabName === 'send') {
-                prepareQRPagination();
-            } else {
-                startQrImportScan();
-            }
+            stopScannerInstance().then(() => {
+                if (tabName === 'send') {
+                    prepareQRPagination();
+                } else {
+                    startQrImportScan();
+                }
+            });
         }
         
         function prepareQRPagination() {
@@ -1624,35 +1628,6 @@
             return pdfBytes;
         }
 
-        async function downloadPdf() {
-            try {
-                // Remplacer le contenu du bouton par un indicateur de chargement si vous voulez
-                // ...
-                
-                const pdfBytes = await buildPdf();
-                if (!pdfBytes) { showToast("Échec de la génération PDF", true); return; }
-                
-                const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-                const today = new Date().toLocaleDateString('fr-FR').replace(/\//g, '-');
-                const title = interventionTitleInput.value.trim() || "Log";
-                const fileName = `PC_Tac_${title.replace(/[^a-z0-9]/gi, '_')}_${today}.pdf`;
-                
-                // Téléchargement
-                const url = URL.createObjectURL(blob); 
-                const link = document.createElement('a');
-                link.href = url; link.download = fileName; 
-                document.body.appendChild(link); link.click();
-                setTimeout(() => { document.body.removeChild(link); URL.revokeObjectURL(url); }, 0); 
-                
-            } catch (error) { 
-                console.error("Erreur PDF critique:", error);
-                showToast(`Erreur PDF: ${error.message || 'Génération échouée'}`, true); 
-            } finally {
-                // Rétablir le bouton
-                // ...
-            }
-        }
-
 
         // --- INIT ---
         document.addEventListener('DOMContentLoaded', () => {
@@ -1669,12 +1644,11 @@
             const savedLogs = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY) || '[]');
             renderLogTable(savedLogs);
             updateHistoryAndColorMap(savedLogs);
-            
-            // Le titre est chargé ici, mais le listener est défini dans saveTitle()
             interventionTitleInput.value = localStorage.getItem(TITLE_STORAGE_KEY) || '';
-
-            // Tenter la reconnexion au chargement
-            NetManager.checkAndReconnect();
+            interventionTitleInput.oninput = () => {
+                localStorage.setItem(TITLE_STORAGE_KEY, interventionTitleInput.value);
+                // Si connecté, on peut vouloir sync le titre aussi, mais optionnel pour l'instant
+            };
 
             // Form Logic
             document.getElementById('log-form').onsubmit = handleAddLogEntry;
