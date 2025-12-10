@@ -584,7 +584,7 @@
             <label for="intervention_title_input"><span class="material-symbols-outlined" style="vertical-align:bottom; font-size:1.1em; margin-right:5px;">edit_document</span>Opération :</label>
             <input type="text" id="intervention_title_input" placeholder="Nom de l'intervention..." value="">
             <div id="webrtc-status-box" class="status-disconnected" title="Statut WebRTC" onclick="showDisconnectModal()">
-                <span class="material-symbols-outlined" style="font-size: 1em;">satellite_alt</span>
+                <span class="material-symbols-outlined" style="font-size: 1em;">sensors_off</span>
                 <span id="webrtc-status-text">Déconnecté</span>
             </div>
         </div>
@@ -619,8 +619,8 @@
                         <div id="free_mode_options">
                             <div class="color-palette" id="free_color_palette"></div>
                             <input type="text" id="free_pax_input" placeholder="Identifiant..." value="" />
-                            <input type="hidden" id="free_color_input" value="#800000" />
-                        </div>
+                            <input type="hidden" id="free_color_input" value="#800000">
+                         </div>
                     </div>
                     <input type="hidden" id="pax_input" required value="Adversaire">
                     <input type="hidden" id="pax_mode_input" value="standard">
@@ -799,8 +799,21 @@
                 PeerService.isReady = false;
                 if (PeerService.peer) { PeerService.peer.destroy(); }
                 
-                // Si on tente de rejoindre, on utilise l'ID de l'hôte
-                const peerId = id || (PeerService.isHost ? undefined : undefined); 
+                // --- MODIFICATION: Réutilisation de l'ID d'hôte stocké ---
+                let peerId = id;
+                if (PeerService.isHost) {
+                    // Si on est Host, on tente de récupérer l'ID persistant
+                    const savedSession = JSON.parse(localStorage.getItem(WEBRTC_STORAGE_KEY));
+                    if (savedSession && savedSession.isHost && savedSession.id) {
+                         peerId = savedSession.id;
+                    } else {
+                         // Laisse PeerJS en générer un (peerId = undefined)
+                         peerId = undefined; 
+                    }
+                } else if (!id) {
+                     // Client: l'ID doit être fourni (hostId) ou être généré pour la connexion
+                     peerId = crypto.randomUUID();
+                }
                 
                 NetService.updateUI('connecting', peerId);
 
@@ -816,6 +829,7 @@
                     
                     if (PeerService.isHost) {
                         NetService.showHostUI(pid);
+                        // --- MODIFICATION: Persister l'ID Host réel ---
                         NetService.saveSession(pid, true);
                     } else if (PeerService.hostId) {
                         NetService.connectToHost();
@@ -860,7 +874,7 @@
                     showToast("Tentative de reconnexion...", true);
                     
                     if (PeerService.isHost) {
-                        // Recréer la session Host
+                        // Recréer la session Host (l'ID sera réutilisé par initPeer)
                         PeerService.initPeer(); 
                     } else if (PeerService.hostId) {
                         // Recréer la session Client et tenter de rejoindre
@@ -1144,6 +1158,9 @@
                  const s = JSON.parse(localStorage.getItem(WEBRTC_STORAGE_KEY));
                  if (s && s.id) {
                      PeerService.isHost = s.isHost;
+                     // --- MODIFICATION: Persister l'ID host/client dans PeerService pour la réutilisation ---
+                     PeerService.hostId = s.isHost ? s.id : s.id; 
+                     
                      if (s.isHost) {
                          PeerService.createHost();
                      } else {
