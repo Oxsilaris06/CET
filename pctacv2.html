@@ -643,13 +643,11 @@
                 NetManager.stopQrScanNet(); 
                 
                 // Afficher la vue Connecté si PeerJS est actif, sinon la vue déconnectée
-                if (NetManager.peer && !NetManager.peer.destroyed) {
-                    document.getElementById('net-disconnected-view').style.display = 'none';
-                    document.getElementById('net-connected-view').style.display = 'block';
-                } else {
-                    document.getElementById('net-disconnected-view').style.display = 'block';
-                    document.getElementById('net-connected-view').style.display = 'none';
-                }
+                const isConnected = (NetManager.peer && !NetManager.peer.destroyed);
+                
+                document.getElementById('net-disconnected-view').style.display = isConnected ? 'none' : 'block';
+                document.getElementById('net-scan-view').style.display = 'none';
+                document.getElementById('net-connected-view').style.display = isConnected ? 'block' : 'none';
                 
                 // Récupérer le callsign sauvegardé
                 const saved = localStorage.getItem('pcTacCallsign');
@@ -1290,6 +1288,11 @@
             };
             let jsonString = JSON.stringify(transferPayload);
             
+            // Correction 2: Nécessaire d'utiliser un objet QRCode
+            if (container.querySelector('canvas') || container.querySelector('img')) {
+                container.innerHTML = '';
+            }
+
             new QRCode(container, {
                 text: jsonString,
                 width: 256,
@@ -1336,7 +1339,9 @@
                 html5QrCodeScanner.stop().catch(err => console.log("Stop scan failed:", err));
                 html5QrCodeScanner = null;
             }
-            // Pas de masquage de modale ici, car c'est géré par closeModal/closeQrImportBtn.onclick
+            // Correction 3: Masquer la modale à la fermeture explicite
+            qrImportModal.style.display = 'none';
+            document.getElementById('modalBackdrop').style.display = 'none';
         }
         
         closeQrImportBtn.onclick = stopQrImportScan;
