@@ -276,6 +276,17 @@
         #confirmResetBtn, #confirmDisconnectBtn { background: var(--danger-red); color: white; }
         #cancelResetBtn, #modalMessageBtn, #cancelDisconnectBtn, #closeWebRtcModalBtn { background: rgba(255,255,255,0.1); color: var(--text-main); }
         
+        /* Modification pour la visibilité du bouton Fermer */
+        #closeWebRtcModalBtn {
+            background: var(--text-muted); /* Couleur neutre */
+            color: var(--bg-body); /* Texte sombre, visible en light mode */
+            border: none;
+        }
+        body.light-mode #closeWebRtcModalBtn {
+            background: var(--text-muted); /* Reste visible sur fond blanc */
+            color: white; /* Texte blanc sur fond sombre */
+        }
+        
         /* Modal WebRTC - Login */
         .webrtc-menu-item {
             width: 100%; padding: 20px; margin-bottom: 15px;
@@ -296,6 +307,18 @@
         .qr-code-region-sm { 
             background: white; padding: 15px; border-radius: var(--radius-sm); 
             display: inline-block; max-width: 100%;
+        }
+
+        /* QR Scanner pour la connexion */
+        #qr-scanner-region {
+            width: 100%; height: 200px; margin: 20px auto; 
+            border: 2px solid var(--accent-blue);
+            border-radius: var(--radius-sm); overflow: hidden; 
+            background: black; 
+            display: none; /* Caché par défaut */
+        }
+        .qr-scan-placeholder {
+            color: var(--text-muted); padding: 50px;
         }
 
 
@@ -409,6 +432,7 @@
     <div class="custom-modal" id="webrtcModal">
         <h3 style="color: var(--accent-blue); margin-bottom: 15px;">Partage en Direct (WebRTC)</h3>
         
+        <!-- Vue CONNEXION/LOGIN -->
         <div id="webrtc-login-view">
              <p style="color: var(--text-muted); font-size: 0.9em; margin-bottom: 20px;">
                 Mode Hôte pour créer une session de partage de log en temps réel.
@@ -419,8 +443,18 @@
             </button>
             
             <div style="text-align: left; color: var(--text-muted); font-size: 0.8rem; margin-top: 20px; margin-bottom: 15px;">REJOINDRE (Client)</div>
+            
+            <div id="qr-scanner-region">
+                 <div class="qr-scan-placeholder" style="text-align: center;">Scan QR Code en cours...</div>
+            </div>
+            
+            <button class="webrtc-menu-item" id="btn-scan-qr" style="justify-content: center; margin-bottom: 15px;">
+                <span class="material-symbols-outlined" style="font-size: 1.5rem;">qr_code_scanner</span>
+                Scanner QR Code
+            </button>
+            
             <div style="display: flex; gap: 10px; margin-bottom: 15px;">
-                <input type="text" id="input-join-id" class="webrtc-input" placeholder="ID CANAL..." style="margin: 0;">
+                <input type="text" id="input-join-id" class="webrtc-input" placeholder="ID CANAL..." style="margin: 0; margin-top: 0;">
                 <button id="btn-paste-id" style="width: 60px; background: var(--bg-glass); border: 1px solid var(--border-glass); border-radius: var(--radius-md); color: white; cursor: pointer;">
                     <span class="material-symbols-outlined">content_paste</span>
                 </button>
@@ -428,12 +462,9 @@
             <button class="webrtc-menu-item action" id="btn-join-session" style="background: rgba(255,255,255,0.05); color: var(--text-main);">
                 REJOINDRE SESSION
             </button>
-             <button class="webrtc-menu-item" id="btn-scan-qr" style="justify-content: center; margin-top: 15px;">
-                <span class="material-symbols-outlined" style="font-size: 1.5rem;">qr_code_scanner</span>
-                Scanner QR Code
-            </button>
         </div>
         
+        <!-- Vue HÔTE ACTIF -->
         <div id="webrtc-host-view" style="display: none;">
             <p style="color: var(--color-host); font-weight: bold; margin-bottom: 10px;">SESSION HÔTE ACTIVE</p>
             <p style="color: var(--text-muted); font-size: 0.9em; margin-bottom: 15px;">Partagez cet ID ou QR Code pour connecter les clients.</p>
@@ -442,6 +473,7 @@
             <p id="peer-count-display" style="color: var(--text-muted); font-size: 0.8em; margin-top: 10px;">Clients connectés: 0</p>
         </div>
         
+        <!-- Vue CLIENT ACTIF -->
         <div id="webrtc-client-view" style="display: none;">
             <p style="color: var(--color-connected); font-weight: bold; margin-bottom: 10px;">CONNECTÉ AU CANAL</p>
             <p style="color: var(--text-muted); font-size: 0.9em; margin-bottom: 15px;">Réception des logs en direct. Le journal n'est pas modifiable.</p>
@@ -698,7 +730,7 @@
         const transferModal = document.getElementById('transferModal');
         const closeTransferBtn = document.getElementById('closeTransferBtn');
         const transferTabs = document.querySelectorAll('.transfer-tab-btn');
-        let html5QrCode;
+        let html5QrCodeLocal; // Renommé pour le scanner local
         let qrChunks = [];
         let currentQrIndex = 0;
         const QR_BATCH_SIZE = 8; // Nombre d'entrées par QR pour assurer la lisibilité
@@ -710,6 +742,9 @@
         const webrtcStatusBox = document.getElementById('webrtc-status-box');
         const webrtcStatusText = document.getElementById('webrtc-status-text');
         const webrtcStatusIcon = webrtcStatusBox.querySelector('.material-symbols-outlined');
+        const webrtcScannerRegion = document.getElementById('qr-scanner-region'); // Nouvelle zone de scan
+        const btnScanQr = document.getElementById('btn-scan-qr');
+        let html5QrCodeWebRtc = null; // Scanner spécifique pour la connexion WebRTC
         
         let isTimeInputManuallyChanged = false;
         let paxColorMap = {}; 
@@ -757,9 +792,14 @@
                 peer.on('error', (err) => {
                     console.error("PeerJS Error:", err);
                     NetService.updateUI('disconnected');
-                    showMessageModal("Erreur Réseau", `Erreur PeerJS : ${err.type}. Veuillez réessayer.`, true);
+                    // On ne montre la modale d'erreur que si on est en phase active de connexion
+                    if (document.getElementById('webrtcModal').style.display === 'block' || PeerService.hostId) {
+                        showMessageModal("Erreur Réseau", `Erreur PeerJS : ${err.type}. Veuillez réessayer.`, true);
+                    }
                     PeerService.isClientReadOnly = false;
-                    document.getElementById('webrtcModal').style.display = 'none';
+                    PeerService.hostId = null; // Réinitialiser pour permettre un nouvel essai
+                    if (html5QrCodeWebRtc) NetService.stopWebRtcScanner();
+                    
                 });
                 
                 peer.on('disconnected', () => { 
@@ -776,6 +816,7 @@
             createHost: () => {
                 PeerService.isHost = true;
                 PeerService.isClientReadOnly = false;
+                NetService.stopWebRtcScanner();
                 PeerService.initPeer();
             },
 
@@ -783,6 +824,7 @@
                 PeerService.isHost = false;
                 PeerService.hostId = hostId;
                 PeerService.isClientReadOnly = true; 
+                NetService.stopWebRtcScanner();
                 PeerService.initPeer(crypto.randomUUID()); 
             },
 
@@ -993,6 +1035,46 @@
             
             saveSession: (id, isHost) => {
                  localStorage.setItem(WEBRTC_STORAGE_KEY, JSON.stringify({ id: id, isHost: isHost }));
+            },
+            
+            // --- LOGIQUE SCANNER WEBRTC ---
+            startWebRtcScanner: () => {
+                if (html5QrCodeWebRtc) return;
+                webrtcScannerRegion.style.display = 'block';
+                btnScanQr.innerHTML = '<span class="material-symbols-outlined" style="font-size: 1.5rem;">stop</span> Arrêter Scan';
+                btnScanQr.classList.remove('webrtc-menu-item');
+                btnScanQr.classList.add('action'); // Mettre en bleu pour indiquer l'activité
+                
+                html5QrCodeWebRtc = new Html5Qrcode("qr-scanner-region");
+                const config = { fps: 10, qrbox: { width: 200, height: 200 } };
+                
+                html5QrCodeWebRtc.start({ facingMode: "environment" }, config, (decodedText) => {
+                    // Succès du scan
+                    NetService.stopWebRtcScanner();
+                    const hostId = decodedText.trim();
+                    document.getElementById('input-join-id').value = hostId;
+                    PeerService.joinClient(hostId);
+                    closeWebRtcModal();
+                }, (errorMessage) => {
+                    // Erreur/Progression
+                })
+                .catch(err => {
+                    NetService.stopWebRtcScanner();
+                    webrtcScannerRegion.innerHTML = `<div class="qr-scan-placeholder" style="color:var(--danger-red);">Erreur Caméra: ${err}.</div>`;
+                    showToast("Erreur caméra WebRTC", true);
+                });
+            },
+            
+            stopWebRtcScanner: () => {
+                 if (html5QrCodeWebRtc) {
+                    html5QrCodeWebRtc.stop().catch(err => console.log("Stop WebRTC Scanner failed", err));
+                    html5QrCodeWebRtc = null;
+                 }
+                 webrtcScannerRegion.style.display = 'none';
+                 webrtcScannerRegion.innerHTML = `<div class="qr-scan-placeholder" style="text-align: center;">Scan QR Code en cours...</div>`;
+                 btnScanQr.innerHTML = '<span class="material-symbols-outlined" style="font-size: 1.5rem;">qr_code_scanner</span> Scanner QR Code';
+                 btnScanQr.classList.remove('action');
+                 btnScanQr.classList.add('webrtc-menu-item');
             }
         };
 
@@ -1665,9 +1747,9 @@
         function closeTransferModal() {
             document.getElementById('modalBackdrop').style.display = 'none';
             transferModal.style.display = 'none';
-            if(html5QrCode) { 
-                html5QrCode.stop().catch(err => console.log("Stop failed", err));
-                html5QrCode = null;
+            if(html5QrCodeLocal) { // Utilise le nom pour le scanner local
+                html5QrCodeLocal.stop().catch(err => console.log("Stop failed", err));
+                html5QrCodeLocal = null;
             }
         }
         function switchTransferTab(tabName) {
@@ -1681,7 +1763,7 @@
             document.getElementById(`transfer-${tabName}`).classList.add('active');
             
             if(tabName === 'send') {
-                if(html5QrCode) { html5QrCode.stop().then(() => html5QrCode = null); }
+                if(html5QrCodeLocal) { html5QrCodeLocal.stop().then(() => html5QrCodeLocal = null); }
                 prepareQRPagination(); // Initialise la pagination
             } else {
                 startScanner();
@@ -1767,10 +1849,10 @@
 
         function startScanner() {
             if (PeerService.isClientReadOnly) { showToast("Importation par QR non autorisée en mode Client WebRTC.", true); return; }
-            if (html5QrCode) return; // Déjà actif
-            html5QrCode = new Html5Qrcode("qr-reader");
+            if (html5QrCodeLocal) return; // Déjà actif
+            html5QrCodeLocal = new Html5Qrcode("qr-reader");
             const config = { fps: 10, qrbox: { width: 250, height: 250 } };
-            html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess)
+            html5QrCodeLocal.start({ facingMode: "environment" }, config, onScanSuccess)
             .catch(err => {
                 document.getElementById('qr-reader').textContent = "Erreur caméra: " + err;
             });
@@ -1823,6 +1905,8 @@
             document.getElementById('modalBackdrop').style.display = 'block';
             webrtcModal.style.display = 'block';
             
+            NetService.stopWebRtcScanner(); // S'assurer que le scanner est arrêté à l'ouverture
+            
             // Masquer/Afficher les vues selon l'état de connexion
             const isConnected = PeerService.isHost || PeerService.hostId;
             document.getElementById('webrtc-active-controls').style.display = isConnected ? 'flex' : 'none';
@@ -1835,9 +1919,9 @@
         }
         
         function closeWebRtcModal() {
+            NetService.stopWebRtcScanner(); // Arrêter le scanner avant de fermer
             document.getElementById('modalBackdrop').style.display = 'none';
             webrtcModal.style.display = 'none';
-            // Assurez-vous que le scanner QR est stoppé s'il était actif dans cette modale (non implémenté ici mais bonne pratique)
         }
         
         function showDisconnectModal() {
@@ -1905,6 +1989,15 @@
             // Listeners WebRTC
             webrtcDockBtn.addEventListener('click', openWebRtcModal);
             closeWebRtcModalBtn.addEventListener('click', closeWebRtcModal);
+            
+            // Toggle du scanner QR WebRTC
+            btnScanQr.addEventListener('click', () => {
+                if (html5QrCodeWebRtc) {
+                    NetService.stopWebRtcScanner();
+                } else {
+                    NetService.startWebRtcScanner();
+                }
+            });
             
             document.getElementById('btn-create-host').addEventListener('click', () => { 
                 PeerService.createHost();
