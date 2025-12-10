@@ -119,7 +119,7 @@
         }
         #intervention_title_input:focus { border-bottom-color: var(--accent-blue); box-shadow: none; }
         
-        /* WebRTC Status Box */
+        /* WebRTC Status Box - Maintenant cliquable */
         #webrtc-status-box {
             font-size: 0.8rem;
             font-family: var(--font-data);
@@ -131,8 +131,11 @@
             gap: 5px;
             font-weight: bold;
             text-transform: uppercase;
-            transition: background 0.3s;
+            transition: background 0.3s, transform 0.1s;
+            cursor: pointer; /* Indique que c'est un bouton */
         }
+        #webrtc-status-box:active { transform: scale(0.98); }
+
         .status-disconnected { background: rgba(239, 68, 68, 0.2); color: var(--danger-red); border: 1px solid var(--danger-red); }
         .status-host { background: rgba(59, 130, 246, 0.2); color: var(--color-host); border: 1px solid var(--color-host); }
         .status-connected { background: rgba(34, 197, 94, 0.2); color: var(--color-connected); border: 1px solid var(--color-connected); }
@@ -149,6 +152,7 @@
             padding: 20px;
             margin-bottom: 25px;
             position: relative;
+            transition: opacity 0.3s; /* Pour l'effet de masquage en mode client */
         }
 
         .form-header {
@@ -279,12 +283,12 @@
         /* Modification pour la visibilité du bouton Fermer */
         #closeWebRtcModalBtn {
             background: var(--text-muted); /* Couleur neutre */
-            color: var(--bg-body); /* Texte sombre, visible en light mode */
+            color: white; /* Texte blanc, visible en light mode aussi */
             border: none;
         }
         body.light-mode #closeWebRtcModalBtn {
             background: var(--text-muted); /* Reste visible sur fond blanc */
-            color: white; /* Texte blanc sur fond sombre */
+            color: var(--text-main); /* Texte sombre */
         }
         
         /* Modal WebRTC - Login */
@@ -311,7 +315,7 @@
 
         /* QR Scanner pour la connexion */
         #qr-scanner-region {
-            width: 100%; height: 200px; margin: 20px auto; 
+            width: 256px; height: 256px; margin: 20px auto; /* Taille demandée */
             border: 2px solid var(--accent-blue);
             border-radius: var(--radius-sm); overflow: hidden; 
             background: black; 
@@ -372,6 +376,12 @@
         @media (max-width: 768px) {
             .container { padding: 10px; }
             h1 { font-size: 2em; }
+            
+            /* Amélioration de la lisibilité des logs en mode client/lecture seule */
+            #logTableContainer { 
+                /* Assure que le conteneur est visible même si le formulaire est masqué */
+                margin-top: 5px; 
+            }
             .form-row.main-fields { display: flex; flex-direction: column; gap: 15px; }
             .form-row.main-fields > div:nth-child(1) { order: 1; display: flex; align-items: center; gap: 10px; }
             .form-row.main-fields > div:nth-child(1) input { width: 120px; }
@@ -556,7 +566,7 @@
         <div id="intervention-title-container">
             <label for="intervention_title_input"><span class="material-symbols-outlined" style="vertical-align:bottom; font-size:1.1em; margin-right:5px;">edit_document</span>Opération :</label>
             <input type="text" id="intervention_title_input" placeholder="Nom de l'intervention..." value="">
-            <div id="webrtc-status-box" class="status-disconnected" title="Statut WebRTC">
+            <div id="webrtc-status-box" class="status-disconnected" title="Statut WebRTC" onclick="showDisconnectModal()">
                 <span class="material-symbols-outlined" style="font-size: 1em;">sensors_off</span>
                 <span id="webrtc-status-text">Déconnecté</span>
             </div>
@@ -672,6 +682,8 @@
         const TITLE_STORAGE_KEY = 'pcTacTitle';
         const WEBRTC_STORAGE_KEY = 'pcTacWebRTC';
         
+        const RECONNECT_INTERVAL_MS = 5000; // Tentative de reconnexion toutes les 5s
+        
         const FREE_MODE_COLORS = [
             { hex: '#800000', name: 'Bordeaux' }, { hex: '#B87333', name: 'Cuivre' },         
             { hex: '#FFDB58', name: 'Jaune Moutarde' }, { hex: '#A3D900', name: 'Vert Lime' },      
@@ -761,6 +773,7 @@
             hostId: null, // Si client, l'ID de l'hôte
             localId: null, // L'ID généré pour cette session
             isReady: false,
+            reconnectTimer: null,
             
             // État pour les clients qui ne doivent pas éditer
             isClientReadOnly: false, 
@@ -779,6 +792,9 @@
                 peer.on('open', (pid) => {
                     PeerService.localId = pid;
                     PeerService.isReady = true;
+                    // Arrêter le loop de reconnexion si on réussit
+                    clearInterval(PeerService.reconnectTimer);
+                    
                     NetService.updateUI(PeerService.isHost ? 'host' : 'connected');
                     
                     if (PeerService.isHost) {
@@ -791,26 +807,58 @@
 
                 peer.on('error', (err) => {
                     console.error("PeerJS Error:", err);
-                    NetService.updateUI('disconnected');
-                    // On ne montre la modale d'erreur que si on est en phase active de connexion
-                    if (document.getElementById('webrtcModal').style.display === 'block' || PeerService.hostId) {
-                        showMessageModal("Erreur Réseau", `Erreur PeerJS : ${err.type}. Veuillez réessayer.`, true);
-                    }
-                    PeerService.isClientReadOnly = false;
-                    PeerService.hostId = null; // Réinitialiser pour permettre un nouvel essai
-                    if (html5QrCodeWebRtc) NetService.stopWebRtcScanner();
                     
+                    // Si l'erreur n'est pas due à une déconnexion (peer-unavailable/network), on réagit.
+                    if (err.type !== 'peer-unavailable' && err.type !== 'network') {
+                        NetService.updateUI('disconnected');
+                        
+                        if (document.getElementById('webrtcModal').style.display === 'block' || PeerService.hostId) {
+                            showMessageModal("Erreur Réseau", `Erreur PeerJS : ${err.type}. Veuillez réessayer.`, true);
+                        }
+                        PeerService.isClientReadOnly = false;
+                        PeerService.hostId = null; 
+                        if (html5QrCodeWebRtc) NetService.stopWebRtcScanner();
+                        
+                        // Tenter la reconnexion si on était connecté et que l'erreur est grave (ex: id déjà utilisé)
+                        if (PeerService.hostId || PeerService.isHost) {
+                            PeerService.startReconnectLoop();
+                        }
+                    }
                 });
                 
                 peer.on('disconnected', () => { 
                     showToast("Déconnexion PeerJS. Reco...");
-                    peer.reconnect();
+                    // PeerJS tente de reconnecter automatiquement, mais on ajoute notre boucle de sécurité
+                    PeerService.startReconnectLoop();
                 });
 
-                // Gère les connexions entrantes (Hôte)
                 peer.on('connection', NetService.handleConnection);
                 
                 PeerService.peer = peer;
+            },
+            
+            reconnectLoop: () => {
+                // Tente de se reconnecter si PeerService n'est pas prêt et que des infos de session existent
+                if (!PeerService.isReady && (PeerService.hostId || PeerService.isHost)) {
+                    showToast("Tentative de reconnexion...", true);
+                    
+                    if (PeerService.isHost) {
+                        // Recréer la session Host
+                        PeerService.initPeer(); 
+                    } else if (PeerService.hostId) {
+                        // Recréer la session Client et tenter de rejoindre
+                        PeerService.initPeer(crypto.randomUUID());
+                    }
+                } else if (PeerService.isReady && PeerService.hostId && !PeerService.conn[PeerService.hostId]) {
+                     // Peer prêt mais n'est plus connecté à l'hôte (côté client)
+                     NetService.connectToHost();
+                }
+            },
+
+            startReconnectLoop: () => {
+                if (!PeerService.reconnectTimer) {
+                    PeerService.reconnectTimer = setInterval(PeerService.reconnectLoop, RECONNECT_INTERVAL_MS);
+                }
             },
             
             createHost: () => {
@@ -829,6 +877,10 @@
             },
 
             disconnect: (isFullReset = false) => {
+                // Arrêter la boucle de reconnexion
+                clearInterval(PeerService.reconnectTimer);
+                PeerService.reconnectTimer = null;
+
                 Object.values(PeerService.conn).forEach(c => {
                     if (c.open) c.close();
                 });
@@ -845,6 +897,9 @@
                 document.getElementById('webrtc-login-view').style.display = 'block';
                 document.getElementById('webrtc-host-view').style.display = 'none';
                 document.getElementById('webrtc-client-view').style.display = 'none';
+                
+                // Affichage du formulaire d'ajout de log
+                logForm.style.display = 'block';
                 
                 if (isFullReset) {
                     localStorage.removeItem(WEBRTC_STORAGE_KEY);
@@ -897,7 +952,8 @@
                     } else if (conn.peer === PeerService.hostId) {
                         // Client a perdu la connexion avec l'hôte
                         PeerService.disconnect();
-                        showMessageModal("Déconnexion", "Connexion à l'hôte perdue.", true);
+                        showMessageModal("Déconnexion", "Connexion à l'hôte perdue. Tentative de reconnexion en arrière-plan.", true);
+                        PeerService.startReconnectLoop(); // Redémarre la boucle de reconnexion
                     }
                 });
 
@@ -989,6 +1045,7 @@
                 if (status === 'disconnected') {
                      logForm.disabled = false;
                      interventionTitleInput.disabled = false;
+                     logForm.style.display = 'block'; // Afficher le formulaire en mode déconnecté
                 }
             },
             
@@ -1007,6 +1064,7 @@
                  new QRCode(document.getElementById('qr-code-region'), { text: pid, width: 200, height: 200 });
                  NetService.updateUI('host', pid);
                  NetService.updateHostPeerCount();
+                 logForm.style.display = 'block'; // L'hôte garde le formulaire
             },
             
             showClientUI: (hostId) => {
@@ -1015,9 +1073,10 @@
                  document.getElementById('webrtc-client-view').style.display = 'block';
                  document.getElementById('client-session-id-display').innerText = `Canal: ${hostId}`;
                  NetService.updateUI('connected', hostId);
-                 // Désactiver l'édition pour le client
+                 // Désactiver et masquer l'édition pour le client
                  logForm.disabled = true;
                  interventionTitleInput.disabled = true;
+                 logForm.style.display = 'none'; // Masquer le formulaire en mode client
             },
             
             loadSession: () => {
@@ -1043,16 +1102,13 @@
                 webrtcScannerRegion.style.display = 'block';
                 btnScanQr.innerHTML = '<span class="material-symbols-outlined" style="font-size: 1.5rem;">stop</span> Arrêter Scan';
                 btnScanQr.classList.remove('webrtc-menu-item');
-                btnScanQr.classList.add('action'); // Mettre en bleu pour indiquer l'activité
+                btnScanQr.classList.add('action'); 
                 
-                // Utilisation de la méthode Html5Qrcode de Comtac
                 html5QrCodeWebRtc = new Html5Qrcode("qr-scanner-region");
                 
-                // Configuration similaire à ComTac pour un scan rapide
                 const config = { 
                     fps: 10, 
-                    qrbox: { width: 250, height: 250 },
-                    // S'assurer que le mode face à l'environnement est préféré
+                    qrbox: { width: 256, height: 256 }, // Taille demandée
                     disableFlip: false 
                 };
                 
@@ -1066,8 +1122,7 @@
                         closeWebRtcModal();
                     }, 
                     (errorMessage) => {
-                        // Affichage des messages d'erreur dans la console si besoin
-                        // console.log("QR Scan progress/error:", errorMessage);
+                        // Progression du scan ou petite erreur ignorée
                     }
                 )
                 .catch(err => {
@@ -1326,11 +1381,15 @@
              saveLogData(getLogData());
              // Gère l'état d'édition si client
              if (PeerService.isClientReadOnly) {
-                 logForm.style.pointerEvents = 'none';
-                 logForm.style.opacity = 0.5;
+                 logForm.disabled = true;
+                 interventionTitleInput.disabled = true;
+                 logForm.style.display = 'none'; // Masquer le formulaire en mode client
+                 sortTimeBtn.disabled = true;
              } else {
-                 logForm.style.pointerEvents = 'auto';
-                 logForm.style.opacity = 1;
+                 logForm.disabled = false;
+                 interventionTitleInput.disabled = false;
+                 logForm.style.display = 'block';
+                 sortTimeBtn.disabled = false;
              }
         }
         
@@ -1937,6 +1996,12 @@
         }
         
         function showDisconnectModal() {
+             // Si déjà déconnecté, la modale n'est pas nécessaire, on ouvre la modale de connexion
+             if (!PeerService.isHost && !PeerService.hostId) {
+                 openWebRtcModal();
+                 return;
+             }
+             
              document.getElementById('disconnectMessage').textContent = PeerService.isHost 
                 ? "Confirmer la déconnexion de la session HÔTE ? Tous les clients seront déconnectés."
                 : "Confirmer la déconnexion de la session CLIENT ?";
