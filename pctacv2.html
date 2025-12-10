@@ -250,6 +250,30 @@
             align-items: center;
         }
 
+        /* Vue Transfert Import */
+        .transfer-tabs { display: flex; gap: 10px; margin-bottom: 20px; }
+        .transfer-tab-btn {
+            flex: 1; padding: 10px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-glass);
+            color: var(--text-muted); cursor: pointer; border-radius: var(--radius-sm); font-family: var(--font-ui);
+        }
+        .transfer-tab-btn.active { background: var(--accent-blue); color: white; border-color: transparent; }
+        .transfer-content { display: none; }
+        .transfer-content.active { display: block; }
+
+        #qrcode-container {
+            background: white; padding: 20px; border-radius: var(--radius-sm); margin: 20px auto;
+            display: inline-block; max-width: 100%;
+        }
+        #qr-nav-controls {
+            display: flex; justify-content: center; align-items: center; gap: 15px; margin-top: 15px;
+            background: rgba(255,255,255,0.05); padding: 10px; border-radius: 8px;
+        }
+        .qr-nav-btn {
+            background: rgba(255,255,255,0.1); border: 1px solid var(--border-glass); color: var(--text-main);
+            width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer;
+        }
+        .qr-nav-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
         /* Mobile */
         @media (max-width: 768px) {
             .form-row.main-fields { display: flex; flex-direction: column; gap: 15px; }
@@ -294,13 +318,36 @@
         </div>
     </div>
     
-    <!-- MODAL IMPORT QR (NOUVEAU) -->
+    <!-- MODAL IMPORT QR (MODIFIÉ POUR EXPORT/IMPORT QR LOCAUX) -->
     <div class="custom-modal" id="qrImportModal">
         <h3 style="color: var(--success-green); margin-bottom: 15px; display:flex; align-items:center; gap:10px;">
-            <span class="material-symbols-outlined">qr_code_scanner</span> Scanner Import
+            <span class="material-symbols-outlined">sync_alt</span> Transfert de Données
         </h3>
-        <div id="qr-reader-import"></div>
-        <p style="color: var(--text-muted); font-size: 0.9em; margin-top: -10px;">Scanner le QR Code de session pour importer les données.</p>
+        
+        <div class="transfer-tabs">
+            <button class="transfer-tab-btn active" data-tab="send" onclick="switchQrTransferTab('send')">Envoyer (QR)</button>
+            <button class="transfer-tab-btn" data-tab="receive" onclick="switchQrTransferTab('receive')">Recevoir (Scan)</button>
+        </div>
+
+        <!-- Contenu Envoyer -->
+        <div id="qr-transfer-send" class="transfer-content active">
+            <div id="qrcode-container"></div>
+            
+            <div id="qr-nav-controls" style="display: none;">
+                <button class="qr-nav-btn" id="prevQrBtn"><span class="material-symbols-outlined">arrow_back</span></button>
+                <span id="qr-counter">1/1</span>
+                <button class="qr-nav-btn" id="nextQrBtn"><span class="material-symbols-outlined">arrow_forward</span></button>
+            </div>
+            
+            <p id="qr-status-text" style="color: var(--text-muted); font-size: 0.85em; margin-top: 10px;">Cliquez sur Envoyer pour générer les QR codes.</p>
+        </div>
+        
+        <!-- Contenu Recevoir -->
+        <div id="qr-transfer-receive" class="transfer-content">
+            <div id="qr-reader-import"></div>
+            <p style="color: var(--text-muted); font-size: 0.9em;">Scanner les QR codes séquentiellement pour importer l'historique.</p>
+        </div>
+
         <div class="modal-buttons">
             <button id="closeQrImportBtn" style="background: rgba(255,255,255,0.1); color: white;">Fermer</button>
         </div>
@@ -498,6 +545,8 @@
         const TITLE_STORAGE_KEY = 'pcTacTitle';
         const SESSION_STORAGE_KEY = 'pcTacLiveSession'; // Clé pour persister l'état de session
         
+        const QR_BATCH_SIZE = 8; // Nombre d'entrées par QR
+        
         const FREE_MODE_COLORS = [
             { hex: '#800000' }, { hex: '#B87333' }, { hex: '#FFDB58' }, { hex: '#A3D900' },      
             { hex: '#00FFFF' }, { hex: '#000080' }, { hex: '#FF69B4' }, { hex: '#FF8C00' },  
@@ -528,6 +577,9 @@
         let html5QrCodeScanner = null;
         let isTimeInputManuallyChanged = false;
         let paxColorMap = {}; 
+        
+        let qrChunks = [];
+        let currentQrIndex = 0;
 
         // --- GESTIONNAIRE RESEAU (Inspiré de COM TAC) ---
         const NetManager = {
@@ -588,7 +640,7 @@
             openModal: () => {
                 document.getElementById('modalBackdrop').style.display = 'block';
                 document.getElementById('networkModal').style.display = 'block';
-                NetManager.stopQrScanNet(); // Arrêter tout scan précédent si on ouvre le formulaire
+                NetManager.stopQrScanNet(); 
                 // Récupérer le callsign sauvegardé
                 const saved = localStorage.getItem('pcTacCallsign');
                 if(saved) document.getElementById('netCallsign').value = saved;
@@ -601,6 +653,11 @@
             },
 
             hostSession: () => {
+                // Déconnexion obligatoire avant de créer un nouveau salon
+                if (NetManager.peer) {
+                    NetManager.disconnect();
+                }
+
                 const cs = document.getElementById('netCallsign').value.trim();
                 if(!cs) return showToast("Identifiant requis");
                 NetManager.callsign = cs;
@@ -679,17 +736,18 @@
                         NetManager.connectToHost(NetManager.hostId);
                     } else {
                         showToast("Session créée. En attente...");
+                        // Hôte envoie le titre par défaut une fois l'ID défini
+                        NetManager.broadcast({ type: 'TITLE_UPDATE', title: interventionTitleInput.value.trim() });
                     }
                     document.querySelector('.modal-buttons button:first-child').innerText = 'Fermer';
                 });
 
-                NetManager.peer.on('connection', (conn) => {
+                peer.on('connection', (conn) => {
                     NetManager.handleConnection(conn);
                 });
 
                 NetManager.peer.on('error', (err) => {
                     console.error("PeerJS Error:", err);
-                    // Tenter la reconnexion si déconnecté ou erreur, SAUF si l'ID hôte n'existe pas
                     if (err.type === 'disconnected' || err.type === 'network') {
                         NetManager.attemptReconnect(isClient);
                     } else if (err.type !== 'peer-unavailable') {
@@ -699,7 +757,6 @@
                     document.querySelector('.modal-buttons button:first-child').innerText = 'Fermer';
                 });
                 
-                // Gérer les déconnexions (fermeture de l'onglet, perte de réseau)
                 NetManager.peer.on('disconnected', () => {
                     showToast("Déconnexion du serveur PeerJS. Tentative de reconnexion...", true);
                     NetManager.attemptReconnect(isClient);
@@ -712,14 +769,12 @@
                     const delay = NetManager.retryCount * 2000;
                     showToast(`Réessai de connexion dans ${delay/1000}s (${NetManager.retryCount}/${NetManager.maxRetries})`, true);
                     
-                    // Tenter la reconnexion si c'est une déconnexion soft
                     if (NetManager.peer && !NetManager.peer.destroyed) {
                         setTimeout(() => NetManager.peer.reconnect(), delay);
                     } else {
-                        // Reconnexion complète si l'objet peer est détruit
                         setTimeout(() => {
                              if (isClient) NetManager.initPeer(null, true);
-                             else NetManager.initPeer(NetManager.myId); // Tente de garder le même ID Hôte
+                             else NetManager.initPeer(NetManager.myId); 
                         }, delay);
                     }
 
@@ -737,7 +792,6 @@
                 conn.on('open', () => {
                     showToast("Connecté à l'Hôte");
                     NetManager.handleConnection(conn);
-                    // Demander la sync complète
                     conn.send({ type: 'SYNC_REQ' });
                 });
                 
@@ -745,36 +799,27 @@
             },
 
             handleConnection: (conn) => {
-                // Si on est Hôte, on ajoute à la liste
                 if(NetManager.isHost) {
                     NetManager.connections.push(conn);
                     NetManager.updatePeersCount();
                 } else {
-                    // Si on est client, c'est notre seule connexion vers le "Serveur"
                     NetManager.conn = conn;
                 }
 
                 conn.on('data', (data) => {
-                    // console.log("Reçu:", data);
-                    
                     if(data.type === 'SYNC_REQ' && NetManager.isHost) {
-                        // Un client demande les logs, on envoie tout
                         conn.send({ type: 'SYNC_FULL', logs: getLogData(), title: interventionTitleInput.value });
                         showToast(`Sync envoyée à ${conn.metadata.callsign || 'Client'}`);
                     }
                     
                     if(data.type === 'SYNC_FULL') {
-                        // On reçoit l'état complet (ex: à la connexion)
-                        // LE TITRE EST MIS À JOUR UNIQUEMENT LORS DU SYNC_FULL
                         if(data.title) { interventionTitleInput.value = data.title; saveTitle(data.title, false); } 
                         mergeLogs(data.logs);
                         showToast("Données synchronisées");
                     }
 
                     if(data.type === 'LOG_ADD') {
-                        // Ajout d'une entrée unique
                         addLogLocally(data.entry);
-                        // Si je suis Hôte, je rebroadcast aux autres
                         if(NetManager.isHost) NetManager.broadcastExcept(data, conn.peer);
                     }
 
@@ -784,9 +829,8 @@
                     }
                     
                     if(data.type === 'TITLE_UPDATE') {
-                        // TITRE: Reçu lors d'un UPDATE, pas de broadcast nécessaire
                         interventionTitleInput.value = data.title;
-                        saveTitle(data.title, false); // Mise à jour locale sans broadcast
+                        saveTitle(data.title, false); 
                         showToast(`Opération : ${data.title}`);
                     }
                 });
@@ -797,12 +841,11 @@
                         NetManager.updatePeersCount();
                     } else {
                         showToast("Déconnecté de l'hôte", true);
-                        NetManager.attemptReconnect(false); // Tentative de reconnexion si client
+                        NetManager.attemptReconnect(false); 
                     }
                 });
             },
 
-            // Envoi à tout le monde (appelé par l'interface quand on ajoute un log)
             broadcast: (data) => {
                 if(!NetManager.peer || NetManager.peer.destroyed) return;
                 
@@ -815,7 +858,6 @@
                 }
             },
 
-            // Rebroadcast de l'hôte vers les autres clients
             broadcastExcept: (data, exceptId) => {
                 NetManager.connections.forEach(c => {
                     if(c.open && c.peer !== exceptId) c.send(data);
@@ -828,7 +870,7 @@
                 NetManager.connections = [];
                 NetManager.hostId = null;
                 NetManager.isHost = false;
-                localStorage.removeItem(SESSION_STORAGE_KEY); // Supprimer la persistance
+                localStorage.removeItem(SESSION_STORAGE_KEY); 
                 NetManager.updateUI(false);
                 showToast("Déconnexion effectuée");
             },
@@ -841,7 +883,7 @@
                 const viewOn = document.getElementById('net-connected-view');
                 const dockBtn = document.getElementById('networkDockBtn');
 
-                viewScan.style.display = 'none'; // S'assurer que le scan est masqué
+                viewScan.style.display = 'none'; 
                 
                 if(connected) {
                     badge.classList.add('connected');
@@ -891,13 +933,16 @@
         // Sauvegarde locale du titre et envoi sur le réseau si sendBroadcast est true
         function saveTitle(newTitle = interventionTitleInput.value.trim(), sendBroadcast = true) { 
             localStorage.setItem(TITLE_STORAGE_KEY, newTitle);
-            if (sendBroadcast && NetManager.peer && NetManager.myId) {
-                 NetManager.broadcast({ type: 'TITLE_UPDATE', title: newTitle });
-            }
+            // Suppression de l'envoi en direct pour éviter le spam, sauf si explicitement demandé (non utilisé ici)
+            // if (sendBroadcast && NetManager.peer && NetManager.myId) {
+            //      NetManager.broadcast({ type: 'TITLE_UPDATE', title: newTitle });
+            // }
+            // Correction: Le broadcast n'est pas nécessaire ici, car l'update réseau ne doit se faire que lors du SYNC_FULL
         }
         
-        // Listener pour déclencher le broadcast du titre
-        interventionTitleInput.oninput = () => saveTitle(interventionTitleInput.value.trim(), true);
+        // Listener pour déclencher le broadcast du titre (Désactivé pour éviter le spam de connexion)
+        interventionTitleInput.oninput = () => saveTitle(interventionTitleInput.value.trim(), false); 
+        // Si le titre change, il sera synchronisé lors de la prochaine connexion/reconnexion complète (SYNC_FULL)
 
         // Fusionne les logs reçus (ex: connexion) avec les locaux
         function mergeLogs(remoteLogs) {
@@ -1160,18 +1205,110 @@
             newHistory.fp.forEach(l => dlFp.innerHTML += `<option value="${l}">`);
         }
         
-        // --- QR IMPORT LOGS ---
+        // --- QR IMPORT/EXPORT LOGS (LOCAL) ---
         
+        function chunkArray(array, size) {
+            const chunks = [];
+            for (let i = 0; i < array.length; i += size) {
+                chunks.push(array.slice(i, i + size));
+            }
+            return chunks;
+        }
+
         function openQrImportModal() {
             document.getElementById('modalBackdrop').style.display = 'block';
             qrImportModal.style.display = 'block';
             
+            switchQrTransferTab('send');
+        }
+        
+        function switchQrTransferTab(tabName) {
+            document.querySelectorAll('.transfer-tab-btn').forEach(t => t.classList.toggle('active', t.dataset.tab === tabName));
+            document.querySelectorAll('.transfer-content').forEach(c => c.classList.remove('active'));
+            document.getElementById(`qr-transfer-${tabName}`).classList.add('active');
+            
+            stopQrImportScan(); // Arrêter l'ancien scan si on change d'onglet
+            
+            if (tabName === 'send') {
+                prepareQRPagination();
+            } else {
+                startQrImportScan();
+            }
+        }
+        
+        function prepareQRPagination() {
+            const logs = getLogData();
+            const container = document.getElementById('qrcode-container');
+            const statusText = document.getElementById('qr-status-text');
+            const navControls = document.getElementById('qr-nav-controls');
+            
+            container.innerHTML = '';
+            
+            if (logs.length === 0) {
+                statusText.textContent = "Aucune donnée à transférer.";
+                navControls.style.display = 'none';
+                return;
+            }
+
+            // Format compressé: [id, heure, pax, paxMode, paxColor, lieu, fenetrePorte, remarques]
+            let compressedData = logs.map(l => [l.id, l.heure, l.pax, l.paxMode, l.paxColor, l.lieu, l.fenetrePorte, l.remarques]);
+            
+            qrChunks = chunkArray(compressedData, QR_BATCH_SIZE);
+            currentQrIndex = 0;
+            
+            navControls.style.display = qrChunks.length > 1 ? 'flex' : 'none';
+            
+            showQR(currentQrIndex);
+        }
+
+        function showQR(index) {
+            const container = document.getElementById('qrcode-container');
+            const statusText = document.getElementById('qr-status-text');
+            const counter = document.getElementById('qr-counter');
+            const prevBtn = document.getElementById('prevQrBtn');
+            const nextBtn = document.getElementById('nextQrBtn');
+            
+            container.innerHTML = ''; // Clear previous QR
+            
+            // Préparer le payload pour ce chunk spécifique
+            let transferPayload = { 
+                t: interventionTitleInput.value, // Titre envoyé avec chaque chunk pour le sync
+                d: qrChunks[index],
+                c: index + 1, // Index courant
+                n: qrChunks.length // Nombre total de chunks
+            };
+            let jsonString = JSON.stringify(transferPayload);
+            
+            new QRCode(container, {
+                text: jsonString,
+                width: 256,
+                height: 256,
+                colorDark : "#000000",
+                colorLight : "#ffffff",
+                correctLevel : QRCode.CorrectLevel.M
+            });
+            
+            // Mise à jour UI Navigation
+            statusText.textContent = `Page ${index + 1} sur ${qrChunks.length} - ${qrChunks[index].length} entrées.`;
+            counter.textContent = `${index + 1} / ${qrChunks.length}`;
+            prevBtn.disabled = index === 0;
+            nextBtn.disabled = index === qrChunks.length - 1;
+        }
+
+        document.getElementById('prevQrBtn').addEventListener('click', () => {
+            if (currentQrIndex > 0) { currentQrIndex--; showQR(currentQrIndex); }
+        });
+        document.getElementById('nextQrBtn').addEventListener('click', () => {
+            if (currentQrIndex < qrChunks.length - 1) { currentQrIndex++; showQR(currentQrIndex); }
+        });
+
+
+        function startQrImportScan() {
             html5QrCodeScanner = new Html5Qrcode("qr-reader-import");
             const config = { fps: 10, qrbox: { width: 250, height: 250 } };
             
             html5QrCodeScanner.start({ facingMode: "environment" }, config, 
                 (decodedText) => {
-                    stopQrImportScan();
                     handleQrImportData(decodedText);
                 }, 
                 (errorMessage) => {
@@ -1182,7 +1319,7 @@
                 stopQrImportScan();
             });
         }
-        
+
         function stopQrImportScan() {
             if(html5QrCodeScanner) {
                 html5QrCodeScanner.stop().catch(err => console.log("Stop scan failed:", err));
@@ -1198,14 +1335,32 @@
             try {
                 const data = JSON.parse(dataString);
                 
-                // Vérifier si c'est un format de log valide (on suppose un format simple type LOG_ADD entry)
-                if (data.metadata && data.logs) {
-                    // C'est un export JSON complet
+                // Le QR code séquentiel utilise le format {t: titre, d: logs, c: current, n: total}
+                if (data.t !== undefined && Array.isArray(data.d)) {
+                    // C'est un chunk de log séquentiel
+                    if(data.t) { interventionTitleInput.value = data.t; saveTitle(data.t, false); }
+                    
+                    // Format reçu: [id, heure, pax, paxMode, paxColor, lieu, fenetrePorte, remarques]
+                    const logsToAdd = data.d.map(item => ({
+                        id: item[0],
+                        heure: item[1],
+                        pax: item[2],
+                        paxMode: item[3],
+                        paxColor: item[4],
+                        lieu: item[5],
+                        fenetrePorte: item[6],
+                        remarques: item[7]
+                    }));
+                    
+                    mergeLogs(logsToAdd);
+                    showToast(`Paquet reçu ${data.c}/${data.n} (${logsToAdd.length} entrées ajoutées).`);
+                    
+                } else if (data.metadata && data.logs) {
+                    // Import JSON complet (au cas où on scanne un QR généré par export JSON)
                     if(data.metadata.title) { interventionTitleInput.value = data.metadata.title; saveTitle(data.metadata.title, false); }
                     mergeLogs(data.logs);
                     showToast("Import JSON (QR) réussi");
                 } else {
-                    // C'est un log unique (venant d'un broadcast exporté par erreur)
                     showToast("Format QR inconnu ou invalide.", true);
                 }
                 
