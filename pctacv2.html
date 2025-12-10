@@ -364,7 +364,7 @@
             </div>
 
             <button class="btn-action" style="background: var(--danger-red);" onclick="NetManager.disconnect()">
-                Déconnexion
+                <span class="material-symbols-outlined" style="vertical-align: middle;">power_off</span> Déconnexion
             </button>
         </div>
 
@@ -693,7 +693,7 @@
                     
                     if(data.type === 'SYNC_FULL') {
                         // On reçoit l'état complet (ex: à la connexion)
-                        if(data.title) { interventionTitleInput.value = data.title; saveTitle(); }
+                        if(data.title) { interventionTitleInput.value = data.title; saveTitle(data.title); } // Appel à saveTitle avec la valeur
                         mergeLogs(data.logs);
                         showToast("Données synchronisées");
                     }
@@ -708,6 +708,12 @@
                     if(data.type === 'LOG_DEL') {
                         deleteLogLocally(data.id);
                         if(NetManager.isHost) NetManager.broadcastExcept(data, conn.peer);
+                    }
+                    
+                    if(data.type === 'TITLE_UPDATE') {
+                        saveTitle(data.title);
+                        interventionTitleInput.value = data.title;
+                        showToast(`Opération : ${data.title}`);
                     }
                 });
 
@@ -747,6 +753,7 @@
                 NetManager.peer = null;
                 NetManager.connections = [];
                 NetManager.updateUI(false);
+                showToast("Déconnexion effectuée");
             },
 
             updateUI: (connected) => {
@@ -803,6 +810,16 @@
             return Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
         }
         
+        // Sauvegarde locale du titre et envoi sur le réseau si connecté
+        function saveTitle(newTitle = interventionTitleInput.value.trim()) { 
+            localStorage.setItem(TITLE_STORAGE_KEY, newTitle);
+            if (NetManager.peer && NetManager.myId) {
+                 NetManager.broadcast({ type: 'TITLE_UPDATE', title: newTitle });
+            }
+        }
+        // Listener pour déclencher le broadcast du titre
+        interventionTitleInput.oninput = () => saveTitle(interventionTitleInput.value.trim());
+
         // Fusionne les logs reçus (ex: connexion) avec les locaux
         function mergeLogs(remoteLogs) {
             const currentLogs = getLogData();
@@ -1105,7 +1122,7 @@
                 // Vérifier si c'est un format de log valide (on suppose un format simple type LOG_ADD entry)
                 if (data.metadata && data.logs) {
                     // C'est un export JSON complet
-                    if(data.metadata.title) { interventionTitleInput.value = data.metadata.title; saveTitle(); }
+                    if(data.metadata.title) { interventionTitleInput.value = data.metadata.title; saveTitle(data.metadata.title); }
                     mergeLogs(data.logs);
                     showToast("Import JSON (QR) réussi");
                 } else {
@@ -1376,11 +1393,9 @@
             const savedLogs = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY) || '[]');
             renderLogTable(savedLogs);
             updateHistoryAndColorMap(savedLogs);
+            
+            // Le titre est chargé ici, mais le listener est défini dans saveTitle()
             interventionTitleInput.value = localStorage.getItem(TITLE_STORAGE_KEY) || '';
-            interventionTitleInput.oninput = () => {
-                localStorage.setItem(TITLE_STORAGE_KEY, interventionTitleInput.value);
-                // Si connecté, on peut vouloir sync le titre aussi, mais optionnel pour l'instant
-            };
 
             // Form Logic
             document.getElementById('log-form').onsubmit = handleAddLogEntry;
