@@ -243,6 +243,13 @@
             border-radius: var(--radius-sm); overflow: hidden; background: black;
         }
 
+        /* Vue Scan Réseau */
+        #net-scan-view {
+            display: none; /* Caché par défaut */
+            flex-direction: column;
+            align-items: center;
+        }
+
         /* Mobile */
         @media (max-width: 768px) {
             .form-row.main-fields { display: flex; flex-direction: column; gap: 15px; }
@@ -310,7 +317,7 @@
             <input type="text" id="netCallsign" placeholder="Ex: PC, ALPHA, BRAVO..." maxlength="10" style="text-align: center; font-weight: bold; letter-spacing: 1px;">
         </div>
 
-        <!-- État: Déconnecté -->
+        <!-- État: Déconnecté (Formulaire) -->
         <div id="net-disconnected-view">
             <button class="btn-action" onclick="NetManager.hostSession()">
                 <span class="material-symbols-outlined" style="vertical-align: middle;">add_circle</span> Créer une Session (Hôte)
@@ -327,6 +334,15 @@
             </button>
             <button class="btn-action secondary" onclick="NetManager.scanJoinQR()">
                 <span class="material-symbols-outlined" style="vertical-align: middle; margin-right: 5px;">qr_code_scanner</span> Scanner ID Session
+            </button>
+        </div>
+
+        <!-- État: Déconnecté (Scan en cours) -->
+        <div id="net-scan-view">
+            <div id="qr-reader-net"></div>
+            <p style="color: var(--text-muted); font-size: 0.9em; margin-top: -10px;">Visez le QR Code de session de l'Hôte.</p>
+            <button class="btn-action secondary" id="btn-cancel-scan" onclick="NetManager.stopQrScanNet()" style="margin-top: 10px;">
+                Annuler Scan
             </button>
         </div>
 
@@ -353,7 +369,7 @@
         </div>
 
         <div class="modal-buttons">
-            <button onclick="document.getElementById('networkModal').style.display='none'; document.getElementById('modalBackdrop').style.display='none';">Fermer</button>
+            <button onclick="NetManager.closeModal()">Fermer</button>
         </div>
     </div>
     
@@ -539,6 +555,7 @@
             openModal: () => {
                 document.getElementById('modalBackdrop').style.display = 'block';
                 document.getElementById('networkModal').style.display = 'block';
+                NetManager.stopQrScanNet(); // Arrêter tout scan précédent si on ouvre le formulaire
                 // Récupérer le callsign sauvegardé
                 const saved = localStorage.getItem('pcTacCallsign');
                 if(saved) document.getElementById('netCallsign').value = saved;
@@ -573,12 +590,13 @@
             },
             
             scanJoinQR: () => {
-                NetManager.openModal(); // S'assurer que la modal est ouverte
+                // S'assurer que les autres vues sont cachées
+                document.getElementById('net-disconnected-view').style.display = 'none';
+                document.getElementById('net-scan-view').style.display = 'flex';
+                document.getElementById('net-connected-view').style.display = 'none';
+
                 NetManager.qrScannerNet = new Html5Qrcode("qr-reader-net");
                 const config = { fps: 10, qrbox: { width: 200, height: 200 } };
-                
-                document.getElementById('net-disconnected-view').style.display = 'none';
-                document.getElementById('qr-reader-net').style.display = 'block';
                 
                 NetManager.qrScannerNet.start({ facingMode: "environment" }, config, 
                     (decodedText) => {
@@ -600,12 +618,18 @@
                     NetManager.qrScannerNet.stop().catch(err => console.log("Stop scan failed:", err));
                     NetManager.qrScannerNet = null;
                 }
+                // Rétablir la vue formulaire déconnecté
                 document.getElementById('net-disconnected-view').style.display = 'block';
-                document.getElementById('qr-reader-net').style.display = 'none';
+                document.getElementById('net-scan-view').style.display = 'none';
+                document.getElementById('net-connected-view').style.display = 'none';
             },
 
             initPeer: (forceId = null, isClient = false) => {
-                document.querySelector('#net-disconnected-view .btn-action').innerText = "Connexion...";
+                // Cacher les autres vues pendant l'initialisation
+                document.getElementById('net-disconnected-view').style.display = 'none';
+                document.getElementById('net-scan-view').style.display = 'none';
+                
+                document.querySelector('.modal-buttons button:first-child').innerText = 'Connexion...';
                 
                 NetManager.peer = new Peer(forceId, NetManager.config);
 
@@ -618,6 +642,7 @@
                     } else {
                         showToast("Session créée. En attente...");
                     }
+                    document.querySelector('.modal-buttons button:first-child').innerText = 'Fermer';
                 });
 
                 NetManager.peer.on('connection', (conn) => {
@@ -628,6 +653,7 @@
                     console.error(err);
                     showToast("Erreur Réseau: " + err.type);
                     NetManager.disconnect();
+                    document.querySelector('.modal-buttons button:first-child').innerText = 'Fermer';
                 });
             },
 
@@ -727,9 +753,12 @@
                 const badge = document.getElementById('live-status-badge');
                 const badgeTxt = document.getElementById('live-status-text');
                 const viewOff = document.getElementById('net-disconnected-view');
+                const viewScan = document.getElementById('net-scan-view');
                 const viewOn = document.getElementById('net-connected-view');
                 const dockBtn = document.getElementById('networkDockBtn');
 
+                viewScan.style.display = 'none'; // S'assurer que le scan est masqué
+                
                 if(connected) {
                     badge.classList.add('connected');
                     badgeTxt.innerText = NetManager.isHost ? "HÔTE (LIVE)" : "CLIENT (LIVE)";
@@ -1406,7 +1435,7 @@
             
             // Listeners pour fermer les modales de scan
             document.getElementById('closeQrImportBtn').onclick = stopQrImportScan;
-            document.getElementById('networkModal').querySelector('.modal-buttons button:last-child').onclick = NetManager.closeModal;
+            document.getElementById('networkModal').querySelector('.modal-buttons button:first-child').onclick = NetManager.closeModal;
         });
     </script>
 </body>
