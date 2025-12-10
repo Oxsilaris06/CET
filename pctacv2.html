@@ -995,41 +995,50 @@
                     renderLogTable(data.logs);
                     showToast(`Journal synchronisé (${data.logs.length} entrées)`);
                 } else if (data.type === 'LOG_UPDATE' && Array.isArray(data.logs)) {
-                    // Pour LOG_UPDATE, nous devons identifier l'action pour le Toast
-                    const oldLogs = loadLogData();
-                    const newLogs = data.logs;
-
-                    const newIds = new Set(newLogs.map(l => l.id));
-                    const oldIds = new Set(oldLogs.map(l => l.id));
+                    // Si l'hôte envoie les logs, on met à jour la page sans notification pour l'hôte.
+                    // Seul un client voit une notification si l'hôte a fait une modification.
                     
-                    let toastMessage = `Journal mis à jour.`;
-                    let toastColor = 'var(--ao-green)';
-                    let logEntry = null;
+                    if (!PeerService.isHost) {
+                        // Logique de notification pour les clients (abonnés)
+                        const oldLogs = loadLogData();
+                        const newLogs = data.logs;
 
-                    if (newLogs.length > oldLogs.length) {
-                        // Ajout
-                        logEntry = newLogs.find(l => !oldIds.has(l.id));
-                        if (logEntry) toastMessage = `Log: ${logEntry.pax} ajouté`;
-                    } else if (newLogs.length < oldLogs.length) {
-                        // Suppression
-                        logEntry = oldLogs.find(l => !newIds.has(l.id));
-                        if (logEntry) toastMessage = `Log: ${logEntry.pax} supprimé`;
-                    } else {
-                         // Modification/Réorganisation (Complexe à détecter précisément sans id de version)
-                         toastMessage = `Log: Journal modifié`;
-                    }
-                    
-                    if (logEntry) {
-                        if (logEntry.paxMode === 'free') {
-                           toastColor = logEntry.paxColor;
+                        const newIds = new Set(newLogs.map(l => l.id));
+                        const oldIds = new Set(oldLogs.map(l => l.id));
+                        
+                        let toastMessage = `Journal mis à jour.`;
+                        let toastColor = 'var(--ao-green)';
+                        let logEntry = null;
+                        let isDeletion = false;
+
+                        if (newLogs.length > oldLogs.length) {
+                            // Ajout
+                            logEntry = newLogs.find(l => !oldIds.has(l.id));
+                            if (logEntry) toastMessage = `Log: ${logEntry.pax} ajouté`;
+                        } else if (newLogs.length < oldLogs.length) {
+                            // Suppression
+                            logEntry = oldLogs.find(l => !newIds.has(l.id));
+                            isDeletion = true;
+                            if (logEntry) toastMessage = `Log: ${logEntry.pax} supprimé`;
                         } else {
-                           toastColor = PDF_PAX_COLORS[logEntry.pax].color || 'var(--ao-green)';
+                             // Modification/Réorganisation
+                             toastMessage = `Log: Journal modifié`;
                         }
                         
+                        if (logEntry) {
+                            if (logEntry.paxMode === 'free') {
+                               toastColor = logEntry.paxColor;
+                            } else {
+                               toastColor = PDF_PAX_COLORS[logEntry.pax].color || 'var(--ao-green)';
+                            }
+                        }
+                        
+                        renderLogTable(newLogs);
+                        showToast(toastMessage, isDeletion, toastColor);
+                    } else {
+                        // Hôte: met à jour la page en silence, sans notification.
+                        renderLogTable(data.logs);
                     }
-                    
-                    renderLogTable(newLogs);
-                    showToast(toastMessage, false, toastColor);
                 }
             },
             
@@ -1075,7 +1084,7 @@
                         break;
                     case 'connected':
                         iconName = 'sensors_in';
-                        text = `Connecté`; // Affichage simplifié
+                        text = `Connecté`; // Affichage simplifié sur mobile
                         if (window.matchMedia("(min-width: 769px)").matches) {
                             text = `CLIENT: ${peerId || PeerService.hostId}`; // Affichage complet sur PC
                         }
@@ -1249,7 +1258,9 @@
             // Déterminer la couleur du texte (pour les couleurs custom)
             let textColor = 'white';
             if (bg.startsWith('#')) {
-                textColor = calculateTextColor(bg);
+                // Pour s'assurer que le texte est lisible sur la couleur de fond
+                const luminosity = calculateTextColor(bg) === '#000000' ? 0.6 : 1; 
+                textColor = `rgba(255, 255, 255, ${luminosity})`; 
             } else if (bg.includes('yellow') || bg.includes('civil-yellow') || bg.includes('ao-green')) {
                 textColor = 'black'; // Texte sombre pour les couleurs claires
             }
