@@ -222,6 +222,7 @@
             background: var(--bg-body); border: 1px solid var(--border-glass); border-radius: var(--radius-md);
             padding: 25px; width: 95%; max-width: 450px; z-index: 2001; display: none;
             box-shadow: 0 20px 50px rgba(0,0,0,0.6);
+            max-height: 90vh; overflow-y: auto;
         }
         .modal-buttons { display: flex; gap: 10px; margin-top: 20px; }
         .modal-buttons button { flex: 1; padding: 12px; border: none; border-radius: var(--radius-sm); cursor: pointer; font-weight: bold; }
@@ -235,6 +236,12 @@
         .btn-action { background: var(--accent-blue); color: white; width: 100%; padding: 15px; border: none; border-radius: var(--radius-sm); font-weight: bold; cursor: pointer; margin-bottom: 10px; }
         .btn-action.secondary { background: rgba(255,255,255,0.1); }
         .copy-icon { cursor: pointer; margin-left: 10px; vertical-align: middle; font-size: 1rem; }
+        
+        /* QR Reader inside Modal */
+        #qr-reader-net, #qr-reader-import {
+            width: 100%; margin: 20px auto; border: 2px solid var(--accent-blue);
+            border-radius: var(--radius-sm); overflow: hidden; background: black;
+        }
 
         /* Mobile */
         @media (max-width: 768px) {
@@ -279,8 +286,20 @@
             <button id="cancelResetBtn" style="background: rgba(255,255,255,0.1); color: white;">Annuler</button>
         </div>
     </div>
+    
+    <!-- MODAL IMPORT QR (NOUVEAU) -->
+    <div class="custom-modal" id="qrImportModal">
+        <h3 style="color: var(--success-green); margin-bottom: 15px; display:flex; align-items:center; gap:10px;">
+            <span class="material-symbols-outlined">qr_code_scanner</span> Scanner Import
+        </h3>
+        <div id="qr-reader-import"></div>
+        <p style="color: var(--text-muted); font-size: 0.9em; margin-top: -10px;">Scanner le QR Code de session pour importer les données.</p>
+        <div class="modal-buttons">
+            <button id="closeQrImportBtn" style="background: rgba(255,255,255,0.1); color: white;">Fermer</button>
+        </div>
+    </div>
 
-    <!-- MODAL RESEAU (NOUVEAU) -->
+    <!-- MODAL RESEAU (MODIFIÉ) -->
     <div class="custom-modal" id="networkModal">
         <h3 style="color: var(--accent-blue); margin-bottom: 15px; display:flex; align-items:center; gap:10px;">
             <span class="material-symbols-outlined">hub</span> Connexion Tactique
@@ -306,6 +325,9 @@
             <button class="btn-action secondary" onclick="NetManager.joinSession()">
                 Rejoindre
             </button>
+            <button class="btn-action secondary" onclick="NetManager.scanJoinQR()">
+                <span class="material-symbols-outlined" style="vertical-align: middle; margin-right: 5px;">qr_code_scanner</span> Scanner ID Session
+            </button>
         </div>
 
         <!-- État: Connecté -->
@@ -322,6 +344,7 @@
             
             <div style="text-align: center; margin-bottom: 15px;">
                 <div id="qr-code-net" style="background: white; padding: 10px; display: inline-block; border-radius: 8px;"></div>
+                <p style="color: var(--text-muted); font-size: 0.8em; margin-top: 5px;">QR Code d'accès rapide</p>
             </div>
 
             <button class="btn-action" style="background: var(--danger-red);" onclick="NetManager.disconnect()">
@@ -445,7 +468,7 @@
         </div>
         
         <div class="dock-menu-item" id="exportJsonDockBtn"><span class="material-symbols-outlined">save</span></div>
-        <div class="dock-menu-item" id="importJsonDockBtn"><span class="material-symbols-outlined">upload_file</span></div>
+        <div class="dock-menu-item" id="importJsonDockBtn" onclick="openQrImportModal()"><span class="material-symbols-outlined">qr_code_scanner</span></div>
         <div class="dock-menu-item" id="darkModeToggle"><span class="material-symbols-outlined" id="darkModeIcon">nightlight</span></div>
         <div class="dock-menu-item" id="previewPdfDockBtn"><span class="material-symbols-outlined">picture_as_pdf</span></div>
         <div class="dock-menu-item" id="resetDataDockBtn"><span class="material-symbols-outlined" style="color: var(--danger-red);">delete_forever</span></div>
@@ -482,7 +505,10 @@
         const remarquesInput = document.getElementById('remarques_input');
         const paxSelectContainer = document.getElementById('pax_select_container');
         const interventionTitleInput = document.getElementById('intervention_title_input');
+        const qrImportModal = document.getElementById('qrImportModal');
+        const closeQrImportBtn = document.getElementById('closeQrImportBtn');
         
+        let html5QrCodeScanner = null;
         let isTimeInputManuallyChanged = false;
         let paxColorMap = {}; 
 
@@ -507,6 +533,8 @@
                     ]
                 }
             },
+            
+            qrScannerNet: null,
 
             openModal: () => {
                 document.getElementById('modalBackdrop').style.display = 'block';
@@ -514,6 +542,12 @@
                 // Récupérer le callsign sauvegardé
                 const saved = localStorage.getItem('pcTacCallsign');
                 if(saved) document.getElementById('netCallsign').value = saved;
+            },
+            
+            closeModal: () => {
+                document.getElementById('networkModal').style.display = 'none'; 
+                document.getElementById('modalBackdrop').style.display = 'none';
+                NetManager.stopQrScanNet();
             },
 
             hostSession: () => {
@@ -537,12 +571,42 @@
                 NetManager.isHost = false;
                 NetManager.initPeer(null, true); // true = mode client
             },
+            
+            scanJoinQR: () => {
+                NetManager.openModal(); // S'assurer que la modal est ouverte
+                NetManager.qrScannerNet = new Html5Qrcode("qr-reader-net");
+                const config = { fps: 10, qrbox: { width: 200, height: 200 } };
+                
+                document.getElementById('net-disconnected-view').style.display = 'none';
+                document.getElementById('qr-reader-net').style.display = 'block';
+                
+                NetManager.qrScannerNet.start({ facingMode: "environment" }, config, 
+                    (decodedText) => {
+                        NetManager.stopQrScanNet();
+                        document.getElementById('netJoinId').value = decodedText;
+                        NetManager.joinSession();
+                    }, 
+                    (errorMessage) => {
+                        // Ignorer les erreurs de scan
+                    }
+                ).catch(err => {
+                    showToast("Erreur caméra (live)", true);
+                    NetManager.stopQrScanNet();
+                });
+            },
+            
+            stopQrScanNet: () => {
+                if(NetManager.qrScannerNet) {
+                    NetManager.qrScannerNet.stop().catch(err => console.log("Stop scan failed:", err));
+                    NetManager.qrScannerNet = null;
+                }
+                document.getElementById('net-disconnected-view').style.display = 'block';
+                document.getElementById('qr-reader-net').style.display = 'none';
+            },
 
             initPeer: (forceId = null, isClient = false) => {
-                document.querySelector('.btn-action').innerText = "Connexion...";
+                document.querySelector('#net-disconnected-view .btn-action').innerText = "Connexion...";
                 
-                // Si Hôte, on génère un ID aléatoire court si possible, sinon UUID PeerJS
-                // PeerJS gère l'ID.
                 NetManager.peer = new Peer(forceId, NetManager.config);
 
                 NetManager.peer.on('open', (id) => {
@@ -579,7 +643,7 @@
                     conn.send({ type: 'SYNC_REQ' });
                 });
                 
-                conn.on('error', (err) => showToast("Erreur connexion hôte"));
+                conn.on('error', (err) => showToast("Erreur connexion hôte", true));
             },
 
             handleConnection: (conn) => {
@@ -626,7 +690,7 @@
                         NetManager.connections = NetManager.connections.filter(c => c.peer !== conn.peer);
                         NetManager.updatePeersCount();
                     } else {
-                        showToast("Déconnecté de l'hôte");
+                        showToast("Déconnecté de l'hôte", true);
                         NetManager.disconnect();
                     }
                 });
@@ -685,7 +749,7 @@
                     badgeTxt.innerText = "OFFLINE";
                     viewOff.style.display = 'block';
                     viewOn.style.display = 'none';
-                    document.querySelector('.btn-action').innerHTML = '<span class="material-symbols-outlined" style="vertical-align: middle;">add_circle</span> Créer une Session (Hôte)';
+                    document.querySelector('#net-disconnected-view .btn-action').innerHTML = '<span class="material-symbols-outlined" style="vertical-align: middle;">add_circle</span> Créer une Session (Hôte)';
                     dockBtn.classList.remove('active');
                 }
             },
@@ -749,13 +813,40 @@
         function deleteLogLocally(id) {
             const logs = getLogData().filter(l => l.id !== id);
             renderLogTable(logs);
+            showToast("Entrée supprimée");
         }
+        
+        // Tri du tableau (bouton dédié)
+        function sortLogTableByTime() {
+             const logData = getLogData();
+             logData.sort((a, b) => {
+                if (a.heure < b.heure) return -1;
+                if (a.heure > b.heure) return 1;
+                return 0; 
+             });
+             renderLogTable(logData);
+             showToast("Journal trié");
+        }
+        document.getElementById('sortTimeBtn').onclick = sortLogTableByTime;
+
 
         // --- FONCTIONS UI STANDARD (Adaptées) ---
 
-        function showToast(message) {
+        function showToast(message, isError = false) {
             const toast = document.getElementById('toast-container');
+            const icon = toast.querySelector('.material-symbols-outlined');
             document.getElementById('toast-message').textContent = message;
+            
+            if (isError) {
+                toast.style.backgroundColor = 'var(--danger-red)';
+                toast.style.color = 'white';
+                icon.textContent = 'warning';
+            } else {
+                toast.style.backgroundColor = 'var(--success-green)';
+                toast.style.color = 'black';
+                icon.textContent = 'info';
+            }
+            
             toast.style.transform = 'translateX(-50%) translateY(0)';
             setTimeout(() => { toast.style.transform = 'translateX(-50%) translateY(-100px)'; }, 3000);
         }
@@ -791,10 +882,8 @@
                 let color = isFree ? (entry.paxColor || '#ffffff') : (PDF_PAX_COLORS[entry.pax]?.color || '#ef4444');
                 let txtColor = isFree ? '#000000' : (PDF_PAX_COLORS[entry.pax]?.fontColor || '#ffffff');
                 if(isFree) {
-                    // Calcul contraste simple
-                    const hex = color.replace('#','');
-                    const r=parseInt(hex.substr(0,2),16), g=parseInt(hex.substr(2,2),16), b=parseInt(hex.substr(4,2),16);
-                    if ((r*0.299 + g*0.587 + b*0.114) < 140) txtColor = '#ffffff';
+                    // Calcul contraste simple (y a pas de fonction getHexToRgb dans cette version, on simplifie)
+                    txtColor = isColorLight(color) ? '#000000' : '#ffffff';
                 }
 
                 row.dataset.id = entry.id;
@@ -823,6 +912,16 @@
                 `;
             });
             saveLogData(logData);
+        }
+        
+        function isColorLight(hex) {
+            const bigint = parseInt(hex.slice(1), 16);
+            const r = (bigint >> 16) & 255;
+            const g = (bigint >> 8) & 255;
+            const b = bigint & 255;
+            // HSP (Highly Sensitive Poo) equation from http://alienryderflex.com/hsp.html
+            const hsp = Math.sqrt(0.299 * (r * r) + 0.587 * (g * g) + 0.114 * (b * b));
+            return hsp > 150; // Seuil
         }
 
         // --- GESTIONNAIRES EVÈNEMENTS ---
@@ -869,7 +968,8 @@
         }
 
         function deleteClick(id) {
-            if(confirm("Supprimer cette entrée ?")) {
+            // Remplacer alert/confirm par une action simple, car Canvas n'aime pas les modales natives
+            if(confirm("Confirmer la suppression ?")) {
                 deleteLogLocally(id);
                 NetManager.broadcast({ type: 'LOG_DEL', id: id });
             }
@@ -934,6 +1034,303 @@
             const dlFp = document.getElementById('fp_history'); dlFp.innerHTML = '';
             newHistory.fp.forEach(l => dlFp.innerHTML += `<option value="${l}">`);
         }
+        
+        // --- QR IMPORT LOGS ---
+        
+        function openQrImportModal() {
+            document.getElementById('modalBackdrop').style.display = 'block';
+            qrImportModal.style.display = 'block';
+            
+            html5QrCodeScanner = new Html5Qrcode("qr-reader-import");
+            const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+            
+            html5QrCodeScanner.start({ facingMode: "environment" }, config, 
+                (decodedText) => {
+                    stopQrImportScan();
+                    handleQrImportData(decodedText);
+                }, 
+                (errorMessage) => {
+                    // Ignorer les erreurs de scan
+                }
+            ).catch(err => {
+                showToast("Erreur caméra (import)", true);
+                stopQrImportScan();
+            });
+        }
+        
+        function stopQrImportScan() {
+            if(html5QrCodeScanner) {
+                html5QrCodeScanner.stop().catch(err => console.log("Stop scan failed:", err));
+                html5QrCodeScanner = null;
+            }
+            qrImportModal.style.display = 'none';
+            document.getElementById('modalBackdrop').style.display = 'none';
+        }
+        
+        closeQrImportBtn.onclick = stopQrImportScan;
+        
+        function handleQrImportData(dataString) {
+            try {
+                const data = JSON.parse(dataString);
+                
+                // Vérifier si c'est un format de log valide (on suppose un format simple type LOG_ADD entry)
+                if (data.metadata && data.logs) {
+                    // C'est un export JSON complet
+                    if(data.metadata.title) { interventionTitleInput.value = data.metadata.title; saveTitle(); }
+                    mergeLogs(data.logs);
+                    showToast("Import JSON (QR) réussi");
+                } else {
+                    // C'est un log unique (venant d'un broadcast exporté par erreur)
+                    showToast("Format QR inconnu ou invalide.", true);
+                }
+                
+            } catch(e) {
+                showToast("Erreur de décodage QR pour l'import", true);
+                console.error("QR Import Error:", e);
+            }
+        }
+        
+        
+        // --- PDF GENERATION (FULL LOGIC) ---
+        
+        function getHexToRgb(hex) {
+             const bigint = parseInt(hex.slice(1), 16);
+             const r = (bigint >> 16) & 255;
+             const g = (bigint >> 8) & 255;
+             const b = bigint & 255;
+             return { r: r / 255, g: g / 255, b: b / 255 };
+        }
+        
+        function getPdfColors(isDarkMode, rgb) {
+            return isDarkMode 
+                ? { background: rgb(0.05, 0.05, 0.05), text: rgb(0.9, 0.9, 0.9), line: rgb(0.2, 0.2, 0.2) } 
+                : { background: rgb(0.95, 0.95, 0.95), text: rgb(0.1, 0.1, 0.1), line: rgb(0.8, 0.8, 0.8) };
+        }
+        
+        function wrapTextForPdf(font, fontSize, text, maxWidth) {
+            text = String(text || ''); const token = ' \n '; const chunks = text.replace(/\r?\n/g, token).split(' ');
+            let lines = []; let currentLine = '';
+            for (const chunk of chunks) {
+                if (chunk === '\n') { lines.push(currentLine.trim()); currentLine = ''; continue; }
+                const lineWithChunk = currentLine === '' ? chunk : `${currentLine} ${chunk}`;
+                if (font.widthOfTextAtSize(lineWithChunk, fontSize) > maxWidth && currentLine !== '') { 
+                    lines.push(currentLine.trim()); currentLine = chunk; 
+                } else { currentLine = lineWithChunk; }
+            }
+            lines.push(currentLine.trim()); return lines.filter(line => line.length > 0);
+        }
+
+        async function buildPdf() {
+            if (typeof PDFLib === 'undefined') { throw new Error("PDFLib non chargé."); }
+            const { PDFDocument, StandardFonts, rgb, PageSizes } = PDFLib;
+            const pdfDoc = await PDFDocument.create();
+            
+            // Landscape A4 orientation
+            const pageConfig = { width: PageSizes.A4[1], height: PageSizes.A4[0], margin: 30, fontSize: 10, lineHeight: 14 };
+            let helveticaFont, helveticaBoldFont;
+            
+            try {
+                helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
+                helveticaBoldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+            } catch (e) { throw new Error("Erreur de chargement des polices PDF."); }
+            
+            const logData = getLogData();
+            const interventionTitle = interventionTitleInput.value.trim() || "Journal d'intervention";
+            const isDarkMode = document.body.classList.contains('dark-mode');
+            const pdfThemeColors = getPdfColors(isDarkMode, rgb); 
+            
+            // Colonnes: Heure (10%), Pax (15%), Lieu (20%), Ouvrant (20%), Remarques (35%)
+            const colWidthRatios = [0.10, 0.15, 0.20, 0.20, 0.35]; 
+            
+            const context = {
+                pdfDoc, helveticaFont, helveticaBoldFont, currentPage: null, y: 0, pageNumber: 0,
+                pageWidth: pageConfig.width, pageHeight: pageConfig.height, margin: pageConfig.margin,
+                fontSize: pageConfig.fontSize, lineHeight: pageConfig.lineHeight,
+                colors: pdfThemeColors,
+                interventionTitle: interventionTitle,
+                colWidthRatios: colWidthRatios
+            };
+            
+            const drawFooter = () => {
+                const footerText = `PC Tac v4.0 | ${new Date().toLocaleDateString()} | Page ${context.pageNumber}`;
+                const textWidth = context.helveticaFont.widthOfTextAtSize(footerText, context.fontSize);
+                context.currentPage.drawText(footerText, { x: (context.pageWidth / 2) - (textWidth / 2), y: context.margin / 2, font: context.helveticaFont, size: 8, color: context.colors.text });
+            };
+            
+            const addNewPage = () => {
+                if (context.currentPage) { drawFooter(); }
+                context.currentPage = context.pdfDoc.addPage([pageConfig.width, pageConfig.height]); 
+                context.pageNumber++;
+                context.y = context.pageHeight - context.margin;
+                // Dessiner le fond (pour le mode sombre)
+                context.currentPage.drawRectangle({ x: 0, y: 0, width: context.pageWidth, height: context.pageHeight, color: context.colors.background });
+                
+                // Titre
+                context.currentPage.drawText(context.interventionTitle, { x: context.margin, y: context.pageHeight - context.margin / 2, font: context.helveticaBoldFont, size: 14, color: context.colors.text });
+                
+                context.y = context.pageHeight - context.margin - 20; // 20px sous le titre
+            };
+            
+            const checkY = (spaceNeeded) => { 
+                // Vérifier si la place restante (y - marge du bas) est suffisante
+                if (context.y - spaceNeeded < context.margin * 1.5) { 
+                    addNewPage(); 
+                    drawTableHeader(); 
+                    return true; 
+                } 
+                return false; 
+            };
+            
+            const drawTableHeader = () => {
+                 const headers = ["Heure", "Pax", "Lieu", "Ouvrant", "Remarques"];
+                 let currentX = context.margin;
+                 const tableY = context.y;
+                 const headerHeight = context.lineHeight + 5;
+                 
+                 // Ligne supérieure (séparateur)
+                 context.currentPage.drawLine({ start: { x: context.margin, y: tableY - 1 }, end: { x: context.pageWidth - context.margin, y: tableY - 1 }, color: context.colors.line, thickness: 1 });
+                 
+                 headers.forEach((header, i) => {
+                     const colWidth = context.pageWidth * context.colWidthRatios[i];
+                     context.currentPage.drawText(header, { 
+                         x: currentX + 2, 
+                         y: tableY - headerHeight + 5, 
+                         font: context.helveticaBoldFont, 
+                         size: context.fontSize, 
+                         color: context.colors.text 
+                     });
+                     currentX += colWidth;
+                 });
+                 context.y -= headerHeight;
+            };
+            
+            const drawLogEntry = (entry) => {
+                let paxColorHex, paxText, paxTextColor;
+                const isFreeMode = entry.paxMode === 'free';
+                
+                if (isFreeMode) {
+                    paxColorHex = entry.paxColor || '#C0C0C0'; paxText = entry.pax;
+                    paxTextColor = isColorLight(paxColorHex) ? rgb(0, 0, 0) : rgb(1, 1, 1);
+                } else {
+                    const paxInfo = PDF_PAX_COLORS[entry.pax] || PDF_PAX_COLORS['Adversaire'];
+                    paxColorHex = paxInfo.color; paxText = paxInfo.text;
+                    paxTextColor = paxInfo.fontColor === '#000000' ? rgb(0, 0, 0) : rgb(1, 1, 1);
+                }
+                
+                const { r, g, b } = getHexToRgb(paxColorHex); 
+                const paxPdfColor = rgb(r, g, b); 
+                
+                const colWidthsPx = context.colWidthRatios.map(ratio => context.pageWidth * ratio - (context.margin / 5));
+                const parts = [
+                    { text: entry.heure, colIndex: 0, font: context.helveticaFont, size: context.fontSize, color: context.colors.text },
+                    { text: paxText, colIndex: 1, font: context.helveticaBoldFont, size: context.fontSize, color: paxTextColor, isPax: true }, 
+                    { text: entry.lieu, colIndex: 2, font: context.helveticaFont, size: context.fontSize, color: context.colors.text }, 
+                    { text: entry.fenetrePorte, colIndex: 3, font: context.helveticaFont, size: context.fontSize, color: context.colors.text },
+                    { text: entry.remarques, colIndex: 4, font: context.helveticaFont, size: context.fontSize, color: context.colors.text },
+                ];
+                
+                let allLines = parts.map((part, i) => {
+                    part.text = String(part.text || '').trim(); if (!part.text && i !== 4) return ['']; 
+                    const maxWidth = colWidthsPx[i] - 4; // -4 pour le padding interne
+                    return wrapTextForPdf(part.font, part.size, part.text, maxWidth);
+                });
+                
+                const maxLines = allLines.reduce((max, lines) => Math.max(max, lines.length), 1);
+                const rowHeight = maxLines * context.lineHeight + 5;
+
+                // Check page break
+                if (checkY(rowHeight)) { 
+                    // Si on ajoute une page, on redessine l'entrée sur la nouvelle page
+                    drawLogEntry(entry);
+                    return; 
+                }
+                
+                let currentX = context.margin; 
+                const tableY = context.y;
+                
+                parts.forEach((part, i) => {
+                    const colWidth = context.pageWidth * context.colWidthRatios[i];
+                    const x = currentX; 
+                    const textLines = allLines[i];
+                    
+                    if (i === 1) { // Colonne PAX (chip coloré)
+                        const bgX = x + 1; 
+                        const paxBlockHeight = context.lineHeight + 4; 
+                        const paxBlockY = tableY - rowHeight + (rowHeight - paxBlockHeight) / 2;
+                        
+                        // Fond coloré
+                        context.currentPage.drawRectangle({ 
+                            x: bgX, y: paxBlockY, 
+                            width: colWidthsPx[i] - 2, 
+                            height: paxBlockHeight, 
+                            color: paxPdfColor, opacity: 1, borderWidth: 0 
+                        });
+                        
+                        // Texte centré
+                        const text = textLines[0] || ''; 
+                        const textWidth = part.font.widthOfTextAtSize(text, part.size);
+                        const textX = bgX + (colWidthsPx[i] - textWidth) / 2; 
+                        const textY = paxBlockY + (paxBlockHeight - part.size) / 2 + 1; // +1 pour ajustement visuel
+                        context.currentPage.drawText(text, { x: textX, y: textY, font: part.font, size: part.size, color: part.color });
+                    } else { 
+                        // Autres colonnes (multi-lignes)
+                        textLines.forEach((line, lineIndex) => {
+                            const textY = tableY - context.lineHeight - (lineIndex * context.lineHeight) - 2;
+                            if (line) { 
+                                context.currentPage.drawText(line, { x: x + 2, y: textY, font: part.font, size: part.size, color: part.color }); 
+                            }
+                        });
+                    }
+                    currentX += colWidth;
+                });
+                
+                // Ligne de séparation de ligne
+                context.currentPage.drawLine({ 
+                    start: { x: context.margin, y: tableY - rowHeight + 1 }, 
+                    end: { x: context.pageWidth - context.margin, y: tableY - rowHeight + 1 }, 
+                    color: context.colors.line, thickness: 0.5, opacity: 0.5 
+                });
+                context.y -= rowHeight;
+            };
+
+            addNewPage(); 
+            drawTableHeader();
+            logData.forEach(entry => { drawLogEntry(entry); });
+            drawFooter();
+            
+            const pdfBytes = await pdfDoc.save();
+            return pdfBytes;
+        }
+
+        async function downloadPdf() {
+            try {
+                // Remplacer le contenu du bouton par un indicateur de chargement si vous voulez
+                // ...
+                
+                const pdfBytes = await buildPdf();
+                if (!pdfBytes) { showToast("Échec de la génération PDF", true); return; }
+                
+                const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+                const today = new Date().toLocaleDateString('fr-FR').replace(/\//g, '-');
+                const title = interventionTitleInput.value.trim() || "Log";
+                const fileName = `PC_Tac_${title.replace(/[^a-z0-9]/gi, '_')}_${today}.pdf`;
+                
+                // Téléchargement
+                const url = URL.createObjectURL(blob); 
+                const link = document.createElement('a');
+                link.href = url; link.download = fileName; 
+                document.body.appendChild(link); link.click();
+                setTimeout(() => { document.body.removeChild(link); URL.revokeObjectURL(url); }, 0); 
+                
+            } catch (error) { 
+                console.error("Erreur PDF critique:", error);
+                showToast(`Erreur PDF: ${error.message || 'Génération échouée'}`, true); 
+            } finally {
+                // Rétablir le bouton
+                // ...
+            }
+        }
+
 
         // --- INIT ---
         document.addEventListener('DOMContentLoaded', () => {
@@ -977,6 +1374,7 @@
                 renderLogTable([]);
                 document.getElementById('resetModal').style.display='none';
                 document.getElementById('modalBackdrop').style.display='none';
+                showToast("Journal purgé");
                 // Si connecté, on pourrait envoyer un 'RESET_ALL' mais dangereux. On reste local sur le reset.
             };
             document.getElementById('cancelResetBtn').onclick = () => {
@@ -986,56 +1384,29 @@
             document.getElementById('modalBackdrop').onclick = (e) => {
                 if(e.target.id === 'modalBackdrop') {
                     document.getElementById('resetModal').style.display='none';
-                    document.getElementById('networkModal').style.display='none';
-                    document.getElementById('modalBackdrop').style.display='none';
+                    NetManager.stopQrScanNet();
+                    stopQrImportScan();
+                    NetManager.closeModal(); // Ferme networkModal
                 }
             };
             
             // Import/Export JSON
             document.getElementById('exportJsonDockBtn').onclick = () => {
-                const data = { metadata: { title: interventionTitleInput.value, date: new Date() }, logs: getLogData() };
+                const data = { metadata: { title: interventionTitleInput.value, date: new Date(), format: "PC Tac JSON Export" }, logs: getLogData() };
                 const blob = new Blob([JSON.stringify(data, null, 2)], {type : 'application/json'});
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a'); a.href = url; a.download = `PCTAC_${Date.now()}.json`;
                 document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                showToast("Export JSON réussi");
             };
-            document.getElementById('importJsonDockBtn').onclick = () => document.getElementById('jsonImportInput').click();
-            document.getElementById('jsonImportInput').onchange = (e) => {
-                const fr = new FileReader();
-                fr.onload = (ev) => {
-                    try {
-                        const d = JSON.parse(ev.target.result);
-                        if(d.logs) mergeLogs(d.logs);
-                        if(d.metadata?.title) interventionTitleInput.value = d.metadata.title;
-                        showToast("Import réussi");
-                    } catch(ex) { showToast("Erreur Fichier JSON"); }
-                };
-                fr.readAsText(e.target.files[0]);
-            };
-
-            // PDF Generation (Version simplifiée pour compacité)
-            document.getElementById('previewPdfDockBtn').onclick = async () => {
-                const { PDFDocument, rgb, StandardFonts } = PDFLib;
-                const pdfDoc = await PDFDocument.create();
-                const page = pdfDoc.addPage();
-                const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-                const { width, height } = page.getSize();
-                
-                page.drawText(`PC TAC - ${interventionTitleInput.value}`, { x: 50, y: height - 50, size: 20, font: font });
-                
-                let y = height - 100;
-                getLogData().forEach(l => {
-                    const line = `${l.heure} | ${l.pax} | ${l.lieu} | ${l.fenetrePorte} | ${l.remarques}`;
-                    page.drawText(line, { x: 50, y: y, size: 10, font: font });
-                    y -= 15;
-                    if(y < 50) { page = pdfDoc.addPage(); y = height - 50; }
-                });
-
-                const pdfBytes = await pdfDoc.save();
-                const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-                const url = URL.createObjectURL(blob);
-                window.open(url, '_blank');
-            };
+            document.getElementById('importJsonDockBtn').onclick = openQrImportModal;
+            
+            // PDF Generation
+            document.getElementById('previewPdfDockBtn').onclick = downloadPdf;
+            
+            // Listeners pour fermer les modales de scan
+            document.getElementById('closeQrImportBtn').onclick = stopQrImportScan;
+            document.getElementById('networkModal').querySelector('.modal-buttons button:last-child').onclick = NetManager.closeModal;
         });
     </script>
 </body>
