@@ -1,0 +1,1042 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+	<link rel="icon" href="favicon.ico" sizes="any" type="image/png">
+    <title>PC Tac v4.0 LIVE</title>
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Oswald:wght@300;400;500&family=Saira+Stencil+One&display=swap" rel="stylesheet">
+    <!-- Icons -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
+
+    <!-- Librairies Externes (PDF, QR, PeerJS) -->
+    <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+
+    <style>
+        /* --- VARIABLES & THEME --- */
+        :root {
+            --bg-body: #050505;
+            --bg-glass: rgba(22, 22, 25, 0.8);
+            --bg-glass-heavy: rgba(15, 15, 20, 0.95);
+            --bg-input: rgba(0, 0, 0, 0.4);
+            --border-glass: rgba(255, 255, 255, 0.1);
+            
+            --font-ui: 'Oswald', sans-serif;
+            --font-data: 'JetBrains Mono', monospace;
+            --font-title: 'Saira Stencil One', cursive;
+
+            --accent-blue: #3b82f6;
+            --accent-glow: rgba(59, 130, 246, 0.3);
+            --success-green: #22c55e;
+            --text-main: #e0e0e0;
+            --text-muted: #94a3b8;
+
+            --danger-red: #ef4444; 
+            --civil-yellow: #eab308;
+            --inter-blue: #3b82f6;
+            --ao-green: #22c55e;
+
+            --radius-md: 12px;
+            --radius-sm: 6px;
+        }
+
+        body.light-mode {
+            --bg-body: #f1f5f9;
+            --bg-glass: rgba(255, 255, 255, 0.9);
+            --bg-glass-heavy: #ffffff;
+            --bg-input: rgba(255, 255, 255, 0.6);
+            --border-glass: rgba(0, 0, 0, 0.1);
+            --text-main: #1e293b;
+            --text-muted: #64748b;
+            --accent-blue: #0f4c9c;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; outline: none; -webkit-tap-highlight-color: transparent; }
+        
+        body {
+            font-family: var(--font-ui);
+            background-color: var(--bg-body);
+            color: var(--text-main);
+            background-image: 
+                linear-gradient(rgba(59, 130, 246, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(59, 130, 246, 0.03) 1px, transparent 1px);
+            background-size: 40px 40px;
+            min-height: 100vh;
+            padding: 20px 10px 120px 10px;
+            transition: background 0.3s ease;
+        }
+
+        .container { max-width: 1000px; margin: 0 auto; }
+
+        /* --- HEADER & LIVE STATUS --- */
+        header { position: relative; margin-bottom: 25px; }
+        
+        h1 {
+            font-family: var(--font-title);
+            font-size: 2.5em;
+            color: var(--accent-blue);
+            text-align: center;
+            text-shadow: 0 0 20px var(--accent-glow);
+            letter-spacing: 2px;
+            margin: 0;
+        }
+
+        #live-status-badge {
+            position: absolute; top: 0; right: 0;
+            background: rgba(0,0,0,0.4); border: 1px solid var(--border-glass);
+            padding: 5px 10px; border-radius: 20px;
+            font-size: 0.75rem; font-family: var(--font-data);
+            display: flex; align-items: center; gap: 6px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        #live-status-badge.connected { border-color: var(--success-green); color: var(--success-green); background: rgba(34, 197, 94, 0.1); }
+        .live-dot { width: 8px; height: 8px; border-radius: 50%; background: #666; }
+        #live-status-badge.connected .live-dot { background: var(--success-green); box-shadow: 0 0 8px var(--success-green); animation: pulse 2s infinite; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+
+        /* Input Titre Intervention */
+        #intervention-title-container {
+            background: var(--bg-glass); backdrop-filter: blur(10px);
+            border: 1px solid var(--border-glass); border-radius: var(--radius-md);
+            padding: 15px; margin-bottom: 20px;
+            display: flex; align-items: center; gap: 15px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        #intervention-title-container label { margin: 0; white-space: nowrap; color: var(--accent-blue); }
+        #intervention_title_input {
+            border: none; background: transparent; border-bottom: 1px solid transparent;
+            font-size: 1.1em; padding: 5px; color: var(--text-main);
+        }
+        #intervention_title_input:focus { border-bottom-color: var(--accent-blue); }
+
+        /* --- FORMULAIRE --- */
+        .log-entry-form {
+            background: var(--bg-glass); backdrop-filter: blur(12px);
+            border: 1px solid var(--border-glass); border-radius: var(--radius-md);
+            padding: 20px; margin-bottom: 25px;
+        }
+
+        .form-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 20px; border-bottom: 1px solid var(--border-glass); padding-bottom: 10px;
+        }
+        .form-header h3 { margin: 0; color: var(--text-muted); font-size: 1.2em; display: flex; align-items: center; gap: 8px; }
+
+        #pax_mode_toggle_container { display: flex; background: rgba(0,0,0,0.2); padding: 3px; border-radius: 6px; }
+        .mode-toggle-btn {
+            background: transparent; border: none; color: var(--text-muted);
+            padding: 6px 12px; border-radius: 4px; cursor: pointer; font-family: var(--font-ui); font-weight: 500;
+        }
+        .mode-toggle-btn.active { background: var(--accent-blue); color: white; }
+
+        .form-row.main-fields { display: grid; grid-template-columns: 100px 1fr 1fr 1fr; gap: 15px; align-items: start; }
+        .form-row.text-fields { margin-top: 15px; }
+
+        label { color: var(--text-muted); font-size: 0.75em; text-transform: uppercase; font-weight: bold; margin-bottom: 5px; display: block; }
+        
+        input, textarea, select {
+            width: 100%; background: var(--bg-input); border: 1px solid var(--border-glass);
+            border-radius: var(--radius-sm); padding: 12px; color: var(--text-main);
+            font-family: var(--font-data); font-size: 0.95em; transition: all 0.2s;
+        }
+        input:focus, textarea:focus { border-color: var(--accent-blue); }
+        #heure_input { text-align: center; color: var(--accent-blue); font-weight: bold; }
+
+        .pax-select { display: flex; gap: 8px; flex-wrap: wrap; }
+        .pax-select-option {
+            flex: 1; padding: 10px; background: rgba(255,255,255,0.05);
+            border: 1px solid var(--border-glass); border-radius: var(--radius-sm);
+            cursor: pointer; text-align: center; font-size: 0.9em; min-width: 70px;
+        }
+        .pax-select-option.selected { transform: scale(1.05); border-color: transparent; opacity: 1; }
+        .pax-select-option[data-pax="Adversaire"].selected { background: var(--danger-red); color: white; }
+        .pax-select-option[data-pax="Otage"].selected { background: var(--civil-yellow); color: black; }
+        .pax-select-option[data-pax="Inter"].selected { background: var(--inter-blue); color: white; }
+        .pax-select-option[data-pax="AO"].selected { background: var(--ao-green); color: black; }
+
+        #free_mode_options { background: rgba(255,255,255,0.03); padding: 10px; border-radius: var(--radius-sm); }
+        .color-palette { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; justify-content: center; }
+        .color-swatch { width: 30px; height: 30px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; }
+        .color-swatch.selected { border-color: white; transform: scale(1.2); }
+
+        .add-log-btn {
+            width: 100%; margin-top: 20px; padding: 14px;
+            background: var(--accent-blue); color: white; border: none; border-radius: var(--radius-sm);
+            font-size: 1.1em; text-transform: uppercase; letter-spacing: 1px; font-weight: bold;
+            cursor: pointer; display: flex; justify-content: center; align-items: center; gap: 8px;
+            box-shadow: 0 4px 12px var(--accent-glow);
+        }
+
+        /* --- TABLEAU --- */
+        #logTableContainer {
+            background: var(--bg-glass); border: 1px solid var(--border-glass);
+            border-radius: var(--radius-md); overflow: hidden; margin-top: 20px;
+        }
+        .sort-button {
+            width: 100%; padding: 10px; background: rgba(0,0,0,0.2); color: var(--text-muted);
+            border: none; border-bottom: 1px solid var(--border-glass); cursor: pointer;
+            display: flex; justify-content: center; gap: 5px; font-size: 0.8em; text-transform: uppercase;
+        }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; padding: 15px; color: var(--text-muted); font-size: 0.75em; text-transform: uppercase; background: rgba(0,0,0,0.2); }
+        td { padding: 12px 15px; border-bottom: 1px solid var(--border-glass); vertical-align: middle; }
+        
+        .heure-cell-text { font-family: var(--font-data); color: var(--accent-blue); font-weight: bold; }
+        .pax-cell { padding: 4px 10px; border-radius: 4px; font-size: 0.85em; font-weight: bold; text-transform: uppercase; }
+        .delete-btn { background: none; border: none; color: var(--text-muted); cursor: pointer; opacity: 0.6; }
+        .delete-btn:hover { color: var(--danger-red); opacity: 1; }
+
+        /* Animation nouvelle entrée */
+        @keyframes highlightRow { 0% { background: var(--accent-glow); } 100% { background: transparent; } }
+        tr.just-added { animation: highlightRow 2s ease-out; }
+
+        /* --- DOCK MENU --- */
+        .dock-menu {
+            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+            background: var(--bg-glass-heavy); backdrop-filter: blur(15px);
+            border: 1px solid var(--border-glass); border-radius: 30px;
+            padding: 8px 15px; display: flex; align-items: center; gap: 10px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.6); z-index: 1000;
+            transition: all 0.3s; width: auto; max-width: 95vw; overflow-x: auto;
+        }
+        .dock-menu.collapsed { width: 50px; height: 50px; padding: 0; justify-content: center; overflow: hidden; border-radius: 50%; }
+        .dock-menu.collapsed .dock-menu-item:not(#dockToggleBtn) { display: none; }
+        .dock-menu-item {
+            width: 42px; height: 42px; border-radius: 50%; flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center;
+            color: var(--text-muted); cursor: pointer; transition: all 0.2s;
+        }
+        .dock-menu-item:hover { color: var(--text-main); background: rgba(255,255,255,0.1); }
+        #networkDockBtn { color: var(--text-main); position: relative; }
+        #networkDockBtn.active { color: var(--success-green); background: rgba(34, 197, 94, 0.1); }
+
+        /* --- MODALES --- */
+        .custom-modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 2000; display: none; backdrop-filter: blur(5px); }
+        .custom-modal {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: var(--bg-body); border: 1px solid var(--border-glass); border-radius: var(--radius-md);
+            padding: 25px; width: 95%; max-width: 450px; z-index: 2001; display: none;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.6);
+        }
+        .modal-buttons { display: flex; gap: 10px; margin-top: 20px; }
+        .modal-buttons button { flex: 1; padding: 12px; border: none; border-radius: var(--radius-sm); cursor: pointer; font-weight: bold; }
+        
+        /* Network Modal Specifics */
+        .net-status-box { 
+            background: rgba(0,0,0,0.3); padding: 15px; border-radius: var(--radius-sm); 
+            margin-bottom: 20px; text-align: center; font-family: var(--font-data);
+        }
+        .net-input-group { margin-bottom: 15px; }
+        .btn-action { background: var(--accent-blue); color: white; width: 100%; padding: 15px; border: none; border-radius: var(--radius-sm); font-weight: bold; cursor: pointer; margin-bottom: 10px; }
+        .btn-action.secondary { background: rgba(255,255,255,0.1); }
+        .copy-icon { cursor: pointer; margin-left: 10px; vertical-align: middle; font-size: 1rem; }
+
+        /* Mobile */
+        @media (max-width: 768px) {
+            .form-row.main-fields { display: flex; flex-direction: column; gap: 15px; }
+            .form-row.main-fields > div:nth-child(1) { display: flex; align-items: center; gap: 10px; }
+            .form-row.main-fields > div:nth-child(1) input { width: 120px; }
+            
+            table, thead, tbody, th, td, tr { display: block; }
+            thead { display: none; }
+            tr { background: rgba(255,255,255,0.03); border: 1px solid var(--border-glass); border-radius: var(--radius-md); margin-bottom: 15px; padding: 15px; position: relative; }
+            td { padding: 6px 0; border: none; display: flex; justify-content: space-between; align-items: center; text-align: right; }
+            td:nth-of-type(1) { justify-content: flex-start; font-size: 1.1em; border-bottom: 1px solid var(--border-glass); padding-bottom: 10px; }
+            td:nth-of-type(2)::before { content: "Pax"; color: var(--text-muted); font-size: 0.75em; margin-right: 10px; }
+            td:nth-of-type(3)::before { content: "Lieu"; color: var(--text-muted); font-size: 0.75em; margin-right: 10px; }
+            td:nth-of-type(4)::before { content: "Ouvrant"; color: var(--text-muted); font-size: 0.75em; margin-right: 10px; }
+            td:nth-of-type(5) { display: block; text-align: left; background: rgba(0,0,0,0.2); padding: 10px; margin-top: 10px; border-radius: 4px; font-style: italic; color: var(--text-muted); }
+            
+            .mobile-delete-btn {
+                position: absolute; top: 15px; right: 15px;
+                background: rgba(239, 68, 68, 0.15); color: var(--danger-red);
+                border: none; border-radius: 4px; padding: 6px; display: block !important;
+            }
+        }
+        .mobile-delete-btn { display: none; }
+    </style>
+</head>
+<body class="dark-mode">
+    <input type="file" id="jsonImportInput" accept=".json" style="display: none;">
+    <div class="custom-modal-backdrop" id="modalBackdrop"></div>
+    
+    <!-- TOAST -->
+    <div id="toast-container" style="position: fixed; top: 20px; left: 50%; transform: translateX(-50%) translateY(-100px); background: var(--success-green); color: black; padding: 12px 24px; border-radius: 30px; font-family: var(--font-ui); z-index: 3000; transition: transform 0.3s; font-weight: bold; display: flex; gap: 10px;">
+        <span class="material-symbols-outlined">info</span> <span id="toast-message">Info</span>
+    </div>
+
+    <!-- MODAL RESET -->
+    <div class="custom-modal" id="resetModal">
+        <h3 style="color: var(--accent-blue); margin-bottom: 10px;">Purge Système</h3>
+        <p style="color: var(--text-main);">Supprimer définitivement le journal ?</p>
+        <div class="modal-buttons">
+            <button id="confirmResetBtn" style="background: var(--danger-red); color: white;">Confirmer</button>
+            <button id="cancelResetBtn" style="background: rgba(255,255,255,0.1); color: white;">Annuler</button>
+        </div>
+    </div>
+
+    <!-- MODAL RESEAU (NOUVEAU) -->
+    <div class="custom-modal" id="networkModal">
+        <h3 style="color: var(--accent-blue); margin-bottom: 15px; display:flex; align-items:center; gap:10px;">
+            <span class="material-symbols-outlined">hub</span> Connexion Tactique
+        </h3>
+        
+        <div class="net-input-group">
+            <label>Identifiant (Callsign)</label>
+            <input type="text" id="netCallsign" placeholder="Ex: PC, ALPHA, BRAVO..." maxlength="10" style="text-align: center; font-weight: bold; letter-spacing: 1px;">
+        </div>
+
+        <!-- État: Déconnecté -->
+        <div id="net-disconnected-view">
+            <button class="btn-action" onclick="NetManager.hostSession()">
+                <span class="material-symbols-outlined" style="vertical-align: middle;">add_circle</span> Créer une Session (Hôte)
+            </button>
+            
+            <div style="display: flex; gap: 5px; margin-bottom: 10px;">
+                <input type="text" id="netJoinId" placeholder="ID Session à rejoindre..." style="text-align: center;">
+                <button onclick="NetManager.pasteID()" style="width: 50px; background: rgba(255,255,255,0.1); border: 1px solid var(--border-glass); border-radius: var(--radius-sm); color: white; cursor: pointer;">
+                    <span class="material-symbols-outlined">content_paste</span>
+                </button>
+            </div>
+            <button class="btn-action secondary" onclick="NetManager.joinSession()">
+                Rejoindre
+            </button>
+        </div>
+
+        <!-- État: Connecté -->
+        <div id="net-connected-view" style="display: none;">
+            <div class="net-status-box">
+                <div style="color: var(--success-green); font-weight: bold; margin-bottom: 5px;">CONNECTÉ</div>
+                <div style="font-size: 0.8rem; color: var(--text-muted);">ID SESSION</div>
+                <div style="font-size: 1.2rem; font-weight: bold; color: white; margin-top: 5px;">
+                    <span id="displaySessionId">...</span>
+                    <span class="material-symbols-outlined copy-icon" onclick="NetManager.copyID()">content_copy</span>
+                </div>
+                <div id="peersCount" style="margin-top: 10px; font-size: 0.9rem;">0 Pairs connectés</div>
+            </div>
+            
+            <div style="text-align: center; margin-bottom: 15px;">
+                <div id="qr-code-net" style="background: white; padding: 10px; display: inline-block; border-radius: 8px;"></div>
+            </div>
+
+            <button class="btn-action" style="background: var(--danger-red);" onclick="NetManager.disconnect()">
+                Déconnexion
+            </button>
+        </div>
+
+        <div class="modal-buttons">
+            <button onclick="document.getElementById('networkModal').style.display='none'; document.getElementById('modalBackdrop').style.display='none';">Fermer</button>
+        </div>
+    </div>
+    
+    <div class="container">
+        <header>
+            <h1>PC TAC</h1>
+            <div id="live-status-badge" onclick="NetManager.openModal()">
+                <div class="live-dot"></div>
+                <span id="live-status-text">OFFLINE</span>
+            </div>
+        </header>
+
+        <div id="intervention-title-container">
+            <label for="intervention_title_input"><span class="material-symbols-outlined" style="vertical-align:bottom; font-size:1.1em; margin-right:5px;">edit_document</span>Opération :</label>
+            <input type="text" id="intervention_title_input" placeholder="Nom de l'intervention..." value="">
+        </div>
+        
+        <!-- Formulaire -->
+        <form id="log-form" class="log-entry-form">
+            <div class="form-header">
+                <h3><span class="material-symbols-outlined">playlist_add</span> Nouvelle Entrée</h3>
+                <div id="pax_mode_toggle_container">
+                    <button type="button" class="mode-toggle-btn active" data-mode="standard">Standard</button>
+                    <button type="button" class="mode-toggle-btn" data-mode="free">Libre</button>
+                </div>
+            </div>
+            
+            <div class="form-row main-fields">
+                 <div>
+                    <label for="heure_input">Heure</label>
+                    <input type="time" id="heure_input" required value="">
+                 </div>
+                 
+                 <div>
+                    <label>Pax / Élément</label>
+                    <div id="pax_select_wrapper_standard">
+                        <div class="pax-select" id="pax_select_container">
+                            <span class="pax-select-option" data-pax="Adversaire">Adversaire</span>
+                            <span class="pax-select-option" data-pax="Otage">Otage</span>
+                            <span class="pax-select-option" data-pax="Inter">Inter</span>
+                            <span class="pax-select-option" data-pax="AO">AO</span>
+                        </div>
+                    </div>
+                    <div id="pax_select_wrapper_free" style="display: none;">
+                        <div id="free_mode_options">
+                            <div class="color-palette" id="free_color_palette"></div>
+                            <input type="text" id="free_pax_input" placeholder="Identifiant..." value="" />
+                            <input type="hidden" id="free_color_input" value="#800000" />
+                        </div>
+                    </div>
+                    <input type="hidden" id="pax_input" required value="Adversaire">
+                    <input type="hidden" id="pax_mode_input" value="standard">
+                    <input type="hidden" id="pax_custom_color_input" value="#800000">
+                 </div>
+                 
+                 <div>
+                    <label for="lieu_input">Lieu / Zone</label>
+                    <input type="text" id="lieu_input" list="lieu_history" placeholder="Ex: Salon..." value="">
+                    <datalist id="lieu_history"></datalist>
+                 </div>
+
+                 <div>
+                    <label for="fenetre_porte_input">Ouvrant</label>
+                    <input type="text" id="fenetre_porte_input" list="fp_history" placeholder="Ex: Porte N..." value="">
+                    <datalist id="fp_history"></datalist>
+                 </div>
+            </div>
+            
+            <div class="form-row text-fields">
+                <div style="grid-column: span 1;">
+                    <label for="remarques_input">Remarques</label>
+                    <textarea id="remarques_input" rows="2" placeholder="Observations..."></textarea>
+                </div>
+            </div>
+
+            <button type="submit" class="add-log-btn" id="addLogBtn">
+                <span class="material-symbols-outlined">send</span> Ajouter (Broadcast)
+            </button>
+        </form>
+
+        <!-- Tableau -->
+        <div id="logTableContainer">
+            <button type="button" class="sort-button" id="sortTimeBtn">
+                <span class="material-symbols-outlined">schedule</span> Trier Chronologie
+            </button>
+            <table id="logTable">
+                <thead>
+                    <tr>
+                        <th style="width: 15%;">Heure</th>
+                        <th style="width: 15%;">Pax</th>
+                        <th style="width: 20%;">Lieu</th>
+                        <th style="width: 20%;">Ouvrant</th>
+                        <th style="width: 30%;">Remarques</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+        
+		<footer style="text-align: center; margin-top: 30px; font-size: 0.7rem; color: var(--text-muted); opacity: 0.5;">
+            PC Tac v4.0 LIVE • Réseau PeerJS Intégré
+        </footer>
+    </div>
+    
+    <!-- Dock Flottant -->
+    <div class="dock-menu collapsed" id="dockMenu">
+        <div class="dock-menu-item" id="dockToggleBtn"><span class="material-symbols-outlined">expand_less</span></div>
+        
+        <!-- BOUTON RESEAU -->
+        <div class="dock-menu-item" id="networkDockBtn" title="Connexion Live" onclick="NetManager.openModal()">
+            <span class="material-symbols-outlined">wifi</span>
+        </div>
+        
+        <div class="dock-menu-item" id="exportJsonDockBtn"><span class="material-symbols-outlined">save</span></div>
+        <div class="dock-menu-item" id="importJsonDockBtn"><span class="material-symbols-outlined">upload_file</span></div>
+        <div class="dock-menu-item" id="darkModeToggle"><span class="material-symbols-outlined" id="darkModeIcon">nightlight</span></div>
+        <div class="dock-menu-item" id="previewPdfDockBtn"><span class="material-symbols-outlined">picture_as_pdf</span></div>
+        <div class="dock-menu-item" id="resetDataDockBtn"><span class="material-symbols-outlined" style="color: var(--danger-red);">delete_forever</span></div>
+    </div>
+
+    <!-- SCRIPT APPLICATION -->
+    <script>
+        // --- CONSTANTES ---
+        const LOCAL_STORAGE_KEY = 'pcTacLogData';
+        const HISTORY_STORAGE_KEY = 'pcTacHistory';
+        const TITLE_STORAGE_KEY = 'pcTacTitle';
+        
+        const FREE_MODE_COLORS = [
+            { hex: '#800000' }, { hex: '#B87333' }, { hex: '#FFDB58' }, { hex: '#A3D900' },      
+            { hex: '#00FFFF' }, { hex: '#000080' }, { hex: '#FF69B4' }, { hex: '#FF8C00' },  
+            { hex: '#8A2BE2' }, { hex: '#008080' }, { hex: '#C0C0C0' }, { hex: '#ffffff' }           
+        ];
+        const PDF_PAX_COLORS = {
+            'Adversaire': { text: 'Adversaire', color: '#ef4444', fontColor: '#ffffff' },
+            'Otage': { text: 'Civil/Otage', color: '#eab308', fontColor: '#000000' }, 
+            'Inter': { text: 'Inter', color: '#3b82f6', fontColor: '#ffffff' },
+            'AO': { text: 'AO', color: '#22c55e', fontColor: '#000000' }
+        };
+
+        // --- VARIABLES GLOBALES UI ---
+        const logTableBody = document.querySelector('#logTable tbody');
+        const heureInput = document.getElementById('heure_input');
+        const paxInput = document.getElementById('pax_input');
+        const paxModeInput = document.getElementById('pax_mode_input'); 
+        const paxCustomColorInput = document.getElementById('pax_custom_color_input'); 
+        const freePaxInput = document.getElementById('free_pax_input'); 
+        const lieuInput = document.getElementById('lieu_input');
+        const fenetrePorteInput = document.getElementById('fenetre_porte_input');
+        const remarquesInput = document.getElementById('remarques_input');
+        const paxSelectContainer = document.getElementById('pax_select_container');
+        const interventionTitleInput = document.getElementById('intervention_title_input');
+        
+        let isTimeInputManuallyChanged = false;
+        let paxColorMap = {}; 
+
+        // --- GESTIONNAIRE RESEAU (Inspiré de COM TAC) ---
+        const NetManager = {
+            peer: null,
+            conn: null,
+            myId: null,
+            hostId: null,
+            isHost: false,
+            callsign: 'PC',
+            connections: [], // Liste des connexions actives (pour l'hôte)
+            
+            // Config STUN robuste pour 4G/NAT
+            config: {
+                debug: 1,
+                config: {
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun1.l.google.com:19302' },
+                        { urls: 'stun:stun.nextcloud.com:443' }
+                    ]
+                }
+            },
+
+            openModal: () => {
+                document.getElementById('modalBackdrop').style.display = 'block';
+                document.getElementById('networkModal').style.display = 'block';
+                // Récupérer le callsign sauvegardé
+                const saved = localStorage.getItem('pcTacCallsign');
+                if(saved) document.getElementById('netCallsign').value = saved;
+            },
+
+            hostSession: () => {
+                const cs = document.getElementById('netCallsign').value.trim();
+                if(!cs) return showToast("Identifiant requis");
+                NetManager.callsign = cs;
+                localStorage.setItem('pcTacCallsign', cs);
+                
+                NetManager.isHost = true;
+                NetManager.initPeer();
+            },
+
+            joinSession: () => {
+                const cs = document.getElementById('netCallsign').value.trim();
+                const id = document.getElementById('netJoinId').value.trim();
+                if(!cs || !id) return showToast("ID et Identifiant requis");
+                NetManager.callsign = cs;
+                NetManager.hostId = id;
+                localStorage.setItem('pcTacCallsign', cs);
+                
+                NetManager.isHost = false;
+                NetManager.initPeer(null, true); // true = mode client
+            },
+
+            initPeer: (forceId = null, isClient = false) => {
+                document.querySelector('.btn-action').innerText = "Connexion...";
+                
+                // Si Hôte, on génère un ID aléatoire court si possible, sinon UUID PeerJS
+                // PeerJS gère l'ID.
+                NetManager.peer = new Peer(forceId, NetManager.config);
+
+                NetManager.peer.on('open', (id) => {
+                    NetManager.myId = id;
+                    NetManager.updateUI(true);
+                    
+                    if(isClient) {
+                        NetManager.connectToHost(NetManager.hostId);
+                    } else {
+                        showToast("Session créée. En attente...");
+                    }
+                });
+
+                NetManager.peer.on('connection', (conn) => {
+                    NetManager.handleConnection(conn);
+                });
+
+                NetManager.peer.on('error', (err) => {
+                    console.error(err);
+                    showToast("Erreur Réseau: " + err.type);
+                    NetManager.disconnect();
+                });
+            },
+
+            connectToHost: (hostId) => {
+                const conn = NetManager.peer.connect(hostId, {
+                    metadata: { callsign: NetManager.callsign }
+                });
+                
+                conn.on('open', () => {
+                    showToast("Connecté à l'Hôte");
+                    NetManager.handleConnection(conn);
+                    // Demander la sync complète
+                    conn.send({ type: 'SYNC_REQ' });
+                });
+                
+                conn.on('error', (err) => showToast("Erreur connexion hôte"));
+            },
+
+            handleConnection: (conn) => {
+                // Si on est Hôte, on ajoute à la liste
+                if(NetManager.isHost) {
+                    NetManager.connections.push(conn);
+                    NetManager.updatePeersCount();
+                } else {
+                    // Si on est client, c'est notre seule connexion vers le "Serveur"
+                    NetManager.conn = conn;
+                }
+
+                conn.on('data', (data) => {
+                    // console.log("Reçu:", data);
+                    
+                    if(data.type === 'SYNC_REQ' && NetManager.isHost) {
+                        // Un client demande les logs, on envoie tout
+                        conn.send({ type: 'SYNC_FULL', logs: getLogData(), title: interventionTitleInput.value });
+                        showToast(`Sync envoyée à ${conn.metadata.callsign || 'Client'}`);
+                    }
+                    
+                    if(data.type === 'SYNC_FULL') {
+                        // On reçoit l'état complet (ex: à la connexion)
+                        if(data.title) { interventionTitleInput.value = data.title; saveTitle(); }
+                        mergeLogs(data.logs);
+                        showToast("Données synchronisées");
+                    }
+
+                    if(data.type === 'LOG_ADD') {
+                        // Ajout d'une entrée unique
+                        addLogLocally(data.entry);
+                        // Si je suis Hôte, je rebroadcast aux autres
+                        if(NetManager.isHost) NetManager.broadcastExcept(data, conn.peer);
+                    }
+
+                    if(data.type === 'LOG_DEL') {
+                        deleteLogLocally(data.id);
+                        if(NetManager.isHost) NetManager.broadcastExcept(data, conn.peer);
+                    }
+                });
+
+                conn.on('close', () => {
+                    if(NetManager.isHost) {
+                        NetManager.connections = NetManager.connections.filter(c => c.peer !== conn.peer);
+                        NetManager.updatePeersCount();
+                    } else {
+                        showToast("Déconnecté de l'hôte");
+                        NetManager.disconnect();
+                    }
+                });
+            },
+
+            // Envoi à tout le monde (appelé par l'interface quand on ajoute un log)
+            broadcast: (data) => {
+                if(!NetManager.peer || NetManager.peer.destroyed) return;
+                
+                if(NetManager.isHost) {
+                    NetManager.connections.forEach(c => {
+                        if(c.open) c.send(data);
+                    });
+                } else if(NetManager.conn && NetManager.conn.open) {
+                    NetManager.conn.send(data);
+                }
+            },
+
+            // Rebroadcast de l'hôte vers les autres clients
+            broadcastExcept: (data, exceptId) => {
+                NetManager.connections.forEach(c => {
+                    if(c.open && c.peer !== exceptId) c.send(data);
+                });
+            },
+
+            disconnect: () => {
+                if(NetManager.peer) NetManager.peer.destroy();
+                NetManager.peer = null;
+                NetManager.connections = [];
+                NetManager.updateUI(false);
+            },
+
+            updateUI: (connected) => {
+                const badge = document.getElementById('live-status-badge');
+                const badgeTxt = document.getElementById('live-status-text');
+                const viewOff = document.getElementById('net-disconnected-view');
+                const viewOn = document.getElementById('net-connected-view');
+                const dockBtn = document.getElementById('networkDockBtn');
+
+                if(connected) {
+                    badge.classList.add('connected');
+                    badgeTxt.innerText = NetManager.isHost ? "HÔTE (LIVE)" : "CLIENT (LIVE)";
+                    viewOff.style.display = 'none';
+                    viewOn.style.display = 'block';
+                    document.getElementById('displaySessionId').innerText = NetManager.myId;
+                    dockBtn.classList.add('active');
+                    
+                    // Générer QR Code de l'ID
+                    document.getElementById('qr-code-net').innerHTML = "";
+                    new QRCode(document.getElementById('qr-code-net'), {
+                        text: NetManager.myId,
+                        width: 128, height: 128
+                    });
+                } else {
+                    badge.classList.remove('connected');
+                    badgeTxt.innerText = "OFFLINE";
+                    viewOff.style.display = 'block';
+                    viewOn.style.display = 'none';
+                    document.querySelector('.btn-action').innerHTML = '<span class="material-symbols-outlined" style="vertical-align: middle;">add_circle</span> Créer une Session (Hôte)';
+                    dockBtn.classList.remove('active');
+                }
+            },
+
+            updatePeersCount: () => {
+                document.getElementById('peersCount').innerText = `${NetManager.connections.length} Pairs connectés`;
+            },
+
+            copyID: () => {
+                navigator.clipboard.writeText(NetManager.myId).then(() => showToast("ID Copié"));
+            },
+            
+            pasteID: () => {
+                navigator.clipboard.readText().then(t => document.getElementById('netJoinId').value = t);
+            }
+        };
+
+
+        // --- LOGIQUE METIER & SYNC ---
+
+        function generateUniqueId() {
+            return Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+        }
+        
+        // Fusionne les logs reçus (ex: connexion) avec les locaux
+        function mergeLogs(remoteLogs) {
+            const currentLogs = getLogData();
+            const currentIds = new Set(currentLogs.map(l => l.id));
+            let added = false;
+
+            remoteLogs.forEach(rLog => {
+                if(!currentIds.has(rLog.id)) {
+                    currentLogs.push(rLog);
+                    added = true;
+                    // Mise à jour palette couleurs si mode libre
+                    if(rLog.paxMode === 'free' && rLog.paxColor) {
+                        paxColorMap[rLog.pax] = rLog.paxColor;
+                    }
+                }
+            });
+
+            if(added) {
+                renderLogTable(currentLogs);
+                updateHistoryAndColorMap(currentLogs);
+            }
+        }
+
+        // Ajoute un log unique reçu par le réseau
+        function addLogLocally(entry) {
+            const logs = getLogData();
+            // Vérif doublon
+            if(logs.some(l => l.id === entry.id)) return;
+            
+            logs.push(entry);
+            renderLogTable(logs, entry.id);
+            updateHistoryAndColorMap(logs);
+            showToast(`Nouveau Log: ${entry.pax}`);
+        }
+
+        // Supprime un log reçu par le réseau
+        function deleteLogLocally(id) {
+            const logs = getLogData().filter(l => l.id !== id);
+            renderLogTable(logs);
+        }
+
+        // --- FONCTIONS UI STANDARD (Adaptées) ---
+
+        function showToast(message) {
+            const toast = document.getElementById('toast-container');
+            document.getElementById('toast-message').textContent = message;
+            toast.style.transform = 'translateX(-50%) translateY(0)';
+            setTimeout(() => { toast.style.transform = 'translateX(-50%) translateY(-100px)'; }, 3000);
+        }
+
+        function saveLogData(logData) {
+            logData.sort((a, b) => a.heure.localeCompare(b.heure));
+            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(logData));
+        }
+
+        function getLogData() {
+            return Array.from(logTableBody.querySelectorAll('tr')).map(row => ({
+                id: row.dataset.id,
+                heure: row.querySelector('.heure-cell-text').textContent,
+                pax: row.dataset.freepaxname || row.dataset.pax,
+                paxMode: row.dataset.paxmode,
+                paxColor: row.dataset.paxcolor,
+                lieu: row.dataset.lieu,
+                fenetrePorte: row.dataset.fenetreporte,
+                remarques: row.dataset.remarques,
+            }));
+        }
+
+        function renderLogTable(logData, newEntryId = null) {
+            logTableBody.innerHTML = '';
+            // Tri Chronologique auto
+            logData.sort((a, b) => a.heure.localeCompare(b.heure));
+            
+            logData.forEach(entry => {
+                const row = logTableBody.insertRow();
+                const isFree = entry.paxMode === 'free';
+                
+                // Préparation Couleurs
+                let color = isFree ? (entry.paxColor || '#ffffff') : (PDF_PAX_COLORS[entry.pax]?.color || '#ef4444');
+                let txtColor = isFree ? '#000000' : (PDF_PAX_COLORS[entry.pax]?.fontColor || '#ffffff');
+                if(isFree) {
+                    // Calcul contraste simple
+                    const hex = color.replace('#','');
+                    const r=parseInt(hex.substr(0,2),16), g=parseInt(hex.substr(2,2),16), b=parseInt(hex.substr(4,2),16);
+                    if ((r*0.299 + g*0.587 + b*0.114) < 140) txtColor = '#ffffff';
+                }
+
+                row.dataset.id = entry.id;
+                row.dataset.pax = entry.pax;
+                row.dataset.paxmode = entry.paxMode;
+                row.dataset.paxcolor = entry.paxColor || '';
+                if(isFree) row.dataset.freepaxname = entry.pax;
+                row.dataset.lieu = entry.lieu;
+                row.dataset.fenetreporte = entry.fenetrePorte;
+                row.dataset.remarques = entry.remarques;
+
+                if (entry.id === newEntryId) row.classList.add('just-added');
+
+                row.innerHTML = `
+                    <td>
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <span class="heure-cell-text">${entry.heure}</span>
+                            <button class="delete-btn desktop-only" onclick="deleteClick('${entry.id}')">✕</button>
+                        </div>
+                    </td>
+                    <td><span class="pax-cell" style="background:${color}; color:${txtColor};">${entry.pax}</span></td>
+                    <td>${entry.lieu}</td>
+                    <td>${entry.fenetrePorte}</td>
+                    <td>${entry.remarques}</td>
+                    <button class="mobile-delete-btn" onclick="deleteClick('${entry.id}')"><span class="material-symbols-outlined">delete</span></button>
+                `;
+            });
+            saveLogData(logData);
+        }
+
+        // --- GESTIONNAIRES EVÈNEMENTS ---
+
+        function handleAddLogEntry(e) {
+            e.preventDefault();
+            const mode = paxModeInput.value;
+            let paxName, paxColorHex;
+            
+            if (mode === 'standard') {
+                paxName = paxInput.value;
+            } else {
+                paxName = freePaxInput.value.trim();
+                paxColorHex = paxCustomColorInput.value;
+                if (!paxName) return showToast("Nom Pax requis");
+            }
+            if (!heureInput.value) return showToast("Heure requise");
+
+            const newEntry = {
+                id: generateUniqueId(),
+                heure: heureInput.value,
+                pax: paxName,
+                paxMode: mode,
+                paxColor: paxColorHex,
+                lieu: lieuInput.value.trim(),
+                fenetrePorte: fenetrePorteInput.value.trim(),
+                remarques: remarquesInput.value.trim(),
+            };
+
+            // 1. Ajout local
+            addLogLocally(newEntry);
+            
+            // 2. Broadcast Réseau
+            NetManager.broadcast({ type: 'LOG_ADD', entry: newEntry });
+
+            // Reset UI
+            isTimeInputManuallyChanged = false;
+            updateTimeInput();
+            lieuInput.value = ''; fenetrePorteInput.value = ''; remarquesInput.value = '';
+            
+            if (mode === 'free') {
+                 paxColorMap[paxName] = paxColorHex; 
+            }
+        }
+
+        function deleteClick(id) {
+            if(confirm("Supprimer cette entrée ?")) {
+                deleteLogLocally(id);
+                NetManager.broadcast({ type: 'LOG_DEL', id: id });
+            }
+        }
+
+        function updateTimeInput() {
+            if (!isTimeInputManuallyChanged) {
+                const now = new Date();
+                heureInput.value = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+            }
+        }
+
+        function setPaxMode(mode) {
+            const isStandard = mode === 'standard';
+            document.getElementById('pax_select_wrapper_standard').style.display = isStandard ? 'block' : 'none';
+            document.getElementById('pax_select_wrapper_free').style.display = isStandard ? 'none' : 'block';
+            document.querySelectorAll('.mode-toggle-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.mode === mode));
+            paxModeInput.value = mode;
+        }
+
+        function initColors() {
+            const palette = document.getElementById('free_color_palette');
+            FREE_MODE_COLORS.forEach(c => {
+                const s = document.createElement('div');
+                s.className = 'color-swatch';
+                s.style.backgroundColor = c.hex;
+                s.onclick = () => {
+                    document.querySelectorAll('.color-swatch').forEach(el => el.classList.remove('selected'));
+                    s.classList.add('selected');
+                    paxCustomColorInput.value = c.hex;
+                };
+                palette.appendChild(s);
+            });
+            // Selection pax standard
+            document.querySelectorAll('.pax-select-option').forEach(opt => {
+                opt.onclick = () => {
+                    document.querySelectorAll('.pax-select-option').forEach(o => o.classList.remove('selected'));
+                    opt.classList.add('selected');
+                    paxInput.value = opt.dataset.pax;
+                };
+            });
+            document.querySelector('[data-pax="Adversaire"]').click();
+        }
+        
+        // Load/Save functions helpers for History
+        function updateHistoryAndColorMap(logData) {
+            const history = JSON.parse(localStorage.getItem(HISTORY_STORAGE_KEY) || '{"lieux":[], "fp":[]}');
+            const lieux = new Set(history.lieux);
+            const fp = new Set(history.fp);
+            
+            logData.forEach(l => {
+                if(l.lieu) lieux.add(l.lieu);
+                if(l.fenetrePorte) fp.add(l.fenetrePorte);
+            });
+
+            const newHistory = { lieux: Array.from(lieux), fp: Array.from(fp) };
+            localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(newHistory));
+            
+            const dlLieu = document.getElementById('lieu_history'); dlLieu.innerHTML = '';
+            newHistory.lieux.forEach(l => dlLieu.innerHTML += `<option value="${l}">`);
+            
+            const dlFp = document.getElementById('fp_history'); dlFp.innerHTML = '';
+            newHistory.fp.forEach(l => dlFp.innerHTML += `<option value="${l}">`);
+        }
+
+        // --- INIT ---
+        document.addEventListener('DOMContentLoaded', () => {
+            // Theme
+            const isDark = localStorage.getItem('theme') !== 'light';
+            if(!isDark) document.body.classList.replace('dark-mode', 'light-mode');
+            document.getElementById('darkModeToggle').onclick = () => {
+                document.body.classList.toggle('dark-mode');
+                document.body.classList.toggle('light-mode');
+                localStorage.setItem('theme', document.body.classList.contains('dark-mode') ? 'dark' : 'light');
+            };
+
+            // Load Data
+            const savedLogs = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY) || '[]');
+            renderLogTable(savedLogs);
+            updateHistoryAndColorMap(savedLogs);
+            interventionTitleInput.value = localStorage.getItem(TITLE_STORAGE_KEY) || '';
+            interventionTitleInput.oninput = () => {
+                localStorage.setItem(TITLE_STORAGE_KEY, interventionTitleInput.value);
+                // Si connecté, on peut vouloir sync le titre aussi, mais optionnel pour l'instant
+            };
+
+            // Form Logic
+            document.getElementById('log-form').onsubmit = handleAddLogEntry;
+            document.querySelectorAll('.mode-toggle-btn').forEach(b => b.onclick = () => setPaxMode(b.dataset.mode));
+            initColors();
+            
+            // Time Auto
+            updateTimeInput();
+            setInterval(updateTimeInput, 60000);
+            heureInput.onchange = () => isTimeInputManuallyChanged = true;
+
+            // Dock UI
+            document.getElementById('dockToggleBtn').onclick = () => document.getElementById('dockMenu').classList.toggle('collapsed');
+            document.getElementById('resetDataDockBtn').onclick = () => {
+                document.getElementById('modalBackdrop').style.display='block';
+                document.getElementById('resetModal').style.display='block';
+            };
+            document.getElementById('confirmResetBtn').onclick = () => {
+                localStorage.removeItem(LOCAL_STORAGE_KEY);
+                renderLogTable([]);
+                document.getElementById('resetModal').style.display='none';
+                document.getElementById('modalBackdrop').style.display='none';
+                // Si connecté, on pourrait envoyer un 'RESET_ALL' mais dangereux. On reste local sur le reset.
+            };
+            document.getElementById('cancelResetBtn').onclick = () => {
+                 document.getElementById('resetModal').style.display='none';
+                 document.getElementById('modalBackdrop').style.display='none';
+            };
+            document.getElementById('modalBackdrop').onclick = (e) => {
+                if(e.target.id === 'modalBackdrop') {
+                    document.getElementById('resetModal').style.display='none';
+                    document.getElementById('networkModal').style.display='none';
+                    document.getElementById('modalBackdrop').style.display='none';
+                }
+            };
+            
+            // Import/Export JSON
+            document.getElementById('exportJsonDockBtn').onclick = () => {
+                const data = { metadata: { title: interventionTitleInput.value, date: new Date() }, logs: getLogData() };
+                const blob = new Blob([JSON.stringify(data, null, 2)], {type : 'application/json'});
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a'); a.href = url; a.download = `PCTAC_${Date.now()}.json`;
+                document.body.appendChild(a); a.click(); document.body.removeChild(a);
+            };
+            document.getElementById('importJsonDockBtn').onclick = () => document.getElementById('jsonImportInput').click();
+            document.getElementById('jsonImportInput').onchange = (e) => {
+                const fr = new FileReader();
+                fr.onload = (ev) => {
+                    try {
+                        const d = JSON.parse(ev.target.result);
+                        if(d.logs) mergeLogs(d.logs);
+                        if(d.metadata?.title) interventionTitleInput.value = d.metadata.title;
+                        showToast("Import réussi");
+                    } catch(ex) { showToast("Erreur Fichier JSON"); }
+                };
+                fr.readAsText(e.target.files[0]);
+            };
+
+            // PDF Generation (Version simplifiée pour compacité)
+            document.getElementById('previewPdfDockBtn').onclick = async () => {
+                const { PDFDocument, rgb, StandardFonts } = PDFLib;
+                const pdfDoc = await PDFDocument.create();
+                const page = pdfDoc.addPage();
+                const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+                const { width, height } = page.getSize();
+                
+                page.drawText(`PC TAC - ${interventionTitleInput.value}`, { x: 50, y: height - 50, size: 20, font: font });
+                
+                let y = height - 100;
+                getLogData().forEach(l => {
+                    const line = `${l.heure} | ${l.pax} | ${l.lieu} | ${l.fenetrePorte} | ${l.remarques}`;
+                    page.drawText(line, { x: 50, y: y, size: 10, font: font });
+                    y -= 15;
+                    if(y < 50) { page = pdfDoc.addPage(); y = height - 50; }
+                });
+
+                const pdfBytes = await pdfDoc.save();
+                const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+                const url = URL.createObjectURL(blob);
+                window.open(url, '_blank');
+            };
+        });
+    </script>
+</body>
+</html>
