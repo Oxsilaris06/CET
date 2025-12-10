@@ -496,6 +496,7 @@
         const LOCAL_STORAGE_KEY = 'pcTacLogData';
         const HISTORY_STORAGE_KEY = 'pcTacHistory';
         const TITLE_STORAGE_KEY = 'pcTacTitle';
+        const SESSION_STORAGE_KEY = 'pcTacLiveSession'; // Clé pour persister l'état de session
         
         const FREE_MODE_COLORS = [
             { hex: '#800000' }, { hex: '#B87333' }, { hex: '#FFDB58' }, { hex: '#A3D900' },      
@@ -551,6 +552,38 @@
             },
             
             qrScannerNet: null,
+            retryCount: 0,
+            maxRetries: 5,
+
+            // Sauvegarde de l'état de session dans localStorage
+            saveSessionState: () => {
+                const state = {
+                    isConnected: !!NetManager.peer,
+                    myId: NetManager.myId,
+                    hostId: NetManager.hostId,
+                    isHost: NetManager.isHost,
+                    callsign: NetManager.callsign,
+                    lastAttempt: Date.now() 
+                };
+                localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(state));
+            },
+
+            // Charge l'état et tente la reconnexion
+            checkAndReconnect: () => {
+                const state = JSON.parse(localStorage.getItem(SESSION_STORAGE_KEY));
+                if (state && (state.isHost || state.hostId) && state.callsign) {
+                    NetManager.callsign = state.callsign;
+                    NetManager.hostId = state.hostId;
+                    NetManager.isHost = state.isHost;
+                    
+                    showToast("Tentative de reconnexion...", false);
+                    if (state.isHost) {
+                        NetManager.initPeer(state.myId);
+                    } else {
+                        NetManager.initPeer(null, true);
+                    }
+                }
+            },
 
             openModal: () => {
                 document.getElementById('modalBackdrop').style.display = 'block';
@@ -625,6 +658,10 @@
             },
 
             initPeer: (forceId = null, isClient = false) => {
+                // Détruire l'ancienne instance si elle existe (pour reconnexion propre)
+                if (NetManager.peer) NetManager.peer.destroy();
+                NetManager.retryCount = 0;
+
                 // Cacher les autres vues pendant l'initialisation
                 document.getElementById('net-disconnected-view').style.display = 'none';
                 document.getElementById('net-scan-view').style.display = 'none';
@@ -636,6 +673,7 @@
                 NetManager.peer.on('open', (id) => {
                     NetManager.myId = id;
                     NetManager.updateUI(true);
+                    NetManager.saveSessionState();
                     
                     if(isClient) {
                         NetManager.connectToHost(NetManager.hostId);
@@ -650,11 +688,45 @@
                 });
 
                 NetManager.peer.on('error', (err) => {
-                    console.error(err);
-                    showToast("Erreur Réseau: " + err.type);
-                    NetManager.disconnect();
+                    console.error("PeerJS Error:", err);
+                    // Tenter la reconnexion si déconnecté ou erreur, SAUF si l'ID hôte n'existe pas
+                    if (err.type === 'disconnected' || err.type === 'network') {
+                        NetManager.attemptReconnect(isClient);
+                    } else if (err.type !== 'peer-unavailable') {
+                        showToast("Erreur Réseau: " + err.type, true);
+                        NetManager.disconnect();
+                    }
                     document.querySelector('.modal-buttons button:first-child').innerText = 'Fermer';
                 });
+                
+                // Gérer les déconnexions (fermeture de l'onglet, perte de réseau)
+                NetManager.peer.on('disconnected', () => {
+                    showToast("Déconnexion du serveur PeerJS. Tentative de reconnexion...", true);
+                    NetManager.attemptReconnect(isClient);
+                });
+            },
+            
+            attemptReconnect: (isClient) => {
+                if (NetManager.retryCount < NetManager.maxRetries) {
+                    NetManager.retryCount++;
+                    const delay = NetManager.retryCount * 2000;
+                    showToast(`Réessai de connexion dans ${delay/1000}s (${NetManager.retryCount}/${NetManager.maxRetries})`, true);
+                    
+                    // Tenter la reconnexion si c'est une déconnexion soft
+                    if (NetManager.peer && !NetManager.peer.destroyed) {
+                        setTimeout(() => NetManager.peer.reconnect(), delay);
+                    } else {
+                        // Reconnexion complète si l'objet peer est détruit
+                        setTimeout(() => {
+                             if (isClient) NetManager.initPeer(null, true);
+                             else NetManager.initPeer(NetManager.myId); // Tente de garder le même ID Hôte
+                        }, delay);
+                    }
+
+                } else {
+                    showToast("Échec de la reconnexion automatique. Session perdue.", true);
+                    NetManager.disconnect();
+                }
             },
 
             connectToHost: (hostId) => {
@@ -693,7 +765,8 @@
                     
                     if(data.type === 'SYNC_FULL') {
                         // On reçoit l'état complet (ex: à la connexion)
-                        if(data.title) { interventionTitleInput.value = data.title; saveTitle(data.title); } // Appel à saveTitle avec la valeur
+                        // LE TITRE EST MIS À JOUR UNIQUEMENT LORS DU SYNC_FULL
+                        if(data.title) { interventionTitleInput.value = data.title; saveTitle(data.title, false); } 
                         mergeLogs(data.logs);
                         showToast("Données synchronisées");
                     }
@@ -711,8 +784,9 @@
                     }
                     
                     if(data.type === 'TITLE_UPDATE') {
-                        saveTitle(data.title);
+                        // TITRE: Reçu lors d'un UPDATE, pas de broadcast nécessaire
                         interventionTitleInput.value = data.title;
+                        saveTitle(data.title, false); // Mise à jour locale sans broadcast
                         showToast(`Opération : ${data.title}`);
                     }
                 });
@@ -723,7 +797,7 @@
                         NetManager.updatePeersCount();
                     } else {
                         showToast("Déconnecté de l'hôte", true);
-                        NetManager.disconnect();
+                        NetManager.attemptReconnect(false); // Tentative de reconnexion si client
                     }
                 });
             },
@@ -752,6 +826,9 @@
                 if(NetManager.peer) NetManager.peer.destroy();
                 NetManager.peer = null;
                 NetManager.connections = [];
+                NetManager.hostId = null;
+                NetManager.isHost = false;
+                localStorage.removeItem(SESSION_STORAGE_KEY); // Supprimer la persistance
                 NetManager.updateUI(false);
                 showToast("Déconnexion effectuée");
             },
@@ -773,6 +850,7 @@
                     viewOn.style.display = 'block';
                     document.getElementById('displaySessionId').innerText = NetManager.myId;
                     dockBtn.classList.add('active');
+                    NetManager.saveSessionState();
                     
                     // Générer QR Code de l'ID
                     document.getElementById('qr-code-net').innerHTML = "";
@@ -810,15 +888,16 @@
             return Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
         }
         
-        // Sauvegarde locale du titre et envoi sur le réseau si connecté
-        function saveTitle(newTitle = interventionTitleInput.value.trim()) { 
+        // Sauvegarde locale du titre et envoi sur le réseau si sendBroadcast est true
+        function saveTitle(newTitle = interventionTitleInput.value.trim(), sendBroadcast = true) { 
             localStorage.setItem(TITLE_STORAGE_KEY, newTitle);
-            if (NetManager.peer && NetManager.myId) {
+            if (sendBroadcast && NetManager.peer && NetManager.myId) {
                  NetManager.broadcast({ type: 'TITLE_UPDATE', title: newTitle });
             }
         }
+        
         // Listener pour déclencher le broadcast du titre
-        interventionTitleInput.oninput = () => saveTitle(interventionTitleInput.value.trim());
+        interventionTitleInput.oninput = () => saveTitle(interventionTitleInput.value.trim(), true);
 
         // Fusionne les logs reçus (ex: connexion) avec les locaux
         function mergeLogs(remoteLogs) {
@@ -1122,7 +1201,7 @@
                 // Vérifier si c'est un format de log valide (on suppose un format simple type LOG_ADD entry)
                 if (data.metadata && data.logs) {
                     // C'est un export JSON complet
-                    if(data.metadata.title) { interventionTitleInput.value = data.metadata.title; saveTitle(data.metadata.title); }
+                    if(data.metadata.title) { interventionTitleInput.value = data.metadata.title; saveTitle(data.metadata.title, false); }
                     mergeLogs(data.logs);
                     showToast("Import JSON (QR) réussi");
                 } else {
@@ -1396,6 +1475,9 @@
             
             // Le titre est chargé ici, mais le listener est défini dans saveTitle()
             interventionTitleInput.value = localStorage.getItem(TITLE_STORAGE_KEY) || '';
+
+            // Tenter la reconnexion au chargement
+            NetManager.checkAndReconnect();
 
             // Form Logic
             document.getElementById('log-form').onsubmit = handleAddLogEntry;
