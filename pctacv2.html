@@ -1037,7 +1037,7 @@
                  localStorage.setItem(WEBRTC_STORAGE_KEY, JSON.stringify({ id: id, isHost: isHost }));
             },
             
-            // --- LOGIQUE SCANNER WEBRTC ---
+            // --- LOGIQUE SCANNER WEBRTC (Basé sur comtac) ---
             startWebRtcScanner: () => {
                 if (html5QrCodeWebRtc) return;
                 webrtcScannerRegion.style.display = 'block';
@@ -1045,19 +1045,31 @@
                 btnScanQr.classList.remove('webrtc-menu-item');
                 btnScanQr.classList.add('action'); // Mettre en bleu pour indiquer l'activité
                 
+                // Utilisation de la méthode Html5Qrcode de Comtac
                 html5QrCodeWebRtc = new Html5Qrcode("qr-scanner-region");
-                const config = { fps: 10, qrbox: { width: 200, height: 200 } };
                 
-                html5QrCodeWebRtc.start({ facingMode: "environment" }, config, (decodedText) => {
-                    // Succès du scan
-                    NetService.stopWebRtcScanner();
-                    const hostId = decodedText.trim();
-                    document.getElementById('input-join-id').value = hostId;
-                    PeerService.joinClient(hostId);
-                    closeWebRtcModal();
-                }, (errorMessage) => {
-                    // Erreur/Progression
-                })
+                // Configuration similaire à ComTac pour un scan rapide
+                const config = { 
+                    fps: 10, 
+                    qrbox: { width: 250, height: 250 },
+                    // S'assurer que le mode face à l'environnement est préféré
+                    disableFlip: false 
+                };
+                
+                html5QrCodeWebRtc.start({ facingMode: "environment" }, config, 
+                    (decodedText) => {
+                        // Succès du scan
+                        NetService.stopWebRtcScanner();
+                        const hostId = decodedText.trim();
+                        document.getElementById('input-join-id').value = hostId;
+                        PeerService.joinClient(hostId);
+                        closeWebRtcModal();
+                    }, 
+                    (errorMessage) => {
+                        // Affichage des messages d'erreur dans la console si besoin
+                        // console.log("QR Scan progress/error:", errorMessage);
+                    }
+                )
                 .catch(err => {
                     NetService.stopWebRtcScanner();
                     webrtcScannerRegion.innerHTML = `<div class="qr-scan-placeholder" style="color:var(--danger-red);">Erreur Caméra: ${err}.</div>`;
@@ -1992,9 +2004,9 @@
             
             // Toggle du scanner QR WebRTC
             btnScanQr.addEventListener('click', () => {
-                if (html5QrCodeWebRtc) {
+                if (btnScanQr.classList.contains('action')) { // Si c'est l'état 'Arrêter Scan'
                     NetService.stopWebRtcScanner();
-                } else {
+                } else { // Si c'est l'état 'Scanner QR Code'
                     NetService.startWebRtcScanner();
                 }
             });
