@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Hub</title>
+    <title>HUB INSTRUCTION</title>
     
     <!-- Polices ComTac pour l'interface du Hub -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -244,7 +244,7 @@
             </button>
 
             <span class="material-symbols-outlined" style="font-size: 1.2em; margin-right: 10px;">hub</span>
-            Hub<span>Instruction</span>
+            HUB<span>INSTRUCTION</span>
         </div>
         
         <div class="nav-container">
@@ -366,7 +366,6 @@
         });
 
         // --- 3. Gestion Tactile Unifiée (Hub + Iframe) ---
-        // On doit gérer les swipes sur le header (Hub) ET dans l'iframe (Contenu)
         
         let touchStartX = 0;
         let touchStartY = 0;
@@ -385,13 +384,12 @@
                 if (absDiffX > threshold) {
                     const frameWindow = document.getElementById('mainFrame').contentWindow;
                     if (diffX > 0) {
-                        // Swipe Gauche -> Suivant (flèche droite)
-                        // Utiliser postMessage est plus sûr si possible, sinon simulation d'événement
+                        // Swipe Gauche -> Suivant
                         try {
                             frameWindow.document.dispatchEvent(new KeyboardEvent('keydown', {'key': 'ArrowRight'}));
                         } catch(e) { console.log("Erreur envoi event iframe"); }
                     } else {
-                        // Swipe Droite -> Précédent (flèche gauche)
+                        // Swipe Droite -> Précédent
                         try {
                             frameWindow.document.dispatchEvent(new KeyboardEvent('keydown', {'key': 'ArrowLeft'}));
                         } catch(e) { console.log("Erreur envoi event iframe"); }
@@ -413,11 +411,21 @@
 
         // Écouteurs sur le Hub (Header, zones vides)
         document.addEventListener('touchstart', e => {
+            // CORRECTION: Si le touch démarre dans le header (nav), on ne fait rien (pour permettre le scroll)
+            if (e.target.closest('header')) {
+                touchStartX = null; // On annule le swipe
+                return;
+            }
             touchStartX = e.changedTouches[0].screenX;
             touchStartY = e.changedTouches[0].screenY;
         }, {passive: true});
 
         document.addEventListener('touchend', e => {
+            if (touchStartX === null) return; // Si le swipe a été annulé
+            
+            // Si le touch se termine dans le header (peu probable si start était ailleurs, mais au cas où)
+            if (e.target.closest('header')) return;
+
             handleUnifiedSwipe(touchStartX, touchStartY, e.changedTouches[0].screenX, e.changedTouches[0].screenY);
         }, {passive: true});
 
