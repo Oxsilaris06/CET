@@ -21,7 +21,7 @@
             --hub-header-h: 70px;
         }
         
-        * { box-sizing: border-box; }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         
         body {
             margin: 0; padding: 0;
@@ -37,15 +37,21 @@
 
         /* HEADER NAVIGATION */
         header {
-            flex: 0 0 auto; /* Ne rétrécit pas, ne grandit pas, taille auto selon contenu ou hauteur fixée */
-            min-height: var(--hub-header-h); /* Hauteur minimum garantie sur PC */
+            flex: 0 0 auto;
+            min-height: var(--hub-header-h);
             background: rgba(10, 10, 10, 0.95);
             border-bottom: 1px solid var(--hub-border);
             display: flex; align-items: center; justify-content: space-between;
             padding: 0 30px;
             box-shadow: 0 5px 20px rgba(0,0,0,0.5);
             z-index: 100;
-            transition: all 0.3s ease;
+            transition: transform 0.3s ease-in-out; /* Animation hide/show */
+            position: relative; /* Pour z-index */
+        }
+
+        header.hidden {
+            transform: translateY(-100%);
+            margin-bottom: calc(var(--hub-header-h) * -1); /* Compense l'espace */
         }
 
         .brand {
@@ -63,7 +69,7 @@
             overflow-x: auto;
             -webkit-overflow-scrolling: touch;
             scrollbar-width: none;
-            padding: 5px 0; /* Petit padding pour l'esthétique du scroll */
+            padding: 5px 0;
         }
         .nav-container::-webkit-scrollbar { display: none; }
 
@@ -99,13 +105,38 @@
 
         /* IFRAME CONTAINER */
         .presentation-frame {
-            flex: 1 1 auto; /* Prend tout l'espace restant */
+            flex: 1 1 auto;
             width: 100%;
-            height: 100%; /* S'adapte au conteneur flex parent */
+            height: 100%;
             border: none;
             background: #000;
             display: block;
         }
+
+        /* BOUTON PLEIN ÉCRAN */
+        .fullscreen-btn {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 50px; height: 50px;
+            border-radius: 50%;
+            background: rgba(10, 10, 10, 0.8);
+            border: 1px solid var(--hub-accent);
+            color: var(--hub-accent);
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            z-index: 1000;
+            transition: all 0.3s;
+            backdrop-filter: blur(5px);
+        }
+        .fullscreen-btn:hover {
+            background: var(--hub-accent);
+            color: #000;
+            transform: scale(1.1);
+        }
+        /* Masquer sur desktop si non désiré, ou garder pour confort */
+        @media (min-width: 1025px) { .fullscreen-btn { bottom: 30px; right: 30px; } }
 
         /* MOBILE & TABLETTE ADAPTATION */
         @media (max-width: 1024px) {
@@ -114,8 +145,13 @@
                 align-items: stretch;
                 padding: 10px; 
                 gap: 10px;
-                height: auto; /* Hauteur auto pour s'adapter au contenu */
+                height: auto; 
                 min-height: auto;
+            }
+            
+            /* Ajustement pour header.hidden sur mobile (hauteur variable) */
+            header.hidden {
+                margin-bottom: -110px; /* Valeur approx de la hauteur mobile */
             }
 
             .brand { 
@@ -127,14 +163,12 @@
             .nav-container { 
                 justify-content: flex-start;
                 padding-bottom: 5px;
-                margin: 0 -10px; /* Compense le padding du header pour scroll plein bord */
-                padding: 0 10px 10px 10px; /* Rétablit le padding interne */
+                margin: 0 -10px; padding: 0 10px 10px 10px;
             }
 
-            .nav-btn { 
-                font-size: 0.85rem; 
-                padding: 8px 15px; 
-            }
+            .nav-btn { font-size: 0.85rem; padding: 8px 15px; }
+            
+            .fullscreen-btn { width: 45px; height: 45px; bottom: 15px; right: 15px; opacity: 0.8; }
         }
         
         /* TV / GRANDS ÉCRANS (4K) */
@@ -149,7 +183,7 @@
 <body>
 
     <!-- Barre de Navigation Supérieure -->
-    <header>
+    <header id="mainHeader">
         <div class="brand">
             <span class="material-symbols-outlined" style="font-size: 1.2em;">hub</span>
             SUITE<span>TACTIQUE</span>
@@ -174,39 +208,90 @@
     <!-- Zone d'affichage (Iframe) -->
     <iframe id="mainFrame" class="presentation-frame" src="adi1.html" title="Zone de Présentation" allowfullscreen></iframe>
 
+    <!-- Bouton Plein Écran -->
+    <button class="fullscreen-btn" id="fsBtn" onclick="toggleFullScreen()">
+        <span class="material-symbols-outlined" id="fsIcon">fullscreen</span>
+    </button>
+
     <script>
-        // Fonction de chargement optimisée
+        // --- 1. Gestion de l'Iframe ---
         function loadPres(filename, btnElement) {
             const frame = document.getElementById('mainFrame');
-            
-            // Évite le rechargement si déjà actif
             if (frame.getAttribute('src') === filename) return;
 
-            // 1. Fade Out effet (optionnel pour fluidité)
             frame.style.opacity = '0';
-            
             setTimeout(() => {
-                // 2. Changer la source
                 frame.src = filename;
-                
-                // 3. Mise à jour boutons
                 document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
                 btnElement.classList.add('active');
-
-                // 4. Fade In après chargement (rapide)
+                
                 frame.onload = function() {
                     frame.style.opacity = '1';
-                    frame.contentWindow.focus(); // Capture clavier
+                    frame.contentWindow.focus();
                 };
-                // Fallback si onload est trop lent (ex: cache)
                 setTimeout(() => frame.style.opacity = '1', 300);
             }, 150);
         }
 
-        // Init : Focus clavier sur l'iframe au démarrage
+        // --- 2. Gestion Plein Écran ---
+        function toggleFullScreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(err => {
+                    console.log(`Error attempting to enable full-screen mode: ${err.message}`);
+                });
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                }
+            }
+        }
+
+        // Mise à jour de l'icône selon l'état
+        document.addEventListener('fullscreenchange', () => {
+            const icon = document.getElementById('fsIcon');
+            if (document.fullscreenElement) {
+                icon.textContent = 'fullscreen_exit';
+            } else {
+                icon.textContent = 'fullscreen';
+                // Si on sort du plein écran, on réaffiche le header au cas où
+                document.getElementById('mainHeader').classList.remove('hidden');
+            }
+        });
+
+        // --- 3. Gestion Swipe (Mobile) pour Cacher/Afficher le Header ---
+        let touchStartY = 0;
+        let touchEndY = 0;
+        const header = document.getElementById('mainHeader');
+        
+        // Zone de détection : tout l'écran (pour pouvoir faire réapparaître le header facilement)
+        document.addEventListener('touchstart', e => {
+            touchStartY = e.changedTouches[0].screenY;
+        }, {passive: true});
+
+        document.addEventListener('touchend', e => {
+            touchEndY = e.changedTouches[0].screenY;
+            handleSwipe();
+        }, {passive: true});
+
+        function handleSwipe() {
+            const threshold = 50; // Sensibilité du swipe
+            const diff = touchStartY - touchEndY;
+
+            if (Math.abs(diff) > threshold) {
+                if (diff > 0) {
+                    // Swipe vers le HAUT (Up) -> Cacher Header
+                    header.classList.add('hidden');
+                } else {
+                    // Swipe vers le BAS (Down) -> Afficher Header
+                    header.classList.remove('hidden');
+                }
+            }
+        }
+
+        // Init
         window.onload = function() {
             const frame = document.getElementById('mainFrame');
-            frame.style.transition = "opacity 0.3s ease"; // Ajout transition JS
+            frame.style.transition = "opacity 0.3s ease";
             frame.contentWindow.focus();
         }
     </script>
