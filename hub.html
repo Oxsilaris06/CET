@@ -28,13 +28,14 @@
             background-color: var(--hub-bg);
             color: var(--hub-text);
             font-family: 'Chakra Petch', sans-serif;
-            height: 100vh; width: 100vw;
+            height: 100vh; width: 100vw; /* Plein écran strict */
             display: flex; flex-direction: column;
-            overflow: hidden;
+            overflow: hidden; /* Pas de scroll global sur le body */
         }
 
         /* HEADER NAVIGATION */
         header {
+            flex-shrink: 0; /* Ne rétrécit pas */
             height: var(--hub-header-h);
             background: rgba(10, 10, 10, 0.95);
             border-bottom: 1px solid var(--hub-border);
@@ -46,16 +47,21 @@
 
         .brand {
             font-family: 'Saira Stencil One';
-            font-size: 1.5rem;
+            font-size: 1.5rem; /* Taille adaptée PC/TV */
             color: #fff;
             letter-spacing: 2px;
             display: flex; align-items: center; gap: 10px;
+            white-space: nowrap; /* Empêche le retour à la ligne */
         }
         .brand span { color: var(--hub-accent); }
 
         .nav-container {
             display: flex; gap: 10px;
+            overflow-x: auto; /* Scroll horizontal si besoin */
+            -webkit-overflow-scrolling: touch; /* Scroll fluide iOS */
+            scrollbar-width: none; /* Cache scrollbar Firefox */
         }
+        .nav-container::-webkit-scrollbar { display: none; /* Cache scrollbar Chrome/Safari */ }
 
         /* BOUTONS NAV */
         .nav-btn {
@@ -68,8 +74,10 @@
             font-weight: 600;
             text-transform: uppercase;
             cursor: pointer;
-            transition: all 0.3s ease;
+            transition: all 0.2s ease;
             display: flex; align-items: center; gap: 8px;
+            white-space: nowrap; /* Texte sur une ligne */
+            flex-shrink: 0; /* Ne s'écrase pas */
         }
 
         .nav-btn:hover {
@@ -79,7 +87,7 @@
         }
 
         .nav-btn.active {
-            background: rgba(59, 130, 246, 0.1);
+            background: rgba(59, 130, 246, 0.15);
             border-color: var(--hub-accent);
             color: var(--hub-accent);
             box-shadow: 0 0 15px rgba(59, 130, 246, 0.4);
@@ -87,18 +95,55 @@
 
         /* IFRAME CONTAINER */
         .presentation-frame {
-            flex-grow: 1;
+            flex-grow: 1; /* Prend tout l'espace restant */
             width: 100%;
+            height: calc(100vh - var(--hub-header-h)); /* Hauteur calculée */
             border: none;
             background: #000;
+            display: block;
         }
 
-        /* MOBILE RESPONSIVE */
+        /* MOBILE & TABLETTE ADAPTATION */
         @media (max-width: 1024px) {
-            header { padding: 0 10px; flex-direction: column; height: auto; padding-bottom: 10px; }
-            .brand { padding: 10px 0; font-size: 1.2rem; }
-            .nav-container { width: 100%; overflow-x: auto; padding-bottom: 5px; }
-            .nav-btn { flex: 1; white-space: nowrap; font-size: 0.8rem; padding: 8px 12px; }
+            :root {
+                --hub-header-h: auto; /* Hauteur auto sur mobile */
+            }
+
+            header { 
+                flex-direction: column; 
+                align-items: stretch; /* Prend toute la largeur */
+                padding: 10px; 
+                gap: 10px;
+            }
+
+            .brand { 
+                justify-content: center; 
+                font-size: 1.4rem;
+            }
+
+            .nav-container { 
+                justify-content: flex-start; /* Alignement début pour scroll */
+                padding-bottom: 5px; /* Espace pour le scroll tactile */
+            }
+
+            .nav-btn { 
+                flex: 0 0 auto; /* Taille basée sur contenu */
+                font-size: 0.85rem; 
+                padding: 8px 15px; 
+            }
+            
+            /* Ajustement iframe pour prendre en compte le header plus grand */
+            .presentation-frame {
+                height: 100%; /* Le flex gère la hauteur */
+            }
+        }
+        
+        /* TV / GRANDS ÉCRANS (4K) */
+        @media (min-width: 2000px) {
+            :root { --hub-header-h: 100px; }
+            .brand { font-size: 2.5rem; }
+            .nav-btn { font-size: 1.2rem; padding: 15px 30px; }
+            .material-symbols-outlined { font-size: 1.5em; }
         }
     </style>
 </head>
@@ -107,7 +152,7 @@
     <!-- Barre de Navigation Supérieure -->
     <header>
         <div class="brand">
-            <span class="material-symbols-outlined" style="font-size: 32px;">hub</span>
+            <span class="material-symbols-outlined" style="font-size: 1.2em;">hub</span>
             SUITE<span>TACTIQUE</span>
         </div>
         
@@ -128,30 +173,41 @@
     </header>
 
     <!-- Zone d'affichage (Iframe) -->
-    <!-- src="adi1.html" charge la première présentation par défaut -->
-    <iframe id="mainFrame" class="presentation-frame" src="adi1.html" title="Zone de Présentation"></iframe>
+    <iframe id="mainFrame" class="presentation-frame" src="adi1.html" title="Zone de Présentation" allowfullscreen></iframe>
 
     <script>
-        // Fonction de chargement
+        // Fonction de chargement optimisée
         function loadPres(filename, btnElement) {
-            // 1. Changer la source de l'iframe
             const frame = document.getElementById('mainFrame');
-            frame.src = filename;
+            
+            // Évite le rechargement si déjà actif
+            if (frame.getAttribute('src') === filename) return;
 
-            // 2. Mettre à jour les boutons (classe active)
-            const buttons = document.querySelectorAll('.nav-btn');
-            buttons.forEach(btn => btn.classList.remove('active'));
-            btnElement.classList.add('active');
+            // 1. Fade Out effet (optionnel pour fluidité)
+            frame.style.opacity = '0';
+            
+            setTimeout(() => {
+                // 2. Changer la source
+                frame.src = filename;
+                
+                // 3. Mise à jour boutons
+                document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+                btnElement.classList.add('active');
 
-            // 3. Focus sur l'iframe pour que les flèches clavier fonctionnent immédiatement
-            frame.onload = function() {
-                frame.contentWindow.focus();
-            };
+                // 4. Fade In après chargement (rapide)
+                frame.onload = function() {
+                    frame.style.opacity = '1';
+                    frame.contentWindow.focus(); // Capture clavier
+                };
+                // Fallback si onload est trop lent (ex: cache)
+                setTimeout(() => frame.style.opacity = '1', 300);
+            }, 150);
         }
 
-        // Focus initial
+        // Init : Focus clavier sur l'iframe au démarrage
         window.onload = function() {
             const frame = document.getElementById('mainFrame');
+            frame.style.transition = "opacity 0.3s ease"; // Ajout transition JS
             frame.contentWindow.focus();
         }
     </script>
