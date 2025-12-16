@@ -193,9 +193,18 @@
             transition: all 0.3s ease-in-out, opacity 0.4s;
             transform: scale(0.9);
             opacity: 0.5;
+            
+            /* Dimensions adaptatives */
             min-height: 200px; 
-            max-height: 600px;
-            max-width: 380px; 
+            max-height: 75vh; /* Ajusté pour éviter de dépasser sur mobile */
+            overflow-y: auto; /* Permet le scroll vertical du contenu */
+            max-width: 380px;
+            
+            /* Masquer la scrollbar */
+            scrollbar-width: none; /* Firefox */
+        }
+        .reco-card::-webkit-scrollbar {
+            display: none; /* Chrome/Safari */
         }
         
         .reco-card ul {
@@ -826,7 +835,8 @@
     <script>
         let currentMeansIndex = 0;
         let isDragging = false;
-        let startPos = 0;
+        let startX = 0;
+        let startY = 0;
         let currentTranslate = 0; 
         let firstCardOffset = 0; 
 
@@ -855,7 +865,6 @@
             if (sectionId === 'moyens') {
                 currentTranslate = 0; 
                 currentMeansIndex = 0; 
-                // Petit délai pour laisser le temps au DOM de se rendre
                 setTimeout(() => showMeans(MEANS_IDS[currentMeansIndex]), 50);
             }
         }
@@ -911,37 +920,68 @@
             });
         }
         
-        // --- Swipe ---
+        // --- Swipe Logic Améliorée (Support Scroll Vertical) ---
         function handleStart(e) {
             if (document.getElementById('content-moyens').classList.contains('active')) {
-                isDragging = true;
-                const carousel = document.querySelector('.reco-carousel');
-                carousel.classList.add('dragging');
-                startPos = e.type.includes('mouse') ? e.pageX : e.touches[0].pageX;
+                const touch = e.type.includes('mouse') ? e : e.touches[0];
+                startX = touch.pageX;
+                startY = touch.pageY;
                 
+                const carousel = document.querySelector('.reco-carousel');
+                // Capture la translation actuelle
                 const style = window.getComputedStyle(carousel);
                 const matrix = new DOMMatrixReadOnly(style.transform);
                 currentTranslate = matrix.m41;
+                
+                // On ne met pas encore isDragging à true, on attend de voir la direction
             }
         }
 
         function handleMove(e) {
-            if (!isDragging) return;
-            e.preventDefault(); 
-            const currentX = e.type.includes('mouse') ? e.pageX : e.touches[0].pageX;
-            const diff = currentX - startPos;
-            const carousel = document.querySelector('.reco-carousel');
-            carousel.style.transform = `translateX(${currentTranslate + diff}px)`;
+            // Si on ne touche pas l'écran, on sort
+            if (e.type.includes('mouse') && e.buttons === 0) return;
+            
+            if (!startX) return;
+
+            const touch = e.type.includes('mouse') ? e : e.touches[0];
+            const diffX = touch.pageX - startX;
+            const diffY = touch.pageY - startY;
+
+            // Détection de l'intention : Swipe Horizontal ou Scroll Vertical
+            // Si on n'a pas encore décidé si on drag
+            if (!isDragging) {
+                // Si le mouvement horizontal est significatif et supérieur au vertical
+                if (Math.abs(diffX) > 10 && Math.abs(diffX) > Math.abs(diffY)) {
+                    isDragging = true;
+                    document.querySelector('.reco-carousel').classList.add('dragging');
+                } else if (Math.abs(diffY) > 10) {
+                    // C'est un scroll vertical, on laisse faire et on annule le swipe
+                    startX = 0; // Reset pour ignorer la fin
+                    return; 
+                }
+            }
+
+            // Si on est en mode dragging (swipe horizontal confirmé)
+            if (isDragging) {
+                e.preventDefault(); // Empêche le scroll vertical pendant le swipe
+                const carousel = document.querySelector('.reco-carousel');
+                carousel.style.transform = `translateX(${currentTranslate + diffX}px)`;
+            }
         }
         
         function handleEnd(e) {
-            if (!isDragging) return;
+            if (!isDragging) {
+                startX = 0;
+                return;
+            }
             
-            const endPos = e.type.includes('mouse') ? e.pageX : e.changedTouches[0].pageX;
-            const diff = endPos - startPos;
+            const touch = e.type.includes('mouse') ? e : e.changedTouches[0];
+            const endPos = touch.pageX;
+            const diff = endPos - startX;
             const SWIPE_THRESHOLD = 50; 
 
             isDragging = false;
+            startX = 0;
             document.querySelector('.reco-carousel').classList.remove('dragging');
 
             if (Math.abs(diff) > SWIPE_THRESHOLD) {
@@ -978,6 +1018,15 @@
                  if (document.getElementById('content-moyens').classList.contains('active')) {
                      showMeans(MEANS_IDS[currentMeansIndex]);
                  }
+             });
+
+             // Navigation Clavier (Compatible avec le swipe du Hub)
+             // Le Hub envoie des événements 'keydown' ArrowRight/ArrowLeft lors des swipes sur l'iframe
+             document.addEventListener('keydown', (e) => {
+                if (document.getElementById('content-moyens').classList.contains('active')) {
+                    if (e.key === 'ArrowRight') showNextMeans();
+                    if (e.key === 'ArrowLeft') showPrevMeans();
+                }
              });
 
              document.querySelectorAll('.means-selector-btn').forEach(btn => {
