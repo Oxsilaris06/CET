@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>HUB INSTRUCTION</title>
+    <title>HUB PRÉSENTATIONS - HUB INSTRUCTION</title>
     
     <!-- Polices ComTac pour l'interface du Hub -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -47,6 +47,7 @@
             z-index: 100;
             transition: transform 0.3s ease-in-out;
             position: relative;
+            touch-action: pan-y; /* Permet le swipe vertical */
         }
 
         header.hidden {
@@ -167,12 +168,12 @@
             100% { opacity: 0; visibility: hidden; }
         }
 
-        /* HOME BUTTON (MOBILE HEADER) */
-        .home-btn-mobile {
-            display: none; /* Caché sur PC */
-            background: transparent; border: 1px solid var(--hub-accent);
-            color: var(--hub-accent); border-radius: 4px; padding: 5px 10px;
-            margin-right: 10px; cursor: pointer;
+        /* ZONE DE RÉCUPÉRATION DU HEADER (Zone invisible en haut pour faire réapparaître le menu) */
+        .header-trigger {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 20px;
+            z-index: 90; /* Juste sous le header quand il est là */
+            display: none; /* Activé via JS */
         }
 
         /* MOBILE & TABLETTE ADAPTATION */
@@ -197,13 +198,6 @@
                 position: relative;
             }
 
-            /* Bouton Home intégré au header mobile */
-            .home-btn-mobile {
-                display: flex; position: absolute; left: 0; top: 0;
-                border: none; padding: 0; margin: 0;
-                align-items: center; justify-content: center;
-            }
-
             .nav-container { 
                 justify-content: flex-start;
                 padding-bottom: 5px;
@@ -222,6 +216,7 @@
             }
             
             .swipe-hint { display: flex; }
+            .header-trigger { display: block; }
         }
         
         /* TV / GRANDS ÉCRANS (4K) */
@@ -235,14 +230,12 @@
 </head>
 <body>
 
+    <!-- Zone tactile invisible pour faire réapparaître le header -->
+    <div class="header-trigger" id="headerTrigger"></div>
+
     <!-- Barre de Navigation Supérieure -->
     <header id="mainHeader">
         <div class="brand">
-            <!-- Bouton Home (Mobile) -->
-            <button class="home-btn-mobile" onclick="window.location.href='index.html'">
-                <span class="material-symbols-outlined" style="font-size: 28px;">home</span>
-            </button>
-
             <span class="material-symbols-outlined" style="font-size: 1.2em; margin-right: 10px;">hub</span>
             HUB<span>INSTRUCTION</span>
         </div>
@@ -370,8 +363,9 @@
         let touchStartX = 0;
         let touchStartY = 0;
         const header = document.getElementById('mainHeader');
+        const headerTrigger = document.getElementById('headerTrigger');
 
-        function handleUnifiedSwipe(startX, startY, endX, endY) {
+        function handleUnifiedSwipe(startX, startY, endX, endY, target) {
             const diffX = startX - endX;
             const diffY = startY - endY;
             const absDiffX = Math.abs(diffX);
@@ -380,8 +374,8 @@
 
             // Détection de l'axe dominant
             if (absDiffX > absDiffY) {
-                // Swipe Horizontal -> Navigation Slides
-                if (absDiffX > threshold) {
+                // Swipe Horizontal -> Navigation Slides (si ce n'est pas le header)
+                if (!target.closest('header') && absDiffX > threshold) {
                     const frameWindow = document.getElementById('mainFrame').contentWindow;
                     if (diffX > 0) {
                         // Swipe Gauche -> Suivant
@@ -399,36 +393,43 @@
                 // Swipe Vertical -> Gestion Header
                 if (absDiffY > threshold) {
                     if (diffY > 0) {
-                        // Swipe Haut -> Cacher Header
-                        header.classList.add('hidden');
+                        // Swipe Haut -> Cacher Header (seulement si swipe SUR le header)
+                        if (target.closest('header')) {
+                            header.classList.add('hidden');
+                        }
                     } else {
-                        // Swipe Bas -> Afficher Header
-                        header.classList.remove('hidden');
+                        // Swipe Bas -> Afficher Header (seulement si swipe SUR le trigger ou le haut de l'iframe)
+                        if (target.id === 'headerTrigger' || target.closest('header')) {
+                            header.classList.remove('hidden');
+                        }
                     }
                 }
             }
         }
 
-        // Écouteurs sur le Hub (Header, zones vides)
-        document.addEventListener('touchstart', e => {
-            // CORRECTION: Si le touch démarre dans le header (nav), on ne fait rien (pour permettre le scroll)
-            if (e.target.closest('header')) {
-                touchStartX = null; // On annule le swipe
-                return;
-            }
+        // --- GESTION HEADER / TRIGGER SPECIFIQUE ---
+        // 1. Swipe HAUT sur le Header pour le cacher
+        header.addEventListener('touchstart', e => {
             touchStartX = e.changedTouches[0].screenX;
             touchStartY = e.changedTouches[0].screenY;
         }, {passive: true});
 
-        document.addEventListener('touchend', e => {
-            if (touchStartX === null) return; // Si le swipe a été annulé
-            
-            // Si le touch se termine dans le header (peu probable si start était ailleurs, mais au cas où)
-            if (e.target.closest('header')) return;
-
-            handleUnifiedSwipe(touchStartX, touchStartY, e.changedTouches[0].screenX, e.changedTouches[0].screenY);
+        header.addEventListener('touchend', e => {
+            handleUnifiedSwipe(touchStartX, touchStartY, e.changedTouches[0].screenX, e.changedTouches[0].screenY, e.target);
         }, {passive: true});
 
+        // 2. Swipe BAS sur la zone Trigger pour afficher le header
+        headerTrigger.addEventListener('touchstart', e => {
+            touchStartX = e.changedTouches[0].screenX;
+            touchStartY = e.changedTouches[0].screenY;
+        }, {passive: true});
+
+        headerTrigger.addEventListener('touchend', e => {
+            handleUnifiedSwipe(touchStartX, touchStartY, e.changedTouches[0].screenX, e.changedTouches[0].screenY, e.target);
+        }, {passive: true});
+
+
+        // --- GESTION IFRAME ---
         // Écouteurs DANS l'iframe (nécessite Same-Origin)
         function setupFrameTouchEvents(iframe) {
             try {
@@ -442,7 +443,8 @@
                 }, {passive: true});
 
                 doc.addEventListener('touchend', e => {
-                    handleUnifiedSwipe(frameStartX, frameStartY, e.changedTouches[0].screenX, e.changedTouches[0].screenY);
+                    // Ici on passe 'doc.body' comme target simulé pour ne pas déclencher la logique header
+                    handleUnifiedSwipe(frameStartX, frameStartY, e.changedTouches[0].screenX, e.changedTouches[0].screenY, doc.body);
                 }, {passive: true});
             } catch (e) {
                 console.warn("Impossible d'attacher les événements tactiles à l'iframe (Cross-Origin).");
