@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Présentation Générateur d'OI</title>
+    
+    <!-- Polices Google -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@300;400;500;700&family=Saira+Stencil+One&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    
+    <!-- Icônes -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+    <style>
+    /* =========================================
+       1. VARIABLES & RESET
+       ========================================= */
+    :root {
+        /* Dimensions PC Fixes (Référence) */
+        --slide-width-pc: 1280px;
+        --slide-height-pc: 720px;
+
+        /* Couleurs Thème Tactique */
+        --accent-blue: #5b9bd5;
+        --success-green: #259654;
+        --danger-red: #be1b09;
+        
+        --bg-body: #121212;
+        --bg-slide: #1a1a1a;
+        --bg-element: #252525;
+        --bg-input: #000000;
+        
+        --text-primary: #e0e0e0;
+        --text-secondary: #a0a0a0;
+        --border-color: #444;
+    }
+
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+    body {
+        background-color: var(--bg-body);
+        margin: 0; padding: 0;
+        height: 100vh; width: 100vw;
+        font-family: 'Oswald', sans-serif;
+        overflow: hidden; /* On gère le scroll dans les slides */
+        display: flex; justify-content: center; align-items: center;
+    }
+
+    /* =========================================
+       2. CONTENEUR DE SLIDE (CŒUR DU LAYOUT)
+       ========================================= */
+    .slide-wrapper {
+        position: relative;
+        width: 100%; height: 100%;
+        display: flex; justify-content: center; align-items: center;
+    }
+
+    .slide-container {
+        background-color: var(--bg-slide);
+        border: 1px solid var(--border-color);
+        box-shadow: 0 0 50px rgba(0, 0, 0, 0.8);
+        border-radius: 8px;
+        
+        /* Layout par défaut (PC) */
+        width: var(--slide-width-pc);
+        height: var(--slide-height-pc);
+        position: absolute;
+        opacity: 0;
+        pointer-events: none;
+        transform: scale(0.95);
+        transition: opacity 0.4s ease, transform 0.4s ease;
+        
+        padding: 60px;
+        display: flex; flex-direction: column;
+        overflow: hidden; /* Pas de scroll sur PC, tout doit tenir */
+    }
+
+    .slide-container.active {
+        opacity: 1;
+        pointer-events: auto;
+        transform: scale(1);
+        z-index: 10;
+    }
+
+    /* Fond Grille Tactique */
+    .slide-container::before {
+        content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+        background-image: 
+            linear-gradient(rgba(91, 155, 213, 0.03) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(91, 155, 213, 0.03) 1px, transparent 1px);
+        background-size: 40px 40px;
+        z-index: 0; pointer-events: none;
+    }
+
+    .content-area {
+        position: relative; z-index: 1;
+        flex-grow: 1; display: flex; flex-direction: column; justify-content: center;
+        width: 100%; height: 100%;
+    }
+
+    /* =========================================
+       3. TYPOGRAPHIE RESPONSIVE
+       ========================================= */
+    h1, h2, h3 { font-family: 'Saira Stencil One', cursive; text-transform: uppercase; margin: 0; font-weight: 400; }
+    
+    h1 { font-size: 4rem; color: var(--accent-blue); text-shadow: 0 0 20px rgba(91, 155, 213, 0.3); line-height: 1.1; }
+    
+    .slide-title {
+        font-size: 2.5rem; color: var(--accent-blue);
+        border-bottom: 2px solid var(--accent-blue);
+        padding-bottom: 15px; margin-bottom: 30px;
+    }
+
+    h3 { font-size: 1.5rem; color: var(--text-primary); font-family: 'Oswald', sans-serif; font-weight: 500; margin-bottom: 10px; }
+    p, li { font-size: 1.25rem; color: var(--text-secondary); line-height: 1.5; font-weight: 300; }
+    
+    .subtitle { color: var(--text-primary); font-size: 1.5rem; letter-spacing: 1px; }
+
+    /* =========================================
+       4. COMPOSANTS DE LAYOUT
+       ========================================= */
+    .two-column { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; height: 100%; align-items: center; }
+    .tiled-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+    
+    .tile {
+        background: rgba(255,255,255,0.03); border: 1px solid var(--border-color);
+        padding: 20px; border-radius: 8px; text-align: center;
+        transition: transform 0.2s; display: flex; flex-direction: column; align-items: center;
+    }
+    .tile:hover { background: rgba(255,255,255,0.06); transform: translateY(-2px); }
+    .tile span.material-symbols-outlined { font-size: 48px; color: var(--accent-blue); margin-bottom: 15px; }
+
+    /* Listes stylisées */
+    ul.feature-list { list-style: none; padding: 0; margin: 0; }
+    ul.feature-list li { position: relative; padding-left: 30px; margin-bottom: 12px; }
+    ul.feature-list li::before {
+        content: '\e876'; font-family: 'Material Symbols Outlined';
+        position: absolute; left: 0; top: 4px; color: var(--success-green); font-weight: bold;
+    }
+
+    /* =========================================
+       5. SIMULATIONS D'INTERFACE (UI Mockups)
+       ========================================= */
+    /* Wizard Steps */
+    .sim-wizard { display: flex; gap: 5px; flex-wrap: wrap; justify-content: center; margin-bottom: 20px; }
+    .sim-step {
+        background: #111; border: 1px solid #333; color: #666; padding: 6px 10px;
+        font-size: 0.8rem; border-radius: 4px; display: flex; align-items: center; gap: 5px;
+    }
+    .sim-step.active { background: var(--accent-blue); color: white; border-color: var(--accent-blue); }
+    .sim-step.done { border-color: var(--accent-blue); color: var(--accent-blue); }
+
+    /* Véhicule Card (PATRACDVR) */
+    .sim-interface-container {
+        background: #0a0a0a; border: 1px dashed #444; padding: 20px; border-radius: 8px;
+        width: 100%; max-width: 500px; margin: 0 auto;
+    }
+    .sim-vehicle-card {
+        background: var(--bg-element); border: 1px solid var(--border-color);
+        border-radius: 6px; padding: 10px; margin-bottom: 10px;
+    }
+    .sim-vehicle-header { display: flex; justify-content: space-between; color: var(--accent-blue); font-weight: bold; margin-bottom: 8px; font-size: 0.9rem; }
+    .sim-members-grid { display: flex; gap: 5px; }
+    .sim-member {
+        background: #000; border: 1px solid #444; padding: 6px; border-radius: 4px;
+        text-align: center; flex: 1; display: flex; flex-direction: column; justify-content: center; min-width: 0;
+    }
+    .sim-member.active { background: var(--accent-blue); color: white; border-color: var(--accent-blue); }
+    .sim-trigramme { font-weight: bold; font-family: 'Saira Stencil One'; font-size: 1rem; }
+    .sim-role { font-size: 0.7rem; opacity: 0.8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    /* Chips */
+    .sim-chip-container { display: flex; flex-wrap: wrap; gap: 5px; }
+    .sim-chip { padding: 4px 12px; border-radius: 12px; font-size: 0.8rem; border: 1px solid #444; background: #111; color: #888; }
+    .sim-chip.selected { background: var(--accent-blue); color: white; border-color: var(--accent-blue); }
+
+    /* Code Block */
+    .code-block {
+        background: #1e1e1e; border-left: 4px solid var(--accent-blue); padding: 15px;
+        font-family: 'JetBrains Mono', monospace; font-size: 0.9rem; color: #d4d4d4;
+        border-radius: 4px; margin-top: 15px; overflow-x: auto;
+    }
+    .kw { color: #569cd6; } .str { color: #ce9178; } .fn { color: #dcdcaa; }
+
+    /* Footer Slide */
+    .slide-footer {
+        position: absolute; bottom: 20px; left: 60px; right: 60px;
+        border-top: 1px solid #333; padding-top: 10px;
+        color: #555; font-size: 0.9rem; display: flex; justify-content: space-between;
+    }
+
+    /* =========================================
+       6. NAVIGATION
+       ========================================= */
+    .navigation {
+        position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+        z-index: 100; display: flex; gap: 15px; background: rgba(0,0,0,0.8);
+        padding: 10px 20px; border-radius: 30px; border: 1px solid #444;
+        backdrop-filter: blur(5px);
+    }
+    .nav-btn {
+        background: transparent; color: var(--text-primary); border: none;
+        padding: 8px 16px; cursor: pointer; font-family: 'Oswald'; text-transform: uppercase;
+        font-size: 1rem; display: flex; align-items: center; gap: 8px;
+        transition: color 0.3s;
+    }
+    .nav-btn:hover:not(:disabled) { color: var(--accent-blue); }
+    .nav-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+    .nav-info { color: #666; display: flex; align-items: center; font-size: 0.9rem; margin: 0 10px;}
+
+    /* =========================================
+       7. MEDIA QUERIES (MOBILE ADAPTATION)
+       ========================================= */
+    @media (max-width: 1024px) {
+        :root {
+            /* On ignore les dimensions fixes PC pour passer en fluide */
+        }
+
+        .slide-container {
+            width: 100%; height: 100%; /* Prend tout l'écran */
+            max-width: none; max-height: none;
+            border: none; border-radius: 0;
+            padding: 20px; padding-bottom: 80px; /* Espace pour nav */
+            overflow-y: auto; /* Scroll vertical autorisé sur mobile */
+            justify-content: flex-start; /* Contenu commence en haut */
+        }
+        
+        .content-area {
+            justify-content: flex-start; /* Ne pas centrer verticalement si contenu long */
+            padding-top: 20px;
+        }
+
+        /* Ajustement des tailles de police */
+        h1 { font-size: 2.5rem; }
+        .slide-title { font-size: 1.8rem; margin-bottom: 20px; padding-bottom: 10px; }
+        h3 { font-size: 1.3rem; }
+        p, li { font-size: 1rem; }
+        
+        /* Layouts en colonne */
+        .two-column { grid-template-columns: 1fr; gap: 30px; display: flex; flex-direction: column; }
+        .tiled-grid { grid-template-columns: 1fr; gap: 15px; }
+
+        /* Ajustements UI */
+        .sim-wizard { display: none; /* Trop petit sur mobile, on cache */ }
+        .sim-interface-container { padding: 10px; }
+        
+        /* Footer masqué ou simplifié sur mobile */
+        .slide-footer { display: none; }
+        
+        /* Navigation simplifiée */
+        .navigation { width: 90%; justify-content: space-between; bottom: 10px; padding: 5px 15px; }
+        .nav-btn { padding: 10px; font-size: 0.9rem; }
+    }
+    </style>
+</head>
+<body>
+
+    <div class="slide-wrapper">
+
+        <!-- SLIDE 1: INTRO -->
+        <div class="slide-container active">
+            <div class="content-area" style="align-items: center; text-align: center;">
+                <div style="border: 2px solid var(--accent-blue); padding: 30px; border-radius: 15px; background: rgba(0,0,0,0.3); max-width: 800px;">
+                    <h1>GÉNÉRATEUR D'OI <span style="font-size: 0.4em; vertical-align: middle; background: var(--accent-blue); color:black; padding: 2px 8px; border-radius: 4px;">V4.0</span></h1>
+                    <p class="subtitle" style="color: var(--accent-blue); margin-top: 10px;">PLANIFICATION TACTIQUE INTÉGRÉE</p>
+                    
+                    <div style="margin-top: 40px; display: flex; flex-wrap: wrap; justify-content: center; gap: 30px;">
+                        <div class="tile" style="min-width: 120px; background: transparent; border: none;">
+                            <span class="material-symbols-outlined" style="color: var(--success-green);">lock</span>
+                            <p style="font-size: 0.9rem;">100% LOCAL</p>
+                        </div>
+                        <div class="tile" style="min-width: 120px; background: transparent; border: none;">
+                            <span class="material-symbols-outlined" style="color: var(--accent-blue);">psychology</span>
+                            <p style="font-size: 0.9rem;">ANALYSE IA</p>
+                        </div>
+                        <div class="tile" style="min-width: 120px; background: transparent; border: none;">
+                            <span class="material-symbols-outlined" style="color: var(--danger-red);">picture_as_pdf</span>
+                            <p style="font-size: 0.9rem;">EXPORT PDF</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="slide-footer">
+                <span>Développé par G/ Maheux</span>
+                <span>Basé sur oi(4).html</span>
+            </div>
+        </div>
+
+        <!-- SLIDE 2: WORKFLOW -->
+        <div class="slide-container">
+            <h2 class="slide-title">FLUX OPÉRATIONNEL</h2>
+            <div class="content-area">
+                <div class="sim-wizard">
+                    <div class="sim-step done">1. SITUATION</div>
+                    <div class="sim-step done">2. ADVERSAIRE</div>
+                    <div class="sim-step active">4. MISSION</div>
+                    <div class="sim-step">7. PATRACDVR</div>
+                    <div class="sim-step">8. PHOTOS</div>
+                    <div class="sim-step">10. FINAL</div>
+                </div>
+
+                <div class="two-column">
+                    <div>
+                        <h3><span class="material-symbols-outlined" style="vertical-align: sub; font-size: 1.2em;">linear_scale</span> WIZARD SÉQUENTIEL</h3>
+                        <p>Une approche guidée en <strong>10 étapes</strong> qui garantit la conformité aux standards (MOIPC, ZMSPCP) tout en permettant une navigation libre.</p>
+                        <ul class="feature-list" style="margin-top: 20px;">
+                            <li>Sauvegarde automatique (LocalStorage).</li>
+                            <li>Navigation non-linéaire.</li>
+                            <li>Indicateurs de progression visuels.</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h3><span class="material-symbols-outlined" style="vertical-align: sub; font-size: 1.2em;">verified</span> CONTRÔLE COHÉRENCE</h3>
+                        <p>Avant l'export, un algorithme vérifie les oublis critiques :</p>
+                        <div style="background: rgba(190, 27, 9, 0.15); border: 1px solid var(--danger-red); padding: 12px; border-radius: 4px; margin-top: 10px;">
+                            <div style="color: #ff8888; font-size: 0.9rem; margin-bottom: 5px; display: flex; align-items: center; gap: 8px;">
+                                <span class="material-symbols-outlined" style="font-size: 1.1rem;">error</span> Alerte : Top Action (T4) manquant.
+                            </div>
+                            <div style="color: #ff8888; font-size: 0.9rem; display: flex; align-items: center; gap: 8px;">
+                                <span class="material-symbols-outlined" style="font-size: 1.1rem;">error</span> Alerte : 2 PAX sans véhicule assigné.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="slide-footer">
+                <span>Ergonomie</span>
+                <span>Étape 1 à 10</span>
+            </div>
+        </div>
+
+        <!-- SLIDE 3: MULTI-CIBLES -->
+        <div class="slide-container">
+            <h2 class="slide-title">GESTION MULTI-CIBLES</h2>
+            <div class="content-area">
+                <p style="margin-bottom: 20px;">L'onglet 2 permet désormais de gérer simultanément un <strong>Objectif Principal</strong> et un <strong>Objectif Secondaire</strong> avec le même niveau de détail.</p>
+                
+                <div class="tiled-grid">
+                    <div class="tile">
+                        <span class="material-symbols-outlined">badge</span>
+                        <h3>PROFIL COMPLET</h3>
+                        <p style="font-size: 0.9rem;">État civil, Signalement, Tenue, Signes particuliers.</p>
+                    </div>
+                    <div class="tile">
+                        <span class="material-symbols-outlined">psychology_alt</span>
+                        <h3>COMPORTEMENT</h3>
+                        <div class="sim-chip-container" style="justify-content: center; margin-top: 10px;">
+                            <div class="sim-chip selected">Hostile</div>
+                            <div class="sim-chip selected">Armé</div>
+                            <div class="sim-chip">Calme</div>
+                        </div>
+                    </div>
+                    <div class="tile">
+                        <span class="material-symbols-outlined">dynamic_form</span>
+                        <h3>DYNAMIQUE</h3>
+                        <p style="font-size: 0.9rem;">Ajout illimité de ME (Moyens Employés) et Véhicules adverses.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="slide-footer">
+                <span>Renseignement</span>
+                <span>Onglet 2</span>
+            </div>
+        </div>
+
+        <!-- SLIDE 4: PATRACDVR -->
+        <div class="slide-container">
+            <h2 class="slide-title">PATRACDVR : DRAG & DROP</h2>
+            <div class="content-area two-column">
+                <div>
+                    <h3>GESTION DES ÉQUIPAGES</h3>
+                    <p>Interface intuitive pour constituer les véhicules et assigner les rôles tactiques.</p>
+                    <ul class="feature-list" style="margin-top: 15px;">
+                        <li>Création de véhicule à la volée.</li>
+                        <li>Assignation par glisser-déposer.</li>
+                        <li>Configuration rapide (Chef, Effrac, AO...).</li>
+                        <li>Import/Export de configurations JSON.</li>
+                    </ul>
+                </div>
+                
+                <div class="sim-interface-container">
+                    <p style="color: #666; font-size: 0.8rem; margin-bottom: 10px; text-transform: uppercase;">Simulation Interface</p>
+                    
+                    <!-- Sim Kodiaq -->
+                    <div class="sim-vehicle-card">
+                        <div class="sim-vehicle-header">
+                            <span>KODIAQ</span> <span style="color: var(--danger-red);">✕</span>
+                        </div>
+                        <div class="sim-members-grid">
+                            <div class="sim-member active">
+                                <span class="sim-trigramme">MAH</span>
+                                <span class="sim-role">Chef Inter</span>
+                            </div>
+                            <div class="sim-member">
+                                <span class="sim-trigramme">DUB</span>
+                                <span class="sim-role">Effrac</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Sim 5008 -->
+                    <div class="sim-vehicle-card">
+                        <div class="sim-vehicle-header">
+                            <span>5008</span> <span style="color: var(--danger-red);">✕</span>
+                        </div>
+                        <div class="sim-members-grid">
+                            <div class="sim-member">
+                                <span class="sim-trigramme">ALF</span>
+                                <span class="sim-role">AO 1</span>
+                            </div>
+                            <div class="sim-member" style="border: 1px dashed #666; background: transparent; opacity: 0.5;">
+                                <span class="sim-role">Déposez ici</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="slide-footer">
+                <span>Articulation</span>
+                <span>Onglet 7</span>
+            </div>
+        </div>
+
+        <!-- SLIDE 5: IA & RETEX -->
+        <div class="slide-container">
+            <h2 class="slide-title">INTELLIGENCE ARTIFICIELLE</h2>
+            <div class="content-area">
+                <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--accent-blue); padding: 30px; border-radius: 8px; display: flex; flex-direction: column; gap: 20px;">
+                    <div style="display: flex; align-items: center; gap: 20px;">
+                        <span class="material-symbols-outlined" style="font-size: 3rem; color: var(--accent-blue);">auto_awesome</span>
+                        <div>
+                            <h3 style="margin: 0; color: var(--accent-blue);">ANALYSE GEMINI PRO</h3>
+                            <p style="margin: 0; font-size: 1rem;">Traitement automatisé des RETEX</p>
+                        </div>
+                    </div>
+                    
+                    <p>L'application ingère les fichiers JSON des comptes-rendus et génère une synthèse tactique structurée :</p>
+                    
+                    <div class="tiled-grid">
+                        <div style="background: #111; padding: 15px; border-radius: 4px; border-left: 3px solid var(--success-green);">
+                            <strong style="color: var(--success-green); display: block; font-size: 0.9rem;">POINTS FORTS</strong>
+                            <span style="font-size: 0.8rem; color: #888;">Ce qui a fonctionné</span>
+                        </div>
+                        <div style="background: #111; padding: 15px; border-radius: 4px; border-left: 3px solid var(--danger-red);">
+                            <strong style="color: var(--danger-red); display: block; font-size: 0.9rem;">POINTS FAIBLES</strong>
+                            <span style="font-size: 0.8rem; color: #888;">Incidents / Manquements</span>
+                        </div>
+                        <div style="background: #111; padding: 15px; border-radius: 4px; border-left: 3px solid var(--accent-blue);">
+                            <strong style="color: var(--accent-blue); display: block; font-size: 0.9rem;">AMÉLIORATIONS</strong>
+                            <span style="font-size: 0.8rem; color: #888;">Axes de travail</span>
+                        </div>
+                    </div>
+                    
+                    <p style="font-size: 0.9rem; color: #666; margin-top: 10px;">
+                        <span class="material-symbols-outlined" style="font-size: 1rem; vertical-align: middle;">vpn_key</span> 
+                        Sécurité : La clé API est stockée uniquement en local (Navigateur).
+                    </p>
+                </div>
+            </div>
+            <div class="slide-footer">
+                <span>Innovation</span>
+                <span>Onglet 10</span>
+            </div>
+        </div>
+
+        <!-- SLIDE 6: EXPORT -->
+        <div class="slide-container">
+            <h2 class="slide-title">SORTIES & FORMATS</h2>
+            <div class="content-area two-column">
+                <div>
+                    <h3><span class="material-symbols-outlined" style="vertical-align: sub;">picture_as_pdf</span> GÉNÉRATION CLIENT-SIDE</h3>
+                    <p>Aucun serveur n'est requis. Le PDF est construit byte-par-byte dans le navigateur via <code>pdf-lib</code>.</p>
+                    <div class="code-block">
+                        <span class="kw">const</span> pdfDoc = <span class="kw">await</span> PDFDocument.<span class="fn">create</span>();<br>
+                        <span class="cmt">// Compression dynamique des images</span><br>
+                        <span class="kw">await</span> <span class="fn">compressImage</span>(blob, 0.9);
+                    </div>
+                    <p style="font-size: 0.9rem; margin-top: 10px;">Optimisation automatique pour maintenir le fichier < 2.5 Mo.</p>
+                </div>
+                <div>
+                    <h3><span class="material-symbols-outlined" style="vertical-align: sub;">present_to_all</span> MODE BRIEFING</h3>
+                    <p>En plus du PDF, l'application génère une vue HTML épurée, sans interface, parfaite pour la projection sur TV en salle de rapport.</p>
+                    <div class="sim-vehicle-card" style="margin-top: 20px; text-align: center; border-color: var(--success-green);">
+                        <span style="color: var(--success-green); font-weight: bold;">OI_2023_CIBLE.pdf</span>
+                    </div>
+                </div>
+            </div>
+            <div class="slide-footer">
+                <span>Diffusion</span>
+                <span>Finalisation</span>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- NAVIGATION -->
+    <div class="navigation">
+        <button class="nav-btn" id="prevBtn" disabled>
+            <span class="material-symbols-outlined">arrow_back</span> <span style="display:none;">Précédent</span>
+        </button>
+        <span class="nav-info" id="slideIndicator">1 / 6</span>
+        <button class="nav-btn" id="nextBtn">
+             <span style="display:none;">Suivant</span> <span class="material-symbols-outlined">arrow_forward</span>
+        </button>
+    </div>
+
+    <script>
+        const slides = document.querySelectorAll('.slide-container');
+        const prevBtn = document.getElementById('prevBtn');
+        const nextBtn = document.getElementById('nextBtn');
+        const slideIndicator = document.getElementById('slideIndicator');
+        let currentSlide = 0;
+
+        function updateSlides() {
+            slides.forEach((slide, index) => {
+                slide.classList.remove('active');
+                if (index === currentSlide) slide.classList.add('active');
+            });
+            
+            // Mise à jour boutons
+            prevBtn.disabled = currentSlide === 0;
+            nextBtn.disabled = currentSlide === slides.length - 1;
+            
+            // Mise à jour indicateur
+            slideIndicator.textContent = `${currentSlide + 1} / ${slides.length}`;
+        }
+
+        nextBtn.addEventListener('click', () => {
+            if (currentSlide < slides.length - 1) {
+                currentSlide++;
+                updateSlides();
+            }
+        });
+
+        prevBtn.addEventListener('click', () => {
+            if (currentSlide > 0) {
+                currentSlide--;
+                updateSlides();
+            }
+        });
+
+        // Navigation Clavier (PC)
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowRight' || e.key === ' ') nextBtn.click();
+            if (e.key === 'ArrowLeft') prevBtn.click();
+        });
+
+        // Init
+        updateSlides();
+    </script>
+</body>
+</html>
