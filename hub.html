@@ -45,8 +45,8 @@
             padding: 0 30px;
             box-shadow: 0 5px 20px rgba(0,0,0,0.5);
             z-index: 100;
-            transition: transform 0.3s ease-in-out; /* Animation hide/show */
-            position: relative; /* Pour z-index */
+            transition: transform 0.3s ease-in-out;
+            position: relative;
         }
 
         header.hidden {
@@ -116,9 +116,7 @@
         /* BOUTON PLEIN ÉCRAN */
         .fullscreen-btn {
             position: fixed;
-            /* Position par défaut (Desktop) */
-            bottom: 30px;
-            right: 30px;
+            bottom: 30px; right: 30px; /* Position Desktop */
             width: 50px; height: 50px;
             border-radius: 50%;
             background: rgba(10, 10, 10, 0.8);
@@ -139,9 +137,9 @@
 
         /* INDICATEUR SWIPE (MOBILE ONLY) */
         .swipe-hint {
-            display: none; /* Caché par défaut */
+            display: none;
             position: fixed;
-            top: 75px; /* Juste sous le header mobile */
+            top: 80px; /* Juste sous le header mobile */
             left: 50%;
             transform: translateX(-50%);
             background: rgba(0, 0, 0, 0.7);
@@ -150,11 +148,11 @@
             border-radius: 20px;
             font-size: 0.8rem;
             z-index: 999;
-            pointer-events: none; /* Ne bloque pas les clics */
+            pointer-events: none;
             border: 1px solid #333;
             align-items: center;
             gap: 5px;
-            animation: fadeHint 4s forwards; /* Disparaît tout seul */
+            animation: fadeHint 4s forwards;
         }
         .swipe-hint span { font-size: 1.2em; animation: bounceUp 1.5s infinite; }
 
@@ -169,6 +167,14 @@
             100% { opacity: 0; visibility: hidden; }
         }
 
+        /* HOME BUTTON (MOBILE HEADER) */
+        .home-btn-mobile {
+            display: none; /* Caché sur PC */
+            background: transparent; border: 1px solid var(--hub-accent);
+            color: var(--hub-accent); border-radius: 4px; padding: 5px 10px;
+            margin-right: 10px; cursor: pointer;
+        }
+
         /* MOBILE & TABLETTE ADAPTATION */
         @media (max-width: 1024px) {
             header { 
@@ -180,15 +186,22 @@
                 min-height: auto;
             }
             
-            /* Ajustement pour header.hidden sur mobile (hauteur variable) */
             header.hidden {
-                margin-bottom: -110px; /* Valeur approx de la hauteur mobile */
+                margin-bottom: -115px; /* Ajusté pour la hauteur mobile */
             }
 
             .brand { 
                 justify-content: center; 
                 font-size: 1.4rem;
                 margin-bottom: 5px;
+                position: relative;
+            }
+
+            /* Bouton Home intégré au header mobile */
+            .home-btn-mobile {
+                display: flex; position: absolute; left: 0; top: 0;
+                border: none; padding: 0; margin: 0;
+                align-items: center; justify-content: center;
             }
 
             .nav-container { 
@@ -202,15 +215,12 @@
             /* Repositionnement Bouton Plein Écran Mobile : Haut Droite (flottant) */
             .fullscreen-btn { 
                 width: 40px; height: 40px; 
-                bottom: auto; /* Annule le bottom */
-                top: 15px;    /* Position en haut */
-                right: 15px; 
+                bottom: auto; top: 15px; right: 15px; 
                 opacity: 0.8;
-                background: rgba(0,0,0,0.6); /* Plus transparent */
-                border: none; /* Plus épuré */
+                background: rgba(0,0,0,0.6);
+                border: none;
             }
             
-            /* Afficher l'indice de swipe */
             .swipe-hint { display: flex; }
         }
         
@@ -228,7 +238,12 @@
     <!-- Barre de Navigation Supérieure -->
     <header id="mainHeader">
         <div class="brand">
-            <span class="material-symbols-outlined" style="font-size: 1.2em;">hub</span>
+            <!-- Bouton Home (Mobile) -->
+            <button class="home-btn-mobile" onclick="window.location.href='index.html'">
+                <span class="material-symbols-outlined" style="font-size: 28px;">home</span>
+            </button>
+
+            <span class="material-symbols-outlined" style="font-size: 1.2em; margin-right: 10px;">hub</span>
             SUITE<span>TACTIQUE</span>
         </div>
         
@@ -245,13 +260,17 @@
             <button class="nav-btn" onclick="loadPres('adi4.html', this)">
                 <span class="material-symbols-outlined">checklist</span> CHECKLIST
             </button>
+            <!-- Bouton Home (PC - intégré à la nav) -->
+            <button class="nav-btn" onclick="window.location.href='index.html'" style="margin-left: auto; border-color: #666;">
+                <span class="material-symbols-outlined">home</span> RETOUR
+            </button>
         </div>
     </header>
 
     <!-- Indication de Swipe (Mobile) -->
-    <div class="swipe-hint">
-        <span class="material-symbols-outlined">keyboard_arrow_up</span>
-        Swipe pour plein écran
+    <div class="swipe-hint" id="swipeHint">
+        <span class="material-symbols-outlined">touch_app</span>
+        Commandes Tactiles Activées
     </div>
 
     <!-- Zone d'affichage (Iframe) -->
@@ -263,7 +282,7 @@
     </button>
 
     <script>
-        // --- 1. Gestion de l'Iframe ---
+        // --- 1. Gestion de l'Iframe & Injection CSS/Events ---
         function loadPres(filename, btnElement) {
             const frame = document.getElementById('mainFrame');
             if (frame.getAttribute('src') === filename) return;
@@ -271,22 +290,48 @@
             frame.style.opacity = '0';
             setTimeout(() => {
                 frame.src = filename;
-                document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
-                btnElement.classList.add('active');
+                if (btnElement) {
+                    document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+                    btnElement.classList.add('active');
+                }
                 
                 frame.onload = function() {
                     frame.style.opacity = '1';
                     frame.contentWindow.focus();
+                    injectMobileStyles(frame); // Injection CSS pour cacher la nav interne
+                    setupFrameTouchEvents(frame); // Capture des swipes dans l'iframe
                 };
                 setTimeout(() => frame.style.opacity = '1', 300);
             }, 150);
+        }
+
+        // Injection CSS dans l'iframe pour masquer la navigation native des présentations sur mobile
+        function injectMobileStyles(iframe) {
+            // On vérifie si on est sur mobile (largeur < 1024px)
+            if (window.innerWidth <= 1024) {
+                try {
+                    const doc = iframe.contentDocument || iframe.contentWindow.document;
+                    const style = doc.createElement('style');
+                    style.textContent = `
+                        /* Masquer la barre de navigation native des présentations */
+                        .navigation { display: none !important; }
+                        /* Masquer le footer si présent */
+                        .slide-footer { display: none !important; }
+                        /* Ajuster le padding pour le plein écran */
+                        .slide-container { padding-bottom: 20px !important; }
+                    `;
+                    doc.head.appendChild(style);
+                } catch (e) {
+                    console.warn("Impossible d'injecter le style (Cross-Origin restricted?)", e);
+                }
+            }
         }
 
         // --- 2. Gestion Plein Écran ---
         function toggleFullScreen() {
             if (!document.fullscreenElement) {
                 document.documentElement.requestFullscreen().catch(err => {
-                    console.log(`Error attempting to enable full-screen mode: ${err.message}`);
+                    console.log(`Error: ${err.message}`);
                 });
             } else {
                 if (document.exitFullscreen) {
@@ -295,45 +340,86 @@
             }
         }
 
-        // Mise à jour de l'icône selon l'état
         document.addEventListener('fullscreenchange', () => {
             const icon = document.getElementById('fsIcon');
             if (document.fullscreenElement) {
                 icon.textContent = 'fullscreen_exit';
             } else {
                 icon.textContent = 'fullscreen';
-                // Si on sort du plein écran, on réaffiche le header au cas où
                 document.getElementById('mainHeader').classList.remove('hidden');
             }
         });
 
-        // --- 3. Gestion Swipe (Mobile) pour Cacher/Afficher le Header ---
-        let touchStartY = 0;
-        let touchEndY = 0;
-        const header = document.getElementById('mainHeader');
+        // --- 3. Gestion Tactile Unifiée (Hub + Iframe) ---
+        // On doit gérer les swipes sur le header (Hub) ET dans l'iframe (Contenu)
         
-        // Zone de détection : tout l'écran (pour pouvoir faire réapparaître le header facilement)
+        let touchStartX = 0;
+        let touchStartY = 0;
+        const header = document.getElementById('mainHeader');
+
+        function handleUnifiedSwipe(startX, startY, endX, endY) {
+            const diffX = startX - endX;
+            const diffY = startY - endY;
+            const absDiffX = Math.abs(diffX);
+            const absDiffY = Math.abs(diffY);
+            const threshold = 50; // Sensibilité
+
+            // Détection de l'axe dominant
+            if (absDiffX > absDiffY) {
+                // Swipe Horizontal -> Navigation Slides
+                if (absDiffX > threshold) {
+                    const frameWindow = document.getElementById('mainFrame').contentWindow;
+                    if (diffX > 0) {
+                        // Swipe Gauche -> Suivant
+                        // Simule flèche droite ou appel fonction
+                        frameWindow.postMessage('nextSlide', '*'); // Si implémenté, sinon simulation touche
+                        frameWindow.document.dispatchEvent(new KeyboardEvent('keydown', {'key': 'ArrowRight'}));
+                    } else {
+                        // Swipe Droite -> Précédent
+                        frameWindow.document.dispatchEvent(new KeyboardEvent('keydown', {'key': 'ArrowLeft'}));
+                    }
+                }
+            } else {
+                // Swipe Vertical -> Gestion Header
+                if (absDiffY > threshold) {
+                    if (diffY > 0) {
+                        // Swipe Haut -> Cacher Header
+                        header.classList.add('hidden');
+                    } else {
+                        // Swipe Bas -> Afficher Header
+                        header.classList.remove('hidden');
+                    }
+                }
+            }
+        }
+
+        // Écouteurs sur le Hub (Header, zones vides)
         document.addEventListener('touchstart', e => {
+            touchStartX = e.changedTouches[0].screenX;
             touchStartY = e.changedTouches[0].screenY;
         }, {passive: true});
 
         document.addEventListener('touchend', e => {
-            touchEndY = e.changedTouches[0].screenY;
-            handleSwipe();
+            handleUnifiedSwipe(touchStartX, touchStartY, e.changedTouches[0].screenX, e.changedTouches[0].screenY);
         }, {passive: true});
 
-        function handleSwipe() {
-            const threshold = 50; // Sensibilité du swipe
-            const diff = touchStartY - touchEndY;
+        // Écouteurs DANS l'iframe (nécessite Same-Origin)
+        function setupFrameTouchEvents(iframe) {
+            try {
+                const doc = iframe.contentDocument || iframe.contentWindow.document;
+                let frameStartX = 0;
+                let frameStartY = 0;
 
-            if (Math.abs(diff) > threshold) {
-                if (diff > 0) {
-                    // Swipe vers le HAUT (Up) -> Cacher Header
-                    header.classList.add('hidden');
-                } else {
-                    // Swipe vers le BAS (Down) -> Afficher Header
-                    header.classList.remove('hidden');
-                }
+                doc.addEventListener('touchstart', e => {
+                    frameStartX = e.changedTouches[0].screenX;
+                    frameStartY = e.changedTouches[0].screenY;
+                }, {passive: true});
+
+                doc.addEventListener('touchend', e => {
+                    handleUnifiedSwipe(frameStartX, frameStartY, e.changedTouches[0].screenX, e.changedTouches[0].screenY);
+                }, {passive: true});
+            } catch (e) {
+                console.warn("Impossible d'attacher les événements tactiles à l'iframe (Cross-Origin).");
             }
         }
 
@@ -341,8 +427,20 @@
         window.onload = function() {
             const frame = document.getElementById('mainFrame');
             frame.style.transition = "opacity 0.3s ease";
-            frame.contentWindow.focus();
+            
+            // Injection initiale (si le src par défaut est chargé vite)
+            frame.onload = function() {
+                injectMobileStyles(frame);
+                setupFrameTouchEvents(frame);
+                frame.contentWindow.focus();
+            };
         }
+        
+        // Gestion redimensionnement pour réappliquer styles si on passe de PC à Mobile
+        window.addEventListener('resize', () => {
+             const frame = document.getElementById('mainFrame');
+             injectMobileStyles(frame);
+        });
     </script>
 
 </body>
