@@ -47,7 +47,7 @@
             z-index: 100;
             transition: transform 0.3s ease-in-out;
             position: relative;
-            touch-action: pan-y; /* Permet le swipe vertical */
+            touch-action: none; /* Important pour js custom swipe handling */
         }
 
         header.hidden {
@@ -71,6 +71,8 @@
             -webkit-overflow-scrolling: touch;
             scrollbar-width: none;
             padding: 5px 0;
+            /* Permet le scroll horizontal natif tout en laissant le swipe vertical bubbling */
+            touch-action: pan-x; 
         }
         .nav-container::-webkit-scrollbar { display: none; }
 
@@ -171,7 +173,7 @@
         /* ZONE DE RÉCUPÉRATION DU HEADER (Zone invisible en haut pour faire réapparaître le menu) */
         .header-trigger {
             position: fixed;
-            top: 0; left: 0; width: 100%; height: 20px;
+            top: 0; left: 0; width: 100%; height: 30px; /* Zone un peu plus grande */
             z-index: 90; /* Juste sous le header quand il est là */
             display: none; /* Activé via JS */
         }
@@ -192,13 +194,12 @@
             }
 
             .brand { 
-                /* MODIFIE : Alignement à gauche pour libérer de la place à droite */
                 justify-content: flex-start;
-                padding-left: 5px; /* Petit padding pour ne pas coller au bord */
-                font-size: 1.3rem; /* Légèrement réduit pour être sûr */
+                padding-left: 5px; 
+                font-size: 1.3rem; 
                 margin-bottom: 5px;
                 position: relative;
-                max-width: 85%; /* S'assure que le titre n'écrase pas la zone du bouton plein écran */
+                max-width: 85%;
             }
 
             .nav-container { 
@@ -361,89 +362,56 @@
             }
         });
 
-        // --- 3. Gestion Tactile Unifiée (Hub + Iframe) ---
+        // --- 3. Gestion Tactile Unifiée ---
         
-        let touchStartX = 0;
-        let touchStartY = 0;
         const header = document.getElementById('mainHeader');
         const headerTrigger = document.getElementById('headerTrigger');
+        
+        // Variables pour le Header Swipe
+        let headerStartY = 0;
+        
+        // Variables pour le Trigger Swipe
+        let triggerStartY = 0;
 
-        function handleUnifiedSwipe(startX, startY, endX, endY, target) {
-            const diffX = startX - endX;
-            const diffY = startY - endY;
-            const absDiffX = Math.abs(diffX);
-            const absDiffY = Math.abs(diffY);
-            const threshold = 50; // Sensibilité
-
-            // Détection de l'axe dominant
-            if (absDiffX > absDiffY) {
-                // Swipe Horizontal -> Navigation Slides (si ce n'est pas le header)
-                if (!target.closest('header') && absDiffX > threshold) {
-                    const frameWindow = document.getElementById('mainFrame').contentWindow;
-                    if (diffX > 0) {
-                        // Swipe Gauche -> Suivant
-                        try {
-                            frameWindow.document.dispatchEvent(new KeyboardEvent('keydown', {'key': 'ArrowRight'}));
-                        } catch(e) { console.log("Erreur envoi event iframe"); }
-                    } else {
-                        // Swipe Droite -> Précédent
-                        try {
-                            frameWindow.document.dispatchEvent(new KeyboardEvent('keydown', {'key': 'ArrowLeft'}));
-                        } catch(e) { console.log("Erreur envoi event iframe"); }
-                    }
-                }
-            } else {
-                // Swipe Vertical -> Gestion Header
-                if (absDiffY > threshold) {
-                    if (diffY > 0) {
-                        // Swipe Haut -> Cacher Header (seulement si swipe SUR le header)
-                        if (target.closest('header')) {
-                            header.classList.add('hidden');
-                        }
-                    } else {
-                        // Swipe Bas -> Afficher Header (seulement si swipe SUR le trigger ou le haut de l'iframe)
-                        if (target.id === 'headerTrigger' || target.closest('header')) {
-                            header.classList.remove('hidden');
-                        }
-                    }
-                }
-            }
-        }
-
-        // --- GESTION HEADER / TRIGGER SPECIFIQUE ---
-        // 1. Swipe HAUT sur le Header pour le cacher
+        // --- A. GESTION SWIPE SUR LE HEADER (Pour le cacher) ---
         header.addEventListener('touchstart', e => {
-            // CORRECTION: Si le touch démarre dans le header (nav), on ne fait rien (pour permettre le scroll)
-            if (e.target.closest('.nav-container')) {
-                touchStartX = null; // On annule le swipe pour la nav container
-                return;
-            }
-            touchStartX = e.changedTouches[0].screenX;
-            touchStartY = e.changedTouches[0].screenY;
+            // On ne veut pas empêcher le scroll horizontal des boutons
+            // Donc on capture Y mais on laisse le comportement natif par défaut
+            headerStartY = e.changedTouches[0].screenY;
         }, {passive: true});
 
         header.addEventListener('touchend', e => {
-            if (touchStartX === null) return; // Si le swipe a été annulé
-            
-            // Si le touch se termine dans le nav container, on laisse le scroll natif
-            if (e.target.closest('.nav-container')) return;
+            const headerEndY = e.changedTouches[0].screenY;
+            const diffY = headerStartY - headerEndY;
+            const threshold = 30; // Seuil faible pour réactivité
 
-            handleUnifiedSwipe(touchStartX, touchStartY, e.changedTouches[0].screenX, e.changedTouches[0].screenY, e.target);
+            // Si mouvement vers le HAUT significatif
+            if (diffY > threshold) {
+                header.classList.add('hidden');
+            }
         }, {passive: true});
 
-        // 2. Swipe BAS sur la zone Trigger pour afficher le header
+
+        // --- B. GESTION SWIPE SUR LE TRIGGER (Pour afficher le header) ---
         headerTrigger.addEventListener('touchstart', e => {
-            touchStartX = e.changedTouches[0].screenX;
-            touchStartY = e.changedTouches[0].screenY;
+            triggerStartY = e.changedTouches[0].screenY;
         }, {passive: true});
 
         headerTrigger.addEventListener('touchend', e => {
-            handleUnifiedSwipe(touchStartX, touchStartY, e.changedTouches[0].screenX, e.changedTouches[0].screenY, e.target);
+            const triggerEndY = e.changedTouches[0].screenY;
+            const diffY = triggerEndY - triggerStartY; // Notez l'inversion: Fin - Début pour le bas
+            const threshold = 30;
+
+            // Si mouvement vers le BAS significatif
+            if (diffY > threshold) {
+                header.classList.remove('hidden');
+            }
         }, {passive: true});
 
 
-        // --- GESTION IFRAME ---
-        // Écouteurs DANS l'iframe (nécessite Same-Origin)
+        // --- C. GESTION NAVIGATION IFRAME (Swipe Horizontal) ---
+        // Cette partie gère uniquement les swipes GAUCHE/DROITE dans l'iframe
+        // On sépare complètement la logique pour éviter les conflits
         function setupFrameTouchEvents(iframe) {
             try {
                 const doc = iframe.contentDocument || iframe.contentWindow.document;
@@ -456,11 +424,35 @@
                 }, {passive: true});
 
                 doc.addEventListener('touchend', e => {
-                    // Ici on passe 'doc.body' comme target simulé pour ne pas déclencher la logique header
-                    handleUnifiedSwipe(frameStartX, frameStartY, e.changedTouches[0].screenX, e.changedTouches[0].screenY, doc.body);
+                    const frameEndX = e.changedTouches[0].screenX;
+                    const frameEndY = e.changedTouches[0].screenY;
+                    
+                    const diffX = frameStartX - frameEndX;
+                    const diffY = frameStartY - frameEndY;
+                    
+                    // Si le mouvement est horizontal (plus X que Y)
+                    if (Math.abs(diffX) > Math.abs(diffY)) {
+                        if (Math.abs(diffX) > 50) { // Seuil
+                            const win = iframe.contentWindow;
+                            if (diffX > 0) {
+                                // Swipe Gauche -> Suivant
+                                win.document.dispatchEvent(new KeyboardEvent('keydown', {'key': 'ArrowRight'}));
+                            } else {
+                                // Swipe Droite -> Précédent
+                                win.document.dispatchEvent(new KeyboardEvent('keydown', {'key': 'ArrowLeft'}));
+                            }
+                        }
+                    } else {
+                        // Mouvement vertical dans l'iframe : on peut aussi l'utiliser pour réafficher le header
+                        // si on est tout en haut et qu'on tire vers le bas
+                        if (diffY < -50 && header.classList.contains('hidden')) {
+                             // Swipe vers le bas significatif
+                             header.classList.remove('hidden');
+                        }
+                    }
                 }, {passive: true});
             } catch (e) {
-                console.warn("Impossible d'attacher les événements tactiles à l'iframe (Cross-Origin).");
+                console.warn("Cross-Origin frame access blocked");
             }
         }
 
@@ -469,7 +461,6 @@
             const frame = document.getElementById('mainFrame');
             frame.style.transition = "opacity 0.3s ease";
             
-            // Injection initiale (si le src par défaut est chargé vite)
             frame.onload = function() {
                 injectMobileStyles(frame);
                 setupFrameTouchEvents(frame);
@@ -477,7 +468,6 @@
             };
         }
         
-        // Gestion redimensionnement pour réappliquer styles si on passe de PC à Mobile
         window.addEventListener('resize', () => {
              const frame = document.getElementById('mainFrame');
              injectMobileStyles(frame);
