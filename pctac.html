@@ -85,6 +85,21 @@
             transition: background 0.3s ease;
         }
 
+        /* CORRECTION IOS FULLSCREEN */
+        body.ios-fake-fullscreen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 9999;
+            background-color: var(--bg-body);
+            overflow-y: auto; /* Permettre le scroll du contenu */
+            padding: 20px 10px 100px 10px;
+            height: 100%;
+            width: 100%;
+        }
+
         .container {
             max-width: 1000px;
             margin: 0 auto;
@@ -354,11 +369,20 @@
         .transfer-content { display: none; }
         .transfer-content.active { display: block; }
         
+        /* CORRECTIF #1 : STYLE QR CODE FIX */
         #qrcode-container {
             background: white; padding: 20px; border-radius: var(--radius-sm); margin: 20px auto;
-            display: inline-block; max-width: 100%;
+            display: inline-block; 
+            max-width: 100%; /* S'assure que le conteneur ne dépasse pas */
+            min-height: 256px; /* Évite le saut de contenu */
         }
-        #qrcode-container img { margin: 0 auto; display: block; max-width: 100%; height: auto; }
+        /* Assure que l'image générée est responsive */
+        #qrcode-container img, #qrcode-container canvas { 
+            margin: 0 auto; 
+            display: block; 
+            max-width: 100% !important; 
+            height: auto !important; 
+        }
         
         #qr-reader {
             width: 100%; margin: 20px auto; border: 2px solid var(--accent-blue);
@@ -675,7 +699,7 @@
         </div>
         
 		<footer id="main-footer" style="text-align: center; margin-top: 30px; font-size: 0.7rem; color: var(--text-muted); opacity: 0.5;">
-            PC Tac v3 &bull; G/Maheux
+            PC Tac v3.1 &bull; G/Maheux
         </footer>
     </div>
     
@@ -704,7 +728,23 @@
         const TITLE_STORAGE_KEY = 'pcTacTitle';
         const WEBRTC_STORAGE_KEY = 'pcTacWebRTC';
         
-        const RECONNECT_INTERVAL_MS = 5000; // Tentative de reconnexion toutes les 5s
+        // CORRECTIF #2 : Worker pour le Heartbeat WebRTC (Fonctionne en arrière-plan)
+        // Les setInterval standards sont throttlés à 1 minute quand l'onglet est inactif.
+        // Le Worker reste actif.
+        const WORKER_CODE = `
+            self.onmessage = function(e) {
+                if (e.data === 'start') {
+                    setInterval(() => { self.postMessage('tick'); }, 2000); // 2 secondes
+                }
+            };
+        `;
+        const workerBlob = new Blob([WORKER_CODE], { type: "text/javascript" });
+        const workerUrl = URL.createObjectURL(workerBlob);
+        const heartBeatWorker = new Worker(workerUrl);
+        
+        const RECONNECT_INTERVAL_MS = 5000;
+        const PING_INTERVAL_MS = 3000; // Fréquence d'envoi du PING
+        const PING_TIMEOUT_MS = 10000; // Temps avant de considérer la connexion morte
         
         const FREE_MODE_COLORS = [
             { hex: '#800000', name: 'Bordeaux' }, { hex: '#B87333', name: 'Cuivre' },         
@@ -723,17 +763,15 @@
             'AO': { text: 'AO', color: '#2ecc71', fontColor: '#000000' }
         };
         
-        // --- CONSTANTES WEBRTC inspirées de comtac ---
+        // --- CONSTANTES WEBRTC ---
         const PEER_CONFIG = { 
-            debug: 0, // Passer à 2 pour le debug
+            debug: 0,
             config: {
                 iceServers: [
                     { urls: 'stun:stun.l.google.com:19302' },
                     { urls: 'stun:stun1.l.google.com:19302' },
-                    { urls: 'stun:stun.l.google.com:443' },
-                    { urls: 'stun:stun.stunprotocol.org:80' }, 
-                ],
-                iceCandidatePoolSize: 5, 
+                    { urls: 'stun:stun.l.google.com:443' }
+                ]
             }
         };
 
@@ -764,10 +802,10 @@
         const transferModal = document.getElementById('transferModal');
         const closeTransferBtn = document.getElementById('closeTransferBtn');
         const transferTabs = document.querySelectorAll('.transfer-tab-btn');
-        let html5QrCodeLocal; // Renommé pour le scanner local
+        let html5QrCodeLocal;
         let qrChunks = [];
         let currentQrIndex = 0;
-        const QR_BATCH_SIZE = 8; // Nombre d'entrées par QR pour assurer la lisibilité
+        const QR_BATCH_SIZE = 8;
 
         // --- Nouveaux éléments WebRTC ---
         const webrtcDockBtn = document.getElementById('webrtcDockBtn');
@@ -776,50 +814,118 @@
         const webrtcStatusBox = document.getElementById('webrtc-status-box');
         const webrtcStatusText = document.getElementById('webrtc-status-text');
         const webrtcStatusIcon = webrtcStatusBox.querySelector('.material-symbols-outlined');
-        const webrtcScannerRegion = document.getElementById('qr-scanner-region'); // Nouvelle zone de scan
+        const webrtcScannerRegion = document.getElementById('qr-scanner-region');
         const btnScanQr = document.getElementById('btn-scan-qr');
-        let html5QrCodeWebRtc = null; // Scanner spécifique pour la connexion WebRTC
+        let html5QrCodeWebRtc = null;
         
         let isTimeInputManuallyChanged = false;
         let paxColorMap = {}; 
         let colorPaxMap = {};
 
         // ----------------------------------------------------
-        // --- DÉBUT MODULE PEERJS (WEBRTC) ---
+        // --- DEBUT MODULE PEERJS (WEBRTC + WORKER) ---
         // ----------------------------------------------------
 
         const PeerService = {
             peer: null,
             conn: {}, // { peerId: connection_object }
+            connLastPong: {}, // { peerId: timestamp }
             isHost: false,
-            hostId: null, // Si client, l'ID de l'hôte
-            localId: null, // L'ID généré pour cette session
+            hostId: null, 
+            localId: null,
             isReady: false,
-            reconnectTimer: null,
-            
-            // État pour les clients qui ne doivent pas éditer
             isClientReadOnly: false, 
-
-            initPeer: (id = null) => {
-                PeerService.isReady = false;
-                if (PeerService.peer) { PeerService.peer.destroy(); }
-                
-                // --- MODIFICATION: Réutilisation de l'ID d'hôte stocké ---
-                let peerId = id;
-                if (PeerService.isHost) {
-                    // Si on est Host, on tente de récupérer l'ID persistant
-                    const savedSession = JSON.parse(localStorage.getItem(WEBRTC_STORAGE_KEY));
-                    if (savedSession && savedSession.isHost && savedSession.id) {
-                         peerId = savedSession.id;
-                    } else {
-                         // Laisse PeerJS en générer un (peerId = undefined)
-                         peerId = undefined; 
+            lastPingReceived: Date.now(),
+            
+            // --- WORKER INTEGRATION ---
+            initWorker: () => {
+                heartBeatWorker.postMessage('start');
+                heartBeatWorker.onmessage = (e) => {
+                    if (e.data === 'tick') {
+                        PeerService.handleHeartbeatTick();
                     }
-                } else if (!id) {
-                     // Client: l'ID doit être fourni (hostId) ou être généré pour la connexion
-                     peerId = crypto.randomUUID();
+                };
+            },
+
+            // Boucle principale du Worker (toutes les 2s)
+            handleHeartbeatTick: () => {
+                const now = Date.now();
+
+                // 1. RECONNEXION AUTO SI DÉCONNECTÉ
+                // Si on a un ID cible (Host ou Client) mais que PeerJS n'est pas prêt ou déconnecté
+                if ((PeerService.hostId || PeerService.isHost) && !PeerService.isReady) {
+                     // On tente de redémarrer PeerJS
+                     console.log("Worker: Peer not ready, retrying init...");
+                     PeerService.initPeer();
+                     return;
+                }
+
+                // 2. LOGIQUE HÔTE : PING LES CLIENTS
+                if (PeerService.isHost && PeerService.isReady) {
+                     Object.keys(PeerService.conn).forEach(peerId => {
+                         const conn = PeerService.conn[peerId];
+                         if (conn && conn.open) {
+                             conn.send({ type: 'PING' });
+                         }
+                     });
                 }
                 
+                // 3. LOGIQUE CLIENT : VERIFIER LE POULS DE L'HÔTE
+                if (!PeerService.isHost && PeerService.isReady && PeerService.hostId) {
+                    // Si connecté à l'hôte
+                    if (PeerService.conn[PeerService.hostId] && PeerService.conn[PeerService.hostId].open) {
+                         // Vérifier si on a reçu un PING récemment
+                         if (now - PeerService.lastPingReceived > PING_TIMEOUT_MS) {
+                             console.warn("Worker: Host timeout. Reconnecting...");
+                             showToast("Perte liaison Hôte. Reconnexion...", true);
+                             PeerService.conn[PeerService.hostId].close(); // Force close
+                             delete PeerService.conn[PeerService.hostId];
+                             NetService.connectToHost(); // Force reconnect
+                         }
+                    } else {
+                        // Pas de connexion active, on essaie de se connecter
+                         console.log("Worker: No connection to host. Connecting...");
+                         NetService.connectToHost();
+                    }
+                }
+            },
+
+            initPeer: (forceId = null) => {
+                // Évite les initialisations multiples
+                if (PeerService.peer && !PeerService.peer.destroyed && !PeerService.peer.disconnected) return;
+                
+                let peerId = forceId;
+                
+                // Récupération ID persistant
+                if (!peerId) {
+                    const savedSession = JSON.parse(localStorage.getItem(WEBRTC_STORAGE_KEY));
+                    if (savedSession && savedSession.id) {
+                         // Si on est censé être Host, on essaie de reprendre notre ID
+                         // Si on est Client, on génère un nouvel ID pour nous (l'ID stocké est celui de l'hôte)
+                         if (savedSession.isHost) {
+                             peerId = savedSession.id;
+                             PeerService.isHost = true;
+                         } else {
+                             PeerService.hostId = savedSession.id; // L'ID sauvegardé est celui de l'hôte
+                             PeerService.isHost = false;
+                             PeerService.isClientReadOnly = true;
+                             // Client ID aléatoire
+                             peerId = crypto.randomUUID(); 
+                         }
+                    } else if (PeerService.isHost) {
+                        // Nouvel hôte sans ID sauvegardé -> PeerJS génère
+                        peerId = undefined;
+                    } else if (PeerService.hostId) {
+                        // Nouveau client avec Host connu -> ID client aléatoire
+                        peerId = crypto.randomUUID();
+                    }
+                }
+
+                // Si aucune intention de connexion, on arrête
+                if (!PeerService.isHost && !PeerService.hostId) return;
+
+                if (PeerService.peer) PeerService.peer.destroy();
+
                 NetService.updateUI('connecting', peerId);
 
                 const peer = new Peer(peerId, PEER_CONFIG);
@@ -827,45 +933,38 @@
                 peer.on('open', (pid) => {
                     PeerService.localId = pid;
                     PeerService.isReady = true;
-                    // Arrêter le loop de reconnexion si on réussit
-                    clearInterval(PeerService.reconnectTimer);
+                    PeerService.lastPingReceived = Date.now(); // Reset timer
                     
                     NetService.updateUI(PeerService.isHost ? 'host' : 'connected');
                     
                     if (PeerService.isHost) {
                         NetService.showHostUI(pid);
-                        // --- MODIFICATION: Persister l'ID Host réel ---
                         NetService.saveSession(pid, true);
                     } else if (PeerService.hostId) {
                         NetService.connectToHost();
+                        NetService.saveSession(PeerService.hostId, false); // Sauve l'ID de l'hôte
                     }
                 });
 
                 peer.on('error', (err) => {
                     console.error("PeerJS Error:", err);
+                    PeerService.isReady = false;
+                    NetService.updateUI('disconnected');
                     
-                    // Si l'erreur n'est pas due à une déconnexion (peer-unavailable/network), on réagit.
-                    if (err.type !== 'peer-unavailable' && err.type !== 'network') {
-                        NetService.updateUI('disconnected');
-                        
-                        if (document.getElementById('webrtcModal').style.display === 'block' || PeerService.hostId) {
-                            showMessageModal("Erreur Réseau", `Erreur PeerJS : ${err.type}. Veuillez réessayer.`, true);
-                        }
-                        PeerService.isClientReadOnly = false;
-                        PeerService.hostId = null; 
-                        if (html5QrCodeWebRtc) NetService.stopWebRtcScanner();
-                        
-                        // Tenter la reconnexion si on était connecté et que l'erreur est grave (ex: id déjà utilisé)
-                        if (PeerService.hostId || PeerService.isHost) {
-                            PeerService.startReconnectLoop();
-                        }
+                    // Gestion spécifique des erreurs fatales vs temporaires
+                    if (err.type === 'peer-unavailable') {
+                        // L'hôte n'est pas là, le Worker réessaiera
+                    } else if (err.type === 'unavailable-id') {
+                        // ID pris, on réessaie sans ID imposé si on est pas l'hôte original ?
+                        // Cas rare, on laisse le Worker gérer le timeout
                     }
                 });
                 
                 peer.on('disconnected', () => { 
-                    showToast("Déconnexion PeerJS. Reco...");
-                    // PeerJS tente de reconnecter automatiquement, mais on ajoute notre boucle de sécurité
-                    PeerService.startReconnectLoop();
+                    console.log("Peer Disconnected");
+                    PeerService.isReady = false;
+                    // On essaie de se reconnecter immédiatement à l'infra PeerJS
+                    peer.reconnect();
                 });
 
                 peer.on('connection', NetService.handleConnection);
@@ -873,32 +972,9 @@
                 PeerService.peer = peer;
             },
             
-            reconnectLoop: () => {
-                // Tente de se reconnecter si PeerService n'est pas prêt et que des infos de session existent
-                if (!PeerService.isReady && (PeerService.hostId || PeerService.isHost)) {
-                    showToast("Tentative de reconnexion...", true);
-                    
-                    if (PeerService.isHost) {
-                        // Recréer la session Host (l'ID sera réutilisé par initPeer)
-                        PeerService.initPeer(); 
-                    } else if (PeerService.hostId) {
-                        // Recréer la session Client et tenter de rejoindre
-                        PeerService.initPeer(crypto.randomUUID());
-                    }
-                } else if (PeerService.isReady && PeerService.hostId && !Object.keys(PeerService.conn).length) {
-                     // Peer prêt mais n'est plus connecté à l'hôte (côté client)
-                     NetService.connectToHost();
-                }
-            },
-
-            startReconnectLoop: () => {
-                if (!PeerService.reconnectTimer) {
-                    PeerService.reconnectTimer = setInterval(PeerService.reconnectLoop, RECONNECT_INTERVAL_MS);
-                }
-            },
-            
             createHost: () => {
                 PeerService.isHost = true;
+                PeerService.hostId = null;
                 PeerService.isClientReadOnly = false;
                 NetService.stopWebRtcScanner();
                 PeerService.initPeer();
@@ -909,98 +985,80 @@
                 PeerService.hostId = hostId;
                 PeerService.isClientReadOnly = true; 
                 NetService.stopWebRtcScanner();
-                PeerService.initPeer(crypto.randomUUID()); 
+                PeerService.initPeer(); 
             },
 
             disconnect: (isFullReset = false) => {
-                // Arrêter la boucle de reconnexion
-                clearInterval(PeerService.reconnectTimer);
-                PeerService.reconnectTimer = null;
-
-                Object.values(PeerService.conn).forEach(c => {
-                    if (c.open) c.close();
-                });
-                if (PeerService.peer) {
-                    PeerService.peer.destroy();
-                }
+                Object.values(PeerService.conn).forEach(c => { if (c.open) c.close(); });
+                if (PeerService.peer) { PeerService.peer.destroy(); }
+                
                 PeerService.conn = {};
                 PeerService.isHost = false;
                 PeerService.hostId = null;
                 PeerService.localId = null;
                 PeerService.isReady = false;
                 PeerService.isClientReadOnly = false;
+                
                 NetService.updateUI('disconnected');
                 document.getElementById('webrtc-login-view').style.display = 'block';
                 document.getElementById('webrtc-host-view').style.display = 'none';
                 document.getElementById('webrtc-client-view').style.display = 'none';
-                
-                // Affichage du formulaire d'ajout de log
                 logForm.style.display = 'block';
                 
                 if (isFullReset) {
                     localStorage.removeItem(WEBRTC_STORAGE_KEY);
-                } else {
-                    NetService.saveSession(null, false);
                 }
                 
-                // Réactive l'édition
                 logForm.disabled = false;
                 interventionTitleInput.disabled = false;
             }
         };
 
         const NetService = {
-            
-            // Connecte le client à l'hôte
             connectToHost: () => {
                 if (!PeerService.isReady || !PeerService.hostId) return;
+                // Fermer l'ancienne connexion si elle existe (zombie)
+                if (PeerService.conn[PeerService.hostId]) {
+                    PeerService.conn[PeerService.hostId].close();
+                }
 
-                const hostConn = PeerService.peer.connect(PeerService.hostId, { metadata: { type: 'client', id: PeerService.localId } });
+                const hostConn = PeerService.peer.connect(PeerService.hostId, { metadata: { type: 'client', id: PeerService.localId }, reliable: true });
                 NetService.handleConnection(hostConn);
             },
             
-            // Gère une nouvelle connexion (pour Host et Client)
             handleConnection: (conn) => {
                 PeerService.conn[conn.peer] = conn;
                 
                 conn.on('open', () => {
-                    showToast(`Connexion établie avec ${conn.peer}`);
-                    
                     if (PeerService.isHost) {
-                        // Hôte envoie le titre et les logs à la connexion
                         conn.send({ type: 'TITLE_SYNC', title: interventionTitleInput.value.trim() });
                         conn.send({ type: 'LOG_SYNC', logs: getLogData() });
                         NetService.updateHostPeerCount();
                     } else if (conn.peer === PeerService.hostId) {
-                        // Client connecté à l'hôte
                         NetService.showClientUI(conn.peer);
-                        NetService.saveSession(conn.peer, false);
+                        PeerService.lastPingReceived = Date.now(); // Connexion vive
+                        showToast("Connecté à l'hôte");
                     }
                 });
 
-                conn.on('data', NetService.handleData);
+                conn.on('data', (data) => {
+                    // Gestion du PING
+                    if (data.type === 'PING') {
+                        PeerService.lastPingReceived = Date.now();
+                        return; // Pas besoin de traiter plus loin
+                    }
+                    NetService.handleData(data);
+                });
                 
                 conn.on('close', () => { 
-                    showToast(`Déconnexion de ${conn.peer}`, true);
                     delete PeerService.conn[conn.peer];
                     if (PeerService.isHost) {
                         NetService.updateHostPeerCount();
-                    } else if (conn.peer === PeerService.hostId) {
-                        // Client a perdu la connexion avec l'hôte
-                        PeerService.disconnect();
-                        showMessageModal("Déconnexion", "Connexion à l'hôte perdue. Tentative de reconnexion en arrière-plan.", true);
-                        PeerService.startReconnectLoop(); // Redémarre la boucle de reconnexion
                     }
-                });
-
-                conn.on('error', (err) => { 
-                    console.error("Erreur Data Connexion:", err);
                 });
             },
             
-            // Gère les données reçues
             handleData: (data) => {
-                // Si client, on force la lecture seule
                 if (PeerService.isClientReadOnly) {
                     logForm.disabled = true;
                     interventionTitleInput.disabled = true;
@@ -1009,39 +1067,26 @@
                 if (data.type === 'TITLE_SYNC' && data.title) {
                     interventionTitleInput.value = data.title;
                     saveTitle();
-                    showToast("Titre d'Opération mis à jour.");
                 } else if (data.type === 'LOG_SYNC' && Array.isArray(data.logs)) {
                     renderLogTable(data.logs);
-                    showToast(`Journal synchronisé (${data.logs.length} entrées)`);
                 } else if (data.type === 'LOG_UPDATE' && Array.isArray(data.logs)) {
-                    // Si l'hôte envoie les logs, on met à jour la page sans notification pour l'hôte.
-                    // Seul un client voit une notification si l'hôte a fait une modification.
-                    
                     if (!PeerService.isHost) {
-                        // Logique de notification pour les clients (abonnés)
                         const oldLogs = loadLogData();
                         const newLogs = data.logs;
-
                         const newIds = new Set(newLogs.map(l => l.id));
                         const oldIds = new Set(oldLogs.map(l => l.id));
-                        
                         let toastMessage = `Journal mis à jour.`;
                         let toastColor = 'var(--ao-green)';
                         let logEntry = null;
                         let isDeletion = false;
 
                         if (newLogs.length > oldLogs.length) {
-                            // Ajout
                             logEntry = newLogs.find(l => !oldIds.has(l.id));
                             if (logEntry) toastMessage = `Log: ${logEntry.pax} ajouté`;
                         } else if (newLogs.length < oldLogs.length) {
-                            // Suppression
                             logEntry = oldLogs.find(l => !newIds.has(l.id));
                             isDeletion = true;
                             if (logEntry) toastMessage = `Log: ${logEntry.pax} supprimé`;
-                        } else {
-                             // Modification/Réorganisation
-                             toastMessage = `Log: Journal modifié`;
                         }
                         
                         if (logEntry) {
@@ -1051,39 +1096,30 @@
                                toastColor = PDF_PAX_COLORS[logEntry.pax].color || 'var(--ao-green)';
                             }
                         }
-                        
                         renderLogTable(newLogs);
                         showToast(toastMessage, isDeletion, toastColor);
                     } else {
-                        // Hôte: met à jour la page en silence, sans notification.
                         renderLogTable(data.logs);
                     }
                 }
             },
             
-            // Diffuse les logs à tous les clients
             broadcastLogs: () => {
                 if (!PeerService.isHost) return;
                 const logData = getLogData();
                 Object.values(PeerService.conn).forEach(conn => {
-                    if (conn.open) {
-                        conn.send({ type: 'LOG_UPDATE', logs: logData });
-                    }
+                    if (conn.open) conn.send({ type: 'LOG_UPDATE', logs: logData });
                 });
             },
             
-            // Diffuse le titre (une seule fois)
             broadcastTitle: () => {
                 if (!PeerService.isHost) return;
                 const title = interventionTitleInput.value.trim();
                 Object.values(PeerService.conn).forEach(conn => {
-                    if (conn.open) {
-                        conn.send({ type: 'TITLE_SYNC', title: title });
-                    }
+                    if (conn.open) conn.send({ type: 'TITLE_SYNC', title: title });
                 });
             },
             
-            // Mise à jour de l'UI globale
             updateUI: (status, peerId = null) => {
                 webrtcStatusBox.className = '';
                 let iconName = '';
@@ -1092,40 +1128,29 @@
 
                 switch (status) {
                     case 'connecting':
-                        iconName = 'sync';
-                        text = 'Connexion...';
-                        boxClass = 'status-connecting';
+                        iconName = 'sync'; text = 'Connexion...'; boxClass = 'status-connecting';
                         break;
                     case 'host':
-                        iconName = 'sensors';
-                        text = `HÔTE: ${peerId || PeerService.localId}`;
-                        boxClass = 'status-host';
+                        iconName = 'sensors'; text = `HÔTE: ${peerId || PeerService.localId}`; boxClass = 'status-host';
                         break;
                     case 'connected':
-                        iconName = 'sensors_in';
-                        text = `Connecté`; // Affichage simplifié sur mobile
-                        if (window.matchMedia("(min-width: 769px)").matches) {
-                            text = `CLIENT: ${peerId || PeerService.hostId}`; // Affichage complet sur PC
-                        }
+                        iconName = 'sensors_in'; text = `Connecté`; 
+                        if (window.matchMedia("(min-width: 769px)").matches) { text = `CLIENT: ${peerId || PeerService.hostId}`; }
                         boxClass = 'status-connected';
                         break;
                     case 'disconnected':
                     default:
-                        iconName = 'sensors_off';
-                        text = 'Déconnecté';
-                        boxClass = 'status-disconnected';
+                        iconName = 'sensors_off'; text = 'Déconnecté'; boxClass = 'status-disconnected';
                         break;
                 }
-                
                 webrtcStatusBox.classList.add(boxClass);
                 webrtcStatusIcon.innerText = iconName;
                 webrtcStatusText.innerText = text;
                 
-                // Si non connecté, réactiver les champs
                 if (status === 'disconnected') {
                      logForm.disabled = false;
                      interventionTitleInput.disabled = false;
-                     logForm.style.display = 'block'; // Afficher le formulaire en mode déconnecté
+                     logForm.style.display = 'block';
                 }
             },
             
@@ -1141,10 +1166,15 @@
                  document.getElementById('webrtc-host-view').style.display = 'block';
                  document.getElementById('session-id-display').innerText = `ID: ${pid}`;
                  document.getElementById('qr-code-region').innerHTML = '';
-                 new QRCode(document.getElementById('qr-code-region'), { text: pid, width: 200, height: 200 });
+                 
+                 // Timeout pour s'assurer que le conteneur est visible avant de dessiner
+                 setTimeout(() => {
+                    new QRCode(document.getElementById('qr-code-region'), { text: pid, width: 200, height: 200 });
+                 }, 100);
+                 
                  NetService.updateUI('host', pid);
                  NetService.updateHostPeerCount();
-                 logForm.style.display = 'block'; // L'hôte garde le formulaire
+                 logForm.style.display = 'block';
             },
             
             showClientUI: (hostId) => {
@@ -1153,33 +1183,20 @@
                  document.getElementById('webrtc-client-view').style.display = 'block';
                  document.getElementById('client-session-id-display').innerText = `Canal: ${hostId}`;
                  NetService.updateUI('connected', hostId);
-                 // Désactiver et masquer l'édition pour le client
                  logForm.disabled = true;
                  interventionTitleInput.disabled = true;
-                 logForm.style.display = 'none'; // Masquer le formulaire en mode client
+                 logForm.style.display = 'none';
             },
             
             loadSession: () => {
-                 const s = JSON.parse(localStorage.getItem(WEBRTC_STORAGE_KEY));
-                 if (s && s.id) {
-                     PeerService.isHost = s.isHost;
-                     // --- MODIFICATION: Persister l'ID host/client dans PeerService pour la réutilisation ---
-                     PeerService.hostId = s.isHost ? s.id : s.id; 
-                     
-                     if (s.isHost) {
-                         PeerService.createHost();
-                     } else {
-                         document.getElementById('input-join-id').value = s.id;
-                         PeerService.joinClient(s.id);
-                     }
-                 }
+                // Initialisation différée pour laisser le temps au Worker de démarrer
+                 setTimeout(() => PeerService.initPeer(), 500);
             },
             
             saveSession: (id, isHost) => {
                  localStorage.setItem(WEBRTC_STORAGE_KEY, JSON.stringify({ id: id, isHost: isHost }));
             },
             
-            // --- LOGIQUE SCANNER WEBRTC (Basé sur comtac) ---
             startWebRtcScanner: () => {
                 if (html5QrCodeWebRtc) return;
                 webrtcScannerRegion.style.display = 'block';
@@ -1188,29 +1205,18 @@
                 btnScanQr.classList.add('action'); 
                 
                 html5QrCodeWebRtc = new Html5Qrcode("qr-scanner-region");
-                
-                const config = { 
-                    fps: 10, 
-                    qrbox: { width: 256, height: 256 }, // Taille demandée
-                    disableFlip: false 
-                };
-                
+                const config = { fps: 10, qrbox: { width: 256, height: 256 }, disableFlip: false };
                 html5QrCodeWebRtc.start({ facingMode: "environment" }, config, 
                     (decodedText) => {
-                        // Succès du scan
                         NetService.stopWebRtcScanner();
                         const hostId = decodedText.trim();
                         document.getElementById('input-join-id').value = hostId;
                         PeerService.joinClient(hostId);
                         closeWebRtcModal();
                     }, 
-                    (errorMessage) => {
-                        // Progression du scan ou petite erreur ignorée
-                    }
-                )
-                .catch(err => {
+                    () => {}
+                ).catch(err => {
                     NetService.stopWebRtcScanner();
-                    webrtcScannerRegion.innerHTML = `<div class="qr-scan-placeholder" style="color:var(--danger-red);">Erreur Caméra: ${err}.</div>`;
                     showToast("Erreur caméra WebRTC", true);
                 });
             },
@@ -1229,7 +1235,7 @@
         };
 
         // ----------------------------------------------------
-        // --- FIN MODULE PEERJS (WEBRTC) ---
+        // --- FIN MODULE PEERJS ---
         // ----------------------------------------------------
         
         function getHexToRgb(hex) {
@@ -1265,36 +1271,26 @@
             };
         }
         
-        // Mise à jour de la fonction showToast pour accepter une couleur
         function showToast(message, isError = false, backgroundColor = null) {
             const toast = document.getElementById('toast-container');
             const msgSpan = document.getElementById('toast-message');
             const iconSpan = toast.querySelector('.material-symbols-outlined');
-            
             msgSpan.textContent = message;
-            
-            // Déterminer la couleur de fond
             let bg = backgroundColor || (isError ? 'var(--danger-red)' : 'var(--ao-green)');
             toast.style.backgroundColor = bg;
-            
-            // Déterminer la couleur du texte (pour les couleurs custom)
             let textColor = 'white';
             if (bg.startsWith('#')) {
-                // Pour s'assurer que le texte est lisible sur la couleur de fond
                 const luminosity = calculateTextColor(bg) === '#000000' ? 0.6 : 1; 
                 textColor = `rgba(255, 255, 255, ${luminosity})`; 
             } else if (bg.includes('yellow') || bg.includes('civil-yellow') || bg.includes('ao-green')) {
-                textColor = 'black'; // Texte sombre pour les couleurs claires
+                textColor = 'black';
             }
             toast.style.color = textColor;
-            iconSpan.style.color = textColor; // Assurer que l'icône a la bonne couleur
-            
+            iconSpan.style.color = textColor;
             iconSpan.textContent = isError ? 'error' : 'check_circle';
-            
             toast.classList.add('show');
             setTimeout(() => { 
                 toast.classList.remove('show'); 
-                // Réinitialiser les couleurs après la fermeture
                 toast.style.backgroundColor = 'var(--ao-green)'; 
                 toast.style.color = 'white';
                 iconSpan.style.color = 'white';
@@ -1311,13 +1307,9 @@
                 });
                 localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(logData));
                 updateHistoryAndColorMap(logData);
-                
-                // !!! WEBRTC BROADCAST: Les logs ont changé
                 if (PeerService.isHost) NetService.broadcastLogs();
-                
             } catch (e) {
-                console.error("Erreur de sauvegarde des données:", e);
-                showMessageModal("Erreur de sauvegarde", "Impossible de sauvegarder les données dans le stockage local.", true);
+                console.error("Erreur de sauvegarde:", e);
             }
         }
 
@@ -1326,7 +1318,6 @@
                 const dataString = localStorage.getItem(LOCAL_STORAGE_KEY);
                 return dataString ? JSON.parse(dataString) : [];
             } catch (e) {
-                console.error("Erreur de chargement des données:", e);
                 return [];
             }
         }
@@ -1366,13 +1357,12 @@
                 }
                 return history;
             } catch (e) {
-                console.error("Erreur de chargement de l'historique:", e);
                 return { lieux: [], fp: [], paxColorMap: {} };
             }
         }
 
         function saveHistory(history) {
-            try { localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history)); } catch (e) { console.error("Erreur de sauvegarde de l'historique:", e); }
+            try { localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history)); } catch (e) {}
         }
 
         function updateHistoryAndColorMap(logData) {
@@ -1417,7 +1407,6 @@
         function loadTitle() { interventionTitleInput.value = localStorage.getItem(TITLE_STORAGE_KEY) || ''; }
         function saveTitle() { 
              localStorage.setItem(TITLE_STORAGE_KEY, interventionTitleInput.value.trim()); 
-             // !!! WEBRTC BROADCAST: Le titre a changé
              if (PeerService.isHost) NetService.broadcastTitle();
         }
 
@@ -1485,11 +1474,10 @@
                 }
             });
              saveLogData(getLogData());
-             // Gère l'état d'édition si client
              if (PeerService.isClientReadOnly) {
                  logForm.disabled = true;
                  interventionTitleInput.disabled = true;
-                 logForm.style.display = 'none'; // Masquer le formulaire en mode client
+                 logForm.style.display = 'none';
                  sortTimeBtn.disabled = true;
              } else {
                  logForm.disabled = false;
@@ -1526,7 +1514,6 @@
             logData.push(newEntry);
             isTimeInputManuallyChanged = false;
             
-            // 1. Déterminer la couleur et le nom pour le Toast
             let toastColor, paxText;
             if (mode === 'free') {
                toastColor = paxColorHex;
@@ -1536,11 +1523,7 @@
                toastColor = paxInfo.color;
                paxText = paxInfo.text;
             }
-            
-            // 2. Rendre le tableau (cela déclenche saveLogData et broadcast)
             renderLogTable(logData, newId); 
-
-            // 3. Afficher le Toast
             showToast(`Log: ${paxText} ajouté`, false, toastColor);
             
             if (mode === 'free') {
@@ -1561,7 +1544,6 @@
             const logData = oldLogs.filter(entry => entry.id !== id);
             renderLogTable(logData);
             
-            // Afficher le Toast de suppression
             if (logToDelete) {
                 let toastColor, paxText;
                 if (logToDelete.paxMode === 'free') {
@@ -1572,7 +1554,7 @@
                    toastColor = paxInfo.color;
                    paxText = paxInfo.text;
                 }
-                showToast(`Log: ${paxText} supprimé`, true, toastColor); // Couleur rouge pour la suppression
+                showToast(`Log: ${paxText} supprimé`, true, toastColor); 
             }
         }
 
@@ -1892,7 +1874,6 @@
             return pdfBytes;
         }
 
-        // Fonction RESTAURÉE : downloadPdf
         async function downloadPdf() {
             const btn = previewPdfDockBtn; 
             const originalIcon = btn.querySelector('.material-symbols-outlined').textContent;
@@ -1918,11 +1899,29 @@
         }
 
         // --- UI UTILS ---
-        function isFullscreen() { return document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement; }
+        function isFullscreen() { return document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement || document.body.classList.contains('ios-fake-fullscreen'); }
+        
+        // CORRECTIF #3 : Fullscreen pour iOS Safari
         function toggleFullscreen() {
-            if (!isFullscreen()) { if (document.documentElement.requestFullscreen) { document.documentElement.requestFullscreen(); } } else { if (document.exitFullscreen) { document.exitFullscreen(); } }
+            // Détection basique iOS
+            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+            
+            if (isIOS) {
+                // Fallback CSS pour iOS
+                document.body.classList.toggle('ios-fake-fullscreen');
+                updateFullscreenIcon();
+                // Scroll to top
+                if(document.body.classList.contains('ios-fake-fullscreen')) {
+                    window.scrollTo(0, 0);
+                }
+            } else {
+                // Standard API
+                if (!isFullscreen()) { if (document.documentElement.requestFullscreen) { document.documentElement.requestFullscreen(); } } else { if (document.exitFullscreen) { document.exitFullscreen(); } }
+            }
         }
+        
         function updateFullscreenIcon() { const icon = document.getElementById('fullscreenIcon'); if (icon) { icon.textContent = isFullscreen() ? 'fullscreen_exit' : 'fullscreen'; } }
+        
         function handleThemeToggle() {
             document.body.classList.toggle('light-mode'); document.body.classList.toggle('dark-mode');
             const isDarkMode = document.body.classList.contains('dark-mode'); localStorage.setItem('theme', isDarkMode ? 'dark' : 'light');
@@ -1959,7 +1958,7 @@
         function closeTransferModal() {
             document.getElementById('modalBackdrop').style.display = 'none';
             transferModal.style.display = 'none';
-            if(html5QrCodeLocal) { // Utilise le nom pour le scanner local
+            if(html5QrCodeLocal) {
                 html5QrCodeLocal.stop().catch(err => console.log("Stop failed", err));
                 html5QrCodeLocal = null;
             }
@@ -1967,7 +1966,6 @@
         function switchTransferTab(tabName) {
             if (tabName === 'receive' && PeerService.isClientReadOnly) { 
                 showToast("Importation par QR non autorisée en mode Client WebRTC.", true); 
-                // Revenir à l'onglet envoyer
                 tabName = 'send';
             }
             transferTabs.forEach(t => t.classList.toggle('active', t.dataset.tab === tabName));
@@ -1976,13 +1974,12 @@
             
             if(tabName === 'send') {
                 if(html5QrCodeLocal) { html5QrCodeLocal.stop().then(() => html5QrCodeLocal = null); }
-                prepareQRPagination(); // Initialise la pagination
+                prepareQRPagination(); 
             } else {
                 startScanner();
             }
         }
         
-        // Fonction utilitaire pour découper un tableau en morceaux
         function chunkArray(array, size) {
             const chunks = [];
             for (let i = 0; i < array.length; i += size) {
@@ -2002,25 +1999,25 @@
             if (logs.length === 0) {
                 container.textContent = "Aucune donnée à transférer.";
                 statusText.textContent = "";
-                navControls.style.display = 'none'; // S'assurer qu'il est masqué
+                navControls.style.display = 'none';
                 return;
             }
 
-            // Découpage en morceaux
-            // On mappe d'abord en format compressé
-            // Format: [id, heure, pax, paxMode, paxColor, lieu, fenetrePorte, remarques]
             let compressedData = logs.map(l => [l.id, l.heure, l.pax, l.paxMode, l.paxColor, l.lieu, l.fenetrePorte, l.remarques]);
             
             qrChunks = chunkArray(compressedData, QR_BATCH_SIZE);
             currentQrIndex = 0;
             
             if (qrChunks.length > 1) {
-                navControls.style.display = 'flex'; // Afficher les contrôles si plus d'un chunk
+                navControls.style.display = 'flex'; 
             } else {
-                navControls.style.display = 'none'; // S'assurer qu'il est masqué si un seul QR
+                navControls.style.display = 'none';
             }
             
-            showQR(currentQrIndex);
+            // CORRECTIF #1 suite : Utiliser un délai pour laisser le modal s'afficher avant de dessiner
+            setTimeout(() => {
+                showQR(currentQrIndex);
+            }, 50);
         }
 
         function showQR(index) {
@@ -2030,13 +2027,9 @@
             const prevBtn = document.getElementById('prevQrBtn');
             const nextBtn = document.getElementById('nextQrBtn');
             
-            container.innerHTML = ''; // Clear previous QR
+            container.innerHTML = '';
             
-            // Préparer le payload pour ce chunk spécifique
-            let transferPayload = { 
-                t: interventionTitleInput.value, 
-                d: qrChunks[index] 
-            };
+            let transferPayload = { t: interventionTitleInput.value, d: qrChunks[index] };
             let jsonString = JSON.stringify(transferPayload);
             
             new QRCode(container, {
@@ -2048,7 +2041,6 @@
                 correctLevel : QRCode.CorrectLevel.M
             });
             
-            // Mise à jour UI Navigation
             if (qrChunks.length > 1) {
                 statusText.textContent = `Page ${index + 1} sur ${qrChunks.length} - ${qrChunks[index].length} entrées.`;
                 counter.textContent = `${index + 1} / ${qrChunks.length}`;
@@ -2061,7 +2053,7 @@
 
         function startScanner() {
             if (PeerService.isClientReadOnly) { showToast("Importation par QR non autorisée en mode Client WebRTC.", true); return; }
-            if (html5QrCodeLocal) return; // Déjà actif
+            if (html5QrCodeLocal) return; 
             html5QrCodeLocal = new Html5Qrcode("qr-reader");
             const config = { fps: 10, qrbox: { width: 250, height: 250 } };
             html5QrCodeLocal.start({ facingMode: "environment" }, config, onScanSuccess)
@@ -2074,26 +2066,16 @@
             try {
                 const data = JSON.parse(decodedText);
                 if (data.d && Array.isArray(data.d)) {
-                    // Reconstruction des données
                     const currentLogs = getLogData();
                     const currentIds = new Set(currentLogs.map(l => l.id));
                     let addedCount = 0;
-
                     if(data.t) { interventionTitleInput.value = data.t; saveTitle(); }
-
-                    // Format reçu: [id, heure, pax, paxMode, paxColor, lieu, fenetrePorte, remarques]
                     data.d.forEach(item => {
                         const id = item[0];
                         if (!currentIds.has(id)) {
                             currentLogs.push({
-                                id: id,
-                                heure: item[1],
-                                pax: item[2],
-                                paxMode: item[3],
-                                paxColor: item[4],
-                                lieu: item[5],
-                                fenetrePorte: item[6],
-                                remarques: item[7]
+                                id: id, heure: item[1], pax: item[2], paxMode: item[3], paxColor: item[4],
+                                lieu: item[5], fenetrePorte: item[6], remarques: item[7]
                             });
                             addedCount++;
                         }
@@ -2108,7 +2090,6 @@
                 }
             } catch (e) {
                 console.error(e);
-                // Ignorer les erreurs de parsing QR non pertinents
             }
         }
         
@@ -2116,10 +2097,8 @@
         function openWebRtcModal() {
             document.getElementById('modalBackdrop').style.display = 'block';
             webrtcModal.style.display = 'block';
+            NetService.stopWebRtcScanner();
             
-            NetService.stopWebRtcScanner(); // S'assurer que le scanner est arrêté à l'ouverture
-            
-            // Masquer/Afficher les vues selon l'état de connexion
             const isConnected = PeerService.isHost || PeerService.hostId;
             document.getElementById('webrtc-active-controls').style.display = isConnected ? 'flex' : 'none';
             document.getElementById('webrtc-login-view').style.display = isConnected ? 'none' : 'block';
@@ -2131,18 +2110,16 @@
         }
         
         function closeWebRtcModal() {
-            NetService.stopWebRtcScanner(); // Arrêter le scanner avant de fermer
+            NetService.stopWebRtcScanner();
             document.getElementById('modalBackdrop').style.display = 'none';
             webrtcModal.style.display = 'none';
         }
         
         function showDisconnectModal() {
-             // Si déjà déconnecté, la modale n'est pas nécessaire, on ouvre la modale de connexion
              if (!PeerService.isHost && !PeerService.hostId) {
                  openWebRtcModal();
                  return;
              }
-             
              document.getElementById('disconnectMessage').textContent = PeerService.isHost 
                 ? "Confirmer la déconnexion de la session HÔTE ? Tous les clients seront déconnectés."
                 : "Confirmer la déconnexion de la session CLIENT ?";
@@ -2181,7 +2158,7 @@
             logTableBody.addEventListener('drop', handleDrop); logTableBody.addEventListener('dragend', handleDragEnd); 
             logTableBody.addEventListener('click', handleDeleteButtonClick);
 
-            renderLogTable(loadLogData()); // Rendu initial
+            renderLogTable(loadLogData());
 
             previewPdfDockBtn.addEventListener('click', downloadPdf);
             exportJsonDockBtn.addEventListener('click', exportJson);
@@ -2192,12 +2169,10 @@
             document.getElementById('cancelResetBtn').addEventListener('click', hideResetModal);
             sortTimeBtn.addEventListener('click', sortLogTableByTime);
 
-            // Listeners Transfert QR local
             transferDockBtn.addEventListener('click', openTransferModal);
             closeTransferBtn.addEventListener('click', closeTransferModal);
             transferTabs.forEach(btn => btn.addEventListener('click', (e) => switchTransferTab(e.target.dataset.tab)));
             
-            // CORRECTION: Ajout des écouteurs pour la navigation QR séquentielle
             document.getElementById('prevQrBtn').addEventListener('click', () => {
                 if (currentQrIndex > 0) { currentQrIndex--; showQR(currentQrIndex); }
             });
@@ -2205,29 +2180,27 @@
                 if (currentQrIndex < qrChunks.length - 1) { currentQrIndex++; showQR(currentQrIndex); }
             });
             
-            // Listeners WebRTC
             webrtcDockBtn.addEventListener('click', openWebRtcModal);
             closeWebRtcModalBtn.addEventListener('click', closeWebRtcModal);
             
-            // Toggle du scanner QR WebRTC
             btnScanQr.addEventListener('click', () => {
-                if (btnScanQr.classList.contains('action')) { // Si c'est l'état 'Arrêter Scan'
+                if (btnScanQr.classList.contains('action')) {
                     NetService.stopWebRtcScanner();
-                } else { // Si c'est l'état 'Scanner QR Code'
+                } else { 
                     NetService.startWebRtcScanner();
                 }
             });
             
             document.getElementById('btn-create-host').addEventListener('click', () => { 
                 PeerService.createHost();
-                closeWebRtcModal(); // Fermer la modale après l'action
+                closeWebRtcModal();
             });
             
             document.getElementById('btn-join-session').addEventListener('click', () => {
                 const id = document.getElementById('input-join-id').value.trim();
                 if (id) {
                     PeerService.joinClient(id);
-                    closeWebRtcModal(); // Fermer la modale après l'action
+                    closeWebRtcModal();
                 } else { showToast("Veuillez entrer un ID de canal.", true); }
             });
             
@@ -2244,7 +2217,6 @@
                 showToast("Session WebRTC déconnectée.", true);
             });
             
-            // Listener pour fermer les modales en cliquant sur le fond
             document.getElementById('modalBackdrop').addEventListener('click', (e) => { 
                 if (e.target.id === 'modalBackdrop') { 
                     hideResetModal(); 
@@ -2254,16 +2226,10 @@
                 } 
             });
             
-            // Chargement de la session WebRTC persistante
+            // Démarrage du Worker et chargement session
+            PeerService.initWorker();
             NetService.loadSession();
-
         });
     </script>
 </body>
 </html>
-
-
-
-
-
-
