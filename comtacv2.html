@@ -8,7 +8,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>COM TAC v13.0</title>
+    <title>COM TAC v13.1</title>
     
     <!-- ================= 1. LIBRAIRIES EXTERNES (CDN) ================= -->
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Chakra+Petch:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -378,7 +378,7 @@
     <!-- STRUCTURE UI -->
     <header>
         <div class="brand">
-            <span class="material-symbols-outlined">satellite_alt</span> COM<span>TAC</span> v13.0
+            <span class="material-symbols-outlined">satellite_alt</span> COM<span>TAC</span> v13.1
         </div>
         <div class="nav-group">
             <div class="btn-nav" id="btn-toggle-map" onclick="App.toggleMap()">
@@ -1312,9 +1312,15 @@
             },
 
             enterPrivate: (peerId, initiateCall) => {
+                // FIX PTT: Couper le micro public avant de basculer
+                AudioService.tx(false);
+
                 App.privatePeerId = peerId;
                 document.body.classList.add('private-active');
                 App.setStatus('BUSY');
+                
+                // FIX PTT: S'assurer que le micro privé est fermé au démarrage
+                AudioService.tx(false);
                 
                 // Mute l'audio principal (Host)
                 if (App.hostAudioElement) App.hostAudioElement.muted = true;
@@ -1331,6 +1337,9 @@
             },
 
             leavePrivate: (sendSignal = true) => {
+                // FIX PTT: Couper le micro privé avant de quitter
+                AudioService.tx(false);
+
                 if (!App.privatePeerId) return;
                 
                 if (sendSignal) {
@@ -1346,6 +1355,10 @@
                 
                 // Unmute Main Audio
                 if (App.hostAudioElement) App.hostAudioElement.muted = false;
+                
+                // FIX PTT: S'assurer que le micro public est fermé au retour
+                AudioService.tx(false);
+                
                 App.toast("Retour Canal Principal");
             },
             
