@@ -8,7 +8,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>COM TAC v12.1</title>
+    <title>COM TAC v12.2</title>
     
     <!-- ================= 1. LIBRAIRIES EXTERNES (CDN) ================= -->
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Chakra+Petch:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -378,7 +378,7 @@
     <!-- STRUCTURE UI -->
     <header>
         <div class="brand">
-            <span class="material-symbols-outlined">satellite_alt</span> COM<span>TAC</span> v12.1
+            <span class="material-symbols-outlined">satellite_alt</span> COM<span>TAC</span> v12.2
         </div>
         <div class="nav-group">
             <div class="btn-nav" id="btn-toggle-map" onclick="App.toggleMap()">
@@ -728,61 +728,76 @@
             
             init: async () => {
                 try {
-                    // 1. Initialisation Flux Micro
-                    const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
-                    AudioService.stream = stream;
-                    
-                    // Crée un clone du stream pour les appels privés (pour pouvoir switcher les pistes indépendamment)
-                    AudioService.privateStream = stream.clone();
-                    
                     const AC = window.AudioContext || window.webkitAudioContext;
                     AudioService.ctx = new AC();
-                    if (AudioService.ctx.state === 'suspended') await AudioService.ctx.resume(); // Fix PC Audio start
+                    // Fix PC: Force resume si le contexte est suspendu au départ
+                    if (AudioService.ctx.state === 'suspended') await AudioService.ctx.resume();
 
                     AudioService.analyser = AudioService.ctx.createAnalyser(); 
 
+                    // 1. Initialisation Flux Micro (Gestion PC sans micro)
+                    try {
+                        const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+                        AudioService.stream = stream;
+                        AudioService.privateStream = stream.clone();
+                    } catch (micErr) {
+                        console.warn("Pas de micro détecté ou accès refusé. Mode Écoute seule.");
+                        App.toast("Micro non détecté: Mode Écoute", true);
+                        // Création d'un flux "fantôme" pour éviter les crashs si on appelle MixerService
+                        const dest = AudioService.ctx.createMediaStreamDestination();
+                        AudioService.stream = dest.stream;
+                        AudioService.privateStream = dest.stream;
+                    }
+
                     // 2. Initialisation Hack Audio pour Arrière-plan (Silent Loop)
-                    const silentBlob = new Blob([new Uint8Array([82,73,70,70,44,0,0,0,87,65,86,69,102,109,116,32,16,0,0,0,1,0,1,0,68,172,0,0,136,88,1,0,2,0,16,0,100,97,116,97,0,0,0,0])], {type: 'audio/wav'});
-                    AudioService.backgroundAudio = new Audio(URL.createObjectURL(silentBlob));
-                    AudioService.backgroundAudio.loop = true;
-                    AudioService.backgroundAudio.volume = 0.01; 
+                    // Uniquement sur Mobile pour économiser CPU sur PC et éviter bugs autoplay
+                    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
                     
-                    // 3. Support Boutons Casques Bluetooth (Media Session API)
-                    if ('mediaSession' in navigator) { 
-                        navigator.mediaSession.metadata = new MediaMetadata({
-                            title: "COM TAC",
-                            artist: "Canal Sécurisé",
-                            album: "v12.1 Active",
-                            artwork: [{ src: 'favicon.ico', sizes: '96x96', type: 'image/png' }]
-                        });
-
-                        // Fonction de bascule TX
-                        const toggleTx = (wantOpen) => {
-                            if (App.silenceActive && !App.isHost) return;
-                            App.user.isTxRequest = wantOpen;
-                            AudioService.tx(wantOpen);
-                            // Met à jour l'état de lecture du téléphone pour garder la synchro
-                            navigator.mediaSession.playbackState = wantOpen ? "playing" : "paused";
-                        };
-
-                        // PLAY = OUVRIR MICRO
-                        navigator.mediaSession.setActionHandler('play', () => toggleTx(true));
-                        // PAUSE = FERMER MICRO
-                        navigator.mediaSession.setActionHandler('pause', () => toggleTx(false));
-                        
-                        // Support bouton "Hook" générique (souvent mapé sur play/pause toggle)
-                        try {
-                            navigator.mediaSession.setActionHandler('stop', () => toggleTx(false)); 
-                        } catch(e){}
+                    if (isMobile) {
+                        const silentBlob = new Blob([new Uint8Array([82,73,70,70,44,0,0,0,87,65,86,69,102,109,116,32,16,0,0,0,1,0,1,0,68,172,0,0,136,88,1,0,2,0,16,0,100,97,116,97,0,0,0,0])], {type: 'audio/wav'});
+                        AudioService.backgroundAudio = new Audio(URL.createObjectURL(silentBlob));
+                        AudioService.backgroundAudio.loop = true;
+                        AudioService.backgroundAudio.volume = 0.01; 
+                        AudioService.backgroundAudio.play().catch(e => console.log("Silent Play blocked"));
                     }
                     
-                    AudioService.backgroundAudio.play().catch(e => console.log("Silent Play blocked until user interact"));
-                    // Force l'état initial
-                    if ('mediaSession' in navigator) navigator.mediaSession.playbackState = "paused";
+                    // 3. Support Boutons Casques Bluetooth (Media Session API)
+                    // Enveloppé dans un try/catch strict pour éviter le crash PC
+                    if ('mediaSession' in navigator) { 
+                        try {
+                            navigator.mediaSession.metadata = new MediaMetadata({
+                                title: "COM TAC",
+                                artist: "Canal Sécurisé",
+                                album: "v12.2 Active",
+                                artwork: [{ src: 'favicon.ico', sizes: '96x96', type: 'image/png' }]
+                            });
 
+                            const toggleTx = (wantOpen) => {
+                                if (App.silenceActive && !App.isHost) return;
+                                App.user.isTxRequest = wantOpen;
+                                AudioService.tx(wantOpen);
+                                try {
+                                    if (navigator.mediaSession.playbackState !== (wantOpen ? "playing" : "paused")) {
+                                        navigator.mediaSession.playbackState = wantOpen ? "playing" : "paused";
+                                    }
+                                } catch(e){}
+                            };
+
+                            navigator.mediaSession.setActionHandler('play', () => toggleTx(true));
+                            navigator.mediaSession.setActionHandler('pause', () => toggleTx(false));
+                            navigator.mediaSession.setActionHandler('stop', () => toggleTx(false)); 
+                        } catch(e) {
+                            console.log("MediaSession non supporté ou erreur hardware PC", e);
+                        }
+                    }
+                    
                     if (App.isHost) MixerService.init(AudioService.stream);
                     return true;
-                } catch(e) { App.toast("Erreur Micro: " + e.message, true); return false; }
+                } catch(e) { 
+                    console.error("Fatal Audio Init Error", e);
+                    App.toast("Erreur Audio Critique: " + e.message, true); 
+                    return false; 
+                }
             },
             
             // Transmission (TX)
@@ -793,7 +808,11 @@
                 // VÉRIFICATION STRICTE SILENCE RADIO (Sauf Hôte)
                 if (App.silenceActive && !App.isHost) active = false; 
 
-                streamToUse.getAudioTracks().forEach(t => t.enabled = active);
+                // Si c'est un flux fantôme (pas de micro), on ne fait rien
+                if (streamToUse.getAudioTracks().length > 0) {
+                    streamToUse.getAudioTracks().forEach(t => t.enabled = active);
+                }
+                
                 App.user.isTx = active;
 
                 // Si Hôte sur canal principal
@@ -807,12 +826,7 @@
                     else btn.classList.remove('active');
                 }
                 
-                if ('mediaSession' in navigator) {
-                    navigator.mediaSession.playbackState = active ? "playing" : "paused";
-                }
-
-                // En privé, on ne broadcast pas le statut TX à tout le monde pour éviter de clignoter sur la grille générale
-                // Mais on peut envoyer un signal léger si besoin.
+                // En privé, on ne broadcast pas le statut TX à tout le monde
                 if (!App.privatePeerId) NetService.broadcast(); 
                 App.renderGrid();
             },
@@ -832,9 +846,9 @@
             
             playRemote: (stream, isPrivate = false) => { 
                 const a = new Audio(); a.srcObject = stream; a.playsInline = true; 
-                if (isPrivate) a.volume = 1.0; // Volume max en privé
+                if (isPrivate) a.volume = 1.0; 
                 a.play().catch(()=>{}); 
-                return a; // Retourne l'élément audio pour contrôle (mute)
+                return a; 
             },
             
             setupViz: () => {
@@ -846,7 +860,15 @@
             
             drawLoop: () => {
                 requestAnimationFrame(AudioService.drawLoop);
-                const analyser = App.isHost && !App.privatePeerId ? MixerService.analyser : AudioService.analyser;
+                
+                // CORRECTION CRASH: Vérification de l'existence des analyseurs
+                let analyser = null;
+                if (App.isHost && !App.privatePeerId) {
+                    analyser = MixerService.analyser; // Peut être null si Mixer pas init
+                } else {
+                    analyser = AudioService.analyser;
+                }
+
                 if (!analyser || !AudioService.visuCtx) return;
                 
                 if (App.silenceActive && !App.isHost && App.user.isTx) AudioService.tx(false); 
@@ -867,23 +889,23 @@
             }
         };
 
-        // --- MODULE MIXEUR AUDIO HÔTE (Pour Relais) ---
+        // --- MODULE MIXEUR AUDIO HÔTE (Pour Relais - ISOLÉ) ---
         const MixerService = {
             ctx: null, destination: null, localSource: null, analyser: null, compressor: null,
             
             init: (localStream) => {
-                // Protection Anti-Crash: Si déjà initialisé, on ne refait pas le graph
-                if (MixerService.destination) return;
+                if (MixerService.destination) return; // Déjà init
                 
                 try {
-                    MixerService.ctx = AudioService.ctx;
+                    MixerService.ctx = AudioService.ctx; // Utilise le même contexte, c'est OK
                     MixerService.destination = MixerService.ctx.createMediaStreamDestination();
                     
-                    // Chaîne Audio: Sources -> Compresseur -> Analyser -> Destination (Out)
+                    // CRÉATION DE NOUVEAUX NOEUDS (ISOLATION TOTALE)
+                    // Ne jamais réutiliser AudioService.analyser ici pour éviter les boucles
                     MixerService.compressor = MixerService.ctx.createDynamicsCompressor();
-                    MixerService.analyser = AudioService.analyser; 
+                    MixerService.analyser = MixerService.ctx.createAnalyser(); 
                     
-                    // Connexions
+                    // Graphique du Mixeur: Sources -> Compresseur -> Analyser -> Stream Sortie
                     MixerService.compressor.connect(MixerService.analyser);
                     MixerService.analyser.connect(MixerService.destination);
     
@@ -892,6 +914,7 @@
                         MixerService.localSource = MixerService.ctx.createMediaStreamSource(localStream);
                         MixerService.localSource.connect(MixerService.compressor);
                     }
+                    console.log("Mixer Initialized Successfully");
                 } catch(e) {
                     console.error("Mixer Init Error:", e);
                     App.toast("Err Audio Mixer", true);
@@ -900,9 +923,11 @@
             
             connectRemoteStream: (stream) => {
                 if (!MixerService.ctx || !MixerService.compressor) return;
-                const remoteSource = MixerService.ctx.createMediaStreamSource(stream);
-                remoteSource.connect(MixerService.compressor);
-                return remoteSource;
+                try {
+                    const remoteSource = MixerService.ctx.createMediaStreamSource(stream);
+                    remoteSource.connect(MixerService.compressor);
+                    return remoteSource;
+                } catch(e) { console.error("Err Connect Remote", e); }
             },
             
             getStream: () => MixerService.destination ? MixerService.destination.stream : AudioService.stream
@@ -913,18 +938,32 @@
             peer: null, hostId: null, retryCount: 0,
             
             createSession: (id = null) => {
-                document.getElementById('btn-create-host').innerHTML = 'Init...';
+                // Séquence de sécurité pour éviter le double clic
+                const btn = document.getElementById('btn-create-host');
+                if(btn.innerHTML === 'Init...') return;
+                btn.innerHTML = 'Init...';
+                
                 App.isHost = true; App.user.role = 'HOST'; document.body.classList.add('is-host');
                 document.getElementById('btn-silence').style.display = 'block';
-                // Assure que le mixeur est prêt (avec protection anti-doublon incluse)
-                MixerService.init(AudioService.stream); 
-                NetService.initPeer(id);
+                
+                // Délai court pour laisser le temps au UI de se mettre à jour avant le gros travail JS
+                setTimeout(() => {
+                    try {
+                        MixerService.init(AudioService.stream); 
+                        NetService.initPeer(id);
+                    } catch(e) {
+                        App.toast("Err Création Salon", true);
+                        btn.innerHTML = 'Créer Salon';
+                    }
+                }, 50);
             },
             
             joinSession: (id = null) => {
                 if (!id) id = document.getElementById('input-join-id').value.trim();
                 if (!id) return App.toast("ID requis", true);
                 const btn = document.getElementById('btn-join-trigger'); 
+                if(btn.disabled) return;
+                
                 btn.innerHTML = 'Connexion...'; btn.disabled = true;
                 App.isHost = false; NetService.hostId = id; NetService.retryCount = 0;
                 document.body.classList.remove('is-host'); 
@@ -947,6 +986,7 @@
                 });
 
                 peer.on('error', (err) => {
+                    console.warn("Peer Error", err);
                     if (err.type === 'unavailable-id' && App.isHost && id) { 
                         setTimeout(() => NetService.initPeer(id), 1500); 
                     } else { App.toast(`Err Réseau: ${err.type}`, true); }
