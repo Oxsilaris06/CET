@@ -8,7 +8,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>COM TAC v12.3</title>
+    <title>COM TAC v12.2</title>
     
     <!-- ================= 1. LIBRAIRIES EXTERNES (CDN) ================= -->
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Chakra+Petch:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -309,9 +309,6 @@
         }
         #ptt-btn.vox-active { border-color: var(--color-green); color: var(--color-green); }
         
-        /* Mode Casque (Icône) */
-        #ptt-btn.headset-mode { border-color: var(--color-blue); color: var(--color-blue); }
-        
         /* État du PTT en Silence Radio */
         body.silence-active #ptt-btn { border-color: #333; color: #333; cursor: not-allowed; }
         body.silence-active #ptt-btn:active { transform: none; background: #222; box-shadow: none; color: #333; }
@@ -381,7 +378,7 @@
     <!-- STRUCTURE UI -->
     <header>
         <div class="brand">
-            <span class="material-symbols-outlined">satellite_alt</span> COM<span>TAC</span> v12.3
+            <span class="material-symbols-outlined">satellite_alt</span> COM<span>TAC</span> v12.2
         </div>
         <div class="nav-group">
             <div class="btn-nav" id="btn-toggle-map" onclick="App.toggleMap()">
@@ -746,89 +743,60 @@
                     } catch (micErr) {
                         console.warn("Pas de micro détecté ou accès refusé. Mode Écoute seule.");
                         App.toast("Micro non détecté: Mode Écoute", true);
+                        // Création d'un flux "fantôme" pour éviter les crashs si on appelle MixerService
                         const dest = AudioService.ctx.createMediaStreamDestination();
                         AudioService.stream = dest.stream;
                         AudioService.privateStream = dest.stream;
                     }
 
-                    // 2. Initialisation Hack Audio pour Arrière-plan (Silent Loop) - CRITIQUE pour MediaSession
-                    const silentBlob = new Blob([new Uint8Array([82,73,70,70,44,0,0,0,87,65,86,69,102,109,116,32,16,0,0,0,1,0,1,0,68,172,0,0,136,88,1,0,2,0,16,0,100,97,116,97,0,0,0,0])], {type: 'audio/wav'});
-                    AudioService.backgroundAudio = new Audio(URL.createObjectURL(silentBlob));
-                    AudioService.backgroundAudio.loop = true;
-                    AudioService.backgroundAudio.volume = 0.01; // Assez fort pour que l'OS ne le tue pas, assez bas pour ne pas gêner
+                    // 2. Initialisation Hack Audio pour Arrière-plan (Silent Loop)
+                    // Uniquement sur Mobile pour économiser CPU sur PC et éviter bugs autoplay
+                    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+                    
+                    if (isMobile) {
+                        const silentBlob = new Blob([new Uint8Array([82,73,70,70,44,0,0,0,87,65,86,69,102,109,116,32,16,0,0,0,1,0,1,0,68,172,0,0,136,88,1,0,2,0,16,0,100,97,116,97,0,0,0,0])], {type: 'audio/wav'});
+                        AudioService.backgroundAudio = new Audio(URL.createObjectURL(silentBlob));
+                        AudioService.backgroundAudio.loop = true;
+                        AudioService.backgroundAudio.volume = 0.01; 
+                        AudioService.backgroundAudio.play().catch(e => console.log("Silent Play blocked"));
+                    }
                     
                     // 3. Support Boutons Casques Bluetooth (Media Session API)
+                    // Enveloppé dans un try/catch strict pour éviter le crash PC
                     if ('mediaSession' in navigator) { 
                         try {
                             navigator.mediaSession.metadata = new MediaMetadata({
                                 title: "COM TAC",
                                 artist: "Canal Sécurisé",
-                                album: "v12.3 Active",
+                                album: "v12.2 Active",
                                 artwork: [{ src: 'favicon.ico', sizes: '96x96', type: 'image/png' }]
                             });
 
-                            const toggleHeadset = () => {
-                                // Important: Toujours garder la session "playing" pour recevoir le prochain event
-                                AudioService.backgroundAudio.play().catch(()=>{});
-                                navigator.mediaSession.playbackState = "playing";
-                                
-                                // Bascule l'état TX
-                                if (App.silenceActive && !App.isHost) {
-                                    App.toast("Silence Radio Actif");
-                                    return;
-                                }
-                                
-                                const newState = !App.user.isTx;
-                                App.user.isTxRequest = newState;
-                                AudioService.tx(newState);
-                                App.toast(newState ? "MICRO CASQUE: ON" : "MICRO CASQUE: OFF");
+                            const toggleTx = (wantOpen) => {
+                                if (App.silenceActive && !App.isHost) return;
+                                App.user.isTxRequest = wantOpen;
+                                AudioService.tx(wantOpen);
+                                try {
+                                    if (navigator.mediaSession.playbackState !== (wantOpen ? "playing" : "paused")) {
+                                        navigator.mediaSession.playbackState = wantOpen ? "playing" : "paused";
+                                    }
+                                } catch(e){}
                             };
 
-                            // On intercepte TOUTES les commandes (Play, Pause, Stop, etc.) pour faire un simple Toggle
-                            // C'est le comportement le plus robuste pour les boutons mono-touche des écouteurs.
-                            ['play', 'pause', 'stop', 'previoustrack', 'nexttrack'].forEach(action => {
-                                try { navigator.mediaSession.setActionHandler(action, toggleHeadset); } catch(e){}
-                            });
-                            
+                            navigator.mediaSession.setActionHandler('play', () => toggleTx(true));
+                            navigator.mediaSession.setActionHandler('pause', () => toggleTx(false));
+                            navigator.mediaSession.setActionHandler('stop', () => toggleTx(false)); 
                         } catch(e) {
                             console.log("MediaSession non supporté ou erreur hardware PC", e);
                         }
                     }
                     
-                    // 4. Détection Casque / Bluetooth
-                    AudioService.checkForHeadset();
-                    try {
-                        navigator.mediaDevices.ondevicechange = () => AudioService.checkForHeadset();
-                    } catch(e){}
-
                     if (App.isHost) MixerService.init(AudioService.stream);
                     return true;
                 } catch(e) { 
                     console.error("Fatal Audio Init Error", e);
                     App.toast("Erreur Audio Critique: " + e.message, true); 
                     return false; 
-                }
-            },
-            
-            checkForHeadset: async () => {
-                try {
-                    const devices = await navigator.mediaDevices.enumerateDevices();
-                    const audioOutputs = devices.filter(d => d.kind === 'audiooutput' || d.kind === 'audioinput');
-                    const hasHeadset = audioOutputs.some(d => {
-                        const l = d.label.toLowerCase();
-                        return l.includes('bluetooth') || l.includes('headset') || l.includes('casque') || l.includes('buds') || l.includes('airpods') || l.includes('freebuds');
-                    });
-                    
-                    const ptt = document.getElementById('ptt-btn');
-                    if (hasHeadset) {
-                        ptt.classList.add('headset-mode');
-                        ptt.innerHTML = '<span class="material-symbols-outlined">headset_mic</span>';
-                    } else {
-                        ptt.classList.remove('headset-mode');
-                        ptt.innerHTML = '<span class="material-symbols-outlined">mic</span>';
-                    }
-                } catch(e) {
-                    console.log("Impossible de scanner les périphériques (Privacy restriction)", e);
                 }
             },
             
@@ -858,11 +826,6 @@
                     else btn.classList.remove('active');
                 }
                 
-                if ('mediaSession' in navigator) {
-                    // Force l'état playing pour garder la main
-                    navigator.mediaSession.playbackState = "playing";
-                }
-
                 // En privé, on ne broadcast pas le statut TX à tout le monde
                 if (!App.privatePeerId) NetService.broadcast(); 
                 App.renderGrid();
@@ -1217,14 +1180,8 @@
                     App.user.callsign = val;
                 }
                 const btn = document.getElementById('btn-login-trigger'); if(btn) btn.innerText = "...";
-                
-                // IMPORTANT: Démarrer le son lors d'un clic utilisateur explicite
-                const audioOk = await AudioService.init(); 
-                if (AudioService.backgroundAudio) AudioService.backgroundAudio.play().catch(()=>{});
-                
-                if(btn) btn.innerText = "CONNEXION";
+                const audioOk = await AudioService.init(); if(btn) btn.innerText = "CONNEXION";
                 if (!audioOk && !skipUI) return;
-                
                 App.saveSession(); App.switchView('view-menu'); MapService.startGPS();
                 if ('wakeLock' in navigator) navigator.wakeLock.request('screen').catch(()=>{});
             },
