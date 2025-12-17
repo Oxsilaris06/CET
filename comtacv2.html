@@ -8,7 +8,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>COM TAC v12.2</title>
+    <title>COM TAC v12.4 (Voice)</title>
     
     <!-- ================= 1. LIBRAIRIES EXTERNES (CDN) ================= -->
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Chakra+Petch:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -378,7 +378,7 @@
     <!-- STRUCTURE UI -->
     <header>
         <div class="brand">
-            <span class="material-symbols-outlined">satellite_alt</span> COM<span>TAC</span> v12.2
+            <span class="material-symbols-outlined">satellite_alt</span> COM<span>TAC</span> v12.4
         </div>
         <div class="nav-group">
             <div class="btn-nav" id="btn-toggle-map" onclick="App.toggleMap()">
@@ -721,6 +721,70 @@
             }
         };
 
+        // --- MODULE COMMANDE VOCALE ---
+        const VoiceService = {
+            recognition: null,
+            isListening: false,
+            
+            init: () => {
+                if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+                    console.log("Speech API non supportée sur ce navigateur");
+                    return false;
+                }
+                const Speech = window.SpeechRecognition || window.webkitSpeechRecognition;
+                VoiceService.recognition = new Speech();
+                VoiceService.recognition.continuous = true;
+                VoiceService.recognition.interimResults = false;
+                VoiceService.recognition.lang = 'fr-FR';
+                VoiceService.recognition.maxAlternatives = 1;
+
+                VoiceService.recognition.onresult = (event) => {
+                    const last = event.results.length - 1;
+                    const command = event.results[last][0].transcript.trim().toLowerCase();
+                    console.log("Commande vocale:", command);
+                    
+                    if (command.includes("ouvre le micro")) {
+                        App.toast("VOCAL: Micro ON");
+                        AudioService.tx(true);
+                    } else if (command.includes("ferme le micro")) {
+                        App.toast("VOCAL: Micro OFF");
+                        AudioService.tx(false);
+                    }
+                };
+
+                VoiceService.recognition.onerror = (e) => {
+                    console.warn("Erreur Vocale:", e.error);
+                    if (VoiceService.isListening && e.error !== 'aborted') {
+                        setTimeout(() => { if (VoiceService.isListening) try{VoiceService.recognition.start()}catch(x){} }, 1000);
+                    }
+                };
+
+                VoiceService.recognition.onend = () => {
+                    if (VoiceService.isListening) {
+                        try{VoiceService.recognition.start()}catch(x){}
+                    }
+                };
+                return true;
+            },
+
+            start: () => {
+                if (!VoiceService.recognition) {
+                    if (!VoiceService.init()) return App.toast("Pas de Support Vocal", true);
+                }
+                VoiceService.isListening = true;
+                try { 
+                    VoiceService.recognition.start(); 
+                    App.toast("COMMANDES VOCALES ACTIVES");
+                } catch(e) { console.log(e); }
+            },
+
+            stop: () => {
+                VoiceService.isListening = false;
+                if (VoiceService.recognition) try{VoiceService.recognition.stop()}catch(e){}
+                App.toast("Commandes Vocales Désactivées");
+            }
+        };
+
         // --- MODULE AUDIO (Web Audio API & Bluetooth) ---
         const AudioService = {
             ctx: null, stream: null, analyser: null, mode: 'ptt', visuCtx: null,
@@ -768,7 +832,7 @@
                             navigator.mediaSession.metadata = new MediaMetadata({
                                 title: "COM TAC",
                                 artist: "Canal Sécurisé",
-                                album: "v12.2 Active",
+                                album: "v12.4 Active",
                                 artwork: [{ src: 'favicon.ico', sizes: '96x96', type: 'image/png' }]
                             });
 
@@ -826,6 +890,10 @@
                     else btn.classList.remove('active');
                 }
                 
+                if ('mediaSession' in navigator) {
+                    navigator.mediaSession.playbackState = active ? "playing" : "paused";
+                }
+
                 // En privé, on ne broadcast pas le statut TX à tout le monde
                 if (!App.privatePeerId) NetService.broadcast(); 
                 App.renderGrid();
@@ -836,11 +904,13 @@
                 const icon = document.getElementById('icon-mic'); const btn = document.getElementById('ptt-btn');
                 if (AudioService.mode === 'vox') {
                     icon.innerText = 'mic'; btn.classList.add('vox-active'); 
-                    App.toast("Mode VOX (Casque)");
+                    // DÉMARRAGE COMMANDE VOCALE
+                    VoiceService.start();
                 } else {
                     icon.innerText = 'mic_none'; btn.classList.remove('vox-active'); 
                     AudioService.tx(false); 
-                    App.toast("Mode PTT");
+                    // ARRÊT COMMANDE VOCALE
+                    VoiceService.stop();
                 }
             },
             
