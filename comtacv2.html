@@ -8,7 +8,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>COM TAC v13.0</title>
+    <title>COM TAC v13.1 BLE</title>
     
     <!-- ================= 1. LIBRAIRIES EXTERNES (CDN) ================= -->
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Chakra+Petch:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -93,7 +93,7 @@
         }
         .brand span { color: var(--color-blue); }
 
-        .nav-group { display: flex; gap: 8px; }
+        .nav-group { display: flex; gap: 8px; align-items: center;}
         
         .btn-nav {
             background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.1);
@@ -103,6 +103,16 @@
         }
         .btn-nav.active { background: var(--color-blue); color: black; border-color: var(--color-blue); }
         .btn-nav.danger { border-color: rgba(239, 68, 68, 0.5); color: var(--color-red); }
+        
+        .ble-status {
+            color: var(--color-dim); 
+            font-size: 1.2rem;
+            animation: none;
+        }
+        .ble-status.connected { color: var(--color-blue); text-shadow: 0 0 10px var(--color-blue); }
+        .ble-status.scanning { animation: blink 1s infinite; color: var(--color-yellow); }
+
+        @keyframes blink { 50% { opacity: 0.3; } }
 
         /* --- VUES (PAGES) --- */
         .view-container { position: relative; flex: 1; overflow: hidden; }
@@ -139,6 +149,9 @@
             transition: background 0.2s;
         }
         .btn-block:active { background: var(--color-surface-light); }
+        
+        .btn-block.ble-btn { border-color: var(--color-blue); background: rgba(59, 130, 246, 0.1); }
+        .btn-block.ble-btn.connected { border-color: var(--color-green); background: rgba(34, 197, 94, 0.1); }
 
         /* --- CARTE (BFT) --- */
         #map-instance { width: 100%; height: 100%; background: #0b0b0b; z-index: 1; }
@@ -378,11 +391,13 @@
     <!-- STRUCTURE UI -->
     <header>
         <div class="brand">
-            <span class="material-symbols-outlined">satellite_alt</span> COM<span>TAC</span> v13.0
+            <span class="material-symbols-outlined">satellite_alt</span> COM<span>TAC</span>
         </div>
         <div class="nav-group">
+            <span id="ble-indicator" class="material-symbols-outlined ble-status">bluetooth</span>
+            
             <div class="btn-nav" id="btn-toggle-map" onclick="App.toggleMap()">
-                <span class="material-symbols-outlined">map</span> Tacmap
+                <span class="material-symbols-outlined">map</span>
             </div>
             <div class="btn-nav danger" id="btn-quit" onclick="App.leaveSession(true)" style="display:none;">
                 <span class="material-symbols-outlined">logout</span>
@@ -434,6 +449,11 @@
             <button class="btn-block" onclick="QRService.start()">
                 <span class="material-symbols-outlined" style="font-size: 1.8rem;">qr_code_scanner</span>
                 <div><div>Scanner QR</div><div style="font-size: 0.7rem; color: var(--color-dim);">Caméra</div></div>
+            </button>
+            
+            <button id="btn-ble-connect" class="btn-block ble-btn" onclick="BluetoothService.connect()">
+                <span class="material-symbols-outlined" style="font-size: 1.8rem;">bluetooth_searching</span>
+                <div><div>Connecter Montre</div><div style="font-size: 0.7rem; color: var(--color-dim);">Garmin PTT (Android/PC)</div></div>
             </button>
 
             <div style="width: 100%; margin-top: 40px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.1);">
@@ -527,6 +547,84 @@
                         { urls: 'stun:stun.l.google.com:443' },
                     ],
                 }
+            }
+        };
+
+        // --- MODULE BLUETOOTH GARMIN ---
+        const BluetoothService = {
+            device: null,
+            server: null,
+            characteristic: null,
+            // UUID Spécifiques pour l'app Garmin Connect IQ
+            // Ces UUIDs doivent correspondre EXACTEMENT au code Monkey C
+            SERVICE_UUID: '5c6b1234-0000-1000-8000-00805f9b34fb', 
+            CHAR_UUID:    '5c6b5678-0000-1000-8000-00805f9b34fb',
+
+            connect: async () => {
+                const ind = document.getElementById('ble-indicator');
+                const btn = document.getElementById('btn-ble-connect');
+                
+                if (!navigator.bluetooth) {
+                    return App.toast("Bluetooth Web non supporté (Utilisez Chrome/Android)", true);
+                }
+
+                try {
+                    ind.classList.add('scanning');
+                    App.toast("Recherche Montre...");
+                    
+                    BluetoothService.device = await navigator.bluetooth.requestDevice({
+                        filters: [{ services: [BluetoothService.SERVICE_UUID] }]
+                    });
+
+                    BluetoothService.device.addEventListener('gattserverdisconnected', BluetoothService.onDisconnected);
+
+                    App.toast("Connexion BLE...");
+                    BluetoothService.server = await BluetoothService.device.gatt.connect();
+                    
+                    const service = await BluetoothService.server.getPrimaryService(BluetoothService.SERVICE_UUID);
+                    BluetoothService.characteristic = await service.getCharacteristic(BluetoothService.CHAR_UUID);
+                    
+                    await BluetoothService.characteristic.startNotifications();
+                    BluetoothService.characteristic.addEventListener('characteristicvaluechanged', BluetoothService.handleNotification);
+
+                    ind.classList.remove('scanning');
+                    ind.classList.add('connected');
+                    btn.classList.add('connected');
+                    btn.querySelector('div div').innerText = "Montre Connectée";
+                    App.toast("GARMIN PTT CONNECTÉ");
+
+                } catch (error) {
+                    console.error('BLE Error:', error);
+                    ind.classList.remove('scanning');
+                    App.toast("Echec Connexion Montre", true);
+                }
+            },
+
+            handleNotification: (event) => {
+                const value = event.target.value.getUint8(0);
+                // 1 = Pressé, 0 = Relâché
+                if (value === 1) {
+                    if (!App.user.isTxRequest) {
+                        App.user.isTxRequest = true;
+                        AudioService.tx(true);
+                    }
+                } else {
+                    if (App.user.isTxRequest) {
+                        App.user.isTxRequest = false;
+                        AudioService.tx(false);
+                    }
+                }
+            },
+
+            onDisconnected: () => {
+                const ind = document.getElementById('ble-indicator');
+                const btn = document.getElementById('btn-ble-connect');
+                ind.classList.remove('connected');
+                btn.classList.remove('connected');
+                btn.querySelector('div div').innerText = "Connecter Montre";
+                App.toast("Montre Déconnectée", true);
+                // Tentative de reconnexion simple si l'objet device existe encore
+                // Note: La reconnexion automatique Web Bluetooth nécessite souvent une action utilisateur
             }
         };
 
