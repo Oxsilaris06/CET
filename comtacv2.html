@@ -8,7 +8,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>COM TAC v12.4 (Voice)</title>
+    <title>COM TAC v12.5</title>
     
     <!-- ================= 1. LIBRAIRIES EXTERNES (CDN) ================= -->
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Chakra+Petch:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -309,6 +309,9 @@
         }
         #ptt-btn.vox-active { border-color: var(--color-green); color: var(--color-green); }
         
+        /* Mode Casque (Icône) */
+        #ptt-btn.headset-mode { border-color: var(--color-blue); color: var(--color-blue); }
+        
         /* État du PTT en Silence Radio */
         body.silence-active #ptt-btn { border-color: #333; color: #333; cursor: not-allowed; }
         body.silence-active #ptt-btn:active { transform: none; background: #222; box-shadow: none; color: #333; }
@@ -378,7 +381,7 @@
     <!-- STRUCTURE UI -->
     <header>
         <div class="brand">
-            <span class="material-symbols-outlined">satellite_alt</span> COM<span>TAC</span> v12.4
+            <span class="material-symbols-outlined">satellite_alt</span> COM<span>TAC</span> v12.5
         </div>
         <div class="nav-group">
             <div class="btn-nav" id="btn-toggle-map" onclick="App.toggleMap()">
@@ -743,11 +746,12 @@
                     const command = event.results[last][0].transcript.trim().toLowerCase();
                     console.log("Commande vocale:", command);
                     
-                    if (command.includes("ouvre le micro")) {
-                        App.toast("VOCAL: Micro ON");
+                    // Logique "Permissive" pour mieux détecter
+                    if (command.includes("ouvre") && command.includes("micro")) {
+                        App.toast("VOCAL: Micro OUVERT 🟢");
                         AudioService.tx(true);
-                    } else if (command.includes("ferme le micro")) {
-                        App.toast("VOCAL: Micro OFF");
+                    } else if (command.includes("ferme") && command.includes("micro")) {
+                        App.toast("VOCAL: Micro FERMÉ 🔴");
                         AudioService.tx(false);
                     }
                 };
@@ -755,7 +759,8 @@
                 VoiceService.recognition.onerror = (e) => {
                     console.warn("Erreur Vocale:", e.error);
                     if (VoiceService.isListening && e.error !== 'aborted') {
-                        setTimeout(() => { if (VoiceService.isListening) try{VoiceService.recognition.start()}catch(x){} }, 1000);
+                        // Tentative de redémarrage robuste
+                        setTimeout(() => { if (VoiceService.isListening) try{VoiceService.recognition.start()}catch(x){} }, 500);
                     }
                 };
 
@@ -803,7 +808,14 @@
                     try {
                         const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
                         AudioService.stream = stream;
+                        
+                        // FIX SILENCE INITIAL: On force mute dès le début
+                        AudioService.stream.getAudioTracks().forEach(t => t.enabled = false);
+                        
+                        // Setup Private stream
                         AudioService.privateStream = stream.clone();
+                        AudioService.privateStream.getAudioTracks().forEach(t => t.enabled = false);
+                        
                     } catch (micErr) {
                         console.warn("Pas de micro détecté ou accès refusé. Mode Écoute seule.");
                         App.toast("Micro non détecté: Mode Écoute", true);
@@ -832,7 +844,7 @@
                             navigator.mediaSession.metadata = new MediaMetadata({
                                 title: "COM TAC",
                                 artist: "Canal Sécurisé",
-                                album: "v12.4 Active",
+                                album: "v12.5 Active",
                                 artwork: [{ src: 'favicon.ico', sizes: '96x96', type: 'image/png' }]
                             });
 
@@ -855,12 +867,40 @@
                         }
                     }
                     
+                    // 4. Détection Casque / Bluetooth
+                    AudioService.checkForHeadset();
+                    try {
+                        navigator.mediaDevices.ondevicechange = () => AudioService.checkForHeadset();
+                    } catch(e){}
+
                     if (App.isHost) MixerService.init(AudioService.stream);
                     return true;
                 } catch(e) { 
                     console.error("Fatal Audio Init Error", e);
                     App.toast("Erreur Audio Critique: " + e.message, true); 
                     return false; 
+                }
+            },
+            
+            checkForHeadset: async () => {
+                try {
+                    const devices = await navigator.mediaDevices.enumerateDevices();
+                    const audioOutputs = devices.filter(d => d.kind === 'audiooutput' || d.kind === 'audioinput');
+                    const hasHeadset = audioOutputs.some(d => {
+                        const l = d.label.toLowerCase();
+                        return l.includes('bluetooth') || l.includes('headset') || l.includes('casque') || l.includes('buds') || l.includes('airpods') || l.includes('freebuds');
+                    });
+                    
+                    const ptt = document.getElementById('ptt-btn');
+                    if (hasHeadset) {
+                        ptt.classList.add('headset-mode');
+                        ptt.innerHTML = '<span class="material-symbols-outlined">headset_mic</span>';
+                    } else {
+                        ptt.classList.remove('headset-mode');
+                        ptt.innerHTML = '<span class="material-symbols-outlined">mic</span>';
+                    }
+                } catch(e) {
+                    console.log("Impossible de scanner les périphériques (Privacy restriction)", e);
                 }
             },
             
@@ -1250,8 +1290,14 @@
                     App.user.callsign = val;
                 }
                 const btn = document.getElementById('btn-login-trigger'); if(btn) btn.innerText = "...";
-                const audioOk = await AudioService.init(); if(btn) btn.innerText = "CONNEXION";
+                
+                // IMPORTANT: Démarrer le son lors d'un clic utilisateur explicite
+                const audioOk = await AudioService.init(); 
+                if (AudioService.backgroundAudio) AudioService.backgroundAudio.play().catch(()=>{});
+                
+                if(btn) btn.innerText = "CONNEXION";
                 if (!audioOk && !skipUI) return;
+                
                 App.saveSession(); App.switchView('view-menu'); MapService.startGPS();
                 if ('wakeLock' in navigator) navigator.wakeLock.request('screen').catch(()=>{});
             },
