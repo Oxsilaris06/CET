@@ -8,7 +8,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>COM TAC v11.3</title>
+    <title>COM TAC v12.0</title>
     
     <!-- ================= 1. LIBRAIRIES EXTERNES (CDN) ================= -->
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Chakra+Petch:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -32,6 +32,7 @@
             --color-red: #ef4444;
             --color-green: #22c55e;
             --color-yellow: #eab308;
+            --color-purple: #a855f7; /* Couleur Privé/Busy */
             --color-text: #e4e4e7;
             --color-dim: #71717a;
             
@@ -79,12 +80,12 @@
             transition: background 0.3s;
         }
         
-        /* Style Spécial Silence Radio */
-        body.silence-active header { 
-            border-bottom: 1px solid var(--color-red); 
-            background: rgba(50, 0, 0, 0.9); 
-        }
+        /* Style Spécial Silence Radio / Privé */
+        body.silence-active header { border-bottom: 1px solid var(--color-red); background: rgba(50, 0, 0, 0.9); }
+        body.private-active header { border-bottom: 1px solid var(--color-purple); background: rgba(20, 0, 40, 0.9); }
+        
         body.silence-active .brand span { color: var(--color-red); }
+        body.private-active .brand span { color: var(--color-purple); }
 
         .brand { 
             font-weight: 800; font-size: 1.2rem; letter-spacing: 1px; 
@@ -178,11 +179,7 @@
         }
         
         /* Statuts & Animation Pulsation */
-        .status-CONTACT .tac-arrow { 
-            border-bottom-color: var(--color-red); 
-            filter: drop-shadow(0 0 10px red); 
-            animation: pulse-arrow 0.8s infinite; 
-        }
+        .status-CONTACT .tac-arrow { border-bottom-color: var(--color-red); filter: drop-shadow(0 0 10px red); animation: pulse-arrow 0.8s infinite; }
         .status-CONTACT .tac-label { border-color: var(--color-red); color: var(--color-red); }
         
         @keyframes pulse-arrow { 
@@ -193,13 +190,18 @@
 
         .status-CLEAR .tac-arrow { border-bottom-color: var(--color-green); }
         .status-CLEAR .tac-label { border-color: var(--color-green); color: var(--color-green); }
+        
         .status-APPUI .tac-arrow { border-bottom-color: var(--color-yellow); }
         .status-APPUI .tac-label { border-color: var(--color-yellow); color: var(--color-yellow); }
+        
         .status-PROGRESSION .tac-arrow { border-bottom-color: var(--color-blue); }
         .status-PROGRESSION .tac-label { border-color: var(--color-blue); color: var(--color-blue); }
 
+        .status-BUSY .tac-arrow { border-bottom-color: var(--color-purple); }
+        .status-BUSY .tac-label { border-color: var(--color-purple); color: var(--color-purple); }
+
         /* Marqueur de PING */
-        .ping-marker { text-align: center; pointer-events: none; } /* Le clic passe à travers le contenu mais pas le marqueur */
+        .ping-marker { text-align: center; pointer-events: none; }
         .ping-icon { 
             color: var(--color-red); font-size: 30px; 
             filter: drop-shadow(0 0 5px black); 
@@ -234,11 +236,25 @@
         .op-card.is-me { background: rgba(59, 130, 246, 0.08); border-color: rgba(59, 130, 246, 0.3); }
         .op-card.talking { border-color: var(--color-green); box-shadow: inset 0 0 20px rgba(34, 197, 94, 0.2); }
         .op-card[data-status="CONTACT"] { animation: pulse-red 1s infinite; }
+        .op-card[data-status="BUSY"] { border-color: var(--color-purple); opacity: 0.8; }
         @keyframes pulse-red { 0%, 100% { border-color: var(--color-red); } 50% { border-color: transparent; } }
+
+        .op-header { display: flex; justify-content: space-between; margin-bottom: 5px; }
+        .op-role { font-size: 0.7rem; color: var(--color-dim); font-weight: 700; background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px; }
+        .op-role.HOST { color: var(--color-yellow); border: 1px solid rgba(234, 179, 8, 0.3); }
 
         .op-callsign { font-family: var(--font-mono); font-size: 1.2rem; font-weight: 800; margin-bottom: 5px; }
         .op-status { font-size: 0.8rem; font-weight: 700; text-transform: uppercase; margin-top: auto; }
         .op-bat { font-size: 0.7rem; color: var(--color-dim); margin-top: 5px; }
+        
+        .btn-private {
+            position: absolute; right: 10px; bottom: 10px;
+            width: 30px; height: 30px; border-radius: 50%;
+            background: rgba(255,255,255,0.1); color: var(--color-dim);
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; transition: 0.2s;
+        }
+        .btn-private:active { background: var(--color-purple); color: white; }
 
         /* --- HUD (BAS DE PAGE) --- */
         .hud-panel {
@@ -251,6 +267,7 @@
         }
         
         body.silence-active .hud-panel { border-top: 2px solid var(--color-red); background: rgba(20, 0, 0, 0.95); }
+        body.private-active .hud-panel { border-top: 2px solid var(--color-purple); background: rgba(20, 0, 40, 0.95); }
 
         .status-bar { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 12px; margin-bottom: 10px; scrollbar-width: none; }
         .chip {
@@ -265,9 +282,14 @@
         .chip[data-val="APPUI"].active { background: var(--color-yellow); color: black; }
         .chip[data-val="PROGRESSION"].active { background: var(--color-blue); color: black; }
         
-        /* Bouton Silence */
+        /* Bouton Silence / Privé */
         .chip.silence-btn { border-color: var(--color-red); color: var(--color-red); }
         .chip.silence-btn.active { background: var(--color-red); color: white; animation: pulse-btn 1s infinite; }
+        
+        .chip.private-exit-btn { border-color: var(--color-purple); color: var(--color-purple); width: 100%; text-align: center; justify-content: center; display: none; }
+        body.private-active .chip.private-exit-btn { display: flex; animation: pulse-btn 2s infinite; }
+        body.private-active .chip:not(.private-exit-btn) { display: none; } /* Cache les autres status en privé */
+
         @keyframes pulse-btn { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
 
         .ptt-container { display: flex; align-items: center; justify-content: center; position: relative; height: 90px; }
@@ -291,10 +313,15 @@
         body.silence-active #ptt-btn { border-color: #333; color: #333; cursor: not-allowed; }
         body.silence-active #ptt-btn:active { transform: none; background: #222; box-shadow: none; color: #333; }
         
-        /* L'Hôte peut parler en Silence */
         body.silence-active.is-host #ptt-btn { border-color: var(--color-red); color: var(--color-red); cursor: pointer; }
         body.silence-active.is-host #ptt-btn:active, body.silence-active.is-host #ptt-btn.active { 
             background: var(--color-red); color: white; box-shadow: 0 0 30px rgba(239, 68, 68, 0.4); 
+        }
+
+        /* État du PTT en Privé */
+        body.private-active #ptt-btn { border-color: var(--color-purple); color: var(--color-purple); }
+        body.private-active #ptt-btn:active, body.private-active #ptt-btn.active {
+            background: var(--color-purple); color: white; box-shadow: 0 0 30px rgba(168, 85, 247, 0.4);
         }
 
         .side-btn {
@@ -334,12 +361,16 @@
             z-index: 9999; display: none; box-shadow: 0 10px 40px rgba(0,0,0,0.8);
         }
         
-        #silence-banner {
+        #silence-banner, #private-banner {
             position: fixed; top: calc(var(--header-height) + var(--safe-top)); width: 100%;
-            background: var(--color-red); color: white; text-align: center; font-weight: 800;
-            padding: 5px; font-size: 0.8rem; z-index: 900; display: none; animation: pulse-btn 2s infinite;
+            text-align: center; font-weight: 800; padding: 5px; font-size: 0.8rem; z-index: 900; 
+            display: none; animation: pulse-btn 2s infinite;
         }
+        #silence-banner { background: var(--color-red); color: white; }
+        #private-banner { background: var(--color-purple); color: white; }
+        
         body.silence-active #silence-banner { display: block; }
+        body.private-active #private-banner { display: block; }
     </style>
 </head>
 <body>
@@ -347,7 +378,7 @@
     <!-- STRUCTURE UI -->
     <header>
         <div class="brand">
-            <span class="material-symbols-outlined">satellite_alt</span> COM<span>TAC</span> v11.3
+            <span class="material-symbols-outlined">satellite_alt</span> COM<span>TAC</span> v12.0
         </div>
         <div class="nav-group">
             <div class="btn-nav" id="btn-toggle-map" onclick="App.toggleMap()">
@@ -360,6 +391,7 @@
     </header>
 
     <div id="silence-banner">SILENCE RADIO ACTIF - ÉCOUTE SEULE</div>
+    <div id="private-banner">CANAL PRIVÉ ACTIF</div>
     <div id="toast-msg">Système Prêt</div>
 
     <!-- OVERLAYS -->
@@ -431,6 +463,10 @@
             <div class="map-btn" onclick="MapService.toggleMode()">
                 <span class="material-symbols-outlined" id="icon-map-mode">light_mode</span>
             </div>
+            <!-- Toggle Trails (Nouveau) -->
+            <div class="map-btn" id="btn-toggle-trails" onclick="MapService.toggleTrails()">
+                <span class="material-symbols-outlined" id="icon-trails">timeline</span>
+            </div>
             <!-- Mode Ping -->
             <div class="map-btn" id="btn-ping-mode" onclick="App.togglePingMode()">
                 <span class="material-symbols-outlined">ads_click</span>
@@ -444,6 +480,9 @@
         <canvas id="visualizer"></canvas>
         
         <div class="status-bar">
+            <!-- Bouton Quitter Privé -->
+            <div class="chip private-exit-btn" onclick="App.leavePrivate()">QUITTER PRIVÉ</div>
+
             <div class="chip" onclick="App.setStatus('PROGRESSION')" data-val="PROGRESSION">PROGRESSION</div>
             <div class="chip" onclick="App.setStatus('CONTACT')" data-val="CONTACT">CONTACT</div>
             <div class="chip" onclick="App.setStatus('CLEAR')" data-val="CLEAR">CLEAR</div>
@@ -475,32 +514,24 @@
 
     <!-- ================= 3. MODULES LOGIQUES (JavaScript) ================= -->
     <script>
-        // --- CONFIGURATION RÉSEAU (FIABILISÉE POUR 4G/5G SANS TURN) ---
-        // Liste de serveurs STUN robustes pour traverser les NAT (4G/Pare-feu)
+        // --- CONFIGURATION RÉSEAU ---
         const CONFIG = {
-            sessionKey: 'comtac_v10_session',
+            sessionKey: 'comtac_v12_session',
             peerConfig: { 
-                debug: 2, // Mode debug pour voir les erreurs NAT
+                debug: 1,
                 config: {
                     iceServers: [
                         { urls: 'stun:stun.l.google.com:19302' },
                         { urls: 'stun:stun1.l.google.com:19302' },
                         { urls: 'stun:stun.l.google.com:443' },
-                        { urls: 'stun:stun.stunprotocol.org:80' }, 
-                        { urls: 'stun:stun.services.mozilla.com' },
-                        { urls: 'stun:stunserver.org' },
-                        { urls: 'stun:stun.nextcloud.com:443' }, 
-                        { urls: 'stun:stun.voip.blackberry.com:3478' }, 
                     ],
-                    iceCandidatePoolSize: 20, 
                 }
             }
         };
 
         // --- MODULE BASE DE DONNÉES (Cache Carte) ---
         const DBService = {
-            db: null, name: 'ComTac_DB_v10',
-            
+            db: null, name: 'ComTac_DB_v12',
             init: async () => {
                 return new Promise((resolve) => {
                     const r = indexedDB.open(DBService.name, 1);
@@ -512,17 +543,11 @@
                     r.onerror = () => resolve();
                 });
             },
-            
-            putTile: (k, b) => { 
-                try { DBService.db.transaction('tiles', 'readwrite').objectStore('tiles').put({ key: k, blob: b }); } catch(e){} 
-            },
-            
+            putTile: (k, b) => { try { DBService.db.transaction('tiles', 'readwrite').objectStore('tiles').put({ key: k, blob: b }); } catch(e){} },
             getTile: async (k) => {
                 if (!DBService.db) return null;
                 return new Promise((res) => { 
-                    try { 
-                        DBService.db.transaction('tiles', 'readonly').objectStore('tiles').get(k).onsuccess = (e) => res(e.target.result?.blob); 
-                    } catch{ res(null); } 
+                    try { DBService.db.transaction('tiles', 'readonly').objectStore('tiles').get(k).onsuccess = (e) => res(e.target.result?.blob); } catch{ res(null); } 
                 });
             }
         };
@@ -532,7 +557,7 @@
             map: null, layer: null, geoId: null, 
             lastLat: 0, lastLng: 0, 
             mode: 'dark', // 'dark' ou 'light'
-            pings: {}, 
+            pings: {}, showTrails: true,
             
             init: () => {
                 if (MapService.map) { MapService.refreshMarkers(); return; }
@@ -556,9 +581,7 @@
                         DBService.getTile(k).then(b => {
                             if(b) { tile.src = URL.createObjectURL(b); done(null, tile); }
                             else fetch(u).then(r => r.blob()).then(b => { 
-                                DBService.putTile(k, b); 
-                                tile.src = URL.createObjectURL(b); 
-                                done(null, tile); 
+                                DBService.putTile(k, b); tile.src = URL.createObjectURL(b); done(null, tile); 
                             }).catch(() => done(null, tile)); 
                         });
                         return tile;
@@ -571,6 +594,17 @@
                 MapService.mode = MapService.mode === 'dark' ? 'light' : 'dark';
                 document.getElementById('icon-map-mode').innerText = MapService.mode === 'dark' ? 'light_mode' : 'dark_mode';
                 MapService.loadLayer();
+            },
+
+            // --- NOUVEAU: Toggle Trails ---
+            toggleTrails: () => {
+                MapService.showTrails = !MapService.showTrails;
+                document.getElementById('icon-trails').style.opacity = MapService.showTrails ? '1' : '0.3';
+                // Update visibility
+                Object.values(App.peers).forEach(p => { if(p.trail) p.trail.setStyle({ opacity: MapService.showTrails ? 0.6 : 0 }); });
+                const me = MapService; // Local storage also has trail
+                if(me.trail) me.trail.setStyle({ opacity: MapService.showTrails ? 0.6 : 0 });
+                App.toast(MapService.showTrails ? "Tracés: VISIBLES" : "Tracés: MASQUÉS");
             },
 
             refreshMarkers: () => {
@@ -606,26 +640,16 @@
                             if (MapService.map) MapService.updateMarker(App.user.id, App.user);
                         },
                         (err) => { 
-                            console.error(`GPS Error (High Acc: ${high}):`, err);
-                            if (high) { 
-                                App.toast("GPS: Haute précision refusée, repli.", true);
-                                tryGPS(false); 
-                            } 
+                            if (high) tryGPS(false); 
                             else { 
-                                const el = document.getElementById('txt-gps-display'); 
-                                if(el) { el.innerText = "GPS ERR"; el.style.color = 'var(--color-red)'; } 
-                                App.toast("GPS: Échec total. Réessai dans 5s.", true);
-                                setTimeout(() => tryGPS(true), 5000);
+                                document.getElementById('txt-gps-display').innerText = "GPS ERR"; 
+                                setTimeout(() => tryGPS(true), 10000);
                             } 
                         },
                         { enableHighAccuracy: high, timeout: high ? 15000 : 30000, maximumAge: 0 } 
                     );
                 };
                 tryGPS(true);
-            },
-            
-            centerMap: () => { 
-                if(MapService.map && App.user.lat) MapService.map.setView([App.user.lat, App.user.lng], 16, { animate: true }); 
             },
             
             updateMarker: (id, data) => {
@@ -647,8 +671,11 @@
                     if (storage.trailPts.length > 50) storage.trailPts.shift();
                     
                     const color = (data.status === 'CONTACT') ? '#ef4444' : '#22c55e';
-                    if (storage.trail) { storage.trail.setLatLngs(storage.trailPts); storage.trail.setStyle({ color: color }); }
-                    else storage.trail = L.polyline(storage.trailPts, { color: color, weight: 2, dashArray: '4,8', opacity: 0.6 }).addTo(MapService.map);
+                    if (storage.trail) { 
+                        storage.trail.setLatLngs(storage.trailPts); 
+                        storage.trail.setStyle({ color: color, opacity: MapService.showTrails ? 0.6 : 0 }); 
+                    }
+                    else storage.trail = L.polyline(storage.trailPts, { color: color, weight: 2, dashArray: '4,8', opacity: MapService.showTrails ? 0.6 : 0 }).addTo(MapService.map);
                 }
             },
 
@@ -671,10 +698,8 @@
                         NetService.broadcast({ type: 'PING_MOVE', id: ping.id, lat: newPos.lat, lng: newPos.lng });
                     });
                     marker.on('contextmenu', () => {
-                        if (true) { 
-                            NetService.broadcast({ type: 'PING_DELETE', id: ping.id });
-                            MapService.removePing(ping.id);
-                        }
+                        NetService.broadcast({ type: 'PING_DELETE', id: ping.id });
+                        MapService.removePing(ping.id);
                     });
                 }
                 MapService.pings[ping.id] = { marker: marker, data: ping };
@@ -696,48 +721,10 @@
             }
         };
 
-        // --- NOUVEAU MODULE: MIXEUR AUDIO HÔTE (Pour Relais) ---
-        const MixerService = {
-            ctx: null, 
-            destination: null, // Le MediaStream de sortie qui sera envoyé à tous les pairs
-            localSource: null, // Le MediaStreamSource du micro local
-            analyser: null, // L'analyser actuel (peut être le local ou le mixé)
-
-            init: (localStream) => {
-                MixerService.ctx = AudioService.ctx;
-                
-                // 1. Créer le nœud de destination pour le flux mixé
-                MixerService.destination = MixerService.ctx.createMediaStreamDestination();
-                
-                // 2. Traiter le flux local (compression et connexion au mixeur)
-                MixerService.localSource = MixerService.ctx.createMediaStreamSource(localStream);
-                const comp = MixerService.ctx.createDynamicsCompressor(); 
-                MixerService.localSource.connect(comp).connect(MixerService.destination);
-
-                // 3. Configurer l'analyser (pour visualiser l'audio local)
-                MixerService.analyser = AudioService.analyser; 
-                MixerService.analyser.connect(MixerService.destination); 
-            },
-
-            // Connecte un flux distant (reçu d'un autre client) au mixeur.
-            connectRemoteStream: (stream) => {
-                const remoteSource = MixerService.ctx.createMediaStreamSource(stream);
-                // Le flux distant est aussi compressé avant d'être mixé.
-                const comp = MixerService.ctx.createDynamicsCompressor(); 
-                remoteSource.connect(comp).connect(MixerService.destination);
-
-                // Stocke la source dans l'objet peer pour référence future si nécessaire (ex: déconnexion)
-                return remoteSource; 
-            },
-
-            getStream: () => MixerService.destination ? MixerService.destination.stream : AudioService.stream
-        };
-
-
         // --- MODULE AUDIO (Web Audio API & Bluetooth) ---
         const AudioService = {
             ctx: null, stream: null, analyser: null, mode: 'ptt', visuCtx: null,
-            backgroundAudio: null,
+            backgroundAudio: null, privateStream: null,
             
             init: async () => {
                 try {
@@ -745,10 +732,11 @@
                     const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
                     AudioService.stream = stream;
                     
+                    // Crée un clone du stream pour les appels privés (pour pouvoir switcher les pistes indépendamment)
+                    AudioService.privateStream = stream.clone();
+                    
                     const AC = window.AudioContext || window.webkitAudioContext;
                     AudioService.ctx = new AC();
-                    // L'analyser n'est PAS connecté directement au stream global ici, 
-                    // car il sera connecté au Mixeur si on est Hôte.
                     AudioService.analyser = AudioService.ctx.createAnalyser(); 
 
                     // 2. Initialisation Hack Audio pour Arrière-plan (Silent Loop)
@@ -756,71 +744,83 @@
                     AudioService.backgroundAudio = new Audio(URL.createObjectURL(silentBlob));
                     AudioService.backgroundAudio.loop = true;
                     AudioService.backgroundAudio.volume = 0.01; 
-                    AudioService.backgroundAudio.play().catch(e => console.log("Silent Play blocked until user interact"));
-
+                    
                     // 3. Support Boutons Casques Bluetooth (Media Session API)
                     if ('mediaSession' in navigator) { 
                         navigator.mediaSession.metadata = new MediaMetadata({
                             title: "COM TAC",
                             artist: "Canal Sécurisé",
-                            album: "v11.3 Active",
+                            album: "v12.0 Active",
                             artwork: [{ src: 'favicon.ico', sizes: '96x96', type: 'image/png' }]
                         });
 
-                        const toggleAction = () => {
-                            if (AudioService.mode === 'vox' || AudioService.mode === 'ptt') {
-                                AudioService.toggleHeadset();
-                            }
+                        // Fonction de bascule TX
+                        const toggleTx = (wantOpen) => {
+                            if (App.silenceActive && !App.isHost) return;
+                            App.user.isTxRequest = wantOpen;
+                            AudioService.tx(wantOpen);
+                            // Met à jour l'état de lecture du téléphone pour garder la synchro
+                            navigator.mediaSession.playbackState = wantOpen ? "playing" : "paused";
                         };
-                        ['play', 'pause', 'stop', 'previoustrack', 'nexttrack'].forEach(evt => {
-                            try { navigator.mediaSession.setActionHandler(evt, toggleAction); } catch(e){}
-                        });
+
+                        // PLAY = OUVRIR MICRO
+                        navigator.mediaSession.setActionHandler('play', () => toggleTx(true));
+                        // PAUSE = FERMER MICRO
+                        navigator.mediaSession.setActionHandler('pause', () => toggleTx(false));
+                        
+                        // Support bouton "Hook" générique (souvent mapé sur play/pause toggle)
+                        try {
+                            navigator.mediaSession.setActionHandler('stop', () => toggleTx(false)); 
+                        } catch(e){}
                     }
                     
-                    // L'initialisation du mixeur pour l'Hôte se fait dans App.login
+                    AudioService.backgroundAudio.play().catch(e => console.log("Silent Play blocked until user interact"));
+                    // Force l'état initial
+                    if ('mediaSession' in navigator) navigator.mediaSession.playbackState = "paused";
+
+                    if (App.isHost) MixerService.init(AudioService.stream);
                     return true;
                 } catch(e) { App.toast("Erreur Micro: " + e.message, true); return false; }
             },
             
             // Transmission (TX)
             tx: (active) => {
-                if (!AudioService.stream) return;
+                const streamToUse = App.privatePeerId ? AudioService.privateStream : AudioService.stream;
+                if (!streamToUse) return;
                 
-                // VÉRIFICATION STRICTE SILENCE RADIO
+                // VÉRIFICATION STRICTE SILENCE RADIO (Sauf Hôte)
                 if (App.silenceActive && !App.isHost) active = false; 
 
-                const open = active;
-                
-                AudioService.stream.getAudioTracks().forEach(t => t.enabled = open);
-                App.user.isTx = open;
+                streamToUse.getAudioTracks().forEach(t => t.enabled = active);
+                App.user.isTx = active;
 
-                // Si l'Hôte est actif, on active/désactive la source locale dans le mixeur.
-                if (App.isHost && MixerService.localSource) {
-                    MixerService.localSource.mediaStream.getAudioTracks().forEach(t => t.enabled = open);
+                // Si Hôte sur canal principal
+                if (App.isHost && !App.privatePeerId && MixerService.localSource) {
+                    MixerService.localSource.mediaStream.getAudioTracks().forEach(t => t.enabled = active);
                 }
                 
                 const btn = document.getElementById('ptt-btn');
                 if (btn) {
-                    if (open) { 
-                        btn.classList.add('active'); 
-                    } else btn.classList.remove('active');
+                    if (active) btn.classList.add('active'); 
+                    else btn.classList.remove('active');
                 }
                 
                 if ('mediaSession' in navigator) {
-                    navigator.mediaSession.playbackState = open ? "playing" : "paused";
+                    navigator.mediaSession.playbackState = active ? "playing" : "paused";
                 }
 
-                NetService.broadcast(); App.renderGrid();
+                // En privé, on ne broadcast pas le statut TX à tout le monde pour éviter de clignoter sur la grille générale
+                // Mais on peut envoyer un signal léger si besoin.
+                if (!App.privatePeerId) NetService.broadcast(); 
+                App.renderGrid();
             },
             
             toggleVox: () => {
                 AudioService.mode = AudioService.mode === 'ptt' ? 'vox' : 'ptt';
                 const icon = document.getElementById('icon-mic'); const btn = document.getElementById('ptt-btn');
-                
                 if (AudioService.mode === 'vox') {
                     icon.innerText = 'mic'; btn.classList.add('vox-active'); 
                     App.toast("Mode VOX (Casque)");
-                    AudioService.tx(false); 
                 } else {
                     icon.innerText = 'mic_none'; btn.classList.remove('vox-active'); 
                     AudioService.tx(false); 
@@ -828,18 +828,11 @@
                 }
             },
             
-            // Appelé par le clic bouton casque
-            toggleHeadset: () => { 
-                const newState = !App.user.isTx;
-                App.user.isTxRequest = newState; 
-                AudioService.tx(newState);
-                App.toast(newState ? "MICRO OUVERT (Casque)" : "MICRO FERMÉ (Casque)");
-                if (navigator.vibrate) navigator.vibrate(newState ? [50, 50, 50] : [200]);
-            },
-            
-            playRemote: (stream) => { 
+            playRemote: (stream, isPrivate = false) => { 
                 const a = new Audio(); a.srcObject = stream; a.playsInline = true; 
+                if (isPrivate) a.volume = 1.0; // Volume max en privé
                 a.play().catch(()=>{}); 
+                return a; // Retourne l'élément audio pour contrôle (mute)
             },
             
             setupViz: () => {
@@ -851,15 +844,10 @@
             
             drawLoop: () => {
                 requestAnimationFrame(AudioService.drawLoop);
-                
-                // Utilise l'analyser du Mixeur si Hôte, sinon celui du service
-                const analyser = App.isHost ? MixerService.analyser : AudioService.analyser;
-
+                const analyser = App.isHost && !App.privatePeerId ? MixerService.analyser : AudioService.analyser;
                 if (!analyser || !AudioService.visuCtx) return;
                 
-                if (App.silenceActive && !App.isHost && App.user.isTx) {
-                     AudioService.tx(false); 
-                }
+                if (App.silenceActive && !App.isHost && App.user.isTx) AudioService.tx(false); 
 
                 const buffer = analyser.frequencyBinCount; const data = new Uint8Array(buffer);
                 analyser.getByteFrequencyData(data);
@@ -871,10 +859,30 @@
                 const bw = (w / buffer) * 2.5; let x = 0;
                 for(let i=0; i<buffer; i++) { 
                     const bh = data[i] / 2; 
-                    ctx.fillStyle = `rgba(59, 130, 246, ${bh/255})`; 
+                    ctx.fillStyle = App.privatePeerId ? `rgba(168, 85, 247, ${bh/255})` : `rgba(59, 130, 246, ${bh/255})`; 
                     ctx.fillRect(x, h - bh, bw, bh); x += bw + 1; 
                 }
             }
+        };
+
+        // --- MODULE MIXEUR AUDIO HÔTE (Pour Relais) ---
+        const MixerService = {
+            ctx: null, destination: null, localSource: null, analyser: null,
+            init: (localStream) => {
+                MixerService.ctx = AudioService.ctx;
+                MixerService.destination = MixerService.ctx.createMediaStreamDestination();
+                MixerService.localSource = MixerService.ctx.createMediaStreamSource(localStream);
+                const comp = MixerService.ctx.createDynamicsCompressor(); 
+                MixerService.localSource.connect(comp).connect(MixerService.destination);
+                MixerService.analyser = AudioService.analyser; 
+                MixerService.analyser.connect(MixerService.destination); 
+            },
+            connectRemoteStream: (stream) => {
+                const remoteSource = MixerService.ctx.createMediaStreamSource(stream);
+                const comp = MixerService.ctx.createDynamicsCompressor(); 
+                remoteSource.connect(comp).connect(MixerService.destination);
+            },
+            getStream: () => MixerService.destination ? MixerService.destination.stream : AudioService.stream
         };
 
         // --- MODULE RÉSEAU (PeerJS) ---
@@ -885,14 +893,7 @@
                 document.getElementById('btn-create-host').innerHTML = 'Init...';
                 App.isHost = true; App.user.role = 'HOST'; document.body.classList.add('is-host');
                 document.getElementById('btn-silence').style.display = 'block';
-                // Initialisation du mixeur pour l'Hôte (essentiel au relais)
-                MixerService.init(AudioService.stream); 
                 NetService.initPeer(id);
-            },
-            
-            resetJoinUI: () => { 
-                const btn = document.getElementById('btn-join-trigger'); 
-                if(btn){ btn.innerHTML = 'REJOINDRE'; btn.disabled = false; } 
             },
             
             joinSession: (id = null) => {
@@ -905,54 +906,6 @@
                 NetService.initPeer();
             },
             
-            tryConnectToHost: () => {
-                if (!NetService.peer?.open || !NetService.hostId) return;
-                const hostConn = NetService.peer.connect(NetService.hostId, { metadata: App.user });
-                App.toast(`Connexion #${NetService.retryCount} vers ${NetService.hostId}...`);
-
-                hostConn.on('open', () => {
-                    NetService.handleConn(hostConn); 
-                    hostConn.send({ type: 'FULL', user: App.user }); 
-                    NetService.resetJoinUI();
-                    NetService.retryCount = 0; 
-                    App.toast("Connecté"); 
-                    App.saveSession(NetService.hostId); 
-                    App.switchView('view-ops'); 
-                    // Appel audio vers l'Hôte avec le stream local du client
-                    NetService.callHostForAudio(NetService.hostId, AudioService.stream); 
-                });
-                
-                hostConn.on('error', (err) => { 
-                    console.error("Erreur Data Host:", err);
-                    NetService.retryConnection();
-                });
-                
-                hostConn.on('close', () => { 
-                    if (NetService.retryCount === 0) App.toast("Déconnexion Host.", true);
-                });
-            },
-
-            retryConnection: () => {
-                if (NetService.retryCount < 5) {
-                    NetService.retryCount++;
-                    const delay = NetService.retryCount * 2000;
-                    App.toast(`Échec. Réessai dans ${delay/1000}s... (${NetService.retryCount}/5)`, true);
-                    setTimeout(NetService.tryConnectToHost, delay);
-                } else {
-                    App.toast("Hôte injoignable.", true);
-                    NetService.resetJoinUI();
-                }
-            },
-
-            // Mise à jour de la fonction pour utiliser le stream passé en paramètre
-            callHostForAudio: (hostId, streamToSend) => {
-                // Utilise le stream local du client (AudioService.stream)
-                const call = NetService.peer.call(hostId, streamToSend); 
-                App.peers[hostId].call = call; // Sauvegarde l'objet call (utile si on veut raccrocher)
-                call.on('stream', s => AudioService.playRemote(s)); // Reçoit le flux mixé de l'Hôte
-                call.on('error', (err) => console.error("Erreur Audio Call", err));
-            },
-            
             initPeer: (id = null) => {
                 if (NetService.peer) NetService.peer.destroy();
                 const peerId = id || (App.isHost ? null : NetService.hostId ? null : crypto.randomUUID());
@@ -961,12 +914,8 @@
                 peer.on('open', (pid) => {
                     App.user.id = pid; NetService.retryCount = 0;
                     document.getElementById('txt-id-display').innerText = `CANAL: ${App.isHost ? pid : NetService.hostId}`;
-                    
                     if (App.isHost) { 
-                        NetService.startHeartbeat(); 
-                        App.saveSession(pid); 
-                        App.switchView('view-ops'); 
-                        App.toast(`Hôte actif. ID: ${pid}`);
+                        NetService.startHeartbeat(); App.saveSession(pid); App.switchView('view-ops'); 
                     } else if (NetService.hostId) {
                         NetService.tryConnectToHost();
                     }
@@ -974,59 +923,66 @@
 
                 peer.on('error', (err) => {
                     if (err.type === 'unavailable-id' && App.isHost && id) { 
-                        if (NetService.retryCount < 5) { 
-                            NetService.retryCount++; 
-                            setTimeout(() => NetService.initPeer(id), 1500); 
-                        } else { 
-                            NetService.peer.destroy(); NetService.initPeer(null); 
-                        } 
-                    } else if (err.type !== 'peer-unavailable') { 
-                        App.toast(`Err Réseau: ${err.type}`, true); NetService.resetJoinUI(); 
-                    }
+                        setTimeout(() => NetService.initPeer(id), 1500); 
+                    } else { App.toast(`Err Réseau: ${err.type}`, true); }
                 });
                 
-                peer.on('disconnected', () => { 
-                    App.toast("PeerJS déconnecté. Reco...");
-                    peer.reconnect();
-                });
-
                 peer.on('connection', (conn) => {
-                    if (conn.metadata?.id) { 
-                        if (!App.peers[conn.peer]) App.peers[conn.peer] = {}; 
-                        App.peers[conn.peer].conn = conn; 
-                        App.peers[conn.peer].data = conn.metadata; 
-                        App.renderGrid(); 
-                        App.toast(`Nouveau contact: ${conn.metadata.callsign}`);
-                    }
                     NetService.handleConn(conn);
                 });
                 
-                // GESTION DES APPELS AUDIO (HÔTE SEULEMENT)
                 peer.on('call', (call) => { 
+                    // GESTION DES APPELS ENTRANTS
+                    
+                    // 1. Appel Privé (Metadata ne passe pas toujours bien sur les calls, on devine par le contexte ou un flag)
+                    // Simplification: Si on a accepté une demande privée, on attend un appel de ce peer.
+                    if (App.privatePeerId && call.peer === App.privatePeerId) {
+                         call.answer(AudioService.privateStream);
+                         call.on('stream', s => {
+                             AudioService.playRemote(s, true); // Play private stream
+                             App.toast("Audio Privé Établi");
+                         });
+                         App.privateCall = call;
+                         return;
+                    }
+
+                    // 2. Appel standard vers Hôte (Relais)
                     if (App.isHost) {
-                        // L'Hôte répond avec le flux mixé (qui contient aussi son propre micro si TX est actif)
                         call.answer(MixerService.getStream()); 
-                        
-                        // Lorsqu'un client envoie son stream à l'Hôte
                         call.on('stream', s => { 
-                            // 1. Jouer le stream localement (pour l'Hôte)
                             AudioService.playRemote(s);
-                            
-                            // 2. CONNECTER LE STREAM AU MIXEUR pour qu'il soit rediffusé aux autres clients
-                            // Il n'est pas nécessaire de stocker la source si on ne veut pas gérer la déconnexion audio fine.
                             MixerService.connectRemoteStream(s);
                         });
-                        // Sauvegarde l'objet call dans l'objet peer correspondant (pour le nom, etc.)
                         if (App.peers[call.peer]) App.peers[call.peer].call = call;
-
                     } else {
-                        // Client: Jouer le flux mixé reçu de l'Hôte (réponse à l'appel initial)
-                        call.answer(null); // Ne répond pas avec son stream (il l'a déjà envoyé)
-                        call.on('stream', s => AudioService.playRemote(s)); 
+                        // 3. Réponse de l'hôte (Mix)
+                        call.answer(null); 
+                        call.on('stream', s => {
+                            // On stocke l'élément audio pour pouvoir le muter en mode privé
+                            App.hostAudioElement = AudioService.playRemote(s); 
+                        }); 
                     }
                 });
                 
                 NetService.peer = peer;
+            },
+
+            tryConnectToHost: () => {
+                if (!NetService.peer?.open || !NetService.hostId) return;
+                const hostConn = NetService.peer.connect(NetService.hostId, { metadata: App.user });
+                
+                hostConn.on('open', () => {
+                    NetService.handleConn(hostConn); 
+                    hostConn.send({ type: 'FULL', user: App.user }); 
+                    App.saveSession(NetService.hostId); App.switchView('view-ops'); 
+                    NetService.callHostForAudio(NetService.hostId, AudioService.stream); 
+                });
+            },
+
+            callHostForAudio: (hostId, stream) => {
+                const call = NetService.peer.call(hostId, stream); 
+                App.peers[hostId].call = call;
+                call.on('stream', s => App.hostAudioElement = AudioService.playRemote(s)); 
             },
             
             handleConn: (conn) => {
@@ -1034,37 +990,32 @@
                 App.peers[conn.peer].conn = conn; 
                 
                 conn.on('data', (d) => {
-                    // Les messages FULL/UPDATE (position/statut) sont reçus.
                     if (d.type === 'FULL' || d.type === 'UPDATE') {
                         NetService.updatePeer(d.user);
-                        
-                        // LOGIQUE DE RELAIS DATA (inchangée)
-                        if (App.isHost) Object.values(App.peers).forEach(p => { 
-                            if (p.conn?.open && p.conn.peer !== d.user.id) p.conn.send({ type: 'UPDATE', user: d.user }); 
-                        });
-                        
+                        if (App.isHost) NetService.broadcast(d); // Relais info
                     }
-                    if (d.type === 'SYNC') { 
-                        d.list.forEach(u => NetService.updatePeer(u)); 
-                        if(d.silence !== undefined) App.setSilence(d.silence); 
-                    }
-                    if (d.type === 'PING') {
-                        MapService.addPingMarker(d.ping);
-                        if (App.isHost) Object.values(App.peers).forEach(p => { if(p.conn?.open && p.conn.peer !== conn.peer) p.conn.send(d); });
-                    }
-                    if (d.type === 'PING_MOVE') {
-                        if (MapService.pings[d.id]) MapService.pings[d.id].marker.setLatLng([d.lat, d.lng]);
-                        if (App.isHost) Object.values(App.peers).forEach(p => { if(p.conn?.open && p.conn.peer !== conn.peer) p.conn.send(d); });
-                    }
-                    if (d.type === 'PING_DELETE') {
-                        MapService.removePing(d.id);
-                        if (App.isHost) Object.values(App.peers).forEach(p => { if(p.conn?.open && p.conn.peer !== conn.peer) p.conn.send(d); });
-                    }
+                    if (d.type === 'SYNC') { d.list.forEach(u => NetService.updatePeer(u)); if(d.silence !== undefined) App.setSilence(d.silence); }
+                    if (d.type === 'PING') { MapService.addPingMarker(d.ping); if (App.isHost) NetService.broadcast(d); }
+                    if (d.type === 'PING_MOVE') { if (MapService.pings[d.id]) MapService.pings[d.id].marker.setLatLng([d.lat, d.lng]); if (App.isHost) NetService.broadcast(d); }
+                    if (d.type === 'PING_DELETE') { MapService.removePing(d.id); if (App.isHost) NetService.broadcast(d); }
                     if (d.type === 'SILENCE') App.setSilence(d.state);
+                    
+                    // --- LOGIQUE PRIVÉE ---
+                    if (d.type === 'PRIVATE_REQ') {
+                        if (confirm(`Appel Privé de ${App.peers[d.from]?.data?.callsign || d.from} ?`)) {
+                            conn.send({ type: 'PRIVATE_ACK', from: App.user.id });
+                            App.enterPrivate(d.from, false); // false = je n'appelle pas, j'attends l'appel ou je laisse l'autre initier
+                        }
+                    }
+                    if (d.type === 'PRIVATE_ACK') {
+                        App.enterPrivate(d.from, true); // true = j'initie l'appel audio
+                    }
+                    if (d.type === 'PRIVATE_END') {
+                        App.leavePrivate(false); // false = pas besoin d'envoyer le signal puisqu'on le reçoit
+                    }
                 });
                 
                 conn.on('open', () => {
-                    if (!App.peers[conn.peer]) App.peers[conn.peer] = {}; App.peers[conn.peer].conn = conn;
                     if (App.isHost) {
                         const list = Object.values(App.peers).map(p => p.data).filter(d => d && d.id); list.push(App.user);
                         conn.send({ type: 'SYNC', list: list, silence: App.silenceActive });
@@ -1073,17 +1024,12 @@
                     NetService.broadcast();
                 });
                 
-                conn.on('close', () => { 
-                    App.toast(`Contact perdu: ${App.peers[conn.peer]?.data?.callsign || conn.peer}`, true);
-                    delete App.peers[conn.peer]; App.renderGrid(); 
-                });
+                conn.on('close', () => { delete App.peers[conn.peer]; App.renderGrid(); });
             },
             
-            // Broadcast : Envoi des mises à jour de statut/position de l'utilisateur local.
             broadcast: (msg) => {
                 if(!msg) msg = { type: 'UPDATE', user: App.user };
-                // Envoie à tous les pairs, y compris l'Hôte si l'appel vient d'un client.
-                Object.values(App.peers).forEach(p => { if (p.conn?.open) p.conn.send(msg); });
+                Object.values(App.peers).forEach(p => { if (p.conn?.open && p.conn.peer !== msg.from) p.conn.send(msg); });
                 if (App.isHost && msg.type === 'UPDATE') App.renderGrid();
             },
             
@@ -1095,14 +1041,10 @@
             },
             
             startHeartbeat: () => {
-                // Heartbeat : L'Hôte envoie périodiquement une synchronisation complète pour garantir
-                // la cohérence des données (y compris Silence Radio).
                 setInterval(() => {
                     if (!App.isHost) return;
                     const list = Object.values(App.peers).map(p => p.data).filter(d => d && d.id); list.push(App.user);
-                    Object.values(App.peers).forEach(p => { 
-                        if (p.conn?.open) p.conn.send({ type: 'SYNC', list: list, silence: App.silenceActive }); 
-                    });
+                    Object.values(App.peers).forEach(p => { if (p.conn?.open) p.conn.send({ type: 'SYNC', list: list, silence: App.silenceActive }); });
                 }, 1000);
             }
         };
@@ -1124,8 +1066,7 @@
             stop: () => { if (QRService.scanner) QRService.scanner.stop().catch(()=>{}); document.getElementById('overlay-scanner').style.display = 'none'; },
             show: () => {
                 const idToShow = App.isHost ? App.user.id : NetService.hostId; 
-                if (!idToShow) return App.toast("Pas de canal actif pour QR", true);
-                
+                if (!idToShow) return App.toast("Pas de canal actif", true);
                 document.getElementById('qr-code-region').innerHTML = '';
                 new QRCode(document.getElementById('qr-code-region'), { text: idToShow, width: 256, height: 256 });
                 document.getElementById('qr-text-val').innerText = idToShow;
@@ -1138,31 +1079,22 @@
         const App = {
             user: { id: null, callsign: '', role: 'OPR', status: 'CLEAR', lat: 0, lng: 0, head: 0, bat: null, isTx: false },
             peers: {}, isHost: false, pingMode: false, silenceActive: false,
-            
+            privatePeerId: null, privateCall: null, hostAudioElement: null,
+
             init: async () => {
-                if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
-                    App.toast("HTTPS Requis pour le Micro et le GPS", true);
-                }
                 await DBService.init(); App.initBattery(); App.checkSession();
-                
                 window.addEventListener('beforeunload', () => { if(NetService.peer) NetService.peer.destroy(); });
                 
                 const btn = document.getElementById('ptt-btn');
                 const start = (e) => { 
-                    // En mode VOX, le bouton PTT écran reste actif (en parallèle du casque)
-                    // mais il fonctionne en "Push" classique, pas en Toggle.
                     if(e.cancelable) e.preventDefault(); 
                     if (App.silenceActive && !App.isHost) { App.toast("SILENCE RADIO ACTIF", true); return; }
                     App.user.isTxRequest = true; AudioService.tx(true); 
                 };
                 const end = (e) => { 
                     if(e.cancelable) e.preventDefault(); 
-                    // Si on est en VOX, le bouton PTT ne doit pas couper le micro si c'était ouvert par le casque
-                    // Sauf si on veut un comportement "Emergency Cut".
-                    // Ici on coupe.
                     App.user.isTxRequest = false; AudioService.tx(false); 
                 };
-                
                 btn.addEventListener('mousedown', start); btn.addEventListener('mouseup', end);
                 btn.addEventListener('mouseleave', end); btn.addEventListener('touchstart', start); btn.addEventListener('touchend', end);
             },
@@ -1171,13 +1103,8 @@
                 const s = JSON.parse(localStorage.getItem(CONFIG.sessionKey));
                 if (s) {
                     App.user.callsign = s.callsign;
-                    if (s.freq) { 
-                        App.isHost = s.isHost; 
-                        App.login(true).then(() => { 
-                            if (s.isHost) NetService.createSession(s.freq); 
-                            else NetService.joinSession(s.freq); 
-                        }); 
-                    } else document.getElementById('input-callsign').value = s.callsign;
+                    if (s.freq) { App.isHost = s.isHost; App.login(true).then(() => { if (s.isHost) NetService.createSession(s.freq); else NetService.joinSession(s.freq); }); } 
+                    else document.getElementById('input-callsign').value = s.callsign;
                 }
             },
             
@@ -1188,25 +1115,14 @@
                     App.user.callsign = val;
                 }
                 const btn = document.getElementById('btn-login-trigger'); if(btn) btn.innerText = "...";
-                
-                // IMPORTANT: AudioService.init doit être déclenché par une interaction utilisateur 
-                // pour que le "Silent Loop" d'arrière plan démarre correctement.
                 const audioOk = await AudioService.init(); if(btn) btn.innerText = "CONNEXION";
                 if (!audioOk && !skipUI) return;
-                
                 App.saveSession(); App.switchView('view-menu'); MapService.startGPS();
                 if ('wakeLock' in navigator) navigator.wakeLock.request('screen').catch(()=>{});
             },
             
-            saveSession: (freq = null) => { 
-                localStorage.setItem(CONFIG.sessionKey, JSON.stringify({ callsign: App.user.callsign, freq: freq, isHost: App.isHost })); 
-            },
-            
-            leaveSession: (full = false) => { 
-                if (NetService.peer) NetService.peer.destroy(); 
-                if (full) localStorage.removeItem(CONFIG.sessionKey); 
-                location.reload(); 
-            },
+            saveSession: (freq = null) => { localStorage.setItem(CONFIG.sessionKey, JSON.stringify({ callsign: App.user.callsign, freq: freq, isHost: App.isHost })); },
+            leaveSession: (full = false) => { if (NetService.peer) NetService.peer.destroy(); if (full) localStorage.removeItem(CONFIG.sessionKey); location.reload(); },
             
             switchView: (id) => {
                 document.querySelectorAll('.view').forEach(el => el.classList.remove('active')); document.getElementById(id).classList.add('active');
@@ -1230,7 +1146,52 @@
                 document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
                 const c = document.querySelector(`.chip[data-val="${s}"]`); if(c) c.classList.add('active');
                 NetService.broadcast(); App.renderGrid(); 
-                if(MapService.map) MapService.updateMarker(App.user.id, App.user);
+            },
+
+            // --- GESTION PRIVÉE ---
+            requestPrivate: (targetId) => {
+                if (App.privatePeerId) return App.toast("Déjà en privé", true);
+                if (App.peers[targetId].data.status === 'BUSY') return App.toast("Opérateur Occupé", true);
+                App.toast("Invitation envoyée...");
+                App.peers[targetId].conn.send({ type: 'PRIVATE_REQ', from: App.user.id });
+            },
+
+            enterPrivate: (peerId, initiateCall) => {
+                App.privatePeerId = peerId;
+                document.body.classList.add('private-active');
+                App.setStatus('BUSY');
+                
+                // Mute l'audio principal (Host)
+                if (App.hostAudioElement) App.hostAudioElement.muted = true;
+
+                // Initiate P2P call if asked
+                if (initiateCall) {
+                    const call = NetService.peer.call(peerId, AudioService.privateStream);
+                    call.on('stream', s => {
+                        AudioService.playRemote(s, true); 
+                        App.toast("Audio Privé Établi");
+                    });
+                    App.privateCall = call;
+                }
+            },
+
+            leavePrivate: (sendSignal = true) => {
+                if (!App.privatePeerId) return;
+                
+                if (sendSignal) {
+                    const conn = App.peers[App.privatePeerId]?.conn;
+                    if (conn) conn.send({ type: 'PRIVATE_END' });
+                }
+
+                if (App.privateCall) { App.privateCall.close(); App.privateCall = null; }
+                
+                App.privatePeerId = null;
+                document.body.classList.remove('private-active');
+                App.setStatus('CLEAR'); // Retour statut vert
+                
+                // Unmute Main Audio
+                if (App.hostAudioElement) App.hostAudioElement.muted = false;
+                App.toast("Retour Canal Principal");
             },
             
             togglePingMode: () => { 
@@ -1241,16 +1202,9 @@
             
             sendPing: (latlng) => {
                 App.togglePingMode(); 
-                const msg = prompt("Message du Ping:", "CIBLE"); 
-                if (!msg) return;
-
-                const pingData = { 
-                    id: Date.now() + '_' + Math.random(), 
-                    lat: latlng.lat, lng: latlng.lng, 
-                    msg: msg, sender: App.user.callsign 
-                };
-                MapService.addPingMarker(pingData); 
-                NetService.broadcast({ type: 'PING', ping: pingData });
+                const msg = prompt("Message du Ping:", "CIBLE"); if (!msg) return;
+                const pingData = { id: Date.now() + '_' + Math.random(), lat: latlng.lat, lng: latlng.lng, msg: msg, sender: App.user.callsign };
+                MapService.addPingMarker(pingData); NetService.broadcast({ type: 'PING', ping: pingData });
             },
             
             toggleSilence: () => { 
@@ -1262,12 +1216,10 @@
             setSilence: (active) => {
                 App.silenceActive = active;
                 if (active) { 
-                    document.body.classList.add('silence-active'); 
-                    document.getElementById('btn-silence').classList.add('active'); 
+                    document.body.classList.add('silence-active'); document.getElementById('btn-silence').classList.add('active'); 
                     if(!App.isHost) AudioService.tx(false); 
                 } else { 
-                    document.body.classList.remove('silence-active'); 
-                    document.getElementById('btn-silence').classList.remove('active'); 
+                    document.body.classList.remove('silence-active'); document.getElementById('btn-silence').classList.remove('active'); 
                 }
             },
             
@@ -1279,34 +1231,39 @@
                     const div = document.createElement('div');
                     div.className = `op-card ${u.isMe ? 'is-me' : ''} ${u.isTx ? 'talking' : ''}`;
                     if(u.status === 'CONTACT') div.setAttribute('data-status', 'CONTACT');
+                    if(u.status === 'BUSY') div.setAttribute('data-status', 'BUSY');
                     
                     const bat = (u.bat != null) ? `🔋 ${u.bat}%` : '🔋 --'; 
-
                     let col = '#aaa';
                     if(u.status === 'CONTACT') col = 'var(--color-red)';
                     else if(u.status === 'PROGRESSION') col = 'var(--color-blue)';
                     else if(u.status === 'CLEAR') col = 'var(--color-green)';
-                    else if(u.status === 'APPUI') col = 'var(--color-yellow)';
-                    div.innerHTML = `<div class="op-header"><span class="op-role ${u.role === 'HOST' ? 'HOST' : ''}">${u.role}</span>${u.isTx ? '<span class="material-symbols-outlined" style="color:var(--color-green); font-size:1rem;">graphic_eq</span>' : ''}</div><div class="op-callsign">${u.callsign}</div><div class="op-status" style="color:${col}">${u.status}</div><div class="op-bat">${bat}</div><div class="viz-bar"><div class="viz-fill" style="width:${u.isTx ? '100%' : '0%'}"></div></div>`;
+                    else if(u.status === 'BUSY') col = 'var(--color-purple)';
+                    
+                    let btnPrivate = '';
+                    if (!u.isMe && !App.privatePeerId) {
+                        btnPrivate = `<div class="btn-private" onclick="App.requestPrivate('${u.id}')"><span class="material-symbols-outlined" style="font-size:16px;">lock</span></div>`;
+                    } else if (u.id === App.privatePeerId) {
+                        btnPrivate = `<div class="btn-private" style="color:var(--color-purple)"><span class="material-symbols-outlined" style="font-size:16px;">lock_open</span></div>`;
+                    }
+
+                    div.innerHTML = `
+                        <div class="op-header"><span class="op-role ${u.role === 'HOST' ? 'HOST' : ''}">${u.role}</span>${u.isTx ? '<span class="material-symbols-outlined" style="color:var(--color-green); font-size:1rem;">graphic_eq</span>' : ''}</div>
+                        <div class="op-callsign">${u.callsign}</div>
+                        <div class="op-status" style="color:${col}">${u.status}</div>
+                        <div class="op-bat">${bat}</div>
+                        <div class="viz-bar"><div class="viz-fill" style="width:${u.isTx ? '100%' : '0%'}"></div></div>
+                        ${btnPrivate}
+                    `;
                     grid.appendChild(div);
                 });
             },
             
             initBattery: () => { 
                 if ('getBattery' in navigator) navigator.getBattery().then(b => { 
-                    const up = () => { 
-                        App.user.bat = Math.floor(b.level * 100); 
-                        NetService.broadcast(); 
-                        App.renderGrid(); 
-                    }; 
-                    up(); 
-                    b.addEventListener('levelchange', up); 
-                    b.addEventListener('chargingchange', up); 
-                }).catch(e => {
-                    App.user.bat = null; 
-                    NetService.broadcast(); 
-                }); 
-                else { App.user.bat = null; }
+                    const up = () => { App.user.bat = Math.floor(b.level * 100); NetService.broadcast(); App.renderGrid(); }; 
+                    up(); b.addEventListener('levelchange', up); b.addEventListener('chargingchange', up); 
+                }).catch(e => { App.user.bat = null; NetService.broadcast(); }); else { App.user.bat = null; }
             },
             
             toast: (msg, err = false) => { 
@@ -1319,24 +1276,13 @@
             copyID: () => { 
                 const txt = document.getElementById('txt-id-display').innerText.replace('CANAL: ', ''); 
                 if (txt) { 
-                    try {
-                        navigator.clipboard.writeText(txt); 
-                        App.toast("ID Copié"); 
-                    } catch (e) {
-                        const el = document.createElement('textarea');
-                        el.value = txt;
-                        document.body.appendChild(el);
-                        el.select();
-                        document.execCommand('copy');
-                        document.body.removeChild(el);
-                        App.toast("ID Copié (Fallback)");
-                    }
+                    try { navigator.clipboard.writeText(txt); App.toast("ID Copié"); } 
+                    catch (e) { const el = document.createElement('textarea'); el.value = txt; document.body.appendChild(el); el.select(); document.execCommand('copy'); document.body.removeChild(el); App.toast("ID Copié (Fallback)"); }
                 } 
             }
         };
 
         document.addEventListener('DOMContentLoaded', App.init);
-
     </script>
 </body>
 </html>
