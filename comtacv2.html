@@ -8,7 +8,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>COM TAC v12.0</title>
+    <title>COM TAC v12.1</title>
     
     <!-- ================= 1. LIBRAIRIES EXTERNES (CDN) ================= -->
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Chakra+Petch:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -378,7 +378,7 @@
     <!-- STRUCTURE UI -->
     <header>
         <div class="brand">
-            <span class="material-symbols-outlined">satellite_alt</span> COM<span>TAC</span> v12.0
+            <span class="material-symbols-outlined">satellite_alt</span> COM<span>TAC</span> v12.1
         </div>
         <div class="nav-group">
             <div class="btn-nav" id="btn-toggle-map" onclick="App.toggleMap()">
@@ -737,6 +737,8 @@
                     
                     const AC = window.AudioContext || window.webkitAudioContext;
                     AudioService.ctx = new AC();
+                    if (AudioService.ctx.state === 'suspended') await AudioService.ctx.resume(); // Fix PC Audio start
+
                     AudioService.analyser = AudioService.ctx.createAnalyser(); 
 
                     // 2. Initialisation Hack Audio pour Arrière-plan (Silent Loop)
@@ -750,7 +752,7 @@
                         navigator.mediaSession.metadata = new MediaMetadata({
                             title: "COM TAC",
                             artist: "Canal Sécurisé",
-                            album: "v12.0 Active",
+                            album: "v12.1 Active",
                             artwork: [{ src: 'favicon.ico', sizes: '96x96', type: 'image/png' }]
                         });
 
@@ -867,21 +869,42 @@
 
         // --- MODULE MIXEUR AUDIO HÔTE (Pour Relais) ---
         const MixerService = {
-            ctx: null, destination: null, localSource: null, analyser: null,
+            ctx: null, destination: null, localSource: null, analyser: null, compressor: null,
+            
             init: (localStream) => {
-                MixerService.ctx = AudioService.ctx;
-                MixerService.destination = MixerService.ctx.createMediaStreamDestination();
-                MixerService.localSource = MixerService.ctx.createMediaStreamSource(localStream);
-                const comp = MixerService.ctx.createDynamicsCompressor(); 
-                MixerService.localSource.connect(comp).connect(MixerService.destination);
-                MixerService.analyser = AudioService.analyser; 
-                MixerService.analyser.connect(MixerService.destination); 
+                // Protection Anti-Crash: Si déjà initialisé, on ne refait pas le graph
+                if (MixerService.destination) return;
+                
+                try {
+                    MixerService.ctx = AudioService.ctx;
+                    MixerService.destination = MixerService.ctx.createMediaStreamDestination();
+                    
+                    // Chaîne Audio: Sources -> Compresseur -> Analyser -> Destination (Out)
+                    MixerService.compressor = MixerService.ctx.createDynamicsCompressor();
+                    MixerService.analyser = AudioService.analyser; 
+                    
+                    // Connexions
+                    MixerService.compressor.connect(MixerService.analyser);
+                    MixerService.analyser.connect(MixerService.destination);
+    
+                    // Input Micro Local (si dispo)
+                    if (localStream && localStream.getAudioTracks().length > 0) {
+                        MixerService.localSource = MixerService.ctx.createMediaStreamSource(localStream);
+                        MixerService.localSource.connect(MixerService.compressor);
+                    }
+                } catch(e) {
+                    console.error("Mixer Init Error:", e);
+                    App.toast("Err Audio Mixer", true);
+                }
             },
+            
             connectRemoteStream: (stream) => {
+                if (!MixerService.ctx || !MixerService.compressor) return;
                 const remoteSource = MixerService.ctx.createMediaStreamSource(stream);
-                const comp = MixerService.ctx.createDynamicsCompressor(); 
-                remoteSource.connect(comp).connect(MixerService.destination);
+                remoteSource.connect(MixerService.compressor);
+                return remoteSource;
             },
+            
             getStream: () => MixerService.destination ? MixerService.destination.stream : AudioService.stream
         };
 
@@ -893,6 +916,8 @@
                 document.getElementById('btn-create-host').innerHTML = 'Init...';
                 App.isHost = true; App.user.role = 'HOST'; document.body.classList.add('is-host');
                 document.getElementById('btn-silence').style.display = 'block';
+                // Assure que le mixeur est prêt (avec protection anti-doublon incluse)
+                MixerService.init(AudioService.stream); 
                 NetService.initPeer(id);
             },
             
