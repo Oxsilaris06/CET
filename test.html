@@ -734,9 +734,9 @@
         // --- MODULE AUDIO (Web Audio API & Bluetooth) ---
         const AudioService = {
             ctx: null, stream: null, analyser: null, mode: 'ptt', visuCtx: null,
-            backgroundAudio: null, privateStream: null, rawStream: null, // Ajout rawStream
-            processingNode: null, gainGate: null,
-            vadState: { active: false, timer: null, hold: 500, threshold: 0.02 }, // VAD config
+            backgroundAudio: null, privateStream: null, rawStream: null, 
+            processingNode: null, gainGate: null, inputGain: null, // Ajout inputGain
+            vadState: { active: false, timer: null, hold: 500, threshold: 0.02 }, 
             
             init: async () => {
                 try {
@@ -817,22 +817,27 @@
 
             // --- NOUVEAU: Pipeline de Traitement Audio ---
             setupProcessing: (rawStream) => {
-                AudioService.rawStream = rawStream; // Stockage ref Hardware
+                AudioService.rawStream = rawStream; 
                 const ctx = AudioService.ctx;
                 const source = ctx.createMediaStreamSource(rawStream);
                 
-                // --- ETAPE A : FILTRAGE (Simulé RNNoise) ---
+                // 0. Etage de GAIN D'ENTRÉE (Pour réduire la sensibilité en VOX)
+                const inputGain = ctx.createGain();
+                inputGain.gain.value = 1.0; // Par défaut 100%
+                AudioService.inputGain = inputGain;
+
+                // --- ETAPE A : FILTRAGE ---
                 // 1. Coupe-bas (HighPass) : Supprime le vent (< 150Hz)
                 const filterWind = ctx.createBiquadFilter();
                 filterWind.type = 'highpass';
                 filterWind.frequency.value = 150;
 
-                // 2. Coupe-haut (LowPass) : Supprime le sifflement (> 3.5kHz) - Optimisation voix radio
+                // 2. Coupe-haut (LowPass) : Supprime le sifflement (> 3.5kHz)
                 const filterHiss = ctx.createBiquadFilter();
                 filterHiss.type = 'lowpass';
                 filterHiss.frequency.value = 3500;
 
-                // 3. Compresseur Dynamique : Normalise le niveau
+                // 3. Compresseur Dynamique
                 const compressor = ctx.createDynamicsCompressor();
                 compressor.threshold.value = -50;
                 compressor.knee.value = 40;
@@ -841,28 +846,26 @@
                 compressor.release.value = 0.25;
 
                 // --- ETAPE B : VAD / Noise Gate ---
-                // GainNode qui agit comme la "Porte" (Gate) : Ouvert (1) ou Fermé (0)
                 AudioService.gainGate = ctx.createGain();
-                AudioService.gainGate.gain.value = 0; // Fermé par défaut (Sécurité)
+                AudioService.gainGate.gain.value = 0; 
 
-                // Destination finale pour PeerJS
                 const destination = ctx.createMediaStreamDestination();
                 const privateDest = ctx.createMediaStreamDestination();
 
                 // Câblage du Graphe Audio
-                source.connect(filterWind);
+                source.connect(inputGain); // Source -> Gain
+                inputGain.connect(filterWind); // Gain -> Filtres
                 filterWind.connect(filterHiss);
                 filterHiss.connect(compressor);
                 
-                // Branche 1 : Vers Analyser pour détection VAD (avant le Gate pour détecter le signal entrant)
+                // Branche 1 : Analyse (avant le Gate)
                 compressor.connect(AudioService.analyser);
                 
-                // Branche 2 : Vers Gate puis Sortie
+                // Branche 2 : Sortie
                 compressor.connect(AudioService.gainGate);
                 AudioService.gainGate.connect(destination);
                 AudioService.gainGate.connect(privateDest);
 
-                // Stockage des streams traités
                 AudioService.stream = destination.stream;
                 AudioService.privateStream = privateDest.stream;
             },
@@ -912,14 +915,28 @@
             toggleVox: () => {
                 AudioService.mode = AudioService.mode === 'ptt' ? 'vox' : 'ptt';
                 const icon = document.getElementById('icon-mic'); const btn = document.getElementById('ptt-btn');
+                
                 if (AudioService.mode === 'vox') {
                     icon.innerText = 'mic'; btn.classList.add('vox-active'); 
-                    // En VOX, on ouvre immédiatement le micro matériel pour alimenter le VAD
+                    
+                    // 1. Activation Micro Hardware (Pour alimentation VAD)
                     if(AudioService.rawStream) AudioService.rawStream.getAudioTracks().forEach(t => t.enabled = true);
-                    App.toast("Mode VOX (Auto)");
+                    
+                    // 2. Réduction Sensibilité (Input Gain 50%)
+                    if(AudioService.inputGain) AudioService.inputGain.gain.value = 0.5;
+                    
+                    // 3. Durcissement Seuil VAD (Filtrage Restrictif)
+                    AudioService.vadState.threshold = 0.06; // Seuil plus haut qu'en PTT
+                    
+                    App.toast("VOX ACTIF (Sensibilité Réduite)");
                 } else {
                     icon.innerText = 'mic_none'; btn.classList.remove('vox-active'); 
-                    AudioService.tx(false); // Coupe tout et désactive le hardware (via logique tx)
+                    
+                    // Reset paramètres PTT standard
+                    if(AudioService.inputGain) AudioService.inputGain.gain.value = 1.0;
+                    AudioService.vadState.threshold = 0.02; // Seuil standard
+                    
+                    AudioService.tx(false); // Coupe tout
                     App.toast("Mode PTT");
                 }
             },
