@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>COM TAC ULTIMATE</title>
+    <title>COM TAC ULTIMATE v2</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&display=swap" rel="stylesheet">
     <style>
@@ -17,10 +17,10 @@
 
         /* DEBUG LOG */
         #debug-log {
-            position: absolute; top: 70px; left: 10px; right: 10px; height: 60px;
-            font-family: monospace; font-size: 0.7rem; color: #0f0;
-            pointer-events: none; overflow: hidden; text-align: center;
-            opacity: 0.7; z-index: 50;
+            position: absolute; top: 70px; left: 10px; right: 10px; height: 80px;
+            font-family: monospace; font-size: 0.8rem; color: #0f0; background: rgba(0,20,0,0.5);
+            pointer-events: none; overflow: hidden; text-align: left; padding: 5px;
+            opacity: 0.8; z-index: 50; border: 1px solid #004400;
         }
 
         /* MAIN PTT BUTTON */
@@ -54,20 +54,20 @@
 <body>
 
     <div id="login-screen">
-        <h1 style="color:#ef4444; margin-bottom: 10px;">ULTIMATE TEST</h1>
+        <h1 style="color:#ef4444; margin-bottom: 10px;">ULTIMATE v2</h1>
         <p style="color:#888; text-align: center; margin-bottom: 30px; font-size: 0.9rem;">
-            Intercepte Media, Clavier & Gamepad.<br>
-            Connectez vos appareils Bluetooth AVANT.
+            Correction du Moteur Audio.<br>
+            Connectez vos écouteurs maintenant.
         </p>
-        <button onclick="startApp()">LANCER L'ÉCOUTE TOTALE</button>
+        <button onclick="startApp()">FORCER L'AUDIO & LANCER</button>
     </div>
 
     <div class="header">
-        <div style="color:#ef4444"><b>OMNI</b> LINK</div>
+        <div style="color:#ef4444"><b>OMNI</b> LINK v2</div>
         <div id="connection-dot" class="status"></div>
     </div>
 
-    <div id="debug-log">En attente d'input...</div>
+    <div id="debug-log">Prêt.</div>
 
     <div class="ptt-wrapper">
         <div id="ptt-btn" onmousedown="manualToggle()" ontouchstart="manualToggle()">
@@ -88,57 +88,97 @@
         let peer = null;
         let localStream = null;
         let isTransmitting = false;
-        let lastTriggerTime = 0; // Pour éviter le double déclenchement
+        let lastTriggerTime = 0;
+        let audioContext = null;
+        let silentOscillator = null;
 
-        // --- DEMARRAGE ---
+        // --- DEMARRAGE ROBUSTE ---
         async function startApp() {
             try {
+                // 1. Initialisation Audio Context
                 const AC = window.AudioContext || window.webkitAudioContext;
-                const audioCtx = new AC();
-                await audioCtx.resume();
+                audioContext = new AC();
+                
+                // IMPORTANT: Forcer le "Resume" immédiat suite au clic
+                await audioContext.resume();
+                log("AudioContext: " + audioContext.state);
 
-                // 1. Silent Loop (CRITIQUE pour le Bluetooth)
-                const silent = new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA');
-                silent.loop = true; silent.volume = 0.01; silent.play();
+                // 2. MOTEUR SILENCIEUX (Oscillateur)
+                // C'est mieux qu'un fichier wav car ça ne s'arrête jamais
+                setupSilentOscillator();
 
-                // 2. Wake Lock
-                if ('wakeLock' in navigator) { try { await navigator.wakeLock.request('screen'); } catch(e){} }
+                // 3. Wake Lock (Garder écran allumé)
+                if ('wakeLock' in navigator) { 
+                    try { await navigator.wakeLock.request('screen'); log("WakeLock: OK"); } 
+                    catch(e){ log("WakeLock: Fail"); } 
+                }
 
-                // 3. Micro
-                localStream = await navigator.mediaDevices.getUserMedia({ 
-                    audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } 
-                });
-                localStream.getAudioTracks().forEach(t => t.enabled = false);
-
-                // 4. Init Réseau
+                // 4. Init Réseau P2P
                 initPeer();
 
-                // 5. ACTIVATION DE TOUS LES ÉCOUTEURS (LE FILET)
-                activateMediaSessionListener();
-                activateKeyboardListener();
-                activateGamepadListener();
+                // 5. Activation des écouteurs Media
+                // On attend un tout petit peu pour s'assurer que l'audio tourne
+                setTimeout(() => {
+                    activateMediaSessionListener();
+                    activateKeyboardListener();
+                    activateGamepadListener();
+                    
+                    // Force l'état 'Playing' pour que le téléphone affiche les contrôles
+                    if(navigator.mediaSession) navigator.mediaSession.playbackState = "playing";
+                }, 500);
+
+                // 6. Récupération Micro (pour PTT)
+                try {
+                    localStream = await navigator.mediaDevices.getUserMedia({ 
+                        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } 
+                    });
+                    localStream.getAudioTracks().forEach(t => t.enabled = false);
+                    log("Micro: OK");
+                } catch(err) {
+                    log("Micro: ERREUR " + err.message);
+                }
 
                 document.getElementById('login-screen').style.display = 'none';
-                log("Système Prêt. Appuyez sur vos boutons.");
 
             } catch (e) {
-                alert("Erreur Init: " + e);
+                alert("Erreur Critique: " + e);
             }
+        }
+
+        // --- MOTEUR SILENCIEUX ROBUSTE ---
+        function setupSilentOscillator() {
+            if (!audioContext) return;
+            
+            // Créer un oscillateur (son pur)
+            silentOscillator = audioContext.createOscillator();
+            silentOscillator.type = 'sine';
+            silentOscillator.frequency.value = 440; // 440Hz (La)
+
+            // Créer un Gain (Volume)
+            const gainNode = audioContext.createGain();
+            // Volume quasi-nul mais NON nul (0.001) pour forcer l'OS à détecter du son
+            // Si 0 absolu, certains OS (iOS) coupent le canal.
+            gainNode.gain.value = 0.001; 
+
+            // Connecter : Oscillateur -> Gain -> Sortie Audio
+            silentOscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            // Démarrer
+            silentOscillator.start();
+            log("Moteur Audio: ACTIF (Oscillateur)");
         }
 
         // --- COEUR DU SYSTÈME : LE TOGGLE PTT ---
         function toggleTx(sourceName) {
-            // Anti-rebond (Debounce) : Empêche d'activer/désactiver trop vite si un appareil envoie 2 signaux
             const now = Date.now();
-            if (now - lastTriggerTime < 300) return; 
+            if (now - lastTriggerTime < 300) return; // Anti-rebond
             lastTriggerTime = now;
 
             isTransmitting = !isTransmitting;
             
-            // Hardware action
             if (localStream) localStream.getAudioTracks().forEach(t => t.enabled = isTransmitting);
 
-            // UI Update
             const btn = document.getElementById('ptt-btn');
             const body = document.body;
             const srcDisplay = document.getElementById('trigger-source');
@@ -148,103 +188,110 @@
                 btn.childNodes[0].nodeValue = "TX ON";
                 srcDisplay.innerText = "Via " + sourceName;
                 if(navigator.vibrate) navigator.vibrate(50);
-                // Force l'état 'playing' pour que les casques restent éveillés
-                if(navigator.mediaSession) navigator.mediaSession.playbackState = "playing";
             } else {
                 body.classList.remove('is-tx');
                 btn.childNodes[0].nodeValue = "PTT";
                 srcDisplay.innerText = "En veille";
                 if(navigator.vibrate) navigator.vibrate([30, 30]);
-                if(navigator.mediaSession) navigator.mediaSession.playbackState = "paused";
             }
             
-            log(`Action: ${isTransmitting ? 'ON' : 'OFF'} via [${sourceName}]`);
+            // RE-FORCER L'ÉTAT PLAYING (Au cas où l'OS le mettrait en pause)
+            if(navigator.mediaSession) navigator.mediaSession.playbackState = "playing";
+            
+            log(`ACTION: ${isTransmitting ? 'TX ON' : 'TX OFF'} [${sourceName}]`);
         }
         
         function manualToggle() {
-            toggleTx("Écran Tactile");
+            // Un clic manuel doit aussi réveiller l'audio context si jamais il s'est endormi
+            if(audioContext && audioContext.state === 'suspended') {
+                audioContext.resume();
+                log("AudioContext: Réveillé manuel");
+            }
+            toggleTx("Tactile");
         }
 
-        // --- ÉCOUTEUR 1 : MEDIA SESSION (Casques, Kits Piéton) ---
+        // --- ÉCOUTEUR MEDIA SESSION (Casques) ---
         function activateMediaSessionListener() {
             if ('mediaSession' in navigator) {
-                navigator.mediaSession.metadata = new MediaMetadata({ title: "COM TAC - LINK", artist: "Tactical Audio" });
+                // Définir des métadonnées aide l'OS à savoir qu'on est une "vraie" app média
+                navigator.mediaSession.metadata = new MediaMetadata({ 
+                    title: "COM TAC - LINK", 
+                    artist: "Canal Tactique",
+                    album: "Mode Opérationnel",
+                    artwork: [
+                        { src: 'https://via.placeholder.com/96', sizes: '96x96', type: 'image/png' },
+                        { src: 'https://via.placeholder.com/128', sizes: '128x128', type: 'image/png' },
+                    ]
+                });
                 
                 const actions = ['play', 'pause', 'stop', 'previoustrack', 'nexttrack', 'seekbackward', 'seekforward'];
-                
+                let registered = 0;
+
                 actions.forEach(action => {
                     try {
                         navigator.mediaSession.setActionHandler(action, () => toggleTx(`MEDIA (${action})`));
+                        registered++;
                     } catch(e) {}
                 });
+                log(`MediaSession: ${registered} handlers actifs`);
+            } else {
+                log("MediaSession: NON SUPPORTÉ");
             }
         }
 
-        // --- ÉCOUTEUR 2 : CLAVIER (Télécommandes Shutter, Pédales, Claviers) ---
+        // --- AUTRES ÉCOUTEURS ---
         function activateKeyboardListener() {
             window.addEventListener('keydown', (e) => {
-                const code = e.code;
-                const key = e.key;
-                
-                // On liste tout ce qui ressemble à une commande à distance
-                const triggers = [
-                    'Enter', 'Space', 'MediaPlayPause', 'MediaTrackNext', 'MediaTrackPrevious',
-                    'VolumeUp', 'VolumeDown', 'AudioVolumeUp', 'AudioVolumeDown', // Tentative d'interception
-                    'ArrowUp', 'ArrowDown', 'PageUp', 'PageDown'
-                ];
-
-                log(`Key Input: ${code}`); // Pour le debug
-
-                if (triggers.includes(code) || triggers.includes(key)) {
-                    e.preventDefault(); // Tente de bloquer l'action par défaut (Volume, Scroll)
-                    toggleTx(`KEY (${code || key})`);
+                const triggerKeys = ['Enter', 'Space', 'MediaPlayPause', 'MediaTrackNext', 'VolumeUp', 'VolumeDown'];
+                if (triggerKeys.includes(e.code) || triggerKeys.includes(e.key)) {
+                    toggleTx(`KEY (${e.code})`);
                 }
             });
         }
 
-        // --- ÉCOUTEUR 3 : GAMEPAD (Manettes VR, Contrôleurs spécifiques) ---
         function activateGamepadListener() {
-            let gpInterval = setInterval(() => {
+            setInterval(() => {
                 const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
                 for (let i = 0; i < gamepads.length; i++) {
                     const gp = gamepads[i];
                     if (gp) {
-                        // On vérifie tous les boutons
                         for (let b = 0; b < gp.buttons.length; b++) {
-                            if (gp.buttons[b].pressed) {
-                                // On ne veut pas spammer le toggle, le debounce global gère ça
-                                toggleTx(`GAMEPAD (Btn ${b})`);
-                            }
+                            if (gp.buttons[b].pressed) toggleTx(`GAMEPAD ${b}`);
                         }
                     }
                 }
-            }, 100); // Vérification toutes les 100ms
+            }, 100);
         }
 
         // --- UTILITAIRES ---
         function log(msg) {
             const el = document.getElementById('debug-log');
-            el.innerText = msg;
+            const time = new Date().toLocaleTimeString().split(' ')[0];
+            el.innerHTML = `[${time}] ${msg}<br>` + el.innerHTML;
             console.log(msg);
         }
 
-        // --- RESEAU CORE ---
+        // --- RESEAU ---
         function initPeer() {
             const simpleId = Math.floor(Math.random() * 9000) + 1000;
             peer = new Peer("comtac-" + simpleId);
             peer.on('open', (id) => {
                 document.getElementById('my-id').innerText = id.split('-')[1];
                 document.getElementById('connection-dot').classList.add('connected');
+                log("Réseau: Connecté ID " + id.split('-')[1]);
             });
             peer.on('call', (call) => {
                 call.answer(); call.on('stream', playAudio);
+                log("Appel entrant accepté");
             });
+            peer.on('error', (err) => log("Err Peer: " + err.type));
         }
         function connectToPeer() {
             const id = document.getElementById('remote-id').value;
             if(id) {
                 const call = peer.call("comtac-" + id, localStream);
                 call.on('stream', playAudio);
+                log("Connexion sortante vers " + id);
             }
         }
         function playAudio(stream) {
