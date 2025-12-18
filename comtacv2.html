@@ -557,19 +557,29 @@
         // --- MODULE ENTRÉES MATÉRIELLES (Clavier / Boutons Casque / Télécommandes BLE HID) ---
         const HardwareInputService = {
             isPressed: false,
+            // Mode débug pour afficher les codes touches si non reconnues
+            debugMode: true,
             
             init: () => {
-                // Écoute les touches physiques
-                // La plupart des télécommandes BLE (ex: déclencheur photo) envoient "VolumeUp" ou "Enter"
+                // Écoute les touches physiques (HID)
                 window.addEventListener('keydown', HardwareInputService.onKeyDown);
                 window.addEventListener('keyup', HardwareInputService.onKeyUp);
             },
 
             onKeyDown: (e) => {
-                // Codes courants pour les boutons PTT / Volume / Media
-                const validKeys = ['VolumeUp', 'VolumeDown', 'AudioVolumeUp', 'AudioVolumeDown', 'Enter', 'Space'];
+                // Codes étendus pour couvrir un maximum de télécommandes BLE bon marché
+                const validKeys = [
+                    'VolumeUp', 'VolumeDown', 'AudioVolumeUp', 'AudioVolumeDown', 
+                    'Enter', 'Space', 
+                    'ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', // Souvent utilisé par les 'clickers' de présentation
+                    'MediaPlayPause', 'MediaTrackNext', 'MediaTrackPrevious' // Boutons média standards
+                ];
                 
-                if (validKeys.includes(e.code) || validKeys.includes(e.key)) {
+                // Normalisation pour vérification
+                const code = e.code;
+                const key = e.key;
+                
+                if (validKeys.includes(code) || validKeys.includes(key)) {
                     // Empêcher l'action par défaut (ex: monter le son système, scroller) si possible
                     if(e.cancelable) e.preventDefault();
                     
@@ -583,14 +593,25 @@
                         } else {
                             App.user.isTxRequest = true;
                             AudioService.tx(true);
-                            App.toast("PTT (Bouton Physique)");
+                            App.toast(`PTT ACTIF (${key || code})`); // Feedback visuel précis
                         }
                     }
+                } else if (HardwareInputService.debugMode) {
+                     // AIDE AU DIAGNOSTIC : Affiche la touche reçue si elle n'est pas reconnue
+                     // Cela permet à l'utilisateur de voir "Ah, mon bouton envoie 'ShiftLeft' !"
+                     // Note : Sur iOS/Android, certaines touches volume système ne déclenchent aucun event JS (sécurité OS)
+                     App.toast(`Touche non mapée: ${code || key}`, true);
                 }
             },
 
             onKeyUp: (e) => {
-                const validKeys = ['VolumeUp', 'VolumeDown', 'AudioVolumeUp', 'AudioVolumeDown', 'Enter', 'Space'];
+                const validKeys = [
+                    'VolumeUp', 'VolumeDown', 'AudioVolumeUp', 'AudioVolumeDown', 
+                    'Enter', 'Space', 
+                    'ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 
+                    'MediaPlayPause', 'MediaTrackNext', 'MediaTrackPrevious'
+                ];
+                
                 if (validKeys.includes(e.code) || validKeys.includes(e.key)) {
                     if(e.cancelable) e.preventDefault();
                     HardwareInputService.isPressed = false;
