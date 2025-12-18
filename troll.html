@@ -17,7 +17,6 @@
             --color-surface: #121214;
             --color-surface-light: #1c1c1f;
             --color-blue: #3b82f6;
-            --color-red: #ef4444;
             --color-green: #22c55e;
             --color-yellow: #eab308;
             --color-text: #e4e4e7;
@@ -86,6 +85,14 @@
         .log-title { font-weight: 700; color: white; font-size: 1.1rem; margin-bottom: 5px; }
         .log-content { font-size: 0.9rem; line-height: 1.4; color: #ccc; }
 
+        /* TOAST NOTIFICATION */
+        #toast {
+            position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
+            background: #333; color: white; padding: 12px 24px; border-radius: 30px;
+            font-size: 0.9rem; font-family: var(--font-ui); z-index: 3000;
+            display: none; box-shadow: 0 5px 15px rgba(0,0,0,0.5); white-space: nowrap;
+        }
+
         /* MODAL VICTOIRE */
         #victory-modal {
             position: fixed; inset: 0; z-index: 2000;
@@ -106,10 +113,6 @@
             box-shadow: 0 0 30px rgba(234, 179, 8, 0.5);
             animation: pulse 2s infinite; cursor: pointer;
         }
-
-        .dev-tools { margin-top: 50px; display: flex; gap: 10px; opacity: 0.3; transition: opacity 0.3s; }
-        .dev-tools:hover { opacity: 1; }
-        .btn-dev { padding: 8px 12px; background: #222; border: 1px solid #444; color: #888; border-radius: 4px; font-size: 0.7rem; cursor: pointer; }
 
         @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-20px); } }
         @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(234, 179, 8, 0.7); } 70% { box-shadow: 0 0 0 15px rgba(234, 179, 8, 0); } 100% { box-shadow: 0 0 0 0 rgba(234, 179, 8, 0); } }
@@ -136,11 +139,6 @@
                 <div class="log-content">Scannez les QR Codes pour décrypter les données.</div>
             </div>
         </div>
-
-        <div class="dev-tools">
-            <button class="btn-dev" onclick="Game.reset()">RESET MISSION</button>
-            <button class="btn-dev" onclick="Game.cheat()">DEV: +1 SECRET</button>
-        </div>
     </main>
 
     <div id="victory-modal">
@@ -156,8 +154,10 @@
         <div style="margin-top: 30px; color: #555; font-size: 0.7rem; cursor: pointer;" onclick="document.getElementById('victory-modal').style.display='none'">[ FERMER ]</div>
     </div>
 
+    <div id="toast">Notification</div>
+
     <script>
-        // CONFIGURATION DES MESSAGES DANS L'ORDRE D'APPARITION
+        // MESSAGES DANS L'ORDRE D'APPARITION (1 à 6)
         const SCENARIO = [
             { t: "PREMIER CONTACT", m: "Bravo bitos, t'as été curieux une fois dans ta vie et tu t'es intéressé à ce que t'as vu ! Continue à chercher des jeunes QR code dans ce style et peut être que tu auras une récompenses a la clé" },
             { t: "PISTE CHAUDE", m: "Bravo ma poule, t'as été curieux une fois encore. Continue ta recherche elle te mènera sûrement vers une petite récompense... Ou pas ?" },
@@ -169,75 +169,62 @@
 
         const Game = {
             totalSecrets: 6,
-            scannedTokens: [], // Stocke les IDs uniques des QR codes scannés (ex: "code1", "code5")
+            scannedTokens: [], 
             
             init: () => {
-                // 1. Charger la sauvegarde (liste des IDs scannés)
-                const saved = localStorage.getItem('troll_progress_v3');
+                const saved = localStorage.getItem('troll_final_v4');
                 if (saved) Game.scannedTokens = JSON.parse(saved);
 
-                // 2. Vérifier si l'URL contient un nouveau token
+                // NOUVEAU SYSTÈME SIMPLE : ?code=XXX
                 const urlParams = new URLSearchParams(window.location.search);
-                let encodedData = urlParams.get('data');
-                // Fallback hash
-                if (!encodedData && window.location.hash) encodedData = new URLSearchParams(window.location.hash.substring(1)).get('data');
+                const code = urlParams.get('code');
 
-                if (encodedData) Game.processToken(encodedData);
+                if (code) {
+                    Game.processCode(code);
+                }
 
                 Game.render();
             },
 
-            processToken: (encodedJson) => {
-                try {
-                    // On attend un format : {"id":"CODE_UNIQUE"}
-                    const data = JSON.parse(decodeURIComponent(encodedJson));
-                    
-                    if (data && data.id) {
-                        // Est-ce que ce QR code spécifique a déjà été scanné ?
-                        if (!Game.scannedTokens.includes(data.id)) {
-                            // Non, c'est un nouveau QR code !
-                            
-                            // Sécurité : On ne dépasse pas le nombre max de messages
-                            if (Game.scannedTokens.length < Game.totalSecrets) {
-                                Game.scannedTokens.push(data.id);
-                                localStorage.setItem('troll_progress_v3', JSON.stringify(Game.scannedTokens));
-                                
-                                // Nettoyage URL
-                                window.history.replaceState({}, document.title, window.location.pathname);
-                            }
-                        } else {
-                            // Déjà scanné
-                            window.history.replaceState({}, document.title, window.location.pathname);
-                            // On pourrait mettre une alerte "Déjà scanné", mais on reste discret
-                        }
+            processCode: (code) => {
+                // On nettoie l'URL tout de suite pour éviter les refreshs accidentels
+                window.history.replaceState({}, document.title, window.location.pathname);
+
+                if (!code) return;
+
+                if (!Game.scannedTokens.includes(code)) {
+                    if (Game.scannedTokens.length < Game.totalSecrets) {
+                        Game.scannedTokens.push(code);
+                        localStorage.setItem('troll_final_v4', JSON.stringify(Game.scannedTokens));
+                        Game.toast("NOUVEAU FRAGMENT DÉCRYPTÉ", false);
+                    } else {
+                        Game.toast("MISSION DÉJÀ TERMINÉE", true);
                     }
-                } catch (e) { console.error("Bad Token", e); }
+                } else {
+                    Game.toast("CODE DÉJÀ VALIDÉ", true);
+                }
             },
 
             render: () => {
                 const count = Game.scannedTokens.length;
                 
-                // --- 1. ÉTOILES ---
+                // Rendu Étoiles
                 const grid = document.getElementById('stars-grid');
                 grid.innerHTML = '';
                 for (let i = 1; i <= Game.totalSecrets; i++) {
-                    const el = document.createElement('div');
-                    // Si i est inférieur ou égal au nombre trouvé, c'est actif
                     const isActive = i <= count;
+                    const el = document.createElement('div');
                     el.className = `star-slot ${isActive ? 'active' : ''}`;
                     if (isActive && count === Game.totalSecrets) el.className += ' final-active';
-                    
                     el.innerHTML = isActive ? '<span class="material-symbols-outlined">check</span>' : i;
                     grid.appendChild(el);
                 }
                 document.getElementById('progress-text').innerText = `${count} / ${Game.totalSecrets} ACTIVÉS`;
 
-                // --- 2. LOGS (MESSAGES) ---
+                // Rendu Logs
                 const logsList = document.getElementById('logs-list');
                 if (count > 0) {
                     logsList.innerHTML = '';
-                    // On affiche les messages de 0 à (count - 1)
-                    // On inverse pour avoir le plus récent en haut
                     for (let i = count - 1; i >= 0; i--) {
                         const msgData = SCENARIO[i];
                         const div = document.createElement('div');
@@ -251,7 +238,7 @@
                     }
                 }
 
-                // --- 3. VICTOIRE ---
+                // Victoire
                 if (count >= Game.totalSecrets) {
                     const finalMsg = SCENARIO[Game.totalSecrets - 1].m;
                     document.getElementById('victory-text').innerText = finalMsg;
@@ -259,20 +246,12 @@
                 }
             },
 
-            reset: () => {
-                if(confirm("Tout effacer ?")) {
-                    localStorage.removeItem('troll_progress_v3');
-                    location.reload();
-                }
-            },
-            
-            cheat: () => {
-                const fakeId = "cheat_" + Date.now();
-                if (Game.scannedTokens.length < Game.totalSecrets) {
-                    Game.scannedTokens.push(fakeId);
-                    localStorage.setItem('troll_progress_v3', JSON.stringify(Game.scannedTokens));
-                    Game.render();
-                }
+            toast: (msg, isError) => {
+                const t = document.getElementById('toast');
+                t.innerText = msg;
+                t.style.background = isError ? '#ef4444' : '#22c55e';
+                t.style.display = 'block';
+                setTimeout(() => t.style.display = 'none', 3000);
             }
         };
 
