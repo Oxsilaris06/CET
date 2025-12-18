@@ -926,6 +926,9 @@
             },
             
             toggleVox: () => {
+                // SÉCURITÉ: Forcer le réveil du contexte audio (utile si pas d'interaction récente)
+                if(AudioService.ctx && AudioService.ctx.state === 'suspended') AudioService.ctx.resume();
+
                 AudioService.mode = AudioService.mode === 'ptt' ? 'vox' : 'ptt';
                 const icon = document.getElementById('icon-mic'); const btn = document.getElementById('ptt-btn');
                 
@@ -938,19 +941,18 @@
                     // 2. Réduction Sensibilité (Input Gain 50%)
                     if(AudioService.inputGain) AudioService.inputGain.gain.value = 0.5;
                     
-                    // 3. Adaptation Seuil VAD (Ajusté pour le gain réduit)
-                    // Gain 0.5 => Signal divisé par 2. Seuil 0.015 correspond à environ 0.03 en gain standard.
+                    // 3. Seuil VAD ajusté
                     AudioService.vadState.threshold = 0.015; 
                     
                     App.toast("VOX ACTIF (Sensibilité Réduite)");
                 } else {
                     icon.innerText = 'mic_none'; btn.classList.remove('vox-active'); 
                     
-                    // Reset paramètres PTT standard
+                    // Reset
                     if(AudioService.inputGain) AudioService.inputGain.gain.value = 1.0;
-                    AudioService.vadState.threshold = 0.02; // Seuil standard
+                    AudioService.vadState.threshold = 0.02; 
                     
-                    AudioService.tx(false); // Coupe tout
+                    AudioService.tx(false); 
                     App.toast("Mode PTT");
                 }
             },
@@ -968,7 +970,6 @@
                     cvs.width = cvs.offsetWidth; cvs.height = cvs.offsetHeight;
                     AudioService.visuCtx = cvs.getContext('2d'); 
                 }
-                // Important: On lance la boucle même si le canvas n'est pas prêt, pour le VAD
                 AudioService.drawLoop();
             },
             
@@ -976,37 +977,46 @@
             drawLoop: () => {
                 requestAnimationFrame(AudioService.drawLoop);
                 
-                // 1. Visualisation (Si canvas dispo)
-                let analyser = (App.isHost && !App.privatePeerId) ? MixerService.analyser : AudioService.analyser;
-                if (!analyser) return; // Pas encore init
+                // CORRECTIF MAJEUR : Toujours utiliser l'analyseur LOCAL (Pre-Gate) pour le VAD.
+                // L'ancien code utilisait le Mixer (Post-Gate) pour l'Host, créant une boucle bloquante.
+                const vadAnalyser = AudioService.analyser; 
+                if (!vadAnalyser) return; 
                 
-                const buffer = analyser.frequencyBinCount; 
-                const data = new Uint8Array(buffer);
-                const timeData = new Uint8Array(buffer); // Pour VAD RMS
+                const buffer = vadAnalyser.frequencyBinCount; 
+                const data = new Uint8Array(buffer); // Frequency data
+                const timeData = new Uint8Array(buffer); // Waveform data (VAD)
                 
-                analyser.getByteFrequencyData(data);
-                analyser.getByteTimeDomainData(timeData); // Waveform data pour le calcul RMS
+                vadAnalyser.getByteFrequencyData(data);
+                vadAnalyser.getByteTimeDomainData(timeData); 
                 
+                // --- Visualisation ---
                 if (AudioService.visuCtx) {
                     const ctx = AudioService.visuCtx; const w = ctx.canvas.width; const h = ctx.canvas.height;
                     ctx.clearRect(0, 0, w, h);
                     
-                    // Dessin du spectre seulement si TX actif (pour économiser batterie/CPU)
-                    if (App.user.isTx) {
+                    // On dessine si le micro Hardware est actif (Feedback Monitoring)
+                    const isMicOn = AudioService.rawStream && AudioService.rawStream.getAudioTracks().some(t => t.enabled);
+                    
+                    if (isMicOn) {
                         const bw = (w / buffer) * 2.5; let x = 0;
                         for(let i=0; i<buffer; i++) { 
                             const bh = data[i] / 2; 
-                            ctx.fillStyle = App.privatePeerId ? `rgba(168, 85, 247, ${bh/255})` : `rgba(59, 130, 246, ${bh/255})`; 
+                            // Feedback visuel : Couleur = Transmission, Gris = Écoute (VOX Standby)
+                            if (App.user.isTx) {
+                                ctx.fillStyle = App.privatePeerId ? `rgba(168, 85, 247, ${bh/255})` : `rgba(59, 130, 246, ${bh/255})`; 
+                            } else {
+                                ctx.fillStyle = `rgba(80, 80, 80, ${bh/255})`; // Gris foncé pour standby
+                            }
                             ctx.fillRect(x, h - bh, bw, bh); x += bw + 1; 
                         }
                     }
                 }
 
-                // 2. LOGIQUE VAD (Voice Activity Detection)
-                // Calcul RMS (Root Mean Square) pour estimer le volume d'entrée
+                // --- LOGIQUE VAD ---
+                // Calcul RMS (Volume)
                 let sum = 0;
                 for(let i = 0; i < buffer; i++) {
-                    const sample = (timeData[i] - 128) / 128; // Centrer autour de 0
+                    const sample = (timeData[i] - 128) / 128; 
                     sum += sample * sample;
                 }
                 const rms = Math.sqrt(sum / buffer);
@@ -1019,19 +1029,17 @@
                 }
 
                 // Gestion VOX
-                if (AudioService.mode === 'vox' && !App.user.isTxRequest) { // isTxRequest = PTT manuel prioritaire
+                if (AudioService.mode === 'vox' && !App.user.isTxRequest) { 
                     if (rms > AudioService.vadState.threshold) {
-                        // Parole détectée
                         if (!AudioService.vadState.active) {
                             AudioService.vadState.active = true;
                             AudioService.tx(true);
                         }
-                        // Reset timer de maintien
                         if (AudioService.vadState.timer) clearTimeout(AudioService.vadState.timer);
                         AudioService.vadState.timer = setTimeout(() => {
                             AudioService.vadState.active = false;
                             AudioService.tx(false);
-                        }, AudioService.vadState.hold); // Maintien 500ms après silence
+                        }, AudioService.vadState.hold); 
                     }
                 }
             }
