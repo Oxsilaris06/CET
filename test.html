@@ -743,7 +743,8 @@
             ctx: null, stream: null, analyser: null, mode: 'ptt', visuCtx: null,
             backgroundAudio: null, privateStream: null, rawStream: null, 
             processingNode: null, gainGate: null, inputGain: null, // Ajout inputGain
-            vadState: { active: false, timer: null, hold: 500, threshold: 0.02 }, 
+            vadState: { active: false, timer: null, hold: 500, threshold: 0.02 },
+            vadInterval: null, // Nouveau : intervalle pour VAD background
             
             init: async () => {
                 try {
@@ -815,8 +816,9 @@
                     
                     if (App.isHost) MixerService.init(AudioService.stream);
                     
-                    // --- FIX VAD: Démarrer la boucle d'analyse ---
-                    AudioService.setupViz();
+                    // --- FIX VAD: Démarrer les boucles ---
+                    AudioService.startVAD(); // Arrière-plan
+                    AudioService.setupViz(); // Premier plan
 
                     return true;
                 } catch(e) { 
@@ -912,6 +914,11 @@
                 
                 App.user.isTx = active;
 
+                // --- FIX ECHO CLIENT : Mute du retour audio quand on parle (sauf privé) ---
+                if (App.hostAudioElement && !App.privatePeerId) {
+                    App.hostAudioElement.muted = active; 
+                }
+
                 if (App.isHost && !App.privatePeerId && MixerService.localSource) {
                      MixerService.localSource.mediaStream.getAudioTracks().forEach(t => t.enabled = active);
                 }
@@ -962,23 +969,74 @@
                 }
                 AudioService.drawLoop();
             },
+
+            // --- NOUVEAU : BOUCLE VAD DÉTACHÉE (Background Safe) ---
+            startVAD: () => {
+                if (AudioService.vadInterval) clearInterval(AudioService.vadInterval);
+                // Intervalle de 100ms (10Hz) pour vérifier le VAD même si l'écran est éteint
+                AudioService.vadInterval = setInterval(AudioService.processVAD, 100);
+            },
+
+            // Logique pure VAD (appelée par setInterval ET drawLoop pour fluidité)
+            processVAD: () => {
+                const vadAnalyser = AudioService.analyser; 
+                if (!vadAnalyser) return;
+
+                const buffer = vadAnalyser.frequencyBinCount; 
+                // Note: réallocation de buffer ici est rapide, mais on pourrait optimiser si besoin
+                const timeData = new Uint8Array(buffer); 
+                vadAnalyser.getByteTimeDomainData(timeData);
+
+                // Calcul RMS (Volume) & ZCR
+                let sum = 0;
+                let zeroCrossings = 0;
+                for(let i = 0; i < buffer; i++) {
+                    const sample = (timeData[i] - 128) / 128; 
+                    sum += sample * sample;
+                    if (i > 0 && timeData[i] >= 128 && timeData[i-1] < 128) zeroCrossings++;
+                }
+                const rms = Math.sqrt(sum / buffer);
+
+                // Indicateur Debug VAD (LED) - UI Only (si visible)
+                const vadLed = document.getElementById('vad-led');
+                if (vadLed) {
+                    if (App.user.isTx) vadLed.classList.add('active');
+                    else vadLed.classList.remove('active');
+                }
+
+                // Logique de Décision VAD
+                if (AudioService.mode === 'vox' && !App.user.isTxRequest) { 
+                    const isVoiceTexture = (zeroCrossings > 5 && zeroCrossings < 150);
+                    
+                    if (rms > AudioService.vadState.threshold && isVoiceTexture) {
+                        if (!AudioService.vadState.active) {
+                            AudioService.vadState.active = true;
+                            AudioService.tx(true);
+                        }
+                        if (AudioService.vadState.timer) clearTimeout(AudioService.vadState.timer);
+                        AudioService.vadState.timer = setTimeout(() => {
+                            AudioService.vadState.active = false;
+                            AudioService.tx(false);
+                        }, AudioService.vadState.hold); 
+                    }
+                }
+            },
             
-            // Boucle VAD AVANCÉE (RMS + ZCR)
+            // Boucle UI (Graphisme seulement)
             drawLoop: () => {
                 requestAnimationFrame(AudioService.drawLoop);
-                const vadAnalyser = AudioService.analyser; 
-                if (!vadAnalyser) return; 
                 
-                const buffer = vadAnalyser.frequencyBinCount; 
-                const data = new Uint8Array(buffer); 
-                const timeData = new Uint8Array(buffer); 
-                
-                vadAnalyser.getByteFrequencyData(data);
-                vadAnalyser.getByteTimeDomainData(timeData); 
+                // On appelle processVAD aussi ici pour avoir une réactivité max écran allumé
+                // (Redondant avec setInterval mais sans danger)
+                // AudioService.processVAD(); 
                 
                 // Visualisation
-                if (AudioService.visuCtx) {
+                if (AudioService.visuCtx && AudioService.analyser) {
                     const ctx = AudioService.visuCtx; const w = ctx.canvas.width; const h = ctx.canvas.height;
+                    const buffer = AudioService.analyser.frequencyBinCount;
+                    const data = new Uint8Array(buffer);
+                    AudioService.analyser.getByteFrequencyData(data);
+
                     ctx.clearRect(0, 0, w, h);
                     const isMicOn = AudioService.rawStream && AudioService.rawStream.getAudioTracks().some(t => t.enabled);
                     if (isMicOn) {
@@ -992,51 +1050,6 @@
                             }
                             ctx.fillRect(x, h - bh, bw, bh); x += bw + 1; 
                         }
-                    }
-                }
-
-                // --- ALGORITHME VAD HYBRIDE ---
-                
-                // 1. Calcul RMS (Volume)
-                let sum = 0;
-                let zeroCrossings = 0;
-                for(let i = 0; i < buffer; i++) {
-                    const sample = (timeData[i] - 128) / 128; 
-                    sum += sample * sample;
-                    
-                    // 2. Calcul ZCR (Texture du son)
-                    if (i > 0 && timeData[i] >= 128 && timeData[i-1] < 128) zeroCrossings++;
-                }
-                const rms = Math.sqrt(sum / buffer);
-                
-                // Normalisation ZCR (pour un buffer de 512)
-                // Voix humaine typique: ZCR modéré.
-                // Bruit blanc/Vent: ZCR très haut ou très bas et aléatoire.
-                
-                // Indicateur Debug
-                const vadLed = document.getElementById('vad-led');
-                if (vadLed) {
-                    if (App.user.isTx) vadLed.classList.add('active');
-                    else vadLed.classList.remove('active');
-                }
-
-                // Logique de Décision VAD
-                if (AudioService.mode === 'vox' && !App.user.isTxRequest) { 
-                    // Condition stricte : Volume suffisant ET Texture de voix (Pas trop de ZCR)
-                    // ZCR < 100 filtre les sifflements aigus et le bruit blanc pur
-                    // ZCR > 5 filtre le "Rumble" très basse fréquence
-                    const isVoiceTexture = (zeroCrossings > 5 && zeroCrossings < 150);
-                    
-                    if (rms > AudioService.vadState.threshold && isVoiceTexture) {
-                        if (!AudioService.vadState.active) {
-                            AudioService.vadState.active = true;
-                            AudioService.tx(true);
-                        }
-                        if (AudioService.vadState.timer) clearTimeout(AudioService.vadState.timer);
-                        AudioService.vadState.timer = setTimeout(() => {
-                            AudioService.vadState.active = false;
-                            AudioService.tx(false);
-                        }, AudioService.vadState.hold); 
                     }
                 }
             }
