@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>COM TAC ULTIMATE v2</title>
+    <title>COM TAC ULTIMATE v3</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&display=swap" rel="stylesheet">
     <style>
@@ -49,21 +49,29 @@
         button { background: #3b82f6; border: none; padding: 15px 40px; border-radius: 8px; color: white; font-weight: bold; font-size: 1.1rem; cursor: pointer; margin-top: 20px; }
         
         .id-display { font-family: monospace; color: #3b82f6; margin-top: 10px; font-size: 1.2rem; cursor: pointer; }
+        
+        /* Audio Element Cache (Hack) */
+        #silent-player { position: absolute; top: -1000px; opacity: 0; pointer-events: none; }
     </style>
 </head>
 <body>
 
     <div id="login-screen">
-        <h1 style="color:#ef4444; margin-bottom: 10px;">ULTIMATE v2</h1>
+        <h1 style="color:#ef4444; margin-bottom: 10px;">ULTIMATE v3</h1>
         <p style="color:#888; text-align: center; margin-bottom: 30px; font-size: 0.9rem;">
-            Correction du Moteur Audio.<br>
-            Connectez vos écouteurs maintenant.
+            Audio Inaudible & Priorité Media.<br>
+            Fermez Spotify/YouTube avant de lancer.
         </p>
-        <button onclick="startApp()">FORCER L'AUDIO & LANCER</button>
+        <button onclick="startApp()">LANCER LE SYSTÈME</button>
     </div>
 
+    <!-- Élément Audio Explicite pour forcer l'interface Media du téléphone -->
+    <audio id="silent-player" loop playsinline>
+        <source src="data:audio/mp3;base64,//NkxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//NkxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq" type="audio/mpeg">
+    </audio>
+
     <div class="header">
-        <div style="color:#ef4444"><b>OMNI</b> LINK v2</div>
+        <div style="color:#ef4444"><b>OMNI</b> LINK v3</div>
         <div id="connection-dot" class="status"></div>
     </div>
 
@@ -95,39 +103,41 @@
         // --- DEMARRAGE ROBUSTE ---
         async function startApp() {
             try {
-                // 1. Initialisation Audio Context
                 const AC = window.AudioContext || window.webkitAudioContext;
                 audioContext = new AC();
-                
-                // IMPORTANT: Forcer le "Resume" immédiat suite au clic
                 await audioContext.resume();
                 log("AudioContext: " + audioContext.state);
 
-                // 2. MOTEUR SILENCIEUX (Oscillateur)
-                // C'est mieux qu'un fichier wav car ça ne s'arrête jamais
+                // 1. MOTEUR SILENCIEUX (Inaudible mais présent)
                 setupSilentOscillator();
+                
+                // 2. FORCE MEDIA PLAYER (L'élément <audio> aide l'OS à comprendre qu'on est un lecteur)
+                const player = document.getElementById('silent-player');
+                player.play().then(() => log("Lecteur MP3: OK")).catch(e => log("Lecteur MP3: " + e.message));
 
-                // 3. Wake Lock (Garder écran allumé)
+                // 3. Wake Lock
                 if ('wakeLock' in navigator) { 
                     try { await navigator.wakeLock.request('screen'); log("WakeLock: OK"); } 
                     catch(e){ log("WakeLock: Fail"); } 
                 }
 
-                // 4. Init Réseau P2P
+                // 4. Init Réseau
                 initPeer();
 
-                // 5. Activation des écouteurs Media
-                // On attend un tout petit peu pour s'assurer que l'audio tourne
+                // 5. Activation des écouteurs
                 setTimeout(() => {
                     activateMediaSessionListener();
                     activateKeyboardListener();
                     activateGamepadListener();
                     
-                    // Force l'état 'Playing' pour que le téléphone affiche les contrôles
-                    if(navigator.mediaSession) navigator.mediaSession.playbackState = "playing";
+                    // FORCE PLAYING STATE
+                    if(navigator.mediaSession) {
+                        navigator.mediaSession.playbackState = "playing";
+                        log("Etat Media: Playing (Forcé)");
+                    }
                 }, 500);
 
-                // 6. Récupération Micro (pour PTT)
+                // 6. Micro
                 try {
                     localStream = await navigator.mediaDevices.getUserMedia({ 
                         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } 
@@ -145,34 +155,29 @@
             }
         }
 
-        // --- MOTEUR SILENCIEUX ROBUSTE ---
+        // --- MOTEUR SILENCIEUX CORRIGÉ (25Hz) ---
         function setupSilentOscillator() {
             if (!audioContext) return;
             
-            // Créer un oscillateur (son pur)
             silentOscillator = audioContext.createOscillator();
             silentOscillator.type = 'sine';
-            silentOscillator.frequency.value = 440; // 440Hz (La)
+            // 25Hz est à la limite de l'audition humaine (infra-basse), souvent inaudible sur écouteurs bluetooth
+            // mais suffisant pour garder le canal actif.
+            silentOscillator.frequency.value = 25; 
 
-            // Créer un Gain (Volume)
             const gainNode = audioContext.createGain();
-            // Volume quasi-nul mais NON nul (0.001) pour forcer l'OS à détecter du son
-            // Si 0 absolu, certains OS (iOS) coupent le canal.
-            gainNode.gain.value = 0.001; 
+            // Gain extrêmement faible pour éviter le "souffle"
+            gainNode.gain.value = 0.0001; 
 
-            // Connecter : Oscillateur -> Gain -> Sortie Audio
             silentOscillator.connect(gainNode);
             gainNode.connect(audioContext.destination);
-            
-            // Démarrer
             silentOscillator.start();
-            log("Moteur Audio: ACTIF (Oscillateur)");
+            log("Moteur Audio: ACTIF (25Hz)");
         }
 
-        // --- COEUR DU SYSTÈME : LE TOGGLE PTT ---
         function toggleTx(sourceName) {
             const now = Date.now();
-            if (now - lastTriggerTime < 300) return; // Anti-rebond
+            if (now - lastTriggerTime < 300) return;
             lastTriggerTime = now;
 
             isTransmitting = !isTransmitting;
@@ -195,53 +200,51 @@
                 if(navigator.vibrate) navigator.vibrate([30, 30]);
             }
             
-            // RE-FORCER L'ÉTAT PLAYING (Au cas où l'OS le mettrait en pause)
+            // On s'assure de rester en "Playing" pour ne pas perdre le focus
             if(navigator.mediaSession) navigator.mediaSession.playbackState = "playing";
             
             log(`ACTION: ${isTransmitting ? 'TX ON' : 'TX OFF'} [${sourceName}]`);
         }
         
         function manualToggle() {
-            // Un clic manuel doit aussi réveiller l'audio context si jamais il s'est endormi
-            if(audioContext && audioContext.state === 'suspended') {
-                audioContext.resume();
-                log("AudioContext: Réveillé manuel");
-            }
+            if(audioContext && audioContext.state === 'suspended') audioContext.resume();
+            
+            // Relancer le lecteur MP3 si besoin (Hack iOS)
+            const player = document.getElementById('silent-player');
+            if(player && player.paused) player.play();
+
             toggleTx("Tactile");
         }
 
-        // --- ÉCOUTEUR MEDIA SESSION (Casques) ---
         function activateMediaSessionListener() {
             if ('mediaSession' in navigator) {
-                // Définir des métadonnées aide l'OS à savoir qu'on est une "vraie" app média
                 navigator.mediaSession.metadata = new MediaMetadata({ 
-                    title: "COM TAC - LINK", 
-                    artist: "Canal Tactique",
-                    album: "Mode Opérationnel",
-                    artwork: [
-                        { src: 'https://via.placeholder.com/96', sizes: '96x96', type: 'image/png' },
-                        { src: 'https://via.placeholder.com/128', sizes: '128x128', type: 'image/png' },
-                    ]
+                    title: "COM TAC v3", 
+                    artist: "Tactical Link",
+                    album: "Canal Ouvert",
+                    artwork: [{ src: 'https://via.placeholder.com/512', sizes: '512x512', type: 'image/png' }]
                 });
                 
                 const actions = ['play', 'pause', 'stop', 'previoustrack', 'nexttrack', 'seekbackward', 'seekforward'];
-                let registered = 0;
-
+                
                 actions.forEach(action => {
                     try {
-                        navigator.mediaSession.setActionHandler(action, () => toggleTx(`MEDIA (${action})`));
-                        registered++;
+                        navigator.mediaSession.setActionHandler(action, () => {
+                            log("Event MediaSession: " + action); // Log l'event brut
+                            toggleTx(`MEDIA (${action})`);
+                        });
                     } catch(e) {}
                 });
-                log(`MediaSession: ${registered} handlers actifs`);
             } else {
                 log("MediaSession: NON SUPPORTÉ");
             }
         }
 
-        // --- AUTRES ÉCOUTEURS ---
         function activateKeyboardListener() {
             window.addEventListener('keydown', (e) => {
+                // LOG TOUT pour voir ce qui arrive
+                log(`KEY RAW: ${e.code} / ${e.key}`);
+                
                 const triggerKeys = ['Enter', 'Space', 'MediaPlayPause', 'MediaTrackNext', 'VolumeUp', 'VolumeDown'];
                 if (triggerKeys.includes(e.code) || triggerKeys.includes(e.key)) {
                     toggleTx(`KEY (${e.code})`);
@@ -263,7 +266,6 @@
             }, 100);
         }
 
-        // --- UTILITAIRES ---
         function log(msg) {
             const el = document.getElementById('debug-log');
             const time = new Date().toLocaleTimeString().split(' ')[0];
@@ -271,7 +273,6 @@
             console.log(msg);
         }
 
-        // --- RESEAU ---
         function initPeer() {
             const simpleId = Math.floor(Math.random() * 9000) + 1000;
             peer = new Peer("comtac-" + simpleId);
