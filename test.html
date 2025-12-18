@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>COM TAC ULTIMATE</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; -webkit-tap-highlight-color: transparent; }
+        body { background: #000; color: #fff; font-family: 'Chakra Petch', sans-serif; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+        
+        /* HEADER */
+        .header { height: 60px; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; border-bottom: 1px solid #333; background: #111; }
+        .status { width: 12px; height: 12px; border-radius: 50%; background: #333; box-shadow: 0 0 5px #000; transition: 0.3s; }
+        .status.connected { background: #0f0; box-shadow: 0 0 10px #0f0; }
+
+        /* DEBUG LOG */
+        #debug-log {
+            position: absolute; top: 70px; left: 10px; right: 10px; height: 60px;
+            font-family: monospace; font-size: 0.7rem; color: #0f0;
+            pointer-events: none; overflow: hidden; text-align: center;
+            opacity: 0.7; z-index: 50;
+        }
+
+        /* MAIN PTT BUTTON */
+        .ptt-wrapper { flex: 1; display: flex; align-items: center; justify-content: center; position: relative; }
+        #ptt-btn {
+            width: 240px; height: 240px; border-radius: 50%;
+            background: #1a1a1a; border: 4px solid #333;
+            color: #555; font-size: 2rem; font-weight: bold;
+            display: flex; align-items: center; justify-content: center;
+            transition: 0.1s; cursor: pointer;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            flex-direction: column;
+        }
+        #ptt-btn span { font-size: 0.8rem; margin-top: 5px; font-weight: normal; }
+
+        /* ETAT ACTIF (TRANSMISSION) */
+        body.is-tx #ptt-btn {
+            background: #ef4444; border-color: #fff; color: white;
+            box-shadow: 0 0 50px rgba(239, 68, 68, 0.6); transform: scale(0.95);
+        }
+        body.is-tx { background: #1a0505; }
+
+        /* MENU CONNEXION */
+        #login-screen { position: fixed; inset: 0; background: #000; z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; }
+        input { background: transparent; border: none; border-bottom: 2px solid #444; color: white; font-size: 1.5rem; text-align: center; margin: 20px 0; padding: 10px; width: 100%; font-family: monospace; outline: none; }
+        button { background: #3b82f6; border: none; padding: 15px 40px; border-radius: 8px; color: white; font-weight: bold; font-size: 1.1rem; cursor: pointer; margin-top: 20px; }
+        
+        .id-display { font-family: monospace; color: #3b82f6; margin-top: 10px; font-size: 1.2rem; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <div id="login-screen">
+        <h1 style="color:#ef4444; margin-bottom: 10px;">ULTIMATE TEST</h1>
+        <p style="color:#888; text-align: center; margin-bottom: 30px; font-size: 0.9rem;">
+            Intercepte Media, Clavier & Gamepad.<br>
+            Connectez vos appareils Bluetooth AVANT.
+        </p>
+        <button onclick="startApp()">LANCER L'ÉCOUTE TOTALE</button>
+    </div>
+
+    <div class="header">
+        <div style="color:#ef4444"><b>OMNI</b> LINK</div>
+        <div id="connection-dot" class="status"></div>
+    </div>
+
+    <div id="debug-log">En attente d'input...</div>
+
+    <div class="ptt-wrapper">
+        <div id="ptt-btn" onmousedown="manualToggle()" ontouchstart="manualToggle()">
+            PTT
+            <span id="trigger-source">Tactile</span>
+        </div>
+    </div>
+
+    <div style="text-align: center; padding: 20px;">
+        <div style="color: #666; font-size: 0.8rem;">MON ID</div>
+        <div id="my-id" class="id-display" onclick="copyId()">...</div>
+        <input type="text" id="remote-id" placeholder="ID Partenaire" style="font-size: 1rem; color: #aaa; margin-top:10px;">
+        <button onclick="connectToPeer()" style="padding: 8px 20px; font-size: 0.8rem;">CONNECTER</button>
+    </div>
+
+    <script>
+        // --- VARIABLES GLOBALES ---
+        let peer = null;
+        let localStream = null;
+        let isTransmitting = false;
+        let lastTriggerTime = 0; // Pour éviter le double déclenchement
+
+        // --- DEMARRAGE ---
+        async function startApp() {
+            try {
+                const AC = window.AudioContext || window.webkitAudioContext;
+                const audioCtx = new AC();
+                await audioCtx.resume();
+
+                // 1. Silent Loop (CRITIQUE pour le Bluetooth)
+                const silent = new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA');
+                silent.loop = true; silent.volume = 0.01; silent.play();
+
+                // 2. Wake Lock
+                if ('wakeLock' in navigator) { try { await navigator.wakeLock.request('screen'); } catch(e){} }
+
+                // 3. Micro
+                localStream = await navigator.mediaDevices.getUserMedia({ 
+                    audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } 
+                });
+                localStream.getAudioTracks().forEach(t => t.enabled = false);
+
+                // 4. Init Réseau
+                initPeer();
+
+                // 5. ACTIVATION DE TOUS LES ÉCOUTEURS (LE FILET)
+                activateMediaSessionListener();
+                activateKeyboardListener();
+                activateGamepadListener();
+
+                document.getElementById('login-screen').style.display = 'none';
+                log("Système Prêt. Appuyez sur vos boutons.");
+
+            } catch (e) {
+                alert("Erreur Init: " + e);
+            }
+        }
+
+        // --- COEUR DU SYSTÈME : LE TOGGLE PTT ---
+        function toggleTx(sourceName) {
+            // Anti-rebond (Debounce) : Empêche d'activer/désactiver trop vite si un appareil envoie 2 signaux
+            const now = Date.now();
+            if (now - lastTriggerTime < 300) return; 
+            lastTriggerTime = now;
+
+            isTransmitting = !isTransmitting;
+            
+            // Hardware action
+            if (localStream) localStream.getAudioTracks().forEach(t => t.enabled = isTransmitting);
+
+            // UI Update
+            const btn = document.getElementById('ptt-btn');
+            const body = document.body;
+            const srcDisplay = document.getElementById('trigger-source');
+
+            if (isTransmitting) {
+                body.classList.add('is-tx');
+                btn.childNodes[0].nodeValue = "TX ON";
+                srcDisplay.innerText = "Via " + sourceName;
+                if(navigator.vibrate) navigator.vibrate(50);
+                // Force l'état 'playing' pour que les casques restent éveillés
+                if(navigator.mediaSession) navigator.mediaSession.playbackState = "playing";
+            } else {
+                body.classList.remove('is-tx');
+                btn.childNodes[0].nodeValue = "PTT";
+                srcDisplay.innerText = "En veille";
+                if(navigator.vibrate) navigator.vibrate([30, 30]);
+                if(navigator.mediaSession) navigator.mediaSession.playbackState = "paused";
+            }
+            
+            log(`Action: ${isTransmitting ? 'ON' : 'OFF'} via [${sourceName}]`);
+        }
+        
+        function manualToggle() {
+            toggleTx("Écran Tactile");
+        }
+
+        // --- ÉCOUTEUR 1 : MEDIA SESSION (Casques, Kits Piéton) ---
+        function activateMediaSessionListener() {
+            if ('mediaSession' in navigator) {
+                navigator.mediaSession.metadata = new MediaMetadata({ title: "COM TAC - LINK", artist: "Tactical Audio" });
+                
+                const actions = ['play', 'pause', 'stop', 'previoustrack', 'nexttrack', 'seekbackward', 'seekforward'];
+                
+                actions.forEach(action => {
+                    try {
+                        navigator.mediaSession.setActionHandler(action, () => toggleTx(`MEDIA (${action})`));
+                    } catch(e) {}
+                });
+            }
+        }
+
+        // --- ÉCOUTEUR 2 : CLAVIER (Télécommandes Shutter, Pédales, Claviers) ---
+        function activateKeyboardListener() {
+            window.addEventListener('keydown', (e) => {
+                const code = e.code;
+                const key = e.key;
+                
+                // On liste tout ce qui ressemble à une commande à distance
+                const triggers = [
+                    'Enter', 'Space', 'MediaPlayPause', 'MediaTrackNext', 'MediaTrackPrevious',
+                    'VolumeUp', 'VolumeDown', 'AudioVolumeUp', 'AudioVolumeDown', // Tentative d'interception
+                    'ArrowUp', 'ArrowDown', 'PageUp', 'PageDown'
+                ];
+
+                log(`Key Input: ${code}`); // Pour le debug
+
+                if (triggers.includes(code) || triggers.includes(key)) {
+                    e.preventDefault(); // Tente de bloquer l'action par défaut (Volume, Scroll)
+                    toggleTx(`KEY (${code || key})`);
+                }
+            });
+        }
+
+        // --- ÉCOUTEUR 3 : GAMEPAD (Manettes VR, Contrôleurs spécifiques) ---
+        function activateGamepadListener() {
+            let gpInterval = setInterval(() => {
+                const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+                for (let i = 0; i < gamepads.length; i++) {
+                    const gp = gamepads[i];
+                    if (gp) {
+                        // On vérifie tous les boutons
+                        for (let b = 0; b < gp.buttons.length; b++) {
+                            if (gp.buttons[b].pressed) {
+                                // On ne veut pas spammer le toggle, le debounce global gère ça
+                                toggleTx(`GAMEPAD (Btn ${b})`);
+                            }
+                        }
+                    }
+                }
+            }, 100); // Vérification toutes les 100ms
+        }
+
+        // --- UTILITAIRES ---
+        function log(msg) {
+            const el = document.getElementById('debug-log');
+            el.innerText = msg;
+            console.log(msg);
+        }
+
+        // --- RESEAU CORE ---
+        function initPeer() {
+            const simpleId = Math.floor(Math.random() * 9000) + 1000;
+            peer = new Peer("comtac-" + simpleId);
+            peer.on('open', (id) => {
+                document.getElementById('my-id').innerText = id.split('-')[1];
+                document.getElementById('connection-dot').classList.add('connected');
+            });
+            peer.on('call', (call) => {
+                call.answer(); call.on('stream', playAudio);
+            });
+        }
+        function connectToPeer() {
+            const id = document.getElementById('remote-id').value;
+            if(id) {
+                const call = peer.call("comtac-" + id, localStream);
+                call.on('stream', playAudio);
+            }
+        }
+        function playAudio(stream) {
+            const a = new Audio(); a.srcObject = stream; a.play();
+        }
+        function copyId() {
+            navigator.clipboard.writeText(document.getElementById('my-id').innerText);
+            alert("ID Copié");
+        }
+    </script>
+</body>
+</html>
