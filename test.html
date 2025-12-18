@@ -2,304 +2,934 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>COM TAC ULTIMATE v4</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#000000">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="format-detection" content="telephone=no">
+    <title>COM TAC v13.3</title>
+    
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Chakra+Petch:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,1,0" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="icon" href="favicon.ico" sizes="any" type="image/png">
+
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; -webkit-tap-highlight-color: transparent; }
-        body { background: #000; color: #fff; font-family: 'Chakra Petch', sans-serif; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+        :root {
+            --color-bg: #050505; --color-surface: #121214; --color-surface-light: #1c1c1f;
+            --color-blue: #3b82f6; --color-red: #ef4444; --color-green: #22c55e; --color-yellow: #eab308;
+            --color-purple: #a855f7; --color-text: #e4e4e7; --color-dim: #71717a;
+            --font-ui: 'Chakra Petch', sans-serif; --font-mono: 'JetBrains Mono', monospace;
+            --header-height: 60px; --radius: 12px;
+            --safe-top: env(safe-area-inset-top, 0px); --safe-bottom: env(safe-area-inset-bottom, 20px);
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-tap-highlight-color: transparent; }
+        body { font-family: var(--font-ui); background-color: var(--color-bg); color: var(--color-text); height: 100dvh; width: 100vw; overflow: hidden; display: flex; flex-direction: column; overscroll-behavior: none; }
         
-        /* HEADER */
-        .header { height: 60px; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; border-bottom: 1px solid #333; background: #111; z-index:10; }
-        .status { width: 12px; height: 12px; border-radius: 50%; background: #333; box-shadow: 0 0 5px #000; transition: 0.3s; }
-        .status.connected { background: #0f0; box-shadow: 0 0 10px #0f0; }
+        header { height: calc(var(--header-height) + var(--safe-top)); padding: var(--safe-top) 16px 0 16px; background: rgba(5,5,5,0.95); border-bottom: 1px solid rgba(255,255,255,0.1); display: flex; justify-content: space-between; align-items: center; position: fixed; top: 0; left: 0; right: 0; z-index: 1000; transition: background 0.3s; }
+        body.silence-active header { border-bottom: 1px solid var(--color-red); background: rgba(50, 0, 0, 0.9); }
+        body.private-active header { border-bottom: 1px solid var(--color-purple); background: rgba(20, 0, 40, 0.9); }
+        .brand { font-weight: 800; font-size: 1.2rem; letter-spacing: 1px; display: flex; align-items: center; gap: 8px; }
+        .brand span { color: var(--color-blue); }
+        body.silence-active .brand span { color: var(--color-red); } body.private-active .brand span { color: var(--color-purple); }
 
-        /* DEBUG LOG - GRANDE VISIBILITÉ */
-        #debug-log {
-            flex: 1;
-            background: rgba(0,20,0,0.8);
-            font-family: monospace; font-size: 0.9rem; color: #0f0;
-            overflow-y: auto; padding: 10px;
-            border-bottom: 1px solid #004400;
-            text-align: left;
-            white-space: pre-wrap;
-        }
+        .nav-group { display: flex; gap: 8px; }
+        .btn-nav { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.1); color: var(--color-text); padding: 6px 12px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 5px; }
+        .btn-nav.active { background: var(--color-blue); color: black; border-color: var(--color-blue); }
+        .btn-nav.danger { border-color: rgba(239, 68, 68, 0.5); color: var(--color-red); }
 
-        /* MAIN PTT BUTTON */
-        .ptt-wrapper { height: 120px; display: flex; align-items: center; justify-content: center; background: #111; border-top: 1px solid #333; }
-        #ptt-btn {
-            width: 100px; height: 100px; border-radius: 50%;
-            background: #1a1a1a; border: 4px solid #333;
-            color: #555; font-size: 1.2rem; font-weight: bold;
-            display: flex; align-items: center; justify-content: center;
-            transition: 0.1s; cursor: pointer;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.5);
-        }
+        .view-container { position: relative; flex: 1; overflow: hidden; }
+        .view { position: absolute; inset: 0; background: var(--color-bg); display: flex; flex-direction: column; opacity: 0; pointer-events: none; z-index: 0; transition: opacity 0.3s ease; padding-top: calc(var(--header-height) + var(--safe-top)); }
+        .view.active { opacity: 1; pointer-events: all; z-index: 10; }
+
+        .center-content { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; padding: 30px; text-align: center; }
+        .input-large { background: transparent; border: none; border-bottom: 2px solid #333; width: 100%; font-size: 2rem; font-family: var(--font-mono); color: white; text-align: center; padding: 15px; margin: 30px 0; border-radius: 0; outline: none; -webkit-appearance: none; appearance: none; }
+        .input-large:focus { border-color: var(--color-blue); }
+        .btn-block { width: 100%; padding: 20px; margin-bottom: 15px; background: var(--color-surface); border: 1px solid rgba(255,255,255,0.1); border-radius: var(--radius); color: white; font-weight: 700; text-align: left; font-size: 1.1rem; display: flex; align-items: center; gap: 15px; cursor: pointer; transition: background 0.2s; }
+        .btn-block:active { background: var(--color-surface-light); }
+
+        #map-instance { width: 100%; height: 100%; background: #0b0b0b; z-index: 1; }
+        .map-controls { position: absolute; top: calc(var(--header-height) + var(--safe-top) + 10px); right: 10px; display: flex; flex-direction: column; gap: 10px; z-index: 400; }
+        .map-btn { width: 44px; height: 44px; background: rgba(0,0,0,0.8); border: 1px solid rgba(255,255,255,0.2); border-radius: 50%; color: white; display: flex; align-items: center; justify-content: center; cursor: pointer; backdrop-filter: blur(4px); }
+        .map-btn.active { background: var(--color-blue); color: black; border-color: var(--color-blue); }
+        .map-btn.alert { background: var(--color-red); color: white; border-color: var(--color-red); animation: pulse-btn 1s infinite; }
+
+        .tac-wrapper { transition: transform 0.5s linear; will-change: transform; }
+        .tac-arrow { width: 0; height: 0; border-left: 10px solid transparent; border-right: 10px solid transparent; border-bottom: 24px solid var(--color-blue); filter: drop-shadow(0 0 4px var(--color-blue)); }
+        .tac-label { position: absolute; top: 28px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.85); color: white; padding: 2px 6px; border-radius: 4px; font-family: var(--font-mono); font-size: 10px; font-weight: bold; white-space: nowrap; border: 1px solid var(--color-blue); }
         
-        /* ETAT ACTIF (TRANSMISSION) */
-        body.is-tx #ptt-btn {
-            background: #ef4444; border-color: #fff; color: white;
-            box-shadow: 0 0 30px rgba(239, 68, 68, 0.6); transform: scale(0.95);
-        }
-        body.is-tx .header { background: #300; }
+        .status-CONTACT .tac-arrow { border-bottom-color: var(--color-red); filter: drop-shadow(0 0 10px red); animation: pulse-arrow 0.8s infinite; } .status-CONTACT .tac-label { border-color: var(--color-red); color: var(--color-red); }
+        @keyframes pulse-arrow { 0% { transform: scale(1); } 50% { transform: scale(1.3); opacity: 0.8; } 100% { transform: scale(1); } }
+        .status-CLEAR .tac-arrow { border-bottom-color: var(--color-green); } .status-CLEAR .tac-label { border-color: var(--color-green); color: var(--color-green); }
+        .status-APPUI .tac-arrow { border-bottom-color: var(--color-yellow); } .status-APPUI .tac-label { border-color: var(--color-yellow); color: var(--color-yellow); }
+        .status-PROGRESSION .tac-arrow { border-bottom-color: var(--color-blue); } .status-PROGRESSION .tac-label { border-color: var(--color-blue); color: var(--color-blue); }
+        .status-BUSY .tac-arrow { border-bottom-color: var(--color-purple); } .status-BUSY .tac-label { border-color: var(--color-purple); color: var(--color-purple); }
 
-        /* INPUT TRAP (INVISIBLE) */
-        #key-trap {
-            position: absolute; opacity: 0; top: -1000px;
-            /* Empêcher le zoom et le clavier virtuel sur mobile */
-            font-size: 16px; 
-        }
+        .ping-marker { text-align: center; pointer-events: none; }
+        .ping-icon { color: var(--color-red); font-size: 30px; filter: drop-shadow(0 0 5px black); animation: bounce 1s infinite; }
+        .ping-msg { background: var(--color-red); color: white; padding: 2px 6px; font-size: 10px; border-radius: 4px; font-weight: bold; font-family: var(--font-mono); }
+        @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } 100% { transform: translateY(0); } }
 
-        /* MENU CONNEXION */
-        #login-screen { position: fixed; inset: 0; background: #000; z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; }
-        button { background: #ef4444; border: none; padding: 15px 40px; border-radius: 8px; color: white; font-weight: bold; font-size: 1.1rem; cursor: pointer; margin-top: 20px; }
-        
-        .id-display { font-family: monospace; color: #3b82f6; cursor: pointer; font-size: 1.2rem;}
-        .controls { display: flex; gap: 10px; padding: 10px; justify-content: center; background: #111;}
-        .controls input { background: #222; border: 1px solid #444; color: white; padding: 8px; width: 100px; text-align: center; }
-        .controls button { margin: 0; padding: 8px 15px; font-size: 0.9rem; background: #3b82f6; }
+        .ops-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; padding: 15px; padding-bottom: calc(240px + var(--safe-bottom)); padding-top: 20px; overflow-y: auto; align-content: start; width: 100%; max-width: 600px; margin: 0 auto; -webkit-overflow-scrolling: touch; }
+        .op-card { background: var(--color-surface); border: 1px solid rgba(255,255,255,0.1); border-radius: var(--radius); padding: 12px; display: flex; flex-direction: column; min-height: 120px; position: relative; transition: all 0.2s; }
+        .op-card.is-me { background: rgba(59, 130, 246, 0.08); border-color: rgba(59, 130, 246, 0.3); }
+        .op-card.talking { border-color: var(--color-green); box-shadow: inset 0 0 20px rgba(34, 197, 94, 0.2); }
+        .op-card[data-status="CONTACT"] { animation: pulse-red 1s infinite; }
+        .op-card[data-status="BUSY"] { border-color: var(--color-purple); opacity: 0.8; }
+        @keyframes pulse-red { 0%, 100% { border-color: var(--color-red); } 50% { border-color: transparent; } }
+        .op-header { display: flex; justify-content: space-between; margin-bottom: 5px; }
+        .op-role { font-size: 0.7rem; color: var(--color-dim); font-weight: 700; background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px; }
+        .op-role.HOST { color: var(--color-yellow); border: 1px solid rgba(234, 179, 8, 0.3); }
+        .op-callsign { font-family: var(--font-mono); font-size: 1.2rem; font-weight: 800; margin-bottom: 5px; }
+        .op-status { font-size: 0.8rem; font-weight: 700; text-transform: uppercase; margin-top: auto; }
+        .op-bat { font-size: 0.7rem; color: var(--color-dim); margin-top: 5px; }
+        .btn-private { position: absolute; right: 10px; bottom: 10px; width: 30px; height: 30px; border-radius: 50%; background: rgba(255,255,255,0.1); color: var(--color-dim); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: 0.2s; }
+        .btn-private:active { background: var(--color-purple); color: white; }
+
+        .hud-panel { position: fixed; bottom: 0; left: 0; right: 0; z-index: 500; background: rgba(10,10,10,0.95); backdrop-filter: blur(20px); border-top: 1px solid rgba(255,255,255,0.1); border-radius: 24px 24px 0 0; padding: 15px 20px calc(30px + var(--safe-bottom)); display: none; box-shadow: 0 -10px 50px rgba(0,0,0,0.8); transition: background 0.3s, border-color 0.3s; }
+        body.silence-active .hud-panel { border-top: 2px solid var(--color-red); background: rgba(20, 0, 0, 0.95); }
+        body.private-active .hud-panel { border-top: 2px solid var(--color-purple); background: rgba(20, 0, 40, 0.95); }
+        .status-bar { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 12px; margin-bottom: 10px; scrollbar-width: none; }
+        .chip { padding: 8px 16px; border-radius: 8px; font-size: 0.75rem; font-weight: 700; white-space: nowrap; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: var(--color-dim); cursor: pointer; }
+        .chip.active { background: var(--color-blue); color: black; border-color: transparent; }
+        .chip[data-val="CONTACT"].active { background: var(--color-red); color: white; }
+        .chip[data-val="CLEAR"].active { background: var(--color-green); color: black; }
+        .chip[data-val="APPUI"].active { background: var(--color-yellow); color: black; }
+        .chip[data-val="PROGRESSION"].active { background: var(--color-blue); color: black; }
+        .chip.silence-btn { border-color: var(--color-red); color: var(--color-red); }
+        .chip.silence-btn.active { background: var(--color-red); color: white; animation: pulse-btn 1s infinite; }
+        .chip.private-exit-btn { border-color: var(--color-purple); color: var(--color-purple); width: 100%; text-align: center; justify-content: center; display: none; }
+        body.private-active .chip.private-exit-btn { display: flex; animation: pulse-btn 2s infinite; }
+        body.private-active .chip:not(.private-exit-btn) { display: none; }
+        @keyframes pulse-btn { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+
+        .ptt-container { display: flex; align-items: center; justify-content: center; position: relative; height: 90px; }
+        #ptt-btn { width: 85px; height: 85px; border-radius: 28px; background: #222; border: 2px solid #444; color: #666; display: flex; align-items: center; justify-content: center; font-size: 2.5rem; cursor: pointer; user-select: none; box-shadow: 0 5px 20px rgba(0,0,0,0.5); transition: transform 0.1s, background 0.3s; -webkit-tap-highlight-color: transparent; }
+        #ptt-btn:active, #ptt-btn.active { transform: scale(0.95); background: var(--color-blue); border-color: white; color: white; box-shadow: 0 0 30px rgba(59, 130, 246, 0.4); }
+        #ptt-btn.vox-active { border-color: var(--color-green); color: var(--color-green); }
+        #ptt-btn.headset-mode { border-color: var(--color-blue); color: var(--color-blue); }
+        body.silence-active #ptt-btn { border-color: #333; color: #333; cursor: not-allowed; }
+        body.silence-active #ptt-btn:active { transform: none; background: #222; box-shadow: none; color: #333; }
+        body.silence-active.is-host #ptt-btn { border-color: var(--color-red); color: var(--color-red); cursor: pointer; }
+        body.silence-active.is-host #ptt-btn:active, body.silence-active.is-host #ptt-btn.active { background: var(--color-red); color: white; box-shadow: 0 0 30px rgba(239, 68, 68, 0.4); }
+        body.private-active #ptt-btn { border-color: var(--color-purple); color: var(--color-purple); }
+        body.private-active #ptt-btn:active, body.private-active #ptt-btn.active { background: var(--color-purple); color: white; box-shadow: 0 0 30px rgba(168, 85, 247, 0.4); }
+
+        .side-btn { position: absolute; width: 50px; height: 50px; border-radius: 50%; background: rgba(255,255,255,0.05); display: flex; align-items: center; justify-content: center; color: var(--color-dim); cursor: pointer; }
+        .side-btn.left { left: 10px; } .side-btn.right { right: 10px; }
+        .hud-footer { text-align: center; font-size: 0.7rem; color: #555; margin-top: 10px; font-family: var(--font-mono); }
+
+        .overlay { position: fixed; inset: 0; background: #000; z-index: 5000; display: none; flex-direction: column; align-items: center; justify-content: center; }
+        .close-overlay { position: absolute; top: 30px; right: 30px; width: 50px; height: 50px; background: rgba(255,255,255,0.2); border-radius: 50%; color: white; display: flex; align-items: center; justify-content: center; cursor: pointer; font-weight: bold; }
+        #scan-region { width: 300px; height: 300px; background: black; border-radius: 20px; overflow: hidden; border: 1px solid #333; }
+        #qr-code-region { background: white; padding: 20px; border-radius: 20px; display: flex; align-items: center; justify-content: center; width: auto; max-width: 85vw; }
+        #qr-code-region img { display: block; max-width: 100% !important; height: auto !important; }
+        #visualizer { position: absolute; bottom: 120px; left: 0; width: 100%; height: 80px; pointer-events: none; opacity: 0.5; z-index: 400; }
+        #toast-msg { position: fixed; top: 30px; left: 50%; transform: translateX(-50%); background: #1a1a1a; border: 1px solid var(--color-blue); color: var(--color-blue); padding: 12px 24px; border-radius: 30px; font-weight: 700; font-size: 0.85rem; z-index: 9999; display: none; box-shadow: 0 10px 40px rgba(0,0,0,0.8); }
+        #silence-banner, #private-banner { position: fixed; top: calc(var(--header-height) + var(--safe-top)); width: 100%; text-align: center; font-weight: 800; padding: 5px; font-size: 0.8rem; z-index: 900; display: none; animation: pulse-btn 2s infinite; }
+        #silence-banner { background: var(--color-red); color: white; }
+        #private-banner { background: var(--color-purple); color: white; }
+        body.silence-active #silence-banner { display: block; } body.private-active #private-banner { display: block; }
     </style>
 </head>
 <body>
 
-    <div id="login-screen">
-        <h1 style="color:#ef4444; margin-bottom: 10px;">ULTIMATE v4</h1>
-        <p style="color:#888; text-align: center; margin-bottom: 30px; font-size: 0.9rem;">
-            Mode DIAGNOSTIC & FORCE BRUTE.<br>
-            Cochez "Desktop Site" si sur Android Chrome.
-        </p>
-        <button onclick="startApp()">ACTIVER L'ÉCOUTE</button>
+    <header>
+        <div class="brand"><span class="material-symbols-outlined">satellite_alt</span> COM<span>TAC</span> v13.3</div>
+        <div class="nav-group">
+            <div class="btn-nav" id="btn-toggle-map" onclick="App.toggleMap()"><span class="material-symbols-outlined">map</span> Tacmap</div>
+            <div class="btn-nav danger" id="btn-quit" onclick="App.leaveSession(true)" style="display:none;"><span class="material-symbols-outlined">logout</span></div>
+        </div>
+    </header>
+
+    <div id="silence-banner">SILENCE RADIO ACTIF - ÉCOUTE SEULE</div>
+    <div id="private-banner">CANAL PRIVÉ ACTIF</div>
+    <div id="toast-msg">Système Prêt</div>
+
+    <div id="overlay-scanner" class="overlay">
+        <div class="close-overlay" onclick="QRService.stop()">✕</div>
+        <div id="scan-region"></div>
+        <div style="margin-top: 20px; color: #777;">Visez le QR Code</div>
     </div>
 
-    <!-- Le Piège à Focus pour capturer les touches "Volume" si vues comme clavier -->
-    <input type="text" id="key-trap" autocomplete="off">
-
-    <!-- Audio Player pour priorité Media -->
-    <audio id="silent-player" loop playsinline>
-        <source src="data:audio/mp3;base64,//NkxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//NkxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq" type="audio/mpeg">
-    </audio>
-
-    <div class="header">
-        <div style="color:#ef4444"><b>OMNI</b> LINK v4</div>
-        <div id="connection-dot" class="status"></div>
+    <div id="overlay-generator" class="overlay" style="background: rgba(0,0,0,0.95);">
+        <div class="close-overlay" onclick="QRService.hide()">✕</div>
+        <div style="text-align: center; width: 100%; padding: 20px; display: flex; flex-direction: column; align-items: center;">
+            <div id="qr-code-region"></div>
+            <div id="qr-text-val" style="margin-top: 20px; font-family: var(--font-mono); color: var(--color-blue); font-size: 1.5rem; word-break: break-all;">...</div>
+        </div>
     </div>
 
-    <div id="debug-log">Journal des événements...</div>
-
-    <div class="controls">
-        <div id="my-id" class="id-display" onclick="copyId()">ID: ...</div>
-        <input type="text" id="remote-id" placeholder="Cible">
-        <button onclick="connectToPeer()">LINK</button>
+    <!-- VUE: LOGIN -->
+    <div id="view-login" class="view active">
+        <div class="center-content">
+            <span class="material-symbols-outlined" style="font-size: 5rem; color: var(--color-blue); margin-bottom: 30px; opacity: 0.8;">fingerprint</span>
+            <h2 style="color:white; margin-bottom: 10px;">IDENTIFICATION</h2>
+            <input type="text" id="input-callsign" class="input-large" placeholder="Trigramme" maxlength="8" autocomplete="off">
+            <button class="btn-block" id="btn-login-trigger" onclick="App.login()" style="justify-content: center; background: var(--color-blue); border:none; margin-top: 20px;">CONNEXION</button>
+        </div>
     </div>
 
-    <div class="ptt-wrapper">
-        <div id="ptt-btn" onmousedown="manualToggle()" ontouchstart="manualToggle()">PTT</div>
+    <!-- VUE: MENU -->
+    <div id="view-menu" class="view">
+        <div class="center-content" style="justify-content: flex-start; padding-top: 60px;">
+            <h3 style="color: var(--color-dim); width: 100%; text-align: left; margin-bottom: 20px;">DÉPLOIEMENT</h3>
+            <button class="btn-block" id="btn-create-host" onclick="NetService.createSession()">
+                <span class="material-symbols-outlined" style="font-size: 1.8rem;">add_circle</span>
+                <div><div>Créer Salon</div><div style="font-size: 0.7rem; color: var(--color-dim);">Hôte (Squad Leader)</div></div>
+            </button>
+            <button class="btn-block" onclick="QRService.start()">
+                <span class="material-symbols-outlined" style="font-size: 1.8rem;">qr_code_scanner</span>
+                <div><div>Scanner QR</div><div style="font-size: 0.7rem; color: var(--color-dim);">Caméra</div></div>
+            </button>
+            
+            <button class="btn-block" onclick="BluetoothService.connect()" style="background: rgba(168, 85, 247, 0.1); border-color: rgba(168, 85, 247, 0.3);">
+                <span class="material-symbols-outlined" style="font-size: 1.8rem; color: var(--color-purple);">bluetooth_searching</span>
+                <div><div style="color: var(--color-purple);">SCAN PTT BLE</div><div style="font-size: 0.7rem; color: var(--color-dim);">Web Bluetooth API</div></div>
+            </button>
+
+            <div style="width: 100%; margin-top: 40px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.1);">
+                <div style="text-align: left; color: var(--color-dim); font-size: 0.8rem; margin-bottom: 15px;">MANUEL</div>
+                <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                    <input type="text" id="input-join-id" class="input-large" placeholder="ID CANAL..." style="margin: 0; font-size: 1rem; text-align: left;">
+                    <button onclick="navigator.clipboard.readText().then(t => document.getElementById('input-join-id').value = t)" style="width: 60px; background: var(--color-surface); border: 1px solid rgba(255,255,255,0.1); border-radius: var(--radius); color: white; cursor: pointer;"><span class="material-symbols-outlined">content_paste</span></button>
+                </div>
+                <button class="btn-block" id="btn-join-trigger" onclick="NetService.joinSession()" style="justify-content: center; background: rgba(255,255,255,0.05);">REJOINDRE</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- VUES OPS & MAP -->
+    <div id="view-ops" class="view"><div id="ops-container" class="ops-grid"></div></div>
+    <div id="view-map" class="view">
+        <div class="map-controls">
+            <div class="map-btn" onclick="MapService.toggleMode()"><span class="material-symbols-outlined" id="icon-map-mode">light_mode</span></div>
+            <div class="map-btn" id="btn-toggle-trails" onclick="MapService.toggleTrails()"><span class="material-symbols-outlined" id="icon-trails">timeline</span></div>
+            <div class="map-btn" id="btn-ping-mode" onclick="App.togglePingMode()"><span class="material-symbols-outlined">ads_click</span></div>
+        </div>
+        <div id="map-instance"></div>
+    </div>
+
+    <!-- HUD -->
+    <div id="hud" class="hud-panel">
+        <canvas id="visualizer"></canvas>
+        <div class="status-bar">
+            <div class="chip private-exit-btn" onclick="App.leavePrivate()">QUITTER PRIVÉ</div>
+            <div class="chip" onclick="App.setStatus('PROGRESSION')" data-val="PROGRESSION">PROGRESSION</div>
+            <div class="chip" onclick="App.setStatus('CONTACT')" data-val="CONTACT">CONTACT</div>
+            <div class="chip" onclick="App.setStatus('CLEAR')" data-val="CLEAR">CLEAR</div>
+            <div class="chip" onclick="App.setStatus('APPUI')" data-val="APPUI">EN APPUI</div>
+            <div class="chip silence-btn" id="btn-silence" onclick="App.toggleSilence()" style="display:none;">SILENCE</div>
+        </div>
+        <div class="ptt-container">
+            <div class="side-btn left" onclick="AudioService.toggleVox()"><span class="material-symbols-outlined" id="icon-mic">mic_none</span></div>
+            <div id="ptt-btn"><span class="material-symbols-outlined">mic</span></div>
+            <div class="side-btn right" onclick="QRService.show()"><span class="material-symbols-outlined">qr_code_2</span></div>
+        </div>
+        <div class="hud-footer">
+            <span id="txt-id-display" onclick="App.copyID()" style="cursor: pointer; border-bottom: 1px dotted #555;">ID: ...</span> 
+            <span style="margin: 0 10px; color: #333;">|</span>
+            <span id="txt-gps-display" onclick="MapService.init()" style="cursor: pointer;">GPS: OFF</span>
+        </div>
     </div>
 
     <script>
-        // --- VARIABLES ---
-        let peer = null;
-        let localStream = null;
-        let isTransmitting = false;
-        let lastTriggerTime = 0;
-        let audioContext = null;
-        let trapInterval = null;
-
-        // --- DEMARRAGE ---
-        async function startApp() {
-            try {
-                const AC = window.AudioContext || window.webkitAudioContext;
-                audioContext = new AC();
-                await audioContext.resume();
-                log("AudioContext: " + audioContext.state);
-
-                // 1. Audio Média (Fichier)
-                const player = document.getElementById('silent-player');
-                player.play().then(() => log("Lecteur Audio: PLAYING")).catch(e => log("Lecteur Err: " + e));
-
-                // 2. Wake Lock
-                if ('wakeLock' in navigator) { 
-                    try { await navigator.wakeLock.request('screen'); log("WakeLock: OK"); } 
-                    catch(e){ log("WakeLock: Fail"); } 
+        const CONFIG = {
+            sessionKey: 'comtac_v13_session',
+            trigramKey: 'comtac_v13_trigram',
+            peerConfig: { 
+                debug: 1,
+                config: {
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun1.l.google.com:19302' },
+                        { urls: 'stun:stun.l.google.com:443' },
+                    ],
                 }
-
-                // 3. Init Réseau
-                initPeer();
-
-                // 4. Activation des écouteurs
-                setupListeners();
-                
-                // 5. Activation du Piège à Focus
-                enableFocusTrap();
-
-                // 6. Micro
-                try {
-                    localStream = await navigator.mediaDevices.getUserMedia({ 
-                        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } 
-                    });
-                    localStream.getAudioTracks().forEach(t => t.enabled = false);
-                    log("Micro: OK");
-                } catch(err) { log("Micro ERR: " + err.message); }
-
-                document.getElementById('login-screen').style.display = 'none';
-
-            } catch (e) {
-                alert("Erreur: " + e);
             }
-        }
+        };
 
-        // --- PIÈGE À FOCUS (POUR BOUTONS VOLUME/SHUTTER) ---
-        function enableFocusTrap() {
-            const trap = document.getElementById('key-trap');
-            
-            // Force le focus toutes les secondes pour être sûr
-            trapInterval = setInterval(() => {
-                if (document.activeElement !== trap) {
-                    trap.focus();
-                    // log("Refocus Trap"); // Spam log, désactivé
-                }
-            }, 2000);
-            
-            trap.focus();
-            log("Piège Clavier: ACTIF");
-            
-            // Si on clique n'importe où, on remet le focus dans le piège
-            document.addEventListener('click', () => trap.focus());
-            document.addEventListener('touchstart', () => trap.focus());
-        }
-
-        // --- COEUR DU SYSTÈME ---
-        function toggleTx(sourceName) {
-            const now = Date.now();
-            if (now - lastTriggerTime < 300) return;
-            lastTriggerTime = now;
-
-            isTransmitting = !isTransmitting;
-            
-            if (localStream) localStream.getAudioTracks().forEach(t => t.enabled = isTransmitting);
-
-            const btn = document.getElementById('ptt-btn');
-            const body = document.body;
-
-            if (isTransmitting) {
-                body.classList.add('is-tx');
-                btn.innerText = "ON";
-                if(navigator.vibrate) navigator.vibrate(50);
-            } else {
-                body.classList.remove('is-tx');
-                btn.innerText = "PTT";
-                if(navigator.vibrate) navigator.vibrate([30, 30]);
-            }
-            
-            // Re-forcer le statut Playing pour l'OS
-            if(navigator.mediaSession) navigator.mediaSession.playbackState = "playing";
-            
-            log(`>>> ACTION PTT: ${isTransmitting ? 'ON' : 'OFF'} [${sourceName}]`);
-        }
-        
-        function manualToggle() {
-            if(audioContext && audioContext.state === 'suspended') audioContext.resume();
-            toggleTx("Tactile");
-        }
-
-        // --- ÉCOUTEURS UNIVERSELS ---
-        function setupListeners() {
-            // 1. MEDIA SESSION (Casques Bluetooth Standards)
-            if ('mediaSession' in navigator) {
-                navigator.mediaSession.metadata = new MediaMetadata({ title: "COM TAC v4", artist: "Canal Tactique" });
-                const actions = ['play', 'pause', 'stop', 'previoustrack', 'nexttrack'];
-                actions.forEach(action => {
-                    try {
-                        navigator.mediaSession.setActionHandler(action, () => {
-                            log(`EVENT MEDIA REÇU: ${action}`);
-                            toggleTx(`MEDIA ${action}`);
-                        });
-                    } catch(e) {}
+        const DBService = {
+            db: null, name: 'ComTac_DB_v12',
+            init: async () => {
+                return new Promise((resolve) => {
+                    const r = indexedDB.open(DBService.name, 1);
+                    r.onupgradeneeded = (e) => { if(!e.target.result.objectStoreNames.contains('tiles')) e.target.result.createObjectStore('tiles', {keyPath: 'key'}); };
+                    r.onsuccess = (e) => { DBService.db = e.target.result; resolve(); };
+                    r.onerror = () => resolve();
                 });
-                log("MediaSession: Prêt");
+            },
+            putTile: (k, b) => { try { DBService.db.transaction('tiles', 'readwrite').objectStore('tiles').put({ key: k, blob: b }); } catch(e){} },
+            getTile: async (k) => {
+                if (!DBService.db) return null;
+                return new Promise((res) => { try { DBService.db.transaction('tiles', 'readonly').objectStore('tiles').get(k).onsuccess = (e) => res(e.target.result?.blob); } catch{ res(null); } });
             }
+        };
 
-            // 2. CLAVIER & PIÈGE (Shutter, Volume Keys mappées)
-            // On écoute sur window ET sur le trap
-            const handleKey = (e) => {
-                log(`EVENT KEY REÇU: Code=${e.code} / Key=${e.key}`);
-                
-                // Liste large de déclencheurs
-                const triggers = [
-                    'Enter', 'Space', 'MediaPlayPause', 'MediaTrackNext', 'MediaTrackPrevious',
-                    'VolumeUp', 'VolumeDown', 'AudioVolumeUp', 'AudioVolumeDown', 
-                    'ArrowUp', 'ArrowDown'
-                ];
-                
-                if (triggers.includes(e.code) || triggers.includes(e.key)) {
-                    e.preventDefault(); // Bloquer l'action par défaut (ex: scroll)
-                    toggleTx(`KEY ${e.code}`);
+        const MapService = {
+            map: null, layer: null, geoId: null, lastLat: 0, lastLng: 0, mode: 'dark', pings: {}, showTrails: true,
+            init: () => {
+                if (MapService.map) { MapService.refreshMarkers(); return; }
+                MapService.map = L.map('map-instance', { zoomControl: false, attributionControl: false }).setView([48.85, 2.35], 13);
+                MapService.map.on('click', (e) => { if (App.pingMode) App.sendPing(e.latlng); });
+                MapService.loadLayer(); MapService.refreshMarkers();
+            },
+            loadLayer: () => {
+                if (MapService.layer) MapService.map.removeLayer(MapService.layer);
+                const url = MapService.mode === 'dark' ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png' : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+                const OfflineLayer = L.TileLayer.extend({
+                    createTile: function(coords, done) {
+                        const tile = document.createElement('img');
+                        const k = `${MapService.mode}_${coords.z}_${coords.x}_${coords.y}`;
+                        const u = this.getTileUrl(coords);
+                        DBService.getTile(k).then(b => {
+                            if(b) { tile.src = URL.createObjectURL(b); done(null, tile); }
+                            else fetch(u).then(r => r.blob()).then(b => { DBService.putTile(k, b); tile.src = URL.createObjectURL(b); done(null, tile); }).catch(() => done(null, tile)); 
+                        });
+                        return tile;
+                    }
+                });
+                MapService.layer = new OfflineLayer(url, { subdomains: 'abcd', maxZoom: 19 }).addTo(MapService.map);
+            },
+            toggleMode: () => { MapService.mode = MapService.mode === 'dark' ? 'light' : 'dark'; document.getElementById('icon-map-mode').innerText = MapService.mode === 'dark' ? 'light_mode' : 'dark_mode'; MapService.loadLayer(); },
+            toggleTrails: () => {
+                MapService.showTrails = !MapService.showTrails;
+                document.getElementById('icon-trails').style.opacity = MapService.showTrails ? '1' : '0.3';
+                Object.values(App.peers).forEach(p => { if(p.trail) p.trail.setStyle({ opacity: MapService.showTrails ? 0.6 : 0 }); });
+                const me = MapService; if(me.trail) me.trail.setStyle({ opacity: MapService.showTrails ? 0.6 : 0 });
+                App.toast(MapService.showTrails ? "Tracés: VISIBLES" : "Tracés: MASQUÉS");
+            },
+            refreshMarkers: () => {
+                Object.keys(App.peers).forEach(pid => MapService.updateMarker(pid, App.peers[pid].data));
+                if(App.user.lat) MapService.updateMarker(App.user.id, App.user);
+                Object.values(MapService.pings).forEach(p => p.marker.addTo(MapService.map));
+            },
+            startGPS: () => {
+                if (!navigator.geolocation) { document.getElementById('txt-gps-display').innerText = "GPS N/A"; return; }
+                const tryGPS = (high) => {
+                    if (MapService.geoId) navigator.geolocation.clearWatch(MapService.geoId);
+                    MapService.geoId = navigator.geolocation.watchPosition(
+                        (pos) => {
+                            const { latitude, longitude, heading, accuracy } = pos.coords;
+                            if (MapService.lastLat !== 0 && (!heading || isNaN(heading))) App.user.head = MapService.calcHeading(MapService.lastLat, MapService.lastLng, latitude, longitude);
+                            else if (heading) App.user.head = heading;
+                            if (MapService.dist(MapService.lastLat, MapService.lastLng, latitude, longitude) > 0.00015 && App.user.status !== 'CONTACT') App.setStatus('PROGRESSION');
+                            MapService.lastLat = latitude; MapService.lastLng = longitude; App.user.lat = latitude; App.user.lng = longitude;
+                            const el = document.getElementById('txt-gps-display');
+                            if(el) { el.innerText = `GPS ±${Math.floor(accuracy)}m`; el.style.color = accuracy < 20 ? 'var(--color-green)' : 'var(--color-yellow)'; }
+                            NetService.broadcast(); if (MapService.map) MapService.updateMarker(App.user.id, App.user);
+                        },
+                        (err) => { if (high) tryGPS(false); else { document.getElementById('txt-gps-display').innerText = "GPS ERR"; setTimeout(() => tryGPS(true), 10000); } },
+                        { enableHighAccuracy: high, timeout: high ? 15000 : 30000, maximumAge: 0 } 
+                    );
+                };
+                tryGPS(true);
+            },
+            updateMarker: (id, data) => {
+                if (!MapService.map || !data.lat) return;
+                const storage = (id === App.user.id) ? MapService : App.peers[id];
+                if (!storage) return;
+                const html = `<div class="tac-wrapper status-${data.status||'CLEAR'}" style="transform: rotate(${data.head||0}deg);"><div class="tac-arrow"></div></div><div class="tac-label status-${data.status||'CLEAR'}">${data.callsign}</div>`;
+                const icon = L.divIcon({ className: 'custom-div-icon', html: html, iconSize: [40, 40], iconAnchor: [20, 20] });
+                if (storage.marker) { storage.marker.setLatLng([data.lat, data.lng]); storage.marker.setIcon(icon); }
+                else storage.marker = L.marker([data.lat, data.lng], { icon: icon }).addTo(MapService.map);
+                if (!storage.trailPts) storage.trailPts = [];
+                const last = storage.trailPts[storage.trailPts.length - 1];
+                if (!last || MapService.dist(last[0], last[1], data.lat, data.lng) > 0.00005) {
+                    storage.trailPts.push([data.lat, data.lng]); 
+                    if (storage.trailPts.length > 50) storage.trailPts.shift();
+                    const color = (data.status === 'CONTACT') ? '#ef4444' : '#22c55e';
+                    if (storage.trail) { storage.trail.setLatLngs(storage.trailPts); storage.trail.setStyle({ color: color, opacity: MapService.showTrails ? 0.6 : 0 }); }
+                    else storage.trail = L.polyline(storage.trailPts, { color: color, weight: 2, dashArray: '4,8', opacity: MapService.showTrails ? 0.6 : 0 }).addTo(MapService.map);
                 }
-            };
+            },
+            addPingMarker: (ping) => {
+                if (!MapService.map) return;
+                if (MapService.pings[ping.id]) { MapService.pings[ping.id].marker.setLatLng([ping.lat, ping.lng]); return; } 
+                const isOwner = App.isHost || ping.sender === App.user.callsign;
+                const icon = L.divIcon({ className: 'custom-div-icon', html: `<div class="ping-marker"><div class="ping-msg">${ping.sender}: ${ping.msg}</div><span class="material-symbols-outlined ping-icon">location_on</span></div>`, iconSize: [100, 60], iconAnchor: [50, 50] });
+                const marker = L.marker([ping.lat, ping.lng], { icon: icon, draggable: isOwner }).addTo(MapService.map);
+                if (isOwner) {
+                    marker.on('dragend', (e) => { const newPos = e.target.getLatLng(); NetService.broadcast({ type: 'PING_MOVE', id: ping.id, lat: newPos.lat, lng: newPos.lng }); });
+                    marker.on('contextmenu', () => { NetService.broadcast({ type: 'PING_DELETE', id: ping.id }); MapService.removePing(ping.id); });
+                }
+                MapService.pings[ping.id] = { marker: marker, data: ping };
+                App.toast(`Nouveau Ping: ${ping.msg}`);
+            },
+            removePing: (id) => { if (MapService.pings[id]) { MapService.map.removeLayer(MapService.pings[id].marker); delete MapService.pings[id]; } },
+            dist: (lat1, lng1, lat2, lng2) => Math.sqrt(Math.pow(lat2 - lat1, 2) + Math.pow(lng2 - lng1, 2)),
+            calcHeading: (lat1, lng1, lat2, lng2) => { const y = Math.sin(lng2 - lng1) * Math.cos(lat2); const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(lng2 - lng1); return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360; }
+        };
 
-            window.addEventListener('keydown', handleKey);
-            document.getElementById('key-trap').addEventListener('keydown', handleKey);
-            document.getElementById('key-trap').addEventListener('input', (e) => {
-                // Si le shutter envoie du texte (rare mais possible)
-                log("EVENT INPUT REÇU");
-                toggleTx("INPUT TEXT");
-                e.target.value = ''; // Vider le champ
-            });
+        const BluetoothService = {
+            device: null, server: null,
+            connect: async () => {
+                if (!navigator.bluetooth) return App.toast("Web Bluetooth indisponible", true);
+                try {
+                    App.toast("Recherche PTT BLE...");
+                    const device = await navigator.bluetooth.requestDevice({ acceptAllDevices: true, optionalServices: ['battery_service', 0x1812, 0xFFE0] });
+                    BluetoothService.device = device;
+                    device.addEventListener('gattserverdisconnected', () => App.toast("PTT BLE Déconnecté", true));
+                    const server = await device.gatt.connect();
+                    BluetoothService.server = server;
+                    App.toast("Connecté: " + device.name);
+                    const services = await server.getPrimaryServices();
+                    let subscribed = false;
+                    for (const service of services) {
+                        try {
+                            const chars = await service.getCharacteristics();
+                            for (const char of chars) {
+                                if (char.properties.notify) {
+                                    await char.startNotifications();
+                                    char.addEventListener('characteristicvaluechanged', BluetoothService.handlePress);
+                                    subscribed = true;
+                                }
+                            }
+                        } catch(e) {}
+                    }
+                    if (subscribed) App.toast("PTT BLE Configuré"); else App.toast("Aucun service notifiant", true);
+                } catch(e) { App.toast("Err BLE: " + e.message, true); }
+            },
+            handlePress: (event) => { const newState = !App.user.isTx; AudioService.tx(newState); App.toast(newState ? "PTT BLE: ON" : "PTT BLE: OFF"); }
+        };
 
-            // 3. GAMEPAD (Manettes)
-            setInterval(() => {
-                const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
-                for (let i = 0; i < gamepads.length; i++) {
-                    const gp = gamepads[i];
-                    if (gp) {
-                        for (let b = 0; b < gp.buttons.length; b++) {
-                            if (gp.buttons[b].pressed) toggleTx(`GAMEPAD ${b}`);
-                        }
+        const AudioService = {
+            ctx: null, stream: null, analyser: null, mode: 'ptt', visuCtx: null, backgroundAudio: null, privateStream: null,
+            init: async () => {
+                try {
+                    const AC = window.AudioContext || window.webkitAudioContext;
+                    AudioService.ctx = new AC();
+                    if (AudioService.ctx.state === 'suspended') await AudioService.ctx.resume();
+                    AudioService.analyser = AudioService.ctx.createAnalyser(); 
+
+                    try {
+                        const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+                        AudioService.stream = stream;
+                        AudioService.stream.getAudioTracks().forEach(t => t.enabled = false);
+                        AudioService.privateStream = stream.clone();
+                        AudioService.privateStream.getAudioTracks().forEach(t => t.enabled = false);
+                    } catch (micErr) {
+                        App.toast("Micro HS: Écoute Seule", true);
+                        const dest = AudioService.ctx.createMediaStreamDestination();
+                        AudioService.stream = dest.stream; AudioService.privateStream = dest.stream;
+                    }
+
+                    const silentBlob = new Blob([new Uint8Array([82,73,70,70,44,0,0,0,87,65,86,69,102,109,116,32,16,0,0,0,1,0,1,0,68,172,0,0,136,88,1,0,2,0,16,0,100,97,116,97,0,0,0,0])], {type: 'audio/wav'});
+                    AudioService.backgroundAudio = new Audio(URL.createObjectURL(silentBlob));
+                    AudioService.backgroundAudio.loop = true;
+                    AudioService.backgroundAudio.volume = 0.01; 
+                    
+                    if ('mediaSession' in navigator) { 
+                        try {
+                            navigator.mediaSession.metadata = new MediaMetadata({ title: "COM TAC", artist: "Active", album: "v13.3" });
+                            const toggleTx = (wantOpen) => {
+                                if (App.silenceActive && !App.isHost) return;
+                                App.user.isTxRequest = wantOpen; AudioService.tx(wantOpen);
+                                try { navigator.mediaSession.playbackState = wantOpen ? "playing" : "paused"; } catch(e){}
+                            };
+                            ['play', 'pause', 'stop'].forEach(a => navigator.mediaSession.setActionHandler(a, () => { const s = !App.user.isTx; toggleTx(s); }));
+                        } catch(e){}
+                    }
+                    
+                    AudioService.backgroundAudio.play().catch(e => {});
+                    if (App.isHost) MixerService.init(AudioService.stream);
+                    return true;
+                } catch(e) { App.toast("Err Audio: " + e.message, true); return false; }
+            },
+            
+            checkForHeadset: async () => {}, // Simplified for now
+            
+            tx: (active) => {
+                const streamToUse = App.privatePeerId ? AudioService.privateStream : AudioService.stream;
+                if (!streamToUse) return;
+                if (App.silenceActive && !App.isHost) active = false; 
+                streamToUse.getAudioTracks().forEach(t => t.enabled = active);
+                App.user.isTx = active;
+                
+                if (App.isHost && !App.privatePeerId && MixerService.localSource) {
+                    MixerService.localSource.mediaStream.getAudioTracks().forEach(t => t.enabled = active);
+                }
+                
+                const btn = document.getElementById('ptt-btn');
+                if (btn) active ? btn.classList.add('active') : btn.classList.remove('active');
+                if ('mediaSession' in navigator) navigator.mediaSession.playbackState = active ? "playing" : "paused";
+                if (!App.privatePeerId) NetService.broadcast(); 
+                App.renderGrid();
+            },
+            
+            toggleVox: () => {
+                AudioService.mode = AudioService.mode === 'ptt' ? 'vox' : 'ptt';
+                const icon = document.getElementById('icon-mic'); const btn = document.getElementById('ptt-btn');
+                if (AudioService.mode === 'vox') { icon.innerText = 'mic'; btn.classList.add('vox-active'); App.toast("Mode VOX"); } 
+                else { icon.innerText = 'mic_none'; btn.classList.remove('vox-active'); AudioService.tx(false); App.toast("Mode PTT"); }
+            },
+            
+            playRemote: (stream, isPrivate = false) => { 
+                const a = new Audio(); a.srcObject = stream; a.playsInline = true; if (isPrivate) a.volume = 1.0; 
+                a.play().catch(()=>{}); return a; 
+            },
+            
+            setupViz: () => {
+                const cvs = document.getElementById('visualizer'); if(!cvs) return;
+                cvs.width = cvs.offsetWidth; cvs.height = cvs.offsetHeight;
+                AudioService.visuCtx = cvs.getContext('2d'); AudioService.drawLoop();
+            },
+            
+            drawLoop: () => {
+                requestAnimationFrame(AudioService.drawLoop);
+                let analyser = (App.isHost && !App.privatePeerId) ? MixerService.analyser : AudioService.analyser;
+                if (!analyser || !AudioService.visuCtx) return;
+                if (App.silenceActive && !App.isHost && App.user.isTx) AudioService.tx(false); 
+                const buffer = analyser.frequencyBinCount; const data = new Uint8Array(buffer);
+                analyser.getByteFrequencyData(data);
+                const ctx = AudioService.visuCtx; const w = ctx.canvas.width; const h = ctx.canvas.height;
+                ctx.clearRect(0, 0, w, h);
+                if (!App.user.isTx) return; 
+                const bw = (w / buffer) * 2.5; let x = 0;
+                for(let i=0; i<buffer; i++) { 
+                    const bh = data[i] / 2; ctx.fillStyle = App.privatePeerId ? `rgba(168, 85, 247, ${bh/255})` : `rgba(59, 130, 246, ${bh/255})`; ctx.fillRect(x, h - bh, bw, bh); x += bw + 1; 
+                }
+            }
+        };
+
+        const MixerService = {
+            ctx: null, destination: null, localSource: null, analyser: null, compressor: null,
+            init: (localStream) => {
+                if (MixerService.destination) return;
+                try {
+                    MixerService.ctx = AudioService.ctx; 
+                    MixerService.destination = MixerService.ctx.createMediaStreamDestination(); 
+                    MixerService.compressor = MixerService.ctx.createDynamicsCompressor();
+                    MixerService.analyser = MixerService.ctx.createAnalyser(); 
+                    
+                    // SAFEGUARD: Only route to MediaStreamDestination, NEVER to ctx.destination (Speakers)
+                    MixerService.compressor.connect(MixerService.analyser);
+                    MixerService.analyser.connect(MixerService.destination);
+                    
+                    if (localStream && localStream.getAudioTracks().length > 0) {
+                        MixerService.localSource = MixerService.ctx.createMediaStreamSource(localStream);
+                        MixerService.localSource.connect(MixerService.compressor);
+                    }
+                } catch(e) { console.error(e); }
+            },
+            connectRemoteStream: (stream) => {
+                if (!MixerService.ctx) return;
+                try { const rs = MixerService.ctx.createMediaStreamSource(stream); rs.connect(MixerService.compressor); } catch(e){}
+            },
+            getStream: () => MixerService.destination ? MixerService.destination.stream : AudioService.stream
+        };
+
+        const NetService = {
+            peer: null, hostId: null, retryCount: 0,
+            createSession: (id = null) => {
+                document.getElementById('btn-create-host').innerHTML = 'Init...';
+                App.isHost = true; App.user.role = 'HOST'; document.body.classList.add('is-host');
+                document.getElementById('btn-silence').style.display = 'block';
+                setTimeout(() => {
+                    MixerService.init(AudioService.stream);
+                    const saved = JSON.parse(localStorage.getItem(CONFIG.sessionKey));
+                    const targetId = (saved && saved.isHost && saved.freq) ? saved.freq : id;
+                    NetService.initPeer(targetId || id);
+                }, 50);
+            },
+            joinSession: (id = null) => {
+                if (!id) id = document.getElementById('input-join-id').value.trim();
+                if (!id) return App.toast("ID requis", true);
+                const btn = document.getElementById('btn-join-trigger'); btn.innerHTML = 'Connexion...'; btn.disabled = true;
+                App.isHost = false; NetService.hostId = id; NetService.retryCount = 0;
+                document.body.classList.remove('is-host'); NetService.initPeer();
+            },
+            initPeer: (forceId = null) => {
+                if (NetService.peer) NetService.peer.destroy();
+                const pid = forceId || (App.isHost ? crypto.randomUUID().substring(0,8).toUpperCase() : null); 
+                const peer = new Peer(pid, CONFIG.peerConfig);
+                peer.on('open', (id) => {
+                    App.user.id = id; NetService.retryCount = 0;
+                    document.getElementById('txt-id-display').innerText = `CANAL: ${App.isHost ? id : NetService.hostId}`;
+                    App.saveSession(App.isHost ? id : NetService.hostId);
+                    if (App.isHost) { NetService.startHeartbeat(); App.switchView('view-ops'); } else if (NetService.hostId) { NetService.tryConnectToHost(); }
+                });
+                peer.on('error', (err) => {
+                    if (err.type === 'unavailable-id' && App.isHost) NetService.initPeer(null); 
+                    else App.toast(`Err Réseau`, true);
+                });
+                peer.on('connection', NetService.handleConn);
+                peer.on('call', (call) => { 
+                    if (App.privatePeerId && call.peer === App.privatePeerId) {
+                         call.answer(AudioService.privateStream); call.on('stream', s => AudioService.playRemote(s, true)); App.privateCall = call;
+                    } else if (App.isHost) {
+                        call.answer(MixerService.getStream()); call.on('stream', s => { AudioService.playRemote(s); MixerService.connectRemoteStream(s); });
+                        if (App.peers[call.peer]) App.peers[call.peer].call = call;
+                    } else {
+                        // BUGFIX ECHO: Prevent Host calling Host
+                        if (call.peer === App.user.id) return;
+                        call.answer(null); call.on('stream', s => App.hostAudioElement = AudioService.playRemote(s)); 
+                    }
+                });
+                NetService.peer = peer;
+            },
+            tryConnectToHost: () => {
+                if (!NetService.peer?.open || !NetService.hostId) return;
+                const hostConn = NetService.peer.connect(NetService.hostId, { metadata: App.user, reliable: true });
+                hostConn.on('open', () => {
+                    NetService.handleConn(hostConn); hostConn.send({ type: 'FULL', user: App.user }); 
+                    App.switchView('view-ops'); NetService.callHostForAudio(NetService.hostId, AudioService.stream); 
+                });
+                hostConn.on('close', () => {
+                    App.toast("Host déconnecté... Reconnexion", true);
+                    setTimeout(NetService.tryConnectToHost, 2000);
+                });
+            },
+            callHostForAudio: (hostId, stream) => {
+                const call = NetService.peer.call(hostId, stream); App.peers[hostId].call = call;
+                call.on('stream', s => App.hostAudioElement = AudioService.playRemote(s)); 
+            },
+            handleConn: (conn) => {
+                if (!App.peers[conn.peer]) App.peers[conn.peer] = {}; App.peers[conn.peer].conn = conn; 
+                conn.on('data', (d) => {
+                    if (d.type === 'FULL' || d.type === 'UPDATE') { NetService.updatePeer(d.user); if (App.isHost) NetService.broadcast(d); }
+                    if (d.type === 'SYNC') { d.list.forEach(u => NetService.updatePeer(u)); if(d.silence !== undefined) App.setSilence(d.silence); }
+                    if (d.type === 'PING') { MapService.addPingMarker(d.ping); if (App.isHost) NetService.broadcast(d); }
+                    if (d.type === 'PING_MOVE') { if (MapService.pings[d.id]) MapService.pings[d.id].marker.setLatLng([d.lat, d.lng]); if (App.isHost) NetService.broadcast(d); }
+                    if (d.type === 'PING_DELETE') { MapService.removePing(d.id); if (App.isHost) NetService.broadcast(d); }
+                    if (d.type === 'SILENCE') App.setSilence(d.state);
+                    
+                    if (d.type === 'PRIVATE_REQ') { 
+                        if (navigator.vibrate) navigator.vibrate([1500, 500, 1500]); 
+                        if (confirm(`Appel Privé de ${d.from} ?`)) { conn.send({ type: 'PRIVATE_ACK', from: App.user.id }); App.enterPrivate(d.from, false); } 
+                    }
+                    if (d.type === 'PRIVATE_ACK') App.enterPrivate(d.from, true);
+                    if (d.type === 'PRIVATE_END') App.leavePrivate(false);
+                    if (d.type === 'PROMOTION') { App.toast("VOUS ÊTES LE NOUVEAU LEADER", false); alert("Passation de Commandement."); location.reload(); }
+                    if (d.type === 'REDIRECT_HOST') { App.toast(`NOUVEAU LEADER -> ${d.newHostId}`); NetService.hostId = d.newHostId; NetService.joinSession(d.newHostId); }
+                });
+                conn.on('open', () => {
+                    if (App.isHost) {
+                        const list = Object.values(App.peers).map(p => p.data).filter(d => d && d.id); list.push(App.user);
+                        conn.send({ type: 'SYNC', list: list, silence: App.silenceActive });
+                        Object.values(MapService.pings).forEach(p => conn.send({ type: 'PING', ping: p.data }));
+                    }
+                    NetService.broadcast();
+                });
+                conn.on('close', () => { delete App.peers[conn.peer]; App.renderGrid(); });
+            },
+            broadcast: (msg) => {
+                if(!msg) msg = { type: 'UPDATE', user: App.user };
+                Object.values(App.peers).forEach(p => { if (p.conn?.open && p.conn.peer !== msg.from) p.conn.send(msg); });
+                if (App.isHost && msg.type === 'UPDATE') App.renderGrid();
+            },
+            updatePeer: (user) => {
+                if (user.id === App.user.id) return;
+                if (!App.peers[user.id]) App.peers[user.id] = { data: {} };
+                App.peers[user.id].data = { ...App.peers[user.id].data, ...user };
+                App.renderGrid(); MapService.updateMarker(user.id, App.peers[user.id].data);
+            },
+            startHeartbeat: () => {
+                setInterval(() => {
+                    if (!App.isHost) return;
+                    const list = Object.values(App.peers).map(p => p.data).filter(d => d && d.id); list.push(App.user);
+                    Object.values(App.peers).forEach(p => { if (p.conn?.open) p.conn.send({ type: 'SYNC', list: list, silence: App.silenceActive }); });
+                }, 1000);
+            },
+            promoteNewHost: () => {
+                if (!App.isHost) return;
+                const candidates = Object.keys(App.peers);
+                if (candidates.length > 0) {
+                    const nextLeaderId = candidates[0];
+                    if(App.peers[nextLeaderId].conn) App.peers[nextLeaderId].conn.send({ type: 'PROMOTION' });
+                    candidates.forEach(cid => { if (cid !== nextLeaderId && App.peers[cid].conn) { App.peers[cid].conn.send({ type: 'REDIRECT_HOST', newHostId: nextLeaderId }); } });
+                }
+            }
+        };
+
+        const QRService = {
+            scanner: null,
+            start: () => {
+                document.getElementById('overlay-scanner').style.display = 'flex';
+                setTimeout(() => {
+                    if (QRService.scanner) try { QRService.scanner.clear(); } catch(e){}
+                    QRService.scanner = new Html5Qrcode("scan-region");
+                    QRService.scanner.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: 250, height: 250 } },
+                        (txt) => { QRService.stop(); document.getElementById('input-join-id').value = txt; NetService.joinSession(txt); App.toast("QR OK"); },
+                        (err) => {}
+                    ).catch(err => { QRService.stop(); App.toast("Erreur Caméra", true); });
+                }, 100);
+            },
+            stop: () => { if (QRService.scanner) QRService.scanner.stop().catch(()=>{}); document.getElementById('overlay-scanner').style.display = 'none'; },
+            show: () => {
+                const idToShow = App.isHost ? App.user.id : NetService.hostId; 
+                if (!idToShow) return App.toast("Pas de canal actif", true);
+                document.getElementById('qr-code-region').innerHTML = '';
+                new QRCode(document.getElementById('qr-code-region'), { text: idToShow, width: 256, height: 256 });
+                document.getElementById('qr-text-val').innerText = idToShow;
+                document.getElementById('overlay-generator').style.display = 'flex';
+            },
+            hide: () => document.getElementById('overlay-generator').style.display = 'none'
+        };
+
+        const App = {
+            user: { id: null, callsign: '', role: 'OPR', status: 'CLEAR', lat: 0, lng: 0, head: 0, bat: null, isTx: false },
+            peers: {}, isHost: false, pingMode: false, silenceActive: false,
+            privatePeerId: null, privateCall: null, hostAudioElement: null,
+
+            init: async () => {
+                await DBService.init(); App.initBattery(); 
+                
+                // RESTAURATION TRIGRAMME
+                const savedTri = localStorage.getItem(CONFIG.trigramKey);
+                if (savedTri) document.getElementById('input-callsign').value = savedTri;
+
+                // TENTATIVE DE RECONNEXION AUTO (Après refresh)
+                const savedSession = JSON.parse(localStorage.getItem(CONFIG.sessionKey));
+                if (savedSession && savedSession.callsign && savedSession.freq) {
+                    document.getElementById('input-callsign').value = savedSession.callsign;
+                    App.login(true).then(() => {
+                        App.toast("Restauration Session...");
+                        if (savedSession.isHost) NetService.createSession(savedSession.freq);
+                        else NetService.joinSession(savedSession.freq);
+                    });
+                }
+
+                window.addEventListener('beforeunload', () => { 
+                    // Pas de leaveSession ici pour permettre le refresh
+                });
+                
+                const btn = document.getElementById('ptt-btn');
+                const start = (e) => { 
+                    if(e.cancelable) e.preventDefault(); 
+                    if (App.silenceActive && !App.isHost) { App.toast("SILENCE RADIO ACTIF", true); return; }
+                    App.user.isTxRequest = true; AudioService.tx(true); 
+                };
+                const end = (e) => { 
+                    if(e.cancelable) e.preventDefault(); 
+                    App.user.isTxRequest = false; AudioService.tx(false); 
+                };
+                btn.addEventListener('mousedown', start); btn.addEventListener('mouseup', end);
+                btn.addEventListener('mouseleave', end); btn.addEventListener('touchstart', start); btn.addEventListener('touchend', end);
+            },
+            
+            checkSession: () => { /* Intégré dans init */ },
+            
+            login: async (autoLogin = false) => {
+                if (!autoLogin) {
+                    const val = document.getElementById('input-callsign').value.trim().toUpperCase();
+                    if (val.length < 2) return App.toast("ID Invalide", true);
+                    App.user.callsign = val;
+                    localStorage.setItem(CONFIG.trigramKey, val); // Sauvegarde Trigramme
+                } else {
+                    App.user.callsign = document.getElementById('input-callsign').value;
+                }
+
+                const btn = document.getElementById('btn-login-trigger'); if(btn) btn.innerText = "...";
+                const audioOk = await AudioService.init(); 
+                if(btn) btn.innerText = "CONNEXION";
+                
+                if (!audioOk && !autoLogin) return;
+                
+                App.switchView('view-menu'); MapService.startGPS();
+                // WAKE LOCK (Garde l'écran/CPU éveillé)
+                if ('wakeLock' in navigator) navigator.wakeLock.request('screen').catch(()=>{});
+            },
+            
+            saveSession: (freq = null) => { 
+                localStorage.setItem(CONFIG.sessionKey, JSON.stringify({ callsign: App.user.callsign, freq: freq, isHost: App.isHost })); 
+            },
+            
+            leaveSession: (full = false) => { 
+                if (App.isHost && full) {
+                    if (confirm("Transmettre le commandement avant de quitter ?")) {
+                        NetService.promoteNewHost();
+                        setTimeout(() => {
+                            if (NetService.peer) NetService.peer.destroy(); 
+                            if (full) localStorage.removeItem(CONFIG.sessionKey); 
+                            location.reload(); 
+                        }, 500); // Petit délai pour l'envoi
+                        return;
                     }
                 }
-            }, 150);
-        }
+                
+                if (NetService.peer) NetService.peer.destroy(); 
+                if (full) localStorage.removeItem(CONFIG.sessionKey); 
+                location.reload(); 
+            },
+            
+            switchView: (id) => {
+                document.querySelectorAll('.view').forEach(el => el.classList.remove('active')); document.getElementById(id).classList.add('active');
+                const isOp = (id === 'view-ops' || id === 'view-map');
+                document.getElementById('hud').style.display = isOp ? 'block' : 'none';
+                document.getElementById('btn-quit').style.display = isOp ? 'flex' : 'none';
+                if (id === 'view-map') { 
+                    MapService.init(); 
+                    setTimeout(() => { if(MapService.map) { MapService.map.invalidateSize(); if(App.user.lat) MapService.map.setView([App.user.lat, App.user.lng], 16); } }, 200); 
+                }
+            },
+            
+            toggleMap: () => { 
+                const isMap = document.getElementById('view-map').classList.contains('active'); 
+                App.switchView(isMap ? 'view-ops' : 'view-map'); 
+                document.getElementById('btn-toggle-map').classList.toggle('active', !isMap); 
+            },
+            
+            setStatus: (s) => {
+                App.user.status = s;
+                document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+                const c = document.querySelector(`.chip[data-val="${s}"]`); if(c) c.classList.add('active');
+                NetService.broadcast(); App.renderGrid(); 
+            },
 
-        // --- UTILITAIRES ---
-        function log(msg) {
-            const el = document.getElementById('debug-log');
-            const time = new Date().toLocaleTimeString().split(' ')[0];
-            el.innerHTML = `[${time}] ${msg}\n` + el.innerHTML;
-            console.log(msg);
-        }
+            // --- GESTION PRIVÉE ---
+            requestPrivate: (targetId) => {
+                if (App.privatePeerId) return App.toast("Déjà en privé", true);
+                if (App.peers[targetId].data.status === 'BUSY') return App.toast("Opérateur Occupé", true);
+                App.toast("Invitation envoyée...");
+                App.peers[targetId].conn.send({ type: 'PRIVATE_REQ', from: App.user.id });
+            },
 
-        // --- RESEAU ---
-        function initPeer() {
-            const simpleId = Math.floor(Math.random() * 9000) + 1000;
-            peer = new Peer("comtac-" + simpleId);
-            peer.on('open', (id) => {
-                document.getElementById('my-id').innerText = "ID: " + id.split('-')[1];
-                document.getElementById('connection-dot').classList.add('connected');
-                log("Réseau: OK (ID " + id.split('-')[1] + ")");
-            });
-            peer.on('call', (call) => {
-                call.answer(); call.on('stream', playAudio);
-                log("Appel entrant OK");
-            });
-            peer.on('error', (err) => log("Err Peer: " + err.type));
-        }
-        function connectToPeer() {
-            const id = document.getElementById('remote-id').value;
-            if(id) {
-                const call = peer.call("comtac-" + id, localStream);
-                call.on('stream', playAudio);
-                log("Appel sortant vers " + id);
+            enterPrivate: (peerId, initiateCall) => {
+                // FIX PTT: Couper le micro public avant de basculer
+                AudioService.tx(false);
+
+                App.privatePeerId = peerId;
+                document.body.classList.add('private-active');
+                App.setStatus('BUSY');
+                
+                // FIX PTT: S'assurer que le micro privé est fermé au démarrage
+                AudioService.tx(false);
+                
+                // Mute l'audio principal (Host)
+                if (App.hostAudioElement) App.hostAudioElement.muted = true;
+
+                // Initiate P2P call if asked
+                if (initiateCall) {
+                    const call = NetService.peer.call(peerId, AudioService.privateStream);
+                    call.on('stream', s => {
+                        AudioService.playRemote(s, true); 
+                        App.toast("Audio Privé Établi");
+                    });
+                    App.privateCall = call;
+                }
+            },
+
+            leavePrivate: (sendSignal = true) => {
+                // FIX PTT: Couper le micro privé avant de quitter
+                AudioService.tx(false);
+
+                if (!App.privatePeerId) return;
+                
+                if (sendSignal) {
+                    const conn = App.peers[App.privatePeerId]?.conn;
+                    if (conn) conn.send({ type: 'PRIVATE_END' });
+                }
+
+                if (App.privateCall) { App.privateCall.close(); App.privateCall = null; }
+                
+                App.privatePeerId = null;
+                document.body.classList.remove('private-active');
+                App.setStatus('CLEAR'); // Retour statut vert
+                
+                // Unmute Main Audio
+                if (App.hostAudioElement) App.hostAudioElement.muted = false;
+                
+                // FIX PTT: S'assurer que le micro public est fermé au retour
+                AudioService.tx(false);
+                
+                App.toast("Retour Canal Principal");
+            },
+            
+            togglePingMode: () => { 
+                App.pingMode = !App.pingMode; 
+                document.getElementById('btn-ping-mode').classList.toggle('alert', App.pingMode); 
+                App.toast(App.pingMode ? "MODE PING: CLIQUEZ SUR CARTE" : "MODE PING DÉSACTIVÉ"); 
+            },
+            
+            sendPing: (latlng) => {
+                App.togglePingMode(); 
+                const msg = prompt("Message du Ping:", "CIBLE"); if (!msg) return;
+                const pingData = { id: Date.now() + '_' + Math.random(), lat: latlng.lat, lng: latlng.lng, msg: msg, sender: App.user.callsign };
+                MapService.addPingMarker(pingData); NetService.broadcast({ type: 'PING', ping: pingData });
+            },
+            
+            toggleSilence: () => { 
+                if (!App.isHost) return; 
+                App.setSilence(!App.silenceActive); 
+                NetService.broadcast({ type: 'SILENCE', state: App.silenceActive }); 
+            },
+            
+            setSilence: (active) => {
+                App.silenceActive = active;
+                if (active) { 
+                    document.body.classList.add('silence-active'); document.getElementById('btn-silence').classList.add('active'); 
+                    if(!App.isHost) AudioService.tx(false); 
+                } else { 
+                    document.body.classList.remove('silence-active'); document.getElementById('btn-silence').classList.remove('active'); 
+                }
+            },
+            
+            renderGrid: () => {
+                const grid = document.getElementById('ops-container'); if (!grid) return;
+                grid.innerHTML = '';
+                const all = [{...App.user, isMe: true}].concat(Object.values(App.peers).map(p => p.data).filter(d => d && d.id));
+                all.forEach(u => {
+                    const div = document.createElement('div');
+                    div.className = `op-card ${u.isMe ? 'is-me' : ''} ${u.isTx ? 'talking' : ''}`;
+                    if(u.status === 'CONTACT') div.setAttribute('data-status', 'CONTACT');
+                    if(u.status === 'BUSY') div.setAttribute('data-status', 'BUSY');
+                    
+                    const bat = (u.bat != null) ? `🔋 ${u.bat}%` : '🔋 --'; 
+                    let col = '#aaa';
+                    if(u.status === 'CONTACT') col = 'var(--color-red)';
+                    else if(u.status === 'PROGRESSION') col = 'var(--color-blue)';
+                    else if(u.status === 'CLEAR') col = 'var(--color-green)';
+                    else if(u.status === 'BUSY') col = 'var(--color-purple)';
+                    
+                    let btnPrivate = '';
+                    if (!u.isMe && !App.privatePeerId) {
+                        btnPrivate = `<div class="btn-private" onclick="App.requestPrivate('${u.id}')"><span class="material-symbols-outlined" style="font-size:16px;">lock</span></div>`;
+                    } else if (u.id === App.privatePeerId) {
+                        btnPrivate = `<div class="btn-private" style="color:var(--color-purple)"><span class="material-symbols-outlined" style="font-size:16px;">lock_open</span></div>`;
+                    }
+
+                    div.innerHTML = `
+                        <div class="op-header"><span class="op-role ${u.role === 'HOST' ? 'HOST' : ''}">${u.role}</span>${u.isTx ? '<span class="material-symbols-outlined" style="color:var(--color-green); font-size:1rem;">graphic_eq</span>' : ''}</div>
+                        <div class="op-callsign">${u.callsign}</div>
+                        <div class="op-status" style="color:${col}">${u.status}</div>
+                        <div class="op-bat">${bat}</div>
+                        <div class="viz-bar"><div class="viz-fill" style="width:${u.isTx ? '100%' : '0%'}"></div></div>
+                        ${btnPrivate}
+                    `;
+                    grid.appendChild(div);
+                });
+            },
+            
+            initBattery: () => { 
+                if ('getBattery' in navigator) navigator.getBattery().then(b => { 
+                    const up = () => { App.user.bat = Math.floor(b.level * 100); NetService.broadcast(); App.renderGrid(); }; 
+                    up(); b.addEventListener('levelchange', up); b.addEventListener('chargingchange', up); 
+                }).catch(e => { App.user.bat = null; NetService.broadcast(); }); else { App.user.bat = null; }
+            },
+            
+            toast: (msg, err = false) => { 
+                const t = document.getElementById('toast-msg'); 
+                t.innerText = msg; t.style.color = err ? 'var(--color-red)' : 'var(--color-blue)'; 
+                t.style.borderColor = t.style.color; t.style.display = 'block'; 
+                setTimeout(() => t.style.display = 'none', 3000); 
+            },
+            
+            copyID: () => { 
+                const txt = document.getElementById('txt-id-display').innerText.replace('CANAL: ', ''); 
+                if (txt) { 
+                    try { navigator.clipboard.writeText(txt); App.toast("ID Copié"); } 
+                    catch (e) { const el = document.createElement('textarea'); el.value = txt; document.body.appendChild(el); el.select(); document.execCommand('copy'); document.body.removeChild(el); App.toast("ID Copié (Fallback)"); }
+                } 
             }
-        }
-        function playAudio(stream) {
-            const a = new Audio(); a.srcObject = stream; a.play();
-        }
-        function copyId() {
-            const txt = document.getElementById('my-id').innerText.replace("ID: ", "");
-            navigator.clipboard.writeText(txt);
-            alert("ID Copié");
-        }
+        };
+
+        document.addEventListener('DOMContentLoaded', App.init);
     </script>
 </body>
 </html>
