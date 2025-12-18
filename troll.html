@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="theme-color" content="#050505">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <title>MISSION: Impossible</title>
+    <title>MISSION: IMPOSSIBLE</title>
     
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Chakra+Petch:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,1,0" />
@@ -86,8 +86,6 @@
         .log-title { font-weight: 700; color: white; font-size: 1.1rem; margin-bottom: 5px; }
         .log-content { font-size: 0.9rem; line-height: 1.4; color: #ccc; }
 
-        @keyframes slideIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-
         /* MODAL VICTOIRE */
         #victory-modal {
             position: fixed; inset: 0; z-index: 2000;
@@ -121,7 +119,7 @@
 <body>
 
     <header>
-        <div class="brand"><span class="material-symbols-outlined">military_tech</span> MISSION <span>IMPOSSIBLE 👮🏻‍♂️</span></div>
+        <div class="brand"><span class="material-symbols-outlined">military_tech</span> MISSION <span>IMPOSSIBLE 👮🏻‍♂️🔍</span></div>
     </header>
 
     <main>
@@ -140,8 +138,8 @@
         </div>
 
         <div class="dev-tools">
-            <button class="btn-dev" onclick="Game.reset()">RESET</button>
-            <button class="btn-dev" onclick="Game.cheat()">DEV: TOUT DÉBLOQUER</button>
+            <button class="btn-dev" onclick="Game.reset()">RESET MISSION</button>
+            <button class="btn-dev" onclick="Game.cheat()">DEV: +1 SECRET</button>
         </div>
     </main>
 
@@ -149,8 +147,8 @@
         <span class="material-symbols-outlined victory-icon">nutrition</span>
         <div class="victory-title">FÉLICITATIONS</div>
         <div class="victory-sub">AUTH: PSIG GILETTE // REWARD: UNLOCKED</div>
-        <div class="victory-msg">
-            "Bon allez, trêve de plaisanteries, t'as gagné une barre gratos a la popote ma poule, c'est cadeau de la maison."
+        <div class="victory-msg" id="victory-text">
+            <!-- Le message final sera injecté ici -->
         </div>
         <button class="btn-reward" onclick="alert('Capture d\'écran conseillée !')">
             RÉCLAMER BARRE
@@ -159,93 +157,122 @@
     </div>
 
     <script>
+        // CONFIGURATION DES MESSAGES DANS L'ORDRE D'APPARITION
+        const SCENARIO = [
+            { t: "PREMIER CONTACT", m: "Bravo bitos, t'as été curieux une fois dans ta vie et tu t'es intéressé à ce que t'as vu ! Continue à chercher des jeunes QR code dans ce style et peut être que tu auras une récompenses a la clé" },
+            { t: "PISTE CHAUDE", m: "Bravo ma poule, t'as été curieux une fois encore. Continue ta recherche elle te mènera sûrement vers une petite récompense... Ou pas ?" },
+            { t: "ARCHÉOLOGIE", m: "Bravo ma couille, a ce rythme là t'es bien parti pour trouver un trésor, ou une vieille chausette de Jerome qui traine depuis 2009 sous un bureau" },
+            { t: "TARGET LOCKED", m: "Bon, les choses commences à devenir sérieuses, plus que 2 et t'auras le droit à un calendrier mullet ou des chaussettes bites qui sait?" },
+            { t: "GRADE SUPÉRIEUR", m: "Tu te rapproches des étoiles, tel un jeune adjudant en attente du TA, lâche rien." },
+            { t: "MISSION COMPLETE", m: "Bon allez, trêve de plaisanteries, t'as gagné une barre gratos a la popote ma poule, c'est cadeau de la maison" }
+        ];
+
         const Game = {
             totalSecrets: 6,
-            secrets: [],
+            scannedTokens: [], // Stocke les IDs uniques des QR codes scannés (ex: "code1", "code5")
             
             init: () => {
-                const saved = localStorage.getItem('troll_secrets_v2');
-                if (saved) Game.secrets = JSON.parse(saved);
+                // 1. Charger la sauvegarde (liste des IDs scannés)
+                const saved = localStorage.getItem('troll_progress_v3');
+                if (saved) Game.scannedTokens = JSON.parse(saved);
 
+                // 2. Vérifier si l'URL contient un nouveau token
                 const urlParams = new URLSearchParams(window.location.search);
                 let encodedData = urlParams.get('data');
-                // Support hash fallback
+                // Fallback hash
                 if (!encodedData && window.location.hash) encodedData = new URLSearchParams(window.location.hash.substring(1)).get('data');
 
-                if (encodedData) Game.processData(encodedData);
+                if (encodedData) Game.processToken(encodedData);
 
                 Game.render();
-                Game.checkWin();
             },
 
-            processData: (encodedJson) => {
+            processToken: (encodedJson) => {
                 try {
+                    // On attend un format : {"id":"CODE_UNIQUE"}
                     const data = JSON.parse(decodeURIComponent(encodedJson));
-                    if (data.id && data.m) {
-                        const exists = Game.secrets.find(s => s.id === data.id);
-                        if (!exists) {
-                            Game.secrets.push({
-                                id: data.id,
-                                title: data.t || `DATA #${data.id}`,
-                                msg: data.m,
-                                timestamp: new Date().toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'})
-                            });
-                            localStorage.setItem('troll_secrets_v2', JSON.stringify(Game.secrets));
-                            window.history.replaceState({}, document.title, window.location.pathname);
+                    
+                    if (data && data.id) {
+                        // Est-ce que ce QR code spécifique a déjà été scanné ?
+                        if (!Game.scannedTokens.includes(data.id)) {
+                            // Non, c'est un nouveau QR code !
+                            
+                            // Sécurité : On ne dépasse pas le nombre max de messages
+                            if (Game.scannedTokens.length < Game.totalSecrets) {
+                                Game.scannedTokens.push(data.id);
+                                localStorage.setItem('troll_progress_v3', JSON.stringify(Game.scannedTokens));
+                                
+                                // Nettoyage URL
+                                window.history.replaceState({}, document.title, window.location.pathname);
+                            }
                         } else {
+                            // Déjà scanné
                             window.history.replaceState({}, document.title, window.location.pathname);
+                            // On pourrait mettre une alerte "Déjà scanné", mais on reste discret
                         }
                     }
-                } catch (e) { console.error(e); }
+                } catch (e) { console.error("Bad Token", e); }
             },
 
             render: () => {
+                const count = Game.scannedTokens.length;
+                
+                // --- 1. ÉTOILES ---
                 const grid = document.getElementById('stars-grid');
                 grid.innerHTML = '';
                 for (let i = 1; i <= Game.totalSecrets; i++) {
-                    const found = Game.secrets.find(s => s.id == i);
                     const el = document.createElement('div');
-                    el.className = `star-slot ${found ? 'active' : ''}`;
-                    if (found && Game.secrets.length === Game.totalSecrets) el.className += ' final-active';
-                    el.innerHTML = found ? '<span class="material-symbols-outlined">check</span>' : i;
+                    // Si i est inférieur ou égal au nombre trouvé, c'est actif
+                    const isActive = i <= count;
+                    el.className = `star-slot ${isActive ? 'active' : ''}`;
+                    if (isActive && count === Game.totalSecrets) el.className += ' final-active';
+                    
+                    el.innerHTML = isActive ? '<span class="material-symbols-outlined">check</span>' : i;
                     grid.appendChild(el);
                 }
-                document.getElementById('progress-text').innerText = `${Game.secrets.length} / ${Game.totalSecrets} ACTIVÉS`;
+                document.getElementById('progress-text').innerText = `${count} / ${Game.totalSecrets} ACTIVÉS`;
 
+                // --- 2. LOGS (MESSAGES) ---
                 const logsList = document.getElementById('logs-list');
-                if (Game.secrets.length > 0) {
+                if (count > 0) {
                     logsList.innerHTML = '';
-                    [...Game.secrets].sort((a,b) => b.id - a.id).forEach(s => {
+                    // On affiche les messages de 0 à (count - 1)
+                    // On inverse pour avoir le plus récent en haut
+                    for (let i = count - 1; i >= 0; i--) {
+                        const msgData = SCENARIO[i];
                         const div = document.createElement('div');
                         div.className = 'log-entry new';
-                        div.innerHTML = `<div class="log-header"><span>FRAGMENT #${s.id}</span><span>${s.timestamp}</span></div><div class="log-title">${s.title}</div><div class="log-content">${s.msg}</div>`;
+                        div.innerHTML = `
+                            <div class="log-header"><span>INFO #${i + 1}</span><span>REÇU</span></div>
+                            <div class="log-title">${msgData.t}</div>
+                            <div class="log-content">${msgData.m}</div>
+                        `;
                         logsList.appendChild(div);
-                    });
+                    }
                 }
-            },
 
-            checkWin: () => {
-                if (Game.secrets.length >= Game.totalSecrets) {
+                // --- 3. VICTOIRE ---
+                if (count >= Game.totalSecrets) {
+                    const finalMsg = SCENARIO[Game.totalSecrets - 1].m;
+                    document.getElementById('victory-text').innerText = finalMsg;
                     setTimeout(() => { document.getElementById('victory-modal').style.display = 'flex'; }, 800);
                 }
             },
 
             reset: () => {
-                if(confirm("Réinitialiser toute la progression ?")) {
-                    localStorage.removeItem('troll_secrets_v2');
+                if(confirm("Tout effacer ?")) {
+                    localStorage.removeItem('troll_progress_v3');
                     location.reload();
                 }
             },
-
+            
             cheat: () => {
-                for(let i=1; i<=6; i++) {
-                    if(!Game.secrets.find(s=>s.id===i)) {
-                        Game.secrets.push({id:i, title:"DEBUG DATA", msg:"Donnée générée pour test.", timestamp:"DEBUG"});
-                    }
+                const fakeId = "cheat_" + Date.now();
+                if (Game.scannedTokens.length < Game.totalSecrets) {
+                    Game.scannedTokens.push(fakeId);
+                    localStorage.setItem('troll_progress_v3', JSON.stringify(Game.scannedTokens));
+                    Game.render();
                 }
-                localStorage.setItem('troll_secrets_v2', JSON.stringify(Game.secrets));
-                Game.render();
-                Game.checkWin();
             }
         };
 
