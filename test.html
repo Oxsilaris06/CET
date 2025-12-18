@@ -734,7 +734,7 @@
         // --- MODULE AUDIO (Web Audio API & Bluetooth) ---
         const AudioService = {
             ctx: null, stream: null, analyser: null, mode: 'ptt', visuCtx: null,
-            backgroundAudio: null, privateStream: null,
+            backgroundAudio: null, privateStream: null, rawStream: null, // Ajout rawStream
             processingNode: null, gainGate: null,
             vadState: { active: false, timer: null, hold: 500, threshold: 0.02 }, // VAD config
             
@@ -755,6 +755,11 @@
                         // SETUP PIPELINE AVANCÉ
                         AudioService.setupProcessing(stream);
                         
+                        // ETAT INITIAL : Micro coupé (PTT)
+                        if(AudioService.rawStream) {
+                            AudioService.rawStream.getAudioTracks().forEach(t => t.enabled = false);
+                        }
+
                     } catch (micErr) {
                         console.warn("Pas de micro détecté ou accès refusé. Mode Écoute seule.");
                         App.toast("Micro non détecté: Mode Écoute", true);
@@ -773,7 +778,33 @@
                         AudioService.backgroundAudio.play().catch(e => console.log("Silent Play blocked until user interact"));
                     }
                     
-                    if ('mediaSession' in navigator) { /* Media Session code... (inchangé) */ }
+                    if ('mediaSession' in navigator) { 
+                        try {
+                            navigator.mediaSession.metadata = new MediaMetadata({
+                                title: "COM TAC",
+                                artist: "Canal Sécurisé",
+                                album: "v13.0 Active",
+                                artwork: [{ src: 'favicon.ico', sizes: '96x96', type: 'image/png' }]
+                            });
+
+                            const toggleTx = (wantOpen) => {
+                                if (App.silenceActive && !App.isHost) return;
+                                App.user.isTxRequest = wantOpen;
+                                AudioService.tx(wantOpen);
+                                try {
+                                    if (navigator.mediaSession.playbackState !== (wantOpen ? "playing" : "paused")) {
+                                        navigator.mediaSession.playbackState = wantOpen ? "playing" : "paused";
+                                    }
+                                } catch(e){}
+                            };
+
+                            navigator.mediaSession.setActionHandler('play', () => toggleTx(true));
+                            navigator.mediaSession.setActionHandler('pause', () => toggleTx(false));
+                            navigator.mediaSession.setActionHandler('stop', () => toggleTx(false)); 
+                        } catch(e) {
+                            console.log("MediaSession non supporté ou erreur hardware PC", e);
+                        }
+                    }
                     
                     if (App.isHost) MixerService.init(AudioService.stream);
                     return true;
@@ -786,6 +817,7 @@
 
             // --- NOUVEAU: Pipeline de Traitement Audio ---
             setupProcessing: (rawStream) => {
+                AudioService.rawStream = rawStream; // Stockage ref Hardware
                 const ctx = AudioService.ctx;
                 const source = ctx.createMediaStreamSource(rawStream);
                 
@@ -835,15 +867,14 @@
                 AudioService.privateStream = privateDest.stream;
             },
             
-            // Transmission (TX) : Gère le Gate du VAD
+            // Transmission (TX) : Gère le Gate du VAD et le Hardware
             tx: (active) => {
                 // VÉRIFICATION STRICTE SILENCE RADIO (Sauf Hôte)
                 if (App.silenceActive && !App.isHost) active = false; 
 
-                // Contrôle du Gain Gate (Smooth transition)
+                // Contrôle du Gain Gate (Sortie Logicielle)
                 if (AudioService.gainGate) {
                     const now = AudioService.ctx.currentTime;
-                    // Ramp up/down pour éviter les "pops"
                     AudioService.gainGate.gain.cancelScheduledValues(now);
                     if (active) {
                         AudioService.gainGate.gain.setTargetAtTime(1, now, 0.01);
@@ -851,13 +882,20 @@
                         AudioService.gainGate.gain.setTargetAtTime(0, now, 0.05);
                     }
                 }
+
+                // Contrôle du Micro (Entrée Matérielle)
+                // En VOX : Micro toujours ON pour analyse. En PTT : Micro ON seulement si appui.
+                if (AudioService.rawStream) {
+                    const hwEnabled = active || (AudioService.mode === 'vox');
+                    AudioService.rawStream.getAudioTracks().forEach(t => {
+                        if(t.enabled !== hwEnabled) t.enabled = hwEnabled;
+                    });
+                }
                 
                 App.user.isTx = active;
 
                 // Si Hôte, gestion spéciale mixeur
                 if (App.isHost && !App.privatePeerId && MixerService.localSource) {
-                     // L'hôte utilise son mixeur qui est branché en parallèle, on doit muter/démuter ses tracks
-                     // Note: Simplification ici, idéalement on utiliserait aussi un GainNode dans MixerService
                      MixerService.localSource.mediaStream.getAudioTracks().forEach(t => t.enabled = active);
                 }
                 
@@ -876,10 +914,12 @@
                 const icon = document.getElementById('icon-mic'); const btn = document.getElementById('ptt-btn');
                 if (AudioService.mode === 'vox') {
                     icon.innerText = 'mic'; btn.classList.add('vox-active'); 
+                    // En VOX, on ouvre immédiatement le micro matériel pour alimenter le VAD
+                    if(AudioService.rawStream) AudioService.rawStream.getAudioTracks().forEach(t => t.enabled = true);
                     App.toast("Mode VOX (Auto)");
                 } else {
                     icon.innerText = 'mic_none'; btn.classList.remove('vox-active'); 
-                    AudioService.tx(false); 
+                    AudioService.tx(false); // Coupe tout et désactive le hardware (via logique tx)
                     App.toast("Mode PTT");
                 }
             },
