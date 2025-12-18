@@ -307,7 +307,17 @@
             transform: scale(0.95); background: var(--color-blue); border-color: white; color: white; 
             box-shadow: 0 0 30px rgba(59, 130, 246, 0.4);
         }
-        #ptt-btn.vox-active { border-color: var(--color-green); color: var(--color-green); }
+        /* Style VOX Actif : ressemble à un PTT bloqué */
+        #ptt-btn.vox-active { 
+            border-color: var(--color-green); 
+            color: var(--color-green);
+            background: rgba(34, 197, 94, 0.1); 
+            box-shadow: 0 0 15px rgba(34, 197, 94, 0.2);
+        }
+        #ptt-btn.vox-active.active { /* Quand le VAD déclenche la transmission par dessus */
+            background: var(--color-green); color: black;
+            box-shadow: 0 0 30px rgba(34, 197, 94, 0.5);
+        }
         
         /* État du PTT en Silence Radio */
         body.silence-active #ptt-btn { border-color: #333; color: #333; cursor: not-allowed; }
@@ -368,9 +378,6 @@
         }
         #silence-banner { background: var(--color-red); color: white; }
         #private-banner { background: var(--color-purple); color: white; }
-        
-        body.silence-active #silence-banner { display: block; }
-        body.private-active #private-banner { display: block; }
 
         /* VAD Indicator (Petite LED pour Debug VAD) */
         .vad-indicator {
@@ -904,6 +911,8 @@
                 
                 const btn = document.getElementById('ptt-btn');
                 if (btn) {
+                    // Si TX actif, on ajoute la classe active. 
+                    // En VOX, le bouton a déjà 'vox-active', 'active' vient en plus quand on parle.
                     if (active) btn.classList.add('active'); 
                     else btn.classList.remove('active');
                 }
@@ -1124,7 +1133,14 @@
                     console.warn("Peer Error", err);
                     if (err.type === 'unavailable-id') { 
                         // ID déjà pris (Host fantôme ?), on en prend un nouveau
-                        NetService.initPeer(null); 
+                        // Sauf si on essaye de reprendre le lead
+                        if (App.isTryingToReclaimHost) {
+                            App.toast("Echec reprise ID...", true);
+                            App.isTryingToReclaimHost = false;
+                            NetService.initPeer(null); // Fallback standard
+                        } else {
+                            NetService.initPeer(null); 
+                        }
                     } else { 
                         App.toast(`Err Réseau: ${err.type}`, true);
                         // Reconnexion auto pour client
@@ -1138,20 +1154,16 @@
                 
                 peer.on('call', (call) => { 
                     // GESTION DES APPELS ENTRANTS
-                    
-                    // 1. Appel Privé (Metadata ne passe pas toujours bien sur les calls, on devine par le contexte ou un flag)
-                    // Simplification: Si on a accepté une demande privée, on attend un appel de ce peer.
                     if (App.privatePeerId && call.peer === App.privatePeerId) {
                          call.answer(AudioService.privateStream);
                          call.on('stream', s => {
-                             AudioService.playRemote(s, true); // Play private stream
+                             AudioService.playRemote(s, true); 
                              App.toast("Audio Privé Établi");
                          });
                          App.privateCall = call;
                          return;
                     }
 
-                    // 2. Appel standard vers Hôte (Relais)
                     if (App.isHost) {
                         call.answer(MixerService.getStream()); 
                         call.on('stream', s => { 
@@ -1160,10 +1172,8 @@
                         });
                         if (App.peers[call.peer]) App.peers[call.peer].call = call;
                     } else {
-                        // 3. Réponse de l'hôte (Mix)
                         call.answer(null); 
                         call.on('stream', s => {
-                            // On stocke l'élément audio pour pouvoir le muter en mode privé
                             App.hostAudioElement = AudioService.playRemote(s); 
                         }); 
                     }
@@ -1182,11 +1192,52 @@
                     App.switchView('view-ops'); 
                     NetService.callHostForAudio(NetService.hostId, AudioService.stream); 
                 });
-                // Auto-Reconnect
+                
+                // --- LOGIQUE MIGRATION HOTE ---
                 hostConn.on('close', () => {
-                    App.toast("Host déconnecté... Reconnexion", true);
-                    setTimeout(NetService.tryConnectToHost, 2000);
+                    App.toast("Host déconnecté... Analyse", true);
+                    NetService.handleHostDisconnect();
                 });
+            },
+
+            // --- NOUVEAU: Logique de Passation ---
+            handleHostDisconnect: () => {
+                if (App.isHost) return; // Je suis déjà l'hôte (cas impossible ici normalement)
+
+                // 1. Lister les survivants (exclure l'ancien host s'il est encore dans la liste)
+                const candidates = Object.values(App.peers)
+                    .filter(p => p.data && p.data.id !== NetService.hostId)
+                    .sort((a,b) => (a.data.joinedAt || Infinity) - (b.data.joinedAt || Infinity)); // Plus ancien = Plus petit timestamp
+                
+                // 2. S'il n'y a personne d'autre que moi (ou candidats vides), je reprends le lead
+                // Note: candidates ne me contient pas, donc si candidates est vide, je suis le seul.
+                // Mais attendez, App.peers ne contient que les AUTRES. 
+                // Donc s'il y a des autres, je dois me comparer à eux.
+                
+                let iAmTheOldest = false;
+                
+                if (candidates.length === 0) {
+                    iAmTheOldest = true;
+                } else {
+                    // Je me compare au premier candidat (le plus vieux des autres)
+                    const myJoinTime = App.user.joinedAt || Infinity;
+                    const oldestOtherTime = candidates[0].data.joinedAt || Infinity;
+                    if (myJoinTime < oldestOtherTime) iAmTheOldest = true;
+                }
+
+                if (iAmTheOldest) {
+                    App.toast("Reprise du Commandement...", false);
+                    setTimeout(() => {
+                        NetService.peer.destroy();
+                        // Tenter de reprendre l'ID de l'ancien host
+                        App.isTryingToReclaimHost = true;
+                        NetService.createSession(NetService.hostId); 
+                    }, 1000); // Petit délai pour laisser PeerJS libérer l'ID serveur
+                } else {
+                    // Je ne suis pas l'élu, j'attends que le nouveau chef prenne l'ID
+                    App.toast("Attente nouveau Leader...", false);
+                    setTimeout(NetService.tryConnectToHost, 3000); // Retry loop
+                }
             },
 
             callHostForAudio: (hostId, stream) => {
@@ -1200,50 +1251,53 @@
                 App.peers[conn.peer].conn = conn; 
                 
                 conn.on('data', (d) => {
-                    // FIX: Eviter l'écho en marquant l'expéditeur explicitement
                     if (!d.from) d.from = conn.peer;
+
+                    // --- LOGIQUE HOTE : Attribuer Timestamp si manquant ---
+                    if (App.isHost && d.type === 'FULL') {
+                         if (!d.user.joinedAt) d.user.joinedAt = Date.now();
+                         NetService.updatePeer(d.user);
+                         NetService.broadcast(d); 
+                    }
+                    // -----------------------------------------------------
 
                     if (d.type === 'FULL' || d.type === 'UPDATE') {
                         NetService.updatePeer(d.user);
-                        if (App.isHost) NetService.broadcast(d); // Relais info
+                        if (App.isHost) NetService.broadcast(d); 
                     }
-                    if (d.type === 'SYNC') { d.list.forEach(u => NetService.updatePeer(u)); if(d.silence !== undefined) App.setSilence(d.silence); }
+                    if (d.type === 'SYNC') { 
+                        d.list.forEach(u => NetService.updatePeer(u)); 
+                        // Synchroniser mon propre joinedAt si le serveur me l'envoie
+                        const meInList = d.list.find(u => u.id === App.user.id);
+                        if (meInList && meInList.joinedAt) App.user.joinedAt = meInList.joinedAt;
+                        
+                        if(d.silence !== undefined) App.setSilence(d.silence); 
+                    }
                     if (d.type === 'PING') { MapService.addPingMarker(d.ping); if (App.isHost) NetService.broadcast(d); }
                     if (d.type === 'PING_MOVE') { if (MapService.pings[d.id]) MapService.pings[d.id].marker.setLatLng([d.lat, d.lng]); if (App.isHost) NetService.broadcast(d); }
                     if (d.type === 'PING_DELETE') { MapService.removePing(d.id); if (App.isHost) NetService.broadcast(d); }
                     if (d.type === 'SILENCE') App.setSilence(d.state);
                     
-                    // --- LOGIQUE PRIVÉE ---
                     if (d.type === 'PRIVATE_REQ') {
                         if (confirm(`Appel Privé de ${App.peers[d.from]?.data?.callsign || d.from} ?`)) {
                             conn.send({ type: 'PRIVATE_ACK', from: App.user.id });
-                            App.enterPrivate(d.from, false); // false = je n'appelle pas, j'attends l'appel ou je laisse l'autre initier
+                            App.enterPrivate(d.from, false); 
                         }
                     }
                     if (d.type === 'PRIVATE_ACK') {
-                        App.enterPrivate(d.from, true); // true = j'initie l'appel audio
+                        App.enterPrivate(d.from, true); 
                     }
                     if (d.type === 'PRIVATE_END') {
-                        App.leavePrivate(false); // false = pas besoin d'envoyer le signal puisqu'on le reçoit
-                    }
-
-                    // --- PASSATION DE POUVOIR ---
-                    if (d.type === 'PROMOTION') {
-                        App.toast("VOUS ÊTES LE NOUVEAU LEADER", false);
-                        alert("Le Leader a quitté. Vous prenez le commandement.");
-                        // On recharge pour nettoyer l'état et devenir Host proprement
-                        // (Idéalement on changerait l'état à la volée, mais PeerJS gère mal le switch client->host sans reload)
-                        location.reload(); 
-                    }
-                    if (d.type === 'REDIRECT_HOST') {
-                        App.toast(`CHANGEMENT LEADER -> ${d.newHostId}`);
-                        NetService.hostId = d.newHostId;
-                        NetService.joinSession(d.newHostId);
+                        App.leavePrivate(false); 
                     }
                 });
                 
                 conn.on('open', () => {
                     if (App.isHost) {
+                        // Si l'utilisateur est nouveau, on lui assigne un timestamp maintenant si pas fait
+                        if (!App.peers[conn.peer].data) App.peers[conn.peer].data = { joinedAt: Date.now() };
+                        else if (!App.peers[conn.peer].data.joinedAt) App.peers[conn.peer].data.joinedAt = Date.now();
+
                         const list = Object.values(App.peers).map(p => p.data).filter(d => d && d.id); list.push(App.user);
                         conn.send({ type: 'SYNC', list: list, silence: App.silenceActive });
                         Object.values(MapService.pings).forEach(p => conn.send({ type: 'PING', ping: p.data }));
@@ -1275,15 +1329,13 @@
                 }, 1000);
             },
 
-            // --- FONCTION PASSATION ---
             promoteNewHost: () => {
+                // Fonction manuelle maintenue au cas où
                 if (!App.isHost) return;
                 const candidates = Object.keys(App.peers);
                 if (candidates.length > 0) {
-                    const nextLeaderId = candidates[0]; // Le plus ancien connecté
-                    // Ordre au nouveau chef
+                    const nextLeaderId = candidates[0]; 
                     if(App.peers[nextLeaderId].conn) App.peers[nextLeaderId].conn.send({ type: 'PROMOTION' });
-                    // Ordre aux autres
                     candidates.forEach(cid => {
                         if (cid !== nextLeaderId && App.peers[cid].conn) {
                             App.peers[cid].conn.send({ type: 'REDIRECT_HOST', newHostId: nextLeaderId });
@@ -1321,9 +1373,10 @@
 
         // --- CONTRÔLEUR PRINCIPAL ---
         const App = {
-            user: { id: null, callsign: '', role: 'OPR', status: 'CLEAR', lat: 0, lng: 0, head: 0, bat: null, isTx: false },
+            user: { id: null, callsign: '', role: 'OPR', status: 'CLEAR', lat: 0, lng: 0, head: 0, bat: null, isTx: false, joinedAt: null }, // joinedAt added
             peers: {}, isHost: false, pingMode: false, silenceActive: false,
             privatePeerId: null, privateCall: null, hostAudioElement: null,
+            isTryingToReclaimHost: false, // Flag pour la migration
 
             init: async () => {
                 await DBService.init(); App.initBattery(); 
