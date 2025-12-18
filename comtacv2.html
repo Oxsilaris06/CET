@@ -8,7 +8,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>COM TAC v13.1 BLE</title>
+    <title>COM TAC v13.2 BLE+</title>
     
     <!-- ================= 1. LIBRAIRIES EXTERNES (CDN) ================= -->
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Chakra+Petch:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -453,7 +453,7 @@
             
             <button id="btn-ble-connect" class="btn-block ble-btn" onclick="BluetoothService.connect()">
                 <span class="material-symbols-outlined" style="font-size: 1.8rem;">bluetooth_searching</span>
-                <div><div>Connecter Montre</div><div style="font-size: 0.7rem; color: var(--color-dim);">Garmin PTT (Android/PC)</div></div>
+                <div><div>Connecter Montre / PTT</div><div style="font-size: 0.7rem; color: var(--color-dim);">Garmin & Devices BLE</div></div>
             </button>
 
             <div style="width: 100%; margin-top: 40px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.1);">
@@ -467,6 +467,10 @@
                 <button class="btn-block" id="btn-join-trigger" onclick="NetService.joinSession()" style="justify-content: center; background: rgba(255,255,255,0.05);">
                     REJOINDRE
                 </button>
+            </div>
+            
+            <div style="margin-top: 20px; font-size: 0.7rem; color: var(--color-dim); width: 100%; text-align: center;">
+                💡 Astuce: Les boutons "Volume" du téléphone ou d'une télécommande déclenchent le PTT.
             </div>
         </div>
     </div>
@@ -483,7 +487,7 @@
             <div class="map-btn" onclick="MapService.toggleMode()">
                 <span class="material-symbols-outlined" id="icon-map-mode">light_mode</span>
             </div>
-            <!-- Toggle Trails (Nouveau) -->
+            <!-- Toggle Trails -->
             <div class="map-btn" id="btn-toggle-trails" onclick="MapService.toggleTrails()">
                 <span class="material-symbols-outlined" id="icon-trails">timeline</span>
             </div>
@@ -550,15 +554,60 @@
             }
         };
 
-        // --- MODULE BLUETOOTH GARMIN ---
+        // --- MODULE ENTRÉES MATÉRIELLES (Clavier / Boutons Casque / Télécommandes BLE HID) ---
+        const HardwareInputService = {
+            isPressed: false,
+            
+            init: () => {
+                // Écoute les touches physiques
+                // La plupart des télécommandes BLE (ex: déclencheur photo) envoient "VolumeUp" ou "Enter"
+                window.addEventListener('keydown', HardwareInputService.onKeyDown);
+                window.addEventListener('keyup', HardwareInputService.onKeyUp);
+            },
+
+            onKeyDown: (e) => {
+                // Codes courants pour les boutons PTT / Volume / Media
+                const validKeys = ['VolumeUp', 'VolumeDown', 'AudioVolumeUp', 'AudioVolumeDown', 'Enter', 'Space'];
+                
+                if (validKeys.includes(e.code) || validKeys.includes(e.key)) {
+                    // Empêcher l'action par défaut (ex: monter le son système, scroller) si possible
+                    if(e.cancelable) e.preventDefault();
+                    
+                    // Anti-répétition (si la touche est maintenue, keydown se déclenche en boucle)
+                    if (!HardwareInputService.isPressed) {
+                        HardwareInputService.isPressed = true;
+                        
+                        // Si le système n'est pas en silence ou si on est hôte
+                        if (App.silenceActive && !App.isHost) {
+                            App.toast("SILENCE RADIO ACTIF", true);
+                        } else {
+                            App.user.isTxRequest = true;
+                            AudioService.tx(true);
+                            App.toast("PTT (Bouton Physique)");
+                        }
+                    }
+                }
+            },
+
+            onKeyUp: (e) => {
+                const validKeys = ['VolumeUp', 'VolumeDown', 'AudioVolumeUp', 'AudioVolumeDown', 'Enter', 'Space'];
+                if (validKeys.includes(e.code) || validKeys.includes(e.key)) {
+                    if(e.cancelable) e.preventDefault();
+                    HardwareInputService.isPressed = false;
+                    App.user.isTxRequest = false;
+                    AudioService.tx(false);
+                }
+            }
+        };
+
+        // --- MODULE BLUETOOTH GARMIN & GÉNÉRIQUE ---
         const BluetoothService = {
             device: null,
             server: null,
             characteristic: null,
             // UUID Spécifiques pour l'app Garmin Connect IQ
-            // Ces UUIDs doivent correspondre EXACTEMENT au code Monkey C
-            SERVICE_UUID: '5c6b1234-0000-1000-8000-00805f9b34fb', 
-            CHAR_UUID:    '5c6b5678-0000-1000-8000-00805f9b34fb',
+            GARMIN_SERVICE_UUID: '5c6b1234-0000-1000-8000-00805f9b34fb', 
+            GARMIN_CHAR_UUID:    '5c6b5678-0000-1000-8000-00805f9b34fb',
 
             connect: async () => {
                 const ind = document.getElementById('ble-indicator');
@@ -570,10 +619,14 @@
 
                 try {
                     ind.classList.add('scanning');
-                    App.toast("Recherche Montre...");
+                    App.toast("Recherche Périphérique BLE...");
                     
+                    // Filtre large : cherche le service Garmin OU accepte tous les appareils
+                    // Note: Pour les périphériques HID (claviers/boutons volume), WebBluetooth les bloque souvent.
+                    // On utilise HardwareInputService pour ceux-là. Ici c'est pour les vrais services GATT.
                     BluetoothService.device = await navigator.bluetooth.requestDevice({
-                        filters: [{ services: [BluetoothService.SERVICE_UUID] }]
+                        optionalServices: [BluetoothService.GARMIN_SERVICE_UUID],
+                        acceptAllDevices: true 
                     });
 
                     BluetoothService.device.addEventListener('gattserverdisconnected', BluetoothService.onDisconnected);
@@ -581,22 +634,27 @@
                     App.toast("Connexion BLE...");
                     BluetoothService.server = await BluetoothService.device.gatt.connect();
                     
-                    const service = await BluetoothService.server.getPrimaryService(BluetoothService.SERVICE_UUID);
-                    BluetoothService.characteristic = await service.getCharacteristic(BluetoothService.CHAR_UUID);
-                    
-                    await BluetoothService.characteristic.startNotifications();
-                    BluetoothService.characteristic.addEventListener('characteristicvaluechanged', BluetoothService.handleNotification);
+                    // Tente de récupérer le service (Logique Garmin par défaut)
+                    try {
+                        const service = await BluetoothService.server.getPrimaryService(BluetoothService.GARMIN_SERVICE_UUID);
+                        BluetoothService.characteristic = await service.getCharacteristic(BluetoothService.GARMIN_CHAR_UUID);
+                        await BluetoothService.characteristic.startNotifications();
+                        BluetoothService.characteristic.addEventListener('characteristicvaluechanged', BluetoothService.handleNotification);
+                        App.toast("SERVICE GARMIN PTT ACTIF");
+                    } catch (errService) {
+                        console.warn("Service Garmin introuvable, connexion générique établie.", errService);
+                        App.toast("Connecté (Mode Générique)");
+                    }
 
                     ind.classList.remove('scanning');
                     ind.classList.add('connected');
                     btn.classList.add('connected');
-                    btn.querySelector('div div').innerText = "Montre Connectée";
-                    App.toast("GARMIN PTT CONNECTÉ");
+                    btn.querySelector('div div').innerText = "BLE Connecté";
 
                 } catch (error) {
                     console.error('BLE Error:', error);
                     ind.classList.remove('scanning');
-                    App.toast("Echec Connexion Montre", true);
+                    App.toast("Annulé ou Erreur BLE", true);
                 }
             },
 
@@ -621,10 +679,8 @@
                 const btn = document.getElementById('btn-ble-connect');
                 ind.classList.remove('connected');
                 btn.classList.remove('connected');
-                btn.querySelector('div div').innerText = "Connecter Montre";
-                App.toast("Montre Déconnectée", true);
-                // Tentative de reconnexion simple si l'objet device existe encore
-                // Note: La reconnexion automatique Web Bluetooth nécessite souvent une action utilisateur
+                btn.querySelector('div div').innerText = "Connecter Montre / PTT";
+                App.toast("BLE Déconnecté", true);
             }
         };
 
@@ -695,13 +751,11 @@
                 MapService.loadLayer();
             },
 
-            // --- NOUVEAU: Toggle Trails ---
             toggleTrails: () => {
                 MapService.showTrails = !MapService.showTrails;
                 document.getElementById('icon-trails').style.opacity = MapService.showTrails ? '1' : '0.3';
-                // Update visibility
                 Object.values(App.peers).forEach(p => { if(p.trail) p.trail.setStyle({ opacity: MapService.showTrails ? 0.6 : 0 }); });
-                const me = MapService; // Local storage also has trail
+                const me = MapService; 
                 if(me.trail) me.trail.setStyle({ opacity: MapService.showTrails ? 0.6 : 0 });
                 App.toast(MapService.showTrails ? "Tracés: VISIBLES" : "Tracés: MASQUÉS");
             },
@@ -829,12 +883,11 @@
                 try {
                     const AC = window.AudioContext || window.webkitAudioContext;
                     AudioService.ctx = new AC();
-                    // Fix PC: Force resume si le contexte est suspendu au départ
                     if (AudioService.ctx.state === 'suspended') await AudioService.ctx.resume();
 
                     AudioService.analyser = AudioService.ctx.createAnalyser(); 
 
-                    // 1. Initialisation Flux Micro (Gestion PC sans micro)
+                    // 1. Initialisation Flux Micro
                     try {
                         const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
                         AudioService.stream = stream;
@@ -842,16 +895,13 @@
                     } catch (micErr) {
                         console.warn("Pas de micro détecté ou accès refusé. Mode Écoute seule.");
                         App.toast("Micro non détecté: Mode Écoute", true);
-                        // Création d'un flux "fantôme" pour éviter les crashs si on appelle MixerService
                         const dest = AudioService.ctx.createMediaStreamDestination();
                         AudioService.stream = dest.stream;
                         AudioService.privateStream = dest.stream;
                     }
 
                     // 2. Initialisation Hack Audio pour Arrière-plan (Silent Loop)
-                    // Uniquement sur Mobile pour économiser CPU sur PC et éviter bugs autoplay
                     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-                    
                     if (isMobile) {
                         const silentBlob = new Blob([new Uint8Array([82,73,70,70,44,0,0,0,87,65,86,69,102,109,116,32,16,0,0,0,1,0,1,0,68,172,0,0,136,88,1,0,2,0,16,0,100,97,116,97,0,0,0,0])], {type: 'audio/wav'});
                         AudioService.backgroundAudio = new Audio(URL.createObjectURL(silentBlob));
@@ -861,13 +911,12 @@
                     }
                     
                     // 3. Support Boutons Casques Bluetooth (Media Session API)
-                    // Enveloppé dans un try/catch strict pour éviter le crash PC
                     if ('mediaSession' in navigator) { 
                         try {
                             navigator.mediaSession.metadata = new MediaMetadata({
                                 title: "COM TAC",
                                 artist: "Canal Sécurisé",
-                                album: "v13.0 Active",
+                                album: "v13.2 Active",
                                 artwork: [{ src: 'favicon.ico', sizes: '96x96', type: 'image/png' }]
                             });
 
@@ -882,11 +931,14 @@
                                 } catch(e){}
                             };
 
+                            // Mapping étendu pour boutons multimédia
                             navigator.mediaSession.setActionHandler('play', () => toggleTx(true));
                             navigator.mediaSession.setActionHandler('pause', () => toggleTx(false));
                             navigator.mediaSession.setActionHandler('stop', () => toggleTx(false)); 
+                            navigator.mediaSession.setActionHandler('previoustrack', () => toggleTx(true));
+                            navigator.mediaSession.setActionHandler('nexttrack', () => toggleTx(true));
                         } catch(e) {
-                            console.log("MediaSession non supporté ou erreur hardware PC", e);
+                            console.log("MediaSession non supporté", e);
                         }
                     }
                     
@@ -907,14 +959,12 @@
                 // VÉRIFICATION STRICTE SILENCE RADIO (Sauf Hôte)
                 if (App.silenceActive && !App.isHost) active = false; 
 
-                // Si c'est un flux fantôme (pas de micro), on ne fait rien
                 if (streamToUse.getAudioTracks().length > 0) {
                     streamToUse.getAudioTracks().forEach(t => t.enabled = active);
                 }
                 
                 App.user.isTx = active;
 
-                // Si Hôte sur canal principal
                 if (App.isHost && !App.privatePeerId && MixerService.localSource) {
                     MixerService.localSource.mediaStream.getAudioTracks().forEach(t => t.enabled = active);
                 }
@@ -925,7 +975,6 @@
                     else btn.classList.remove('active');
                 }
                 
-                // En privé, on ne broadcast pas le statut TX à tout le monde
                 if (!App.privatePeerId) NetService.broadcast(); 
                 App.renderGrid();
             },
@@ -960,10 +1009,9 @@
             drawLoop: () => {
                 requestAnimationFrame(AudioService.drawLoop);
                 
-                // CORRECTION CRASH: Vérification de l'existence des analyseurs
                 let analyser = null;
                 if (App.isHost && !App.privatePeerId) {
-                    analyser = MixerService.analyser; // Peut être null si Mixer pas init
+                    analyser = MixerService.analyser; 
                 } else {
                     analyser = AudioService.analyser;
                 }
@@ -993,22 +1041,18 @@
             ctx: null, destination: null, localSource: null, analyser: null, compressor: null,
             
             init: (localStream) => {
-                if (MixerService.destination) return; // Déjà init
+                if (MixerService.destination) return; 
                 
                 try {
-                    MixerService.ctx = AudioService.ctx; // Utilise le même contexte, c'est OK
+                    MixerService.ctx = AudioService.ctx; 
                     MixerService.destination = MixerService.ctx.createMediaStreamDestination();
                     
-                    // CRÉATION DE NOUVEAUX NOEUDS (ISOLATION TOTALE)
-                    // Ne jamais réutiliser AudioService.analyser ici pour éviter les boucles
                     MixerService.compressor = MixerService.ctx.createDynamicsCompressor();
                     MixerService.analyser = MixerService.ctx.createAnalyser(); 
                     
-                    // Graphique du Mixeur: Sources -> Compresseur -> Analyser -> Stream Sortie
                     MixerService.compressor.connect(MixerService.analyser);
                     MixerService.analyser.connect(MixerService.destination);
     
-                    // Input Micro Local (si dispo)
                     if (localStream && localStream.getAudioTracks().length > 0) {
                         MixerService.localSource = MixerService.ctx.createMediaStreamSource(localStream);
                         MixerService.localSource.connect(MixerService.compressor);
@@ -1037,7 +1081,6 @@
             peer: null, hostId: null, retryCount: 0,
             
             createSession: (id = null) => {
-                // Séquence de sécurité pour éviter le double clic
                 const btn = document.getElementById('btn-create-host');
                 if(btn.innerHTML === 'Init...') return;
                 btn.innerHTML = 'Init...';
@@ -1045,11 +1088,9 @@
                 App.isHost = true; App.user.role = 'HOST'; document.body.classList.add('is-host');
                 document.getElementById('btn-silence').style.display = 'block';
                 
-                // Délai court pour laisser le temps au UI de se mettre à jour avant le gros travail JS
                 setTimeout(() => {
                     try {
                         MixerService.init(AudioService.stream); 
-                        // RECONNEXION INTELLIGENTE: Réutiliser le même ID si possible (Persistance Host)
                         const saved = JSON.parse(localStorage.getItem(CONFIG.sessionKey));
                         const targetId = (saved && saved.isHost && saved.freq) ? saved.freq : id;
                         NetService.initPeer(targetId);
@@ -1074,7 +1115,6 @@
             
             initPeer: (forceId = null) => {
                 if (NetService.peer) NetService.peer.destroy();
-                // Si Host, on essaie de garder l'ID. Si Client, ID random.
                 const peerId = forceId || (App.isHost ? crypto.randomUUID().substring(0,8).toUpperCase() : null); 
                 const peer = new Peer(peerId, CONFIG.peerConfig);
                 
@@ -1082,7 +1122,6 @@
                     App.user.id = pid; NetService.retryCount = 0;
                     document.getElementById('txt-id-display').innerText = `CANAL: ${App.isHost ? pid : NetService.hostId}`;
                     
-                    // --- PERSISTANCE SESSION IMMÉDIATE ---
                     App.saveSession(App.isHost ? pid : NetService.hostId);
 
                     if (App.isHost) { 
@@ -1095,11 +1134,9 @@
                 peer.on('error', (err) => {
                     console.warn("Peer Error", err);
                     if (err.type === 'unavailable-id') { 
-                        // ID déjà pris (Host fantôme ?), on en prend un nouveau
                         NetService.initPeer(null); 
                     } else { 
                         App.toast(`Err Réseau: ${err.type}`, true);
-                        // Reconnexion auto pour client
                         if(!App.isHost && NetService.hostId) setTimeout(NetService.tryConnectToHost, 3000);
                     }
                 });
@@ -1109,21 +1146,16 @@
                 });
                 
                 peer.on('call', (call) => { 
-                    // GESTION DES APPELS ENTRANTS
-                    
-                    // 1. Appel Privé (Metadata ne passe pas toujours bien sur les calls, on devine par le contexte ou un flag)
-                    // Simplification: Si on a accepté une demande privée, on attend un appel de ce peer.
                     if (App.privatePeerId && call.peer === App.privatePeerId) {
                          call.answer(AudioService.privateStream);
                          call.on('stream', s => {
-                             AudioService.playRemote(s, true); // Play private stream
+                             AudioService.playRemote(s, true); 
                              App.toast("Audio Privé Établi");
                          });
                          App.privateCall = call;
                          return;
                     }
 
-                    // 2. Appel standard vers Hôte (Relais)
                     if (App.isHost) {
                         call.answer(MixerService.getStream()); 
                         call.on('stream', s => { 
@@ -1132,10 +1164,8 @@
                         });
                         if (App.peers[call.peer]) App.peers[call.peer].call = call;
                     } else {
-                        // 3. Réponse de l'hôte (Mix)
                         call.answer(null); 
                         call.on('stream', s => {
-                            // On stocke l'élément audio pour pouvoir le muter en mode privé
                             App.hostAudioElement = AudioService.playRemote(s); 
                         }); 
                     }
@@ -1146,7 +1176,7 @@
 
             tryConnectToHost: () => {
                 if (!NetService.peer?.open || !NetService.hostId) return;
-                const hostConn = NetService.peer.connect(NetService.hostId, { metadata: App.user, reliable: true }); // Reliable data channel
+                const hostConn = NetService.peer.connect(NetService.hostId, { metadata: App.user, reliable: true }); 
                 
                 hostConn.on('open', () => {
                     NetService.handleConn(hostConn); 
@@ -1154,7 +1184,6 @@
                     App.switchView('view-ops'); 
                     NetService.callHostForAudio(NetService.hostId, AudioService.stream); 
                 });
-                // Auto-Reconnect
                 hostConn.on('close', () => {
                     App.toast("Host déconnecté... Reconnexion", true);
                     setTimeout(NetService.tryConnectToHost, 2000);
@@ -1174,7 +1203,7 @@
                 conn.on('data', (d) => {
                     if (d.type === 'FULL' || d.type === 'UPDATE') {
                         NetService.updatePeer(d.user);
-                        if (App.isHost) NetService.broadcast(d); // Relais info
+                        if (App.isHost) NetService.broadcast(d); 
                     }
                     if (d.type === 'SYNC') { d.list.forEach(u => NetService.updatePeer(u)); if(d.silence !== undefined) App.setSilence(d.silence); }
                     if (d.type === 'PING') { MapService.addPingMarker(d.ping); if (App.isHost) NetService.broadcast(d); }
@@ -1186,22 +1215,20 @@
                     if (d.type === 'PRIVATE_REQ') {
                         if (confirm(`Appel Privé de ${App.peers[d.from]?.data?.callsign || d.from} ?`)) {
                             conn.send({ type: 'PRIVATE_ACK', from: App.user.id });
-                            App.enterPrivate(d.from, false); // false = je n'appelle pas, j'attends l'appel ou je laisse l'autre initier
+                            App.enterPrivate(d.from, false); 
                         }
                     }
                     if (d.type === 'PRIVATE_ACK') {
-                        App.enterPrivate(d.from, true); // true = j'initie l'appel audio
+                        App.enterPrivate(d.from, true); 
                     }
                     if (d.type === 'PRIVATE_END') {
-                        App.leavePrivate(false); // false = pas besoin d'envoyer le signal puisqu'on le reçoit
+                        App.leavePrivate(false); 
                     }
 
                     // --- PASSATION DE POUVOIR ---
                     if (d.type === 'PROMOTION') {
                         App.toast("VOUS ÊTES LE NOUVEAU LEADER", false);
                         alert("Le Leader a quitté. Vous prenez le commandement.");
-                        // On recharge pour nettoyer l'état et devenir Host proprement
-                        // (Idéalement on changerait l'état à la volée, mais PeerJS gère mal le switch client->host sans reload)
                         location.reload(); 
                     }
                     if (d.type === 'REDIRECT_HOST') {
@@ -1244,15 +1271,12 @@
                 }, 1000);
             },
 
-            // --- FONCTION PASSATION ---
             promoteNewHost: () => {
                 if (!App.isHost) return;
                 const candidates = Object.keys(App.peers);
                 if (candidates.length > 0) {
-                    const nextLeaderId = candidates[0]; // Le plus ancien connecté
-                    // Ordre au nouveau chef
+                    const nextLeaderId = candidates[0]; 
                     if(App.peers[nextLeaderId].conn) App.peers[nextLeaderId].conn.send({ type: 'PROMOTION' });
-                    // Ordre aux autres
                     candidates.forEach(cid => {
                         if (cid !== nextLeaderId && App.peers[cid].conn) {
                             App.peers[cid].conn.send({ type: 'REDIRECT_HOST', newHostId: nextLeaderId });
@@ -1296,16 +1320,14 @@
 
             init: async () => {
                 await DBService.init(); App.initBattery(); 
+                HardwareInputService.init(); // INIT CLAVIER/BLE
                 
-                // --- RESTAURATION TRIGRAMME ---
                 const savedTri = localStorage.getItem(CONFIG.trigramKey);
                 if (savedTri) document.getElementById('input-callsign').value = savedTri;
 
-                // --- TENTATIVE DE RECONNEXION AUTO ---
                 const savedSession = JSON.parse(localStorage.getItem(CONFIG.sessionKey));
                 if (savedSession && savedSession.callsign && savedSession.freq) {
                     document.getElementById('input-callsign').value = savedSession.callsign;
-                    // Auto-Login
                     App.login(true).then(() => {
                         App.toast("Restauration Session...");
                         if (savedSession.isHost) NetService.createSession(savedSession.freq);
@@ -1314,7 +1336,6 @@
                 }
 
                 window.addEventListener('beforeunload', () => { 
-                    // On ne détruit pas la session au unload pour permettre le refresh
                     if(NetService.peer && !App.isHost) { /* Keep alive for refresh */ }
                 });
                 
@@ -1339,7 +1360,7 @@
                     const val = document.getElementById('input-callsign').value.trim().toUpperCase();
                     if (val.length < 2) return App.toast("ID Invalide", true);
                     App.user.callsign = val;
-                    localStorage.setItem(CONFIG.trigramKey, val); // Sauvegarde Trigramme
+                    localStorage.setItem(CONFIG.trigramKey, val); 
                 } else {
                     App.user.callsign = document.getElementById('input-callsign').value;
                 }
@@ -1351,7 +1372,6 @@
                 if (!audioOk && !autoLogin) return;
                 
                 App.switchView('view-menu'); MapService.startGPS();
-                // WAKE LOCK (Garde l'écran/CPU éveillé)
                 if ('wakeLock' in navigator) navigator.wakeLock.request('screen').catch(()=>{});
             },
             
@@ -1367,7 +1387,7 @@
                             if (NetService.peer) NetService.peer.destroy(); 
                             if (full) localStorage.removeItem(CONFIG.sessionKey); 
                             location.reload(); 
-                        }, 500); // Petit délai pour l'envoi
+                        }, 500); 
                         return;
                     }
                 }
@@ -1401,7 +1421,6 @@
                 NetService.broadcast(); App.renderGrid(); 
             },
 
-            // --- GESTION PRIVÉE ---
             requestPrivate: (targetId) => {
                 if (App.privatePeerId) return App.toast("Déjà en privé", true);
                 if (App.peers[targetId].data.status === 'BUSY') return App.toast("Opérateur Occupé", true);
@@ -1413,11 +1432,8 @@
                 App.privatePeerId = peerId;
                 document.body.classList.add('private-active');
                 App.setStatus('BUSY');
-                
-                // Mute l'audio principal (Host)
                 if (App.hostAudioElement) App.hostAudioElement.muted = true;
 
-                // Initiate P2P call if asked
                 if (initiateCall) {
                     const call = NetService.peer.call(peerId, AudioService.privateStream);
                     call.on('stream', s => {
@@ -1430,19 +1446,14 @@
 
             leavePrivate: (sendSignal = true) => {
                 if (!App.privatePeerId) return;
-                
                 if (sendSignal) {
                     const conn = App.peers[App.privatePeerId]?.conn;
                     if (conn) conn.send({ type: 'PRIVATE_END' });
                 }
-
                 if (App.privateCall) { App.privateCall.close(); App.privateCall = null; }
-                
                 App.privatePeerId = null;
                 document.body.classList.remove('private-active');
-                App.setStatus('CLEAR'); // Retour statut vert
-                
-                // Unmute Main Audio
+                App.setStatus('CLEAR'); 
                 if (App.hostAudioElement) App.hostAudioElement.muted = false;
                 App.toast("Retour Canal Principal");
             },
