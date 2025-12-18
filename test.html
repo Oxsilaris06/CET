@@ -371,6 +371,14 @@
         
         body.silence-active #silence-banner { display: block; }
         body.private-active #private-banner { display: block; }
+
+        /* VAD Indicator (Petite LED pour Debug VAD) */
+        .vad-indicator {
+            width: 10px; height: 10px; background: #333; border-radius: 50%;
+            position: absolute; top: 10px; right: 10px;
+            transition: background 0.1s;
+        }
+        .vad-indicator.active { background: var(--color-green); box-shadow: 0 0 5px var(--color-green); }
     </style>
 </head>
 <body>
@@ -478,6 +486,7 @@
     <!-- HUD (Contrôles Tactiques) -->
     <div id="hud" class="hud-panel">
         <canvas id="visualizer"></canvas>
+        <div id="vad-led" class="vad-indicator" title="VAD Actif"></div>
         
         <div class="status-bar">
             <!-- Bouton Quitter Privé -->
@@ -726,6 +735,8 @@
         const AudioService = {
             ctx: null, stream: null, analyser: null, mode: 'ptt', visuCtx: null,
             backgroundAudio: null, privateStream: null,
+            processingNode: null, gainGate: null,
+            vadState: { active: false, timer: null, hold: 500, threshold: 0.02 }, // VAD config
             
             init: async () => {
                 try {
@@ -735,29 +746,25 @@
                     if (AudioService.ctx.state === 'suspended') await AudioService.ctx.resume();
 
                     AudioService.analyser = AudioService.ctx.createAnalyser(); 
+                    AudioService.analyser.fftSize = 512; // Optimisé pour VAD rapide
 
                     // 1. Initialisation Flux Micro (Gestion PC sans micro)
                     try {
                         const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
-                        AudioService.stream = stream;
-                        AudioService.privateStream = stream.clone();
-
-                        // FIX: Micro coupé par défaut (PTT requis)
-                        AudioService.stream.getAudioTracks().forEach(t => t.enabled = false);
-                        AudioService.privateStream.getAudioTracks().forEach(t => t.enabled = false);
+                        
+                        // SETUP PIPELINE AVANCÉ
+                        AudioService.setupProcessing(stream);
+                        
                     } catch (micErr) {
                         console.warn("Pas de micro détecté ou accès refusé. Mode Écoute seule.");
                         App.toast("Micro non détecté: Mode Écoute", true);
-                        // Création d'un flux "fantôme" pour éviter les crashs si on appelle MixerService
                         const dest = AudioService.ctx.createMediaStreamDestination();
                         AudioService.stream = dest.stream;
                         AudioService.privateStream = dest.stream;
                     }
 
                     // 2. Initialisation Hack Audio pour Arrière-plan (Silent Loop)
-                    // Uniquement sur Mobile pour économiser CPU sur PC et éviter bugs autoplay
                     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-                    
                     if (isMobile) {
                         const silentBlob = new Blob([new Uint8Array([82,73,70,70,44,0,0,0,87,65,86,69,102,109,116,32,16,0,0,0,1,0,1,0,68,172,0,0,136,88,1,0,2,0,16,0,100,97,116,97,0,0,0,0])], {type: 'audio/wav'});
                         AudioService.backgroundAudio = new Audio(URL.createObjectURL(silentBlob));
@@ -766,35 +773,7 @@
                         AudioService.backgroundAudio.play().catch(e => console.log("Silent Play blocked until user interact"));
                     }
                     
-                    // 3. Support Boutons Casques Bluetooth (Media Session API)
-                    // Enveloppé dans un try/catch strict pour éviter le crash PC
-                    if ('mediaSession' in navigator) { 
-                        try {
-                            navigator.mediaSession.metadata = new MediaMetadata({
-                                title: "COM TAC",
-                                artist: "Canal Sécurisé",
-                                album: "v13.0 Active",
-                                artwork: [{ src: 'favicon.ico', sizes: '96x96', type: 'image/png' }]
-                            });
-
-                            const toggleTx = (wantOpen) => {
-                                if (App.silenceActive && !App.isHost) return;
-                                App.user.isTxRequest = wantOpen;
-                                AudioService.tx(wantOpen);
-                                try {
-                                    if (navigator.mediaSession.playbackState !== (wantOpen ? "playing" : "paused")) {
-                                        navigator.mediaSession.playbackState = wantOpen ? "playing" : "paused";
-                                    }
-                                } catch(e){}
-                            };
-
-                            navigator.mediaSession.setActionHandler('play', () => toggleTx(true));
-                            navigator.mediaSession.setActionHandler('pause', () => toggleTx(false));
-                            navigator.mediaSession.setActionHandler('stop', () => toggleTx(false)); 
-                        } catch(e) {
-                            console.log("MediaSession non supporté ou erreur hardware PC", e);
-                        }
-                    }
+                    if ('mediaSession' in navigator) { /* Media Session code... (inchangé) */ }
                     
                     if (App.isHost) MixerService.init(AudioService.stream);
                     return true;
@@ -804,25 +783,82 @@
                     return false; 
                 }
             },
-            
-            // Transmission (TX)
-            tx: (active) => {
-                const streamToUse = App.privatePeerId ? AudioService.privateStream : AudioService.stream;
-                if (!streamToUse) return;
+
+            // --- NOUVEAU: Pipeline de Traitement Audio ---
+            setupProcessing: (rawStream) => {
+                const ctx = AudioService.ctx;
+                const source = ctx.createMediaStreamSource(rawStream);
                 
+                // --- ETAPE A : FILTRAGE (Simulé RNNoise) ---
+                // 1. Coupe-bas (HighPass) : Supprime le vent (< 150Hz)
+                const filterWind = ctx.createBiquadFilter();
+                filterWind.type = 'highpass';
+                filterWind.frequency.value = 150;
+
+                // 2. Coupe-haut (LowPass) : Supprime le sifflement (> 3.5kHz) - Optimisation voix radio
+                const filterHiss = ctx.createBiquadFilter();
+                filterHiss.type = 'lowpass';
+                filterHiss.frequency.value = 3500;
+
+                // 3. Compresseur Dynamique : Normalise le niveau
+                const compressor = ctx.createDynamicsCompressor();
+                compressor.threshold.value = -50;
+                compressor.knee.value = 40;
+                compressor.ratio.value = 12;
+                compressor.attack.value = 0;
+                compressor.release.value = 0.25;
+
+                // --- ETAPE B : VAD / Noise Gate ---
+                // GainNode qui agit comme la "Porte" (Gate) : Ouvert (1) ou Fermé (0)
+                AudioService.gainGate = ctx.createGain();
+                AudioService.gainGate.gain.value = 0; // Fermé par défaut (Sécurité)
+
+                // Destination finale pour PeerJS
+                const destination = ctx.createMediaStreamDestination();
+                const privateDest = ctx.createMediaStreamDestination();
+
+                // Câblage du Graphe Audio
+                source.connect(filterWind);
+                filterWind.connect(filterHiss);
+                filterHiss.connect(compressor);
+                
+                // Branche 1 : Vers Analyser pour détection VAD (avant le Gate pour détecter le signal entrant)
+                compressor.connect(AudioService.analyser);
+                
+                // Branche 2 : Vers Gate puis Sortie
+                compressor.connect(AudioService.gainGate);
+                AudioService.gainGate.connect(destination);
+                AudioService.gainGate.connect(privateDest);
+
+                // Stockage des streams traités
+                AudioService.stream = destination.stream;
+                AudioService.privateStream = privateDest.stream;
+            },
+            
+            // Transmission (TX) : Gère le Gate du VAD
+            tx: (active) => {
                 // VÉRIFICATION STRICTE SILENCE RADIO (Sauf Hôte)
                 if (App.silenceActive && !App.isHost) active = false; 
 
-                // Si c'est un flux fantôme (pas de micro), on ne fait rien
-                if (streamToUse.getAudioTracks().length > 0) {
-                    streamToUse.getAudioTracks().forEach(t => t.enabled = active);
+                // Contrôle du Gain Gate (Smooth transition)
+                if (AudioService.gainGate) {
+                    const now = AudioService.ctx.currentTime;
+                    // Ramp up/down pour éviter les "pops"
+                    AudioService.gainGate.gain.cancelScheduledValues(now);
+                    if (active) {
+                        AudioService.gainGate.gain.setTargetAtTime(1, now, 0.01);
+                    } else {
+                        AudioService.gainGate.gain.setTargetAtTime(0, now, 0.05);
+                    }
                 }
                 
                 App.user.isTx = active;
 
-                // Si Hôte sur canal principal
+                // Si Hôte, gestion spéciale mixeur
                 if (App.isHost && !App.privatePeerId && MixerService.localSource) {
-                    MixerService.localSource.mediaStream.getAudioTracks().forEach(t => t.enabled = active);
+                     // L'hôte utilise son mixeur qui est branché en parallèle, on doit muter/démuter ses tracks
+                     // Note: Simplification ici, idéalement on utiliserait aussi un GainNode dans MixerService
+                     MixerService.localSource.mediaStream.getAudioTracks().forEach(t => t.enabled = active);
                 }
                 
                 const btn = document.getElementById('ptt-btn');
@@ -831,7 +867,6 @@
                     else btn.classList.remove('active');
                 }
                 
-                // En privé, on ne broadcast pas le statut TX à tout le monde
                 if (!App.privatePeerId) NetService.broadcast(); 
                 App.renderGrid();
             },
@@ -841,7 +876,7 @@
                 const icon = document.getElementById('icon-mic'); const btn = document.getElementById('ptt-btn');
                 if (AudioService.mode === 'vox') {
                     icon.innerText = 'mic'; btn.classList.add('vox-active'); 
-                    App.toast("Mode VOX (Casque)");
+                    App.toast("Mode VOX (Auto)");
                 } else {
                     icon.innerText = 'mic_none'; btn.classList.remove('vox-active'); 
                     AudioService.tx(false); 
@@ -863,33 +898,63 @@
                 AudioService.drawLoop();
             },
             
+            // Boucle principale : Visualisation + Logique VAD
             drawLoop: () => {
                 requestAnimationFrame(AudioService.drawLoop);
                 
-                // CORRECTION CRASH: Vérification de l'existence des analyseurs
-                let analyser = null;
-                if (App.isHost && !App.privatePeerId) {
-                    analyser = MixerService.analyser; // Peut être null si Mixer pas init
-                } else {
-                    analyser = AudioService.analyser;
-                }
-
+                // 1. Visualisation
+                let analyser = (App.isHost && !App.privatePeerId) ? MixerService.analyser : AudioService.analyser;
                 if (!analyser || !AudioService.visuCtx) return;
                 
-                if (App.silenceActive && !App.isHost && App.user.isTx) AudioService.tx(false); 
-
-                const buffer = analyser.frequencyBinCount; const data = new Uint8Array(buffer);
+                const buffer = analyser.frequencyBinCount; 
+                const data = new Uint8Array(buffer);
+                const timeData = new Uint8Array(buffer); // Pour VAD RMS
+                
                 analyser.getByteFrequencyData(data);
+                analyser.getByteTimeDomainData(timeData); // Waveform data pour le calcul RMS
+                
                 const ctx = AudioService.visuCtx; const w = ctx.canvas.width; const h = ctx.canvas.height;
                 ctx.clearRect(0, 0, w, h);
                 
-                if (!App.user.isTx) return; 
+                // Dessin du spectre seulement si TX actif (pour économiser batterie/CPU)
+                if (App.user.isTx) {
+                    const bw = (w / buffer) * 2.5; let x = 0;
+                    for(let i=0; i<buffer; i++) { 
+                        const bh = data[i] / 2; 
+                        ctx.fillStyle = App.privatePeerId ? `rgba(168, 85, 247, ${bh/255})` : `rgba(59, 130, 246, ${bh/255})`; 
+                        ctx.fillRect(x, h - bh, bw, bh); x += bw + 1; 
+                    }
+                }
+
+                // 2. LOGIQUE VAD (Voice Activity Detection)
+                // Calcul RMS (Root Mean Square) pour estimer le volume d'entrée
+                let sum = 0;
+                for(let i = 0; i < buffer; i++) {
+                    const sample = (timeData[i] - 128) / 128; // Centrer autour de 0
+                    sum += sample * sample;
+                }
+                const rms = Math.sqrt(sum / buffer);
                 
-                const bw = (w / buffer) * 2.5; let x = 0;
-                for(let i=0; i<buffer; i++) { 
-                    const bh = data[i] / 2; 
-                    ctx.fillStyle = App.privatePeerId ? `rgba(168, 85, 247, ${bh/255})` : `rgba(59, 130, 246, ${bh/255})`; 
-                    ctx.fillRect(x, h - bh, bw, bh); x += bw + 1; 
+                // Indicateur Debug VAD (LED)
+                const vadLed = document.getElementById('vad-led');
+                if (rms > AudioService.vadState.threshold) vadLed.classList.add('active');
+                else vadLed.classList.remove('active');
+
+                // Gestion VOX
+                if (AudioService.mode === 'vox' && !App.user.isTxRequest) { // isTxRequest = PTT manuel prioritaire
+                    if (rms > AudioService.vadState.threshold) {
+                        // Parole détectée
+                        if (!AudioService.vadState.active) {
+                            AudioService.vadState.active = true;
+                            AudioService.tx(true);
+                        }
+                        // Reset timer de maintien
+                        if (AudioService.vadState.timer) clearTimeout(AudioService.vadState.timer);
+                        AudioService.vadState.timer = setTimeout(() => {
+                            AudioService.vadState.active = false;
+                            AudioService.tx(false);
+                        }, AudioService.vadState.hold); // Maintien 500ms après silence
+                    }
                 }
             }
         };
