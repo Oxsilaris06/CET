@@ -8,14 +8,21 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>COM TAC v13.0</title>
     
+    <!-- PWA MANIFEST (INTEGRÉ ET COMPLET) -->
+    <!-- Note: Les chemins d'icônes supposent que le fichier HTML est dans le même dossier que les images -->
+    <link rel="manifest" href="manifest.json">    
+    <title>COM TAC v13.1</title>
+    
+    <!-- ICO & APPLE TOUCH ICON -->
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="apple-touch-icon" href="apple-touch-icon-180x180.png">
+
     <!-- ================= 1. LIBRAIRIES EXTERNES (CDN) ================= -->
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Chakra+Petch:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,1,0" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <link rel="icon" href="favicon.ico" sizes="any" type="image/png">
-
+    
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
@@ -393,7 +400,7 @@
     <!-- STRUCTURE UI -->
     <header>
         <div class="brand">
-            <span class="material-symbols-outlined">satellite_alt</span> COM<span>TAC</span> v13.0
+            <span class="material-symbols-outlined">satellite_alt</span> COM<span>TAC</span> v13.1
         </div>
         <div class="nav-group">
             <div class="btn-nav" id="btn-toggle-map" onclick="App.toggleMap()">
@@ -743,7 +750,8 @@
             ctx: null, stream: null, analyser: null, mode: 'ptt', visuCtx: null,
             backgroundAudio: null, privateStream: null, rawStream: null, 
             processingNode: null, gainGate: null, inputGain: null, // Ajout inputGain
-            vadState: { active: false, timer: null, hold: 500, threshold: 0.02 }, 
+            vadState: { active: false, timer: null, hold: 500, threshold: 0.02 },
+            vadInterval: null, // Nouveau : intervalle pour VAD background
             
             init: async () => {
                 try {
@@ -785,13 +793,17 @@
                         AudioService.backgroundAudio.play().catch(e => console.log("Silent Play blocked until user interact"));
                     }
                     
+                    // 3. Support Boutons Casques Bluetooth (Media Session API)
                     if ('mediaSession' in navigator) { 
                         try {
                             navigator.mediaSession.metadata = new MediaMetadata({
                                 title: "COM TAC",
                                 artist: "Canal Sécurisé",
-                                album: "v13.0 Active",
-                                artwork: [{ src: 'favicon.ico', sizes: '96x96', type: 'image/png' }]
+                                album: "v13.1 Active",
+                                artwork: [
+                                    { src: 'android-launchericon-512-512.png', sizes: '512x512', type: 'image/png' },
+                                    { src: 'android-icon-192x192.png', sizes: '192x192', type: 'image/png' }
+                                ]
                             });
 
                             const toggleTx = (wantOpen) => {
@@ -815,8 +827,9 @@
                     
                     if (App.isHost) MixerService.init(AudioService.stream);
                     
-                    // --- FIX VAD: Démarrer la boucle d'analyse ---
-                    AudioService.setupViz();
+                    // --- FIX VAD: Démarrer les boucles ---
+                    AudioService.startVAD(); // Arrière-plan
+                    AudioService.setupViz(); // Premier plan
 
                     return true;
                 } catch(e) { 
@@ -826,53 +839,61 @@
                 }
             },
 
-            // --- NOUVEAU: Pipeline de Traitement Audio ---
+            // --- NOUVEAU: Pipeline de Traitement Audio DSP ---
             setupProcessing: (rawStream) => {
                 AudioService.rawStream = rawStream; 
                 const ctx = AudioService.ctx;
                 const source = ctx.createMediaStreamSource(rawStream);
                 
-                // 0. Etage de GAIN D'ENTRÉE (Pour réduire la sensibilité en VOX)
+                // 0. Etage de GAIN D'ENTRÉE
                 const inputGain = ctx.createGain();
-                inputGain.gain.value = 1.0; // Par défaut 100%
+                inputGain.gain.value = 1.0; 
                 AudioService.inputGain = inputGain;
 
-                // --- ETAPE A : FILTRAGE ---
-                // 1. Coupe-bas (HighPass) : Supprime le vent (< 150Hz)
+                // --- ETAPE A : FILTRAGE SPECTRAL (Bandpass + Presence) ---
+                
+                // 1. Coupe-bas (HighPass) à 200Hz (Coupe le vent et les bruits sourds)
                 const filterWind = ctx.createBiquadFilter();
                 filterWind.type = 'highpass';
-                filterWind.frequency.value = 150;
+                filterWind.frequency.value = 200; 
 
-                // 2. Coupe-haut (LowPass) : Supprime le sifflement (> 3.5kHz)
+                // 2. Coupe-haut (LowPass) à 3000Hz (Coupe les sifflements et bruits aigus)
                 const filterHiss = ctx.createBiquadFilter();
                 filterHiss.type = 'lowpass';
-                filterHiss.frequency.value = 3500;
+                filterHiss.frequency.value = 3000;
 
-                // 3. Compresseur Dynamique
+                // 3. Filtre de Présence (Peaking) à 2kHz (Boost la voix intelligible)
+                const filterPresence = ctx.createBiquadFilter();
+                filterPresence.type = 'peaking';
+                filterPresence.frequency.value = 2000;
+                filterPresence.Q.value = 1.0;
+                filterPresence.gain.value = 5.0; // Boost léger
+
+                // 4. Compresseur Anti-Crête (Anti-Gunshot)
+                // Attaque instantanée pour écraser les bruits d'impact
                 const compressor = ctx.createDynamicsCompressor();
-                compressor.threshold.value = -50;
-                compressor.knee.value = 40;
-                compressor.ratio.value = 12;
-                compressor.attack.value = 0;
-                compressor.release.value = 0.25;
+                compressor.threshold.value = -40;
+                compressor.knee.value = 10;
+                compressor.ratio.value = 20; // Ratio élevé (Limiter)
+                compressor.attack.value = 0; // Attaque immédiate
+                compressor.release.value = 0.1;
 
-                // --- ETAPE B : VAD / Noise Gate ---
+                // --- ETAPE B : GATE / SORTIE ---
                 AudioService.gainGate = ctx.createGain();
                 AudioService.gainGate.gain.value = 0; 
 
                 const destination = ctx.createMediaStreamDestination();
                 const privateDest = ctx.createMediaStreamDestination();
 
-                // Câblage du Graphe Audio
-                source.connect(inputGain); // Source -> Gain
-                inputGain.connect(filterWind); // Gain -> Filtres
+                // Câblage
+                source.connect(inputGain);
+                inputGain.connect(filterWind);
                 filterWind.connect(filterHiss);
-                filterHiss.connect(compressor);
+                filterHiss.connect(filterPresence); // Ajout Presence
+                filterPresence.connect(compressor);
                 
-                // Branche 1 : Analyse (avant le Gate)
-                compressor.connect(AudioService.analyser);
+                compressor.connect(AudioService.analyser); // Analyse post-traitement (propre)
                 
-                // Branche 2 : Sortie
                 compressor.connect(AudioService.gainGate);
                 AudioService.gainGate.connect(destination);
                 AudioService.gainGate.connect(privateDest);
@@ -881,12 +902,10 @@
                 AudioService.privateStream = privateDest.stream;
             },
             
-            // Transmission (TX) : Gère le Gate du VAD et le Hardware
+            // Transmission (TX)
             tx: (active) => {
-                // VÉRIFICATION STRICTE SILENCE RADIO (Sauf Hôte)
                 if (App.silenceActive && !App.isHost) active = false; 
 
-                // Contrôle du Gain Gate (Sortie Logicielle)
                 if (AudioService.gainGate) {
                     const now = AudioService.ctx.currentTime;
                     AudioService.gainGate.gain.cancelScheduledValues(now);
@@ -897,8 +916,6 @@
                     }
                 }
 
-                // Contrôle du Micro (Entrée Matérielle)
-                // En VOX : Micro toujours ON pour analyse. En PTT : Micro ON seulement si appui.
                 if (AudioService.rawStream) {
                     const hwEnabled = active || (AudioService.mode === 'vox');
                     AudioService.rawStream.getAudioTracks().forEach(t => {
@@ -908,15 +925,17 @@
                 
                 App.user.isTx = active;
 
-                // Si Hôte, gestion spéciale mixeur
+                // --- FIX ECHO CLIENT : Mute du retour audio quand on parle (sauf privé) ---
+                if (App.hostAudioElement && !App.privatePeerId) {
+                    App.hostAudioElement.muted = active; 
+                }
+
                 if (App.isHost && !App.privatePeerId && MixerService.localSource) {
                      MixerService.localSource.mediaStream.getAudioTracks().forEach(t => t.enabled = active);
                 }
                 
                 const btn = document.getElementById('ptt-btn');
                 if (btn) {
-                    // Si TX actif, on ajoute la classe active. 
-                    // En VOX, le bouton a déjà 'vox-active', 'active' vient en plus quand on parle.
                     if (active) btn.classList.add('active'); 
                     else btn.classList.remove('active');
                 }
@@ -926,7 +945,6 @@
             },
             
             toggleVox: () => {
-                // SÉCURITÉ: Forcer le réveil du contexte audio (utile si pas d'interaction récente)
                 if(AudioService.ctx && AudioService.ctx.state === 'suspended') AudioService.ctx.resume();
 
                 AudioService.mode = AudioService.mode === 'ptt' ? 'vox' : 'ptt';
@@ -934,24 +952,14 @@
                 
                 if (AudioService.mode === 'vox') {
                     icon.innerText = 'mic'; btn.classList.add('vox-active'); 
-                    
-                    // 1. Activation Micro Hardware (Pour alimentation VAD)
                     if(AudioService.rawStream) AudioService.rawStream.getAudioTracks().forEach(t => t.enabled = true);
-                    
-                    // 2. Réduction Sensibilité (Input Gain 50%)
                     if(AudioService.inputGain) AudioService.inputGain.gain.value = 0.5;
-                    
-                    // 3. Seuil VAD ajusté
                     AudioService.vadState.threshold = 0.015; 
-                    
-                    App.toast("VOX ACTIF (Sensibilité Réduite)");
+                    App.toast("VOX ACTIF (Filtres Tactiques ON)");
                 } else {
                     icon.innerText = 'mic_none'; btn.classList.remove('vox-active'); 
-                    
-                    // Reset
                     if(AudioService.inputGain) AudioService.inputGain.gain.value = 1.0;
                     AudioService.vadState.threshold = 0.02; 
-                    
                     AudioService.tx(false); 
                     App.toast("Mode PTT");
                 }
@@ -972,65 +980,46 @@
                 }
                 AudioService.drawLoop();
             },
-            
-            // Boucle principale : Visualisation + Logique VAD
-            drawLoop: () => {
-                requestAnimationFrame(AudioService.drawLoop);
-                
-                // CORRECTIF MAJEUR : Toujours utiliser l'analyseur LOCAL (Pre-Gate) pour le VAD.
-                // L'ancien code utilisait le Mixer (Post-Gate) pour l'Host, créant une boucle bloquante.
-                const vadAnalyser = AudioService.analyser; 
-                if (!vadAnalyser) return; 
-                
-                const buffer = vadAnalyser.frequencyBinCount; 
-                const data = new Uint8Array(buffer); // Frequency data
-                const timeData = new Uint8Array(buffer); // Waveform data (VAD)
-                
-                vadAnalyser.getByteFrequencyData(data);
-                vadAnalyser.getByteTimeDomainData(timeData); 
-                
-                // --- Visualisation ---
-                if (AudioService.visuCtx) {
-                    const ctx = AudioService.visuCtx; const w = ctx.canvas.width; const h = ctx.canvas.height;
-                    ctx.clearRect(0, 0, w, h);
-                    
-                    // On dessine si le micro Hardware est actif (Feedback Monitoring)
-                    const isMicOn = AudioService.rawStream && AudioService.rawStream.getAudioTracks().some(t => t.enabled);
-                    
-                    if (isMicOn) {
-                        const bw = (w / buffer) * 2.5; let x = 0;
-                        for(let i=0; i<buffer; i++) { 
-                            const bh = data[i] / 2; 
-                            // Feedback visuel : Couleur = Transmission, Gris = Écoute (VOX Standby)
-                            if (App.user.isTx) {
-                                ctx.fillStyle = App.privatePeerId ? `rgba(168, 85, 247, ${bh/255})` : `rgba(59, 130, 246, ${bh/255})`; 
-                            } else {
-                                ctx.fillStyle = `rgba(80, 80, 80, ${bh/255})`; // Gris foncé pour standby
-                            }
-                            ctx.fillRect(x, h - bh, bw, bh); x += bw + 1; 
-                        }
-                    }
-                }
 
-                // --- LOGIQUE VAD ---
-                // Calcul RMS (Volume)
+            // --- NOUVEAU : BOUCLE VAD DÉTACHÉE (Background Safe) ---
+            startVAD: () => {
+                if (AudioService.vadInterval) clearInterval(AudioService.vadInterval);
+                // Intervalle de 100ms (10Hz) pour vérifier le VAD même si l'écran est éteint
+                AudioService.vadInterval = setInterval(AudioService.processVAD, 100);
+            },
+
+            // Logique pure VAD (appelée par setInterval ET drawLoop pour fluidité)
+            processVAD: () => {
+                const vadAnalyser = AudioService.analyser; 
+                if (!vadAnalyser) return;
+
+                const buffer = vadAnalyser.frequencyBinCount; 
+                // Note: réallocation de buffer ici est rapide, mais on pourrait optimiser si besoin
+                const timeData = new Uint8Array(buffer); 
+                vadAnalyser.getByteTimeDomainData(timeData);
+
+                // Calcul RMS (Volume) & ZCR
                 let sum = 0;
+                let zeroCrossings = 0;
                 for(let i = 0; i < buffer; i++) {
                     const sample = (timeData[i] - 128) / 128; 
                     sum += sample * sample;
+                    if (i > 0 && timeData[i] >= 128 && timeData[i-1] < 128) zeroCrossings++;
                 }
                 const rms = Math.sqrt(sum / buffer);
-                
-                // Indicateur Debug VAD (LED)
+
+                // Indicateur Debug VAD (LED) - UI Only (si visible)
                 const vadLed = document.getElementById('vad-led');
                 if (vadLed) {
-                    if (rms > AudioService.vadState.threshold) vadLed.classList.add('active');
+                    if (App.user.isTx) vadLed.classList.add('active');
                     else vadLed.classList.remove('active');
                 }
 
-                // Gestion VOX
+                // Logique de Décision VAD
                 if (AudioService.mode === 'vox' && !App.user.isTxRequest) { 
-                    if (rms > AudioService.vadState.threshold) {
+                    const isVoiceTexture = (zeroCrossings > 5 && zeroCrossings < 150);
+                    
+                    if (rms > AudioService.vadState.threshold && isVoiceTexture) {
                         if (!AudioService.vadState.active) {
                             AudioService.vadState.active = true;
                             AudioService.tx(true);
@@ -1042,6 +1031,38 @@
                         }, AudioService.vadState.hold); 
                     }
                 }
+            },
+            
+            // Boucle UI (Graphisme seulement)
+            drawLoop: () => {
+                requestAnimationFrame(AudioService.drawLoop);
+                
+                // On appelle processVAD aussi ici pour avoir une réactivité max écran allumé
+                // (Redondant avec setInterval mais sans danger)
+                // AudioService.processVAD(); 
+                
+                // Visualisation
+                if (AudioService.visuCtx && AudioService.analyser) {
+                    const ctx = AudioService.visuCtx; const w = ctx.canvas.width; const h = ctx.canvas.height;
+                    const buffer = AudioService.analyser.frequencyBinCount;
+                    const data = new Uint8Array(buffer);
+                    AudioService.analyser.getByteFrequencyData(data);
+
+                    ctx.clearRect(0, 0, w, h);
+                    const isMicOn = AudioService.rawStream && AudioService.rawStream.getAudioTracks().some(t => t.enabled);
+                    if (isMicOn) {
+                        const bw = (w / buffer) * 2.5; let x = 0;
+                        for(let i=0; i<buffer; i++) { 
+                            const bh = data[i] / 2; 
+                            if (App.user.isTx) {
+                                ctx.fillStyle = App.privatePeerId ? `rgba(168, 85, 247, ${bh/255})` : `rgba(59, 130, 246, ${bh/255})`; 
+                            } else {
+                                ctx.fillStyle = `rgba(80, 80, 80, ${bh/255})`; 
+                            }
+                            ctx.fillRect(x, h - bh, bw, bh); x += bw + 1; 
+                        }
+                    }
+                }
             }
         };
 
@@ -1050,22 +1071,22 @@
             ctx: null, destination: null, localSource: null, analyser: null, compressor: null,
             
             init: (localStream) => {
-                if (MixerService.destination) return; // Déjà init
+                if (MixerService.destination) return; 
                 
                 try {
-                    MixerService.ctx = AudioService.ctx; // Utilise le même contexte, c'est OK
+                    MixerService.ctx = AudioService.ctx; 
                     MixerService.destination = MixerService.ctx.createMediaStreamDestination();
                     
-                    // CRÉATION DE NOUVEAUX NOEUDS (ISOLATION TOTALE)
-                    // Ne jamais réutiliser AudioService.analyser ici pour éviter les boucles
+                    // Mixeur aussi équipé d'un limiteur pour éviter la saturation du master
                     MixerService.compressor = MixerService.ctx.createDynamicsCompressor();
+                    MixerService.compressor.threshold.value = -10; // Limiteur final doux
+                    MixerService.compressor.ratio.value = 12;
+                    
                     MixerService.analyser = MixerService.ctx.createAnalyser(); 
                     
-                    // Graphique du Mixeur: Sources -> Compresseur -> Analyser -> Stream Sortie
                     MixerService.compressor.connect(MixerService.analyser);
                     MixerService.analyser.connect(MixerService.destination);
     
-                    // Input Micro Local (si dispo)
                     if (localStream && localStream.getAudioTracks().length > 0) {
                         MixerService.localSource = MixerService.ctx.createMediaStreamSource(localStream);
                         MixerService.localSource.connect(MixerService.compressor);
@@ -1094,7 +1115,6 @@
             peer: null, hostId: null, retryCount: 0,
             
             createSession: (id = null) => {
-                // Séquence de sécurité pour éviter le double clic
                 const btn = document.getElementById('btn-create-host');
                 if(btn.innerHTML === 'Init...') return;
                 btn.innerHTML = 'Init...';
@@ -1102,11 +1122,9 @@
                 App.isHost = true; App.user.role = 'HOST'; document.body.classList.add('is-host');
                 document.getElementById('btn-silence').style.display = 'block';
                 
-                // Délai court pour laisser le temps au UI de se mettre à jour avant le gros travail JS
                 setTimeout(() => {
                     try {
                         MixerService.init(AudioService.stream); 
-                        // RECONNEXION INTELLIGENTE: Réutiliser le même ID si possible (Persistance Host)
                         const saved = JSON.parse(localStorage.getItem(CONFIG.sessionKey));
                         const targetId = (saved && saved.isHost && saved.freq) ? saved.freq : id;
                         NetService.initPeer(targetId);
@@ -1131,15 +1149,12 @@
             
             initPeer: (forceId = null) => {
                 if (NetService.peer) NetService.peer.destroy();
-                // Si Host, on essaie de garder l'ID. Si Client, ID random.
                 const peerId = forceId || (App.isHost ? crypto.randomUUID().substring(0,8).toUpperCase() : null); 
                 const peer = new Peer(peerId, CONFIG.peerConfig);
                 
                 peer.on('open', (pid) => {
                     App.user.id = pid; NetService.retryCount = 0;
                     document.getElementById('txt-id-display').innerText = `CANAL: ${App.isHost ? pid : NetService.hostId}`;
-                    
-                    // --- PERSISTANCE SESSION IMMÉDIATE ---
                     App.saveSession(App.isHost ? pid : NetService.hostId);
 
                     if (App.isHost) { 
@@ -1152,18 +1167,15 @@
                 peer.on('error', (err) => {
                     console.warn("Peer Error", err);
                     if (err.type === 'unavailable-id') { 
-                        // ID déjà pris (Host fantôme ?), on en prend un nouveau
-                        // Sauf si on essaye de reprendre le lead
                         if (App.isTryingToReclaimHost) {
                             App.toast("Echec reprise ID...", true);
                             App.isTryingToReclaimHost = false;
-                            NetService.initPeer(null); // Fallback standard
+                            NetService.initPeer(null); 
                         } else {
                             NetService.initPeer(null); 
                         }
                     } else { 
                         App.toast(`Err Réseau: ${err.type}`, true);
-                        // Reconnexion auto pour client
                         if(!App.isHost && NetService.hostId) setTimeout(NetService.tryConnectToHost, 3000);
                     }
                 });
@@ -1173,7 +1185,6 @@
                 });
                 
                 peer.on('call', (call) => { 
-                    // GESTION DES APPELS ENTRANTS
                     if (App.privatePeerId && call.peer === App.privatePeerId) {
                          call.answer(AudioService.privateStream);
                          call.on('stream', s => {
@@ -1204,7 +1215,7 @@
 
             tryConnectToHost: () => {
                 if (!NetService.peer?.open || !NetService.hostId) return;
-                const hostConn = NetService.peer.connect(NetService.hostId, { metadata: App.user, reliable: true }); // Reliable data channel
+                const hostConn = NetService.peer.connect(NetService.hostId, { metadata: App.user, reliable: true }); 
                 
                 hostConn.on('open', () => {
                     NetService.handleConn(hostConn); 
@@ -1213,33 +1224,24 @@
                     NetService.callHostForAudio(NetService.hostId, AudioService.stream); 
                 });
                 
-                // --- LOGIQUE MIGRATION HOTE ---
                 hostConn.on('close', () => {
                     App.toast("Host déconnecté... Analyse", true);
                     NetService.handleHostDisconnect();
                 });
             },
 
-            // --- NOUVEAU: Logique de Passation ---
             handleHostDisconnect: () => {
-                if (App.isHost) return; // Je suis déjà l'hôte (cas impossible ici normalement)
+                if (App.isHost) return; 
 
-                // 1. Lister les survivants (exclure l'ancien host s'il est encore dans la liste)
                 const candidates = Object.values(App.peers)
                     .filter(p => p.data && p.data.id !== NetService.hostId)
-                    .sort((a,b) => (a.data.joinedAt || Infinity) - (b.data.joinedAt || Infinity)); // Plus ancien = Plus petit timestamp
-                
-                // 2. S'il n'y a personne d'autre que moi (ou candidats vides), je reprends le lead
-                // Note: candidates ne me contient pas, donc si candidates est vide, je suis le seul.
-                // Mais attendez, App.peers ne contient que les AUTRES. 
-                // Donc s'il y a des autres, je dois me comparer à eux.
+                    .sort((a,b) => (a.data.joinedAt || Infinity) - (b.data.joinedAt || Infinity)); 
                 
                 let iAmTheOldest = false;
                 
                 if (candidates.length === 0) {
                     iAmTheOldest = true;
                 } else {
-                    // Je me compare au premier candidat (le plus vieux des autres)
                     const myJoinTime = App.user.joinedAt || Infinity;
                     const oldestOtherTime = candidates[0].data.joinedAt || Infinity;
                     if (myJoinTime < oldestOtherTime) iAmTheOldest = true;
@@ -1249,14 +1251,12 @@
                     App.toast("Reprise du Commandement...", false);
                     setTimeout(() => {
                         NetService.peer.destroy();
-                        // Tenter de reprendre l'ID de l'ancien host
                         App.isTryingToReclaimHost = true;
                         NetService.createSession(NetService.hostId); 
-                    }, 1000); // Petit délai pour laisser PeerJS libérer l'ID serveur
+                    }, 1000); 
                 } else {
-                    // Je ne suis pas l'élu, j'attends que le nouveau chef prenne l'ID
                     App.toast("Attente nouveau Leader...", false);
-                    setTimeout(NetService.tryConnectToHost, 3000); // Retry loop
+                    setTimeout(NetService.tryConnectToHost, 3000); 
                 }
             },
 
@@ -1273,13 +1273,11 @@
                 conn.on('data', (d) => {
                     if (!d.from) d.from = conn.peer;
 
-                    // --- LOGIQUE HOTE : Attribuer Timestamp si manquant ---
                     if (App.isHost && d.type === 'FULL') {
                          if (!d.user.joinedAt) d.user.joinedAt = Date.now();
                          NetService.updatePeer(d.user);
                          NetService.broadcast(d); 
                     }
-                    // -----------------------------------------------------
 
                     if (d.type === 'FULL' || d.type === 'UPDATE') {
                         NetService.updatePeer(d.user);
@@ -1287,7 +1285,6 @@
                     }
                     if (d.type === 'SYNC') { 
                         d.list.forEach(u => NetService.updatePeer(u)); 
-                        // Synchroniser mon propre joinedAt si le serveur me l'envoie
                         const meInList = d.list.find(u => u.id === App.user.id);
                         if (meInList && meInList.joinedAt) App.user.joinedAt = meInList.joinedAt;
                         
@@ -1314,7 +1311,6 @@
                 
                 conn.on('open', () => {
                     if (App.isHost) {
-                        // Si l'utilisateur est nouveau, on lui assigne un timestamp maintenant si pas fait
                         if (!App.peers[conn.peer].data) App.peers[conn.peer].data = { joinedAt: Date.now() };
                         else if (!App.peers[conn.peer].data.joinedAt) App.peers[conn.peer].data.joinedAt = Date.now();
 
@@ -1350,7 +1346,6 @@
             },
 
             promoteNewHost: () => {
-                // Fonction manuelle maintenue au cas où
                 if (!App.isHost) return;
                 const candidates = Object.keys(App.peers);
                 if (candidates.length > 0) {
@@ -1421,6 +1416,25 @@
                     // On ne détruit pas la session au unload pour permettre le refresh
                     if(NetService.peer && !App.isHost) { /* Keep alive for refresh */ }
                 });
+
+                // --- NOUVEAU: Gestionnaire Visibilité (Pour forcer le maintien audio) ---
+                document.addEventListener('visibilitychange', () => {
+                    if (document.visibilityState === 'visible') {
+                        if (AudioService.ctx && AudioService.ctx.state === 'suspended') {
+                            AudioService.ctx.resume();
+                        }
+                        // Rafraichir l'affichage au cas où
+                        App.renderGrid();
+                    }
+                });
+
+                // --- NOUVEAU: Surveillance Réseau ---
+                if ('connection' in navigator) {
+                    navigator.connection.addEventListener('change', () => {
+                        if (navigator.onLine) App.toast(`Réseau: ${navigator.connection.effectiveType.toUpperCase()}`);
+                        else App.toast("Hors Connexion", true);
+                    });
+                }
                 
                 const btn = document.getElementById('ptt-btn');
                 const start = (e) => { 
