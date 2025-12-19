@@ -8,7 +8,11 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>COM TAC v13.1</title>
+    
+    <!-- PWA MANIFEST (INTEGRÉ) - Permet l'installation en mode Standalone -->
+    <link rel="manifest" href='data:application/json;charset=utf-8,%7B%22name%22%3A%22COM%20TAC%20v13%22%2C%22short_name%22%3A%22COMTAC%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23050505%22%2C%22theme_color%22%3A%22%23050505%22%2C%22orientation%22%3A%22portrait%22%2C%22icons%22%3A%5B%5D%7D'>
+    
+    <title>COM TAC v13.0</title>
     
     <!-- ================= 1. LIBRAIRIES EXTERNES (CDN) ================= -->
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Chakra+Petch:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -1405,6 +1409,25 @@
                     // On ne détruit pas la session au unload pour permettre le refresh
                     if(NetService.peer && !App.isHost) { /* Keep alive for refresh */ }
                 });
+
+                // --- NOUVEAU: Gestionnaire Visibilité (Pour forcer le maintien audio) ---
+                document.addEventListener('visibilitychange', () => {
+                    if (document.visibilityState === 'visible') {
+                        if (AudioService.ctx && AudioService.ctx.state === 'suspended') {
+                            AudioService.ctx.resume();
+                        }
+                        // Rafraichir l'affichage au cas où
+                        App.renderGrid();
+                    }
+                });
+
+                // --- NOUVEAU: Surveillance Réseau ---
+                if ('connection' in navigator) {
+                    navigator.connection.addEventListener('change', () => {
+                        if (navigator.onLine) App.toast(`Réseau: ${navigator.connection.effectiveType.toUpperCase()}`);
+                        else App.toast("Hors Connexion", true);
+                    });
+                }
                 
                 const btn = document.getElementById('ptt-btn');
                 const start = (e) => { 
