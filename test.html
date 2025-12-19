@@ -9,10 +9,10 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
     
-    <!-- PWA MANIFEST (INTEGRÉ) - Référencement des images locales du repo -->
-    <link rel="manifest" href='data:application/json;charset=utf-8,%7B%22name%22%3A%22COM%20TAC%20v13.2%22%2C%22short_name%22%3A%22COMTAC%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23050505%22%2C%22theme_color%22%3A%22%23050505%22%2C%22orientation%22%3A%22portrait%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22android-icon-192x192.png%22%2C%22sizes%22%3A%22192x192%22%2C%22type%22%3A%22image%2Fpng%22%7D%2C%7B%22src%22%3A%22android-launchericon-512-512.png%22%2C%22sizes%22%3A%22512x512%22%2C%22type%22%3A%22image%2Fpng%22%7D%2C%7B%22src%22%3A%22maskable_icon_x512.png%22%2C%22sizes%22%3A%22512x512%22%2C%22type%22%3A%22image%2Fpng%22%2C%22purpose%22%3A%22any%20maskable%22%7D%5D%7D'>
+    <!-- PWA MANIFEST (INTEGRÉ) - Utilise les images du repo -->
+    <link rel="manifest" href='data:application/json;charset=utf-8,%7B%22name%22%3A%22COM%20TAC%20v13%22%2C%22short_name%22%3A%22COMTAC%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23050505%22%2C%22theme_color%22%3A%22%23050505%22%2C%22orientation%22%3A%22portrait%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22android-icon-192x192.png%22%2C%22sizes%22%3A%22192x192%22%2C%22type%22%3A%22image%2Fpng%22%7D%2C%7B%22src%22%3A%22android-launchericon-512-512.png%22%2C%22sizes%22%3A%22512x512%22%2C%22type%22%3A%22image%2Fpng%22%7D%2C%7B%22src%22%3A%22maskable_icon_x512.png%22%2C%22sizes%22%3A%22512x512%22%2C%22type%22%3A%22image%2Fpng%22%2C%22purpose%22%3A%22any%20maskable%22%7D%5D%7D'>
     
-    <title>COM TAC v13.2</title>
+    <title>COM TAC v13.3</title>
     
     <!-- ICO & APPLE TOUCH ICON -->
     <link rel="icon" href="favicon.ico" sizes="any">
@@ -406,7 +406,7 @@
     <!-- STRUCTURE UI -->
     <header>
         <div class="brand">
-            <span class="material-symbols-outlined">satellite_alt</span> COM<span>TAC</span> v13.2
+            <span class="material-symbols-outlined">satellite_alt</span> COM<span>TAC</span> v13.3
         </div>
         <div class="nav-group">
             <div class="btn-nav" id="btn-toggle-map" onclick="App.toggleMap()">
@@ -812,7 +812,7 @@
                             navigator.mediaSession.metadata = new MediaMetadata({
                                 title: "COM TAC",
                                 artist: "Canal Sécurisé",
-                                album: "v13.2 Active",
+                                album: "v13.3 Active",
                                 artwork: [
                                     { src: 'android-launchericon-512-512.png', sizes: '512x512', type: 'image/png' },
                                     { src: 'android-icon-192x192.png', sizes: '192x192', type: 'image/png' }
@@ -1063,6 +1063,28 @@
 
                     ctx.clearRect(0, 0, w, h);
                     const isMicOn = AudioService.rawStream && AudioService.rawStream.getAudioTracks().some(t => t.enabled);
+                    
+                    // --- MODIF PIP: DESSIN DANS LE CANVAS DU PIP AUSSI ---
+                    if (App.pipCtx) {
+                        App.pipCtx.fillStyle = '#000';
+                        App.pipCtx.fillRect(0,0,300,300);
+                        App.pipCtx.fillStyle = '#22c55e';
+                        App.pipCtx.font = 'bold 30px monospace';
+                        // Feedback textuel
+                        App.pipCtx.fillText("COM TAC", 80, 50);
+                        App.pipCtx.fillText(App.user.isTx ? "TX: ON" : "TX: OFF", 90, 90);
+                        
+                        // Mini viz
+                        let px = 0;
+                        const bw_pip = (300 / buffer) * 5; // Zoom x2
+                        for(let i=0; i<buffer; i+=2) { // Skip 1 sur 2
+                             const bh = data[i];
+                             App.pipCtx.fillStyle = App.user.isTx ? '#22c55e' : '#333';
+                             App.pipCtx.fillRect(px, 300 - bh, bw_pip, bh);
+                             px += bw_pip + 1;
+                        }
+                    }
+
                     if (isMicOn) {
                         const bw = (w / buffer) * 2.5; let x = 0;
                         for(let i=0; i<buffer; i++) { 
@@ -1405,6 +1427,7 @@
             peers: {}, isHost: false, pingMode: false, silenceActive: false,
             privatePeerId: null, privateCall: null, hostAudioElement: null,
             isTryingToReclaimHost: false, // Flag pour la migration
+            pipCtx: null, // Contexte pour le PIP
 
             init: async () => {
                 await DBService.init(); App.initBattery(); 
@@ -1538,16 +1561,20 @@
                 if (document.pictureInPictureElement) {
                     await document.exitPictureInPicture();
                     document.getElementById('btn-pip').classList.remove('active');
+                    App.pipCtx = null; // Clean up
                 } else if (document.pictureInPictureEnabled) {
                     try {
                         // Création Canvas
                         const canvas = document.createElement('canvas');
                         canvas.width = 300; canvas.height = 300;
                         const ctx = canvas.getContext('2d');
+                        App.pipCtx = ctx; // Store context for drawLoop
+
+                        // Initial draw
                         ctx.fillStyle = '#000'; ctx.fillRect(0,0,300,300);
                         ctx.fillStyle = '#22c55e'; ctx.font = 'bold 30px monospace';
                         ctx.fillText("COM TAC", 80, 140);
-                        ctx.fillText("ACTIVE", 90, 180);
+                        ctx.fillText("STANDBY", 90, 180);
                         
                         // Stream
                         vid.srcObject = canvas.captureStream();
