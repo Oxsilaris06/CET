@@ -9,10 +9,10 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
     
-    <!-- PWA MANIFEST (INTEGRÉ ET COMPLET) -->
-    <!-- Note: Les chemins d'icônes supposent que le fichier HTML est dans le même dossier que les images -->
-    <link rel="manifest" href="manifest.json">    
-    <title>COM TAC v13.1</title>
+    <!-- PWA MANIFEST (INTEGRÉ) - Référencement des images locales du repo -->
+    <link rel="manifest" href='data:application/json;charset=utf-8,%7B%22name%22%3A%22COM%20TAC%20v13.2%22%2C%22short_name%22%3A%22COMTAC%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23050505%22%2C%22theme_color%22%3A%22%23050505%22%2C%22orientation%22%3A%22portrait%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22android-icon-192x192.png%22%2C%22sizes%22%3A%22192x192%22%2C%22type%22%3A%22image%2Fpng%22%7D%2C%7B%22src%22%3A%22android-launchericon-512-512.png%22%2C%22sizes%22%3A%22512x512%22%2C%22type%22%3A%22image%2Fpng%22%7D%2C%7B%22src%22%3A%22maskable_icon_x512.png%22%2C%22sizes%22%3A%22512x512%22%2C%22type%22%3A%22image%2Fpng%22%2C%22purpose%22%3A%22any%20maskable%22%7D%5D%7D'>
+    
+    <title>COM TAC v13.2</title>
     
     <!-- ICO & APPLE TOUCH ICON -->
     <link rel="icon" href="favicon.ico" sizes="any">
@@ -289,10 +289,13 @@
         .chip[data-val="APPUI"].active { background: var(--color-yellow); color: black; }
         .chip[data-val="PROGRESSION"].active { background: var(--color-blue); color: black; }
         
-        /* Bouton Silence / Privé */
+        /* Bouton Silence / Privé / PIP */
         .chip.silence-btn { border-color: var(--color-red); color: var(--color-red); }
         .chip.silence-btn.active { background: var(--color-red); color: white; animation: pulse-btn 1s infinite; }
         
+        .chip.pip-btn { border-color: #555; color: #aaa; }
+        .chip.pip-btn.active { border-color: var(--color-blue); color: var(--color-blue); background: rgba(59, 130, 246, 0.1); }
+
         .chip.private-exit-btn { border-color: var(--color-purple); color: var(--color-purple); width: 100%; text-align: center; justify-content: center; display: none; }
         body.private-active .chip.private-exit-btn { display: flex; animation: pulse-btn 2s infinite; }
         body.private-active .chip:not(.private-exit-btn) { display: none; } /* Cache les autres status en privé */
@@ -393,6 +396,9 @@
             transition: background 0.1s;
         }
         .vad-indicator.active { background: var(--color-green); box-shadow: 0 0 5px var(--color-green); }
+        
+        /* Elements cachés pour le PIP */
+        #pip-video { position: absolute; top: -9999px; left: -9999px; width: 1px; height: 1px; opacity: 0.01; pointer-events: none; }
     </style>
 </head>
 <body>
@@ -400,7 +406,7 @@
     <!-- STRUCTURE UI -->
     <header>
         <div class="brand">
-            <span class="material-symbols-outlined">satellite_alt</span> COM<span>TAC</span> v13.1
+            <span class="material-symbols-outlined">satellite_alt</span> COM<span>TAC</span> v13.2
         </div>
         <div class="nav-group">
             <div class="btn-nav" id="btn-toggle-map" onclick="App.toggleMap()">
@@ -415,6 +421,9 @@
     <div id="silence-banner">SILENCE RADIO ACTIF - ÉCOUTE SEULE</div>
     <div id="private-banner">CANAL PRIVÉ ACTIF</div>
     <div id="toast-msg">Système Prêt</div>
+
+    <!-- PIP DUMMY VIDEO -->
+    <video id="pip-video" playsinline muted autoplay></video>
 
     <!-- OVERLAYS -->
     <div id="overlay-scanner" class="overlay">
@@ -510,6 +519,10 @@
             <div class="chip" onclick="App.setStatus('CONTACT')" data-val="CONTACT">CONTACT</div>
             <div class="chip" onclick="App.setStatus('CLEAR')" data-val="CLEAR">CLEAR</div>
             <div class="chip" onclick="App.setStatus('APPUI')" data-val="APPUI">EN APPUI</div>
+            
+            <!-- BOUTON PIP (Mode Arrière-plan) -->
+            <div class="chip pip-btn" onclick="App.togglePiP()" id="btn-pip">BG MODE</div>
+
             <!-- Bouton Silence Radio (Hôte uniquement) -->
             <div class="chip silence-btn" id="btn-silence" onclick="App.toggleSilence()" style="display:none;">SILENCE</div>
         </div>
@@ -799,7 +812,7 @@
                             navigator.mediaSession.metadata = new MediaMetadata({
                                 title: "COM TAC",
                                 artist: "Canal Sécurisé",
-                                album: "v13.1 Active",
+                                album: "v13.2 Active",
                                 artwork: [
                                     { src: 'android-launchericon-512-512.png', sizes: '512x512', type: 'image/png' },
                                     { src: 'android-icon-192x192.png', sizes: '192x192', type: 'image/png' }
@@ -1517,6 +1530,36 @@
                 document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
                 const c = document.querySelector(`.chip[data-val="${s}"]`); if(c) c.classList.add('active');
                 NetService.broadcast(); App.renderGrid(); 
+            },
+
+            // --- GESTION PIP ---
+            togglePiP: async () => {
+                const vid = document.getElementById('pip-video');
+                if (document.pictureInPictureElement) {
+                    await document.exitPictureInPicture();
+                    document.getElementById('btn-pip').classList.remove('active');
+                } else if (document.pictureInPictureEnabled) {
+                    try {
+                        // Création Canvas
+                        const canvas = document.createElement('canvas');
+                        canvas.width = 300; canvas.height = 300;
+                        const ctx = canvas.getContext('2d');
+                        ctx.fillStyle = '#000'; ctx.fillRect(0,0,300,300);
+                        ctx.fillStyle = '#22c55e'; ctx.font = 'bold 30px monospace';
+                        ctx.fillText("COM TAC", 80, 140);
+                        ctx.fillText("ACTIVE", 90, 180);
+                        
+                        // Stream
+                        vid.srcObject = canvas.captureStream();
+                        await vid.play();
+                        await vid.requestPictureInPicture();
+                        document.getElementById('btn-pip').classList.add('active');
+                    } catch(e) {
+                        App.toast("Erreur PIP: " + e.message, true);
+                    }
+                } else {
+                    App.toast("PIP non supporté", true);
+                }
             },
 
             // --- GESTION PRIVÉE ---
