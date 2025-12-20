@@ -4,231 +4,255 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Spectral Flow v3 - Secure Lock</title>
+    <title>Spectral Flow v4 - Fixed Anchor</title>
     <style>
-        :root { --bg: #020617; --primary: #06b6d4; --success: #22c55e; --error: #ef4444; }
-        body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: #f8fafc; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
-        .grid-layout { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 20px; width: 100%; max-width: 1000px; }
-        .card { background: #0f172a; border-radius: 16px; padding: 20px; border: 1px solid #1e293b; position: relative; }
+        :root { --bg: #030712; --primary: #0ea5e9; --accent: #f43f5e; --success: #10b981; }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: #f1f5f9; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
         
-        #emitter-canvas { width: 100%; aspect-ratio: 1; background: #000; border-radius: 12px; margin-top: 15px; }
-        .video-container { position: relative; width: 100%; aspect-ratio: 1; border-radius: 12px; overflow: hidden; background: #000; }
+        .layout { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 25px; width: 100%; max-width: 1100px; }
+        .card { background: #0f172a; border-radius: 20px; padding: 25px; border: 1px solid #1e293b; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); }
+        
+        /* Emetteur */
+        #emitter-canvas { width: 100%; aspect-ratio: 1; background: #000; border-radius: 12px; margin-top: 15px; border: 2px solid #334155; }
+        
+        /* Récepteur */
+        .camera-container { position: relative; width: 100%; aspect-ratio: 1; border-radius: 12px; overflow: hidden; background: #000; }
         #camera-feed { width: 100%; height: 100%; object-fit: cover; }
         
-        /* Overlay de visée */
-        .reticle { position: absolute; top: 10%; left: 10%; width: 80%; height: 80%; border: 2px dashed rgba(255,255,255,0.3); pointer-events: none; transition: border-color 0.3s; }
-        .reticle.locked { border: 3px solid var(--success); box-shadow: 0 0 20px var(--success); }
+        /* Overlay de visée fixe */
+        .guide-frame { position: absolute; top: 10%; left: 10%; width: 80%; height: 80%; border: 2px solid rgba(255,255,255,0.1); pointer-events: none; box-sizing: border-box; }
+        .guide-corner { position: absolute; width: 20px; height: 20px; border: 3px solid var(--primary); }
+        .tl { top: -2px; left: -2px; border-right: none; border-bottom: none; }
+        .tr { top: -2px; right: -2px; border-left: none; border-bottom: none; }
+        .bl { bottom: -2px; left: -2px; border-right: none; border-top: none; }
+        .br { bottom: -2px; right: -2px; border-left: none; border-top: none; }
 
-        .status-badge { display: inline-block; padding: 4px 12px; border-radius: 99px; font-size: 0.75rem; font-weight: bold; text-transform: uppercase; margin-bottom: 10px; }
-        .status-idle { background: #334155; }
-        .status-sync { background: var(--primary); animation: pulse 1s infinite; }
-        .status-locked { background: var(--success); }
+        .status-pill { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; font-weight: 600; padding: 6px 16px; border-radius: 99px; width: fit-content; margin-bottom: 15px; background: #1e293b; }
+        .indicator { width: 8px; height: 8px; border-radius: 50%; background: #64748b; }
+        .active .indicator { background: var(--success); box-shadow: 0 0 10px var(--success); }
 
-        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+        textarea { width: 100%; background: #030712; border: 1px solid #334155; color: var(--primary); border-radius: 10px; padding: 15px; font-family: 'Courier New', monospace; box-sizing: border-box; }
+        button { width: 100%; background: var(--primary); color: white; border: none; padding: 16px; border-radius: 10px; font-weight: 700; cursor: pointer; margin-top: 15px; transition: all 0.2s; }
+        button:hover { filter: brightness(1.1); }
         
-        textarea { width: 100%; background: #020617; border: 1px solid #334155; color: var(--primary); border-radius: 8px; padding: 12px; box-sizing: border-box; font-family: monospace; }
-        button { width: 100%; background: var(--primary); color: white; border: none; padding: 14px; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 10px; }
-        .log { height: 80px; overflow-y: auto; background: #000; color: #94a3b8; font-family: monospace; font-size: 0.7rem; padding: 10px; margin-top: 10px; border-radius: 6px; }
-        .output { font-size: 1.2rem; min-height: 1.5em; color: #e2e8f0; margin: 15px 0; word-break: break-all; }
+        .output-area { background: #030712; border-radius: 10px; padding: 15px; margin-top: 20px; min-height: 60px; border-left: 4px solid var(--primary); }
+        .log-stream { font-size: 0.7rem; color: #64748b; font-family: monospace; margin-top: 10px; height: 40px; overflow: hidden; }
     </style>
 </head>
 <body>
 
-    <h1 style="color: var(--primary); margin-bottom: 5px;">SPECTRAL FLOW <span style="font-weight: 300;">v3</span></h1>
-    <p style="margin-bottom: 30px; opacity: 0.6;">Système de transmission optique avec verrouillage de signal</p>
+    <h1 style="letter-spacing: -1px; margin-bottom: 5px;">SPECTRAL FLOW <span style="color:var(--primary)">ANCHOR</span></h1>
+    <p style="opacity: 0.5; margin-bottom: 30px;">Transmission optique sécurisée par ancrage visuel</p>
 
-    <div class="grid-layout">
+    <div class="layout">
         <!-- EMETTEUR -->
         <div class="card">
-            <span class="status-badge status-idle" id="emitStatus">Prêt</span>
-            <textarea id="msgInput">HELLO SPECTRAL</textarea>
-            <button id="btnSend">DÉMARRER LA TRANSMISSION</button>
+            <div class="status-pill" id="emitStatus">
+                <div class="indicator"></div> EMISSION STOPPÉE
+            </div>
+            <textarea id="msgInput" rows="3">SYSTEME DE TRANSMISSION SPECTRAL OK</textarea>
+            <button id="btnSend">GÉNÉRER LE FLUX D'ANCRAGE</button>
             <canvas id="emitter-canvas"></canvas>
-            <div class="log" id="emitLog">> En attente...</div>
         </div>
 
-        <!-- RÉCEPTEUR -->
+        <!-- RECEPTEUR -->
         <div class="card">
-            <span class="status-badge status-idle" id="recvStatus">Caméra Off</span>
-            <div class="video-container">
-                <video id="camera-feed" autoplay playsinline></video>
-                <div class="reticle" id="reticle"></div>
+            <div class="status-pill" id="recvStatus">
+                <div class="indicator"></div> RECHERCHE D'ANCRAGE
             </div>
-            <button id="btnStartCam" style="background: #334155;">ACTIVER LA RÉCEPTION</button>
-            <div class="output" id="displayMsg">_</div>
-            <div class="log" id="recvLog">> Prêt...</div>
+            <div class="camera-container">
+                <video id="camera-feed" autoplay playsinline></video>
+                <div class="guide-frame" id="visualGuide">
+                    <div class="guide-corner tl"></div>
+                    <div class="guide-corner tr"></div>
+                    <div class="guide-corner bl"></div>
+                    <div class="guide-corner br"></div>
+                </div>
+            </div>
+            <button id="btnStartCam" style="background: #334155;">ACTIVER LA CAMERA</button>
+            <div class="output-area">
+                <div style="font-size: 0.7rem; color: #64748b; margin-bottom: 5px;">MESSAGE DÉCODÉ :</div>
+                <div id="decodedMsg" style="font-weight: 600; color: var(--success);">---</div>
+            </div>
+            <div class="log-stream" id="logStream">> Initialisation...</div>
         </div>
     </div>
 
 <script>
+    /** * CONSTANTES DE TRANSMISSION 
+     * GRID : 8x8 pour les données
+     * ANCHOR : Le cadre fixe pour le verrouillage
+     */
     const GRID = 8;
-    const BEACON_PATTERN = ["1", "0", "1", "0"]; // Motif de réveil (Flash Alterné)
+    const FREQ = 120; // ms par frame
     
     const emitterCanvas = document.getElementById('emitter-canvas');
     const eCtx = emitterCanvas.getContext('2d');
-    const emitLog = document.getElementById('emitLog');
-    const recvLog = document.getElementById('recvLog');
-    const displayMsg = document.getElementById('displayMsg');
-    const reticle = document.getElementById('reticle');
+    const emitStatus = document.getElementById('emitStatus');
     const recvStatus = document.getElementById('recvStatus');
+    const logStream = document.getElementById('logStream');
+    const decodedMsg = document.getElementById('decodedMsg');
 
-    let isTransmitting = false;
+    let isEmitting = false;
 
-    // --- EMETTEUR ---
-    emitterCanvas.width = 400;
-    emitterCanvas.height = 400;
+    // --- LOGIQUE DE L'EMETTEUR ---
+    emitterCanvas.width = 512;
+    emitterCanvas.height = 512;
 
-    const renderFrame = (bitString, isBeacon = false) => {
-        const cellSize = emitterCanvas.width / GRID;
+    const drawFrame = (dataBits) => {
+        const size = emitterCanvas.width;
+        const cellSize = size / (GRID + 4); // On laisse de la place pour l'ancrage
+        
         eCtx.fillStyle = "black";
-        eCtx.fillRect(0,0,400,400);
+        eCtx.fillRect(0, 0, size, size);
+
+        // 1. DESSINER L'ANCRAGE FIXE (Coins blancs massifs)
+        eCtx.fillStyle = "white";
+        const anchorSize = cellSize * 1.5;
+        eCtx.fillRect(0, 0, anchorSize, anchorSize); // TL
+        eCtx.fillRect(size - anchorSize, 0, anchorSize, anchorSize); // TR
+        eCtx.fillRect(0, size - anchorSize, anchorSize, anchorSize); // BL
+        eCtx.fillRect(size - anchorSize, size - anchorSize, anchorSize, anchorSize); // BR
+
+        // 2. DESSINER LA GRILLE DE DONNEES (Au centre)
+        const offset = cellSize * 2;
+        const dataCellSize = (size - offset * 2) / GRID;
 
         for (let i = 0; i < GRID * GRID; i++) {
             const x = i % GRID;
             const y = Math.floor(i / GRID);
-            const bit = bitString[i] || '0';
+            const bit = dataBits[i] || '0';
             
-            // Si beacon, on flashe toute la grille
-            const color = bit === '1' ? "#FFFFFF" : "#050505";
-            eCtx.fillStyle = color;
-            eCtx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
+            eCtx.fillStyle = bit === '1' ? "white" : "#0a0a0a";
+            eCtx.fillRect(offset + x * dataCellSize + 1, offset + y * dataCellSize + 1, dataCellSize - 2, dataCellSize - 2);
         }
     };
 
     document.getElementById('btnSend').onclick = () => {
-        if (isTransmitting) return;
-        isTransmitting = true;
-        
-        const rawBin = document.getElementById('msgInput').value.split('').map(c => c.charCodeAt(0).toString(2).padStart(8, '0')).join('');
-        const packets = [];
+        if(isEmitting) return;
+        isEmitting = true;
+        emitStatus.classList.add('active');
+        emitStatus.innerHTML = '<div class="indicator"></div> EMISSION EN COURS';
 
-        // 1. PHASE DE RÉVEIL (BEACON) - 8 frames
-        for(let i=0; i<8; i++) packets.push(i % 2 === 0 ? "1".repeat(64) : "0".repeat(64));
-        
-        // 2. DATA
-        for (let i = 0; i < rawBin.length; i += 64) {
-            packets.push(rawBin.substring(i, i + 64).padEnd(64, '0'));
+        const binary = document.getElementById('msgInput').value.split('').map(c => c.charCodeAt(0).toString(2).padStart(8, '0')).join('');
+        let packets = [];
+        for (let i = 0; i < binary.length; i += 64) {
+            packets.push(binary.substring(i, i + 64).padEnd(64, '0'));
         }
-        
-        // 3. FIN
-        packets.push("0".repeat(64));
 
         let idx = 0;
-        const speed = 150; // ms
         const timer = setInterval(() => {
             if (idx >= packets.length) {
                 clearInterval(timer);
-                isTransmitting = false;
-                renderFrame("0".repeat(64));
+                isEmitting = false;
+                emitStatus.classList.remove('active');
+                emitStatus.innerHTML = '<div class="indicator"></div> EMISSION TERMINEE';
+                drawFrame("0".repeat(64));
                 return;
             }
-            renderFrame(packets[idx]);
+            drawFrame(packets[idx]);
             idx++;
-        }, speed);
+        }, FREQ);
     };
 
-    // --- RÉCEPTEUR ---
+    // Initialisation avec l'ancrage visible
+    drawFrame("0".repeat(64));
+
+    // --- LOGIQUE DU RECEPTEUR ---
     const video = document.getElementById('camera-feed');
-    let streamActive = false;
-    let isLocked = false;
+    const visualGuide = document.getElementById('visualGuide');
+    let analysisActive = false;
 
     document.getElementById('btnStartCam').onclick = async () => {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-        video.srcObject = stream;
-        streamActive = true;
-        recvStatus.className = "status-badge status-sync";
-        recvStatus.innerText = "Recherche Signal...";
-        startAnalysis();
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: 640, height: 640 } });
+            video.srcObject = stream;
+            analysisActive = true;
+            startProcessing();
+            logStream.innerText = "> Caméra prête. Alignez les coins.";
+        } catch (e) {
+            logStream.innerText = "> Erreur caméra : " + e.message;
+        }
     };
 
-    const startAnalysis = () => {
+    function startProcessing() {
         const pCanvas = document.createElement('canvas');
         const pCtx = pCanvas.getContext('2d', { willReadFrequently: true });
-        pCanvas.width = 64;
-        pCanvas.height = 64;
+        pCanvas.width = 128;
+        pCanvas.height = 128;
 
-        let lastBits = "";
-        let finalMessage = "";
-        let syncBuffer = [];
+        let lastBitString = "";
+        let fullMessage = "";
+        let lockCount = 0;
 
-        const analyze = () => {
-            if (!streamActive) return;
+        const loop = () => {
+            if(!analysisActive) return;
 
-            // Analyse de la zone centrale (80%)
-            pCtx.drawImage(video, video.videoWidth*0.1, video.videoHeight*0.1, video.videoWidth*0.8, video.videoHeight*0.8, 0, 0, 64, 64);
-            const data = pCtx.getImageData(0, 0, 64, 64).data;
-            
-            let currentBits = "";
-            let globalBrightness = 0;
-            let maxB = 0, minB = 255;
+            // On capture le centre de l'image
+            pCtx.drawImage(video, video.videoWidth * 0.15, video.videoHeight * 0.15, video.videoWidth * 0.7, video.videoHeight * 0.7, 0, 0, 128, 128);
+            const pixels = pCtx.getImageData(0, 0, 128, 128).data;
 
-            // 1. Calcul de la grille
-            for (let y = 0; y < GRID; y++) {
-                for (let x = 0; x < GRID; x++) {
-                    let sum = 0;
-                    for (let i=0; i<8; i++) {
-                        for (let j=0; j<8; j++) {
-                            const idx = ((y*8+i)*64 + (x*8+j))*4;
-                            const b = (data[idx] + data[idx+1] + data[idx+2])/3;
-                            sum += b;
-                            if(b > maxB) maxB = b;
-                            if(b < minB) minB = b;
-                        }
-                    }
-                    const avg = sum/64;
-                    globalBrightness += avg;
-                    currentBits += avg > 140 ? "1" : "0";
-                }
-            }
+            // 1. VERIFICATION DE L'ANCRAGE (Les coins doivent être brillants)
+            // On vérifie quelques pixels stratégiques dans les coins du canvas de calcul
+            const checkAnchor = (x, y) => {
+                const idx = (y * 128 + x) * 4;
+                return (pixels[idx] + pixels[idx+1] + pixels[idx+2]) / 3 > 180;
+            };
 
-            const contrast = maxB - minB;
+            const isAnchored = checkAnchor(5, 5) && checkAnchor(123, 5) && checkAnchor(5, 123) && checkAnchor(123, 123);
 
-            // 2. Logique de Verrouillage (Lock)
-            if (!isLocked) {
-                // On cherche le motif alterné 111... / 000...
-                if (currentBits !== lastBits) {
-                    if (currentBits === "1".repeat(64) || currentBits === "0".repeat(64)) {
-                        syncBuffer.push(currentBits[0]);
-                        if (syncBuffer.join('').includes("1010")) {
-                            isLocked = true;
-                            reticle.classList.add('locked');
-                            recvStatus.className = "status-badge status-locked";
-                            recvStatus.innerText = "Signal Verrouillé";
-                            finalMessage = "";
-                            displayMsg.innerText = "Chargement...";
-                        }
-                    }
-                    lastBits = currentBits;
-                }
+            if (isAnchored) {
+                lockCount = Math.min(lockCount + 1, 10);
+                visualGuide.style.borderColor = "var(--success)";
+                recvStatus.classList.add('active');
+                recvStatus.innerHTML = '<div class="indicator"></div> SIGNAL VERROUILLÉ';
             } else {
-                // On est verrouillé : On décode
-                if (currentBits !== lastBits) {
-                    if (currentBits === "0".repeat(64) && contrast < 30) {
-                        // Perte de signal ou fin
-                        isLocked = false;
-                        reticle.classList.remove('locked');
-                        recvStatus.className = "status-badge status-sync";
-                        recvStatus.innerText = "Signal Perdu";
-                        syncBuffer = [];
-                    } else {
-                        // On décode les octets
-                        for (let i = 0; i < currentBits.length; i += 8) {
-                            const byte = currentBits.substring(i, i + 8);
-                            const charCode = parseInt(byte, 2);
-                            if (charCode > 31 && charCode < 127) {
-                                finalMessage += String.fromCharCode(charCode);
-                            }
-                        }
-                        displayMsg.innerText = finalMessage;
-                    }
-                    lastBits = currentBits;
+                lockCount = Math.max(lockCount - 1, 0);
+                if (lockCount === 0) {
+                    visualGuide.style.borderColor = "rgba(255,255,255,0.1)";
+                    recvStatus.classList.remove('active');
+                    recvStatus.innerHTML = '<div class="indicator"></div> RECHERCHE D\'ANCRAGE';
                 }
             }
 
-            requestAnimationFrame(analyze);
+            // 2. DECODAGE SI VERROUILLE
+            if (lockCount > 5) {
+                let currentBits = "";
+                // On échantillonne la grille centrale (8x8)
+                // Offset de 25% pour éviter les bords d'ancrage
+                const start = 32; 
+                const end = 96;
+                const step = (end - start) / GRID;
+
+                for (let y = 0; y < GRID; y++) {
+                    for (let x = 0; x < GRID; x++) {
+                        const px = Math.floor(start + x * step + step/2);
+                        const py = Math.floor(start + y * step + step/2);
+                        const idx = (py * 128 + px) * 4;
+                        const lum = (pixels[idx] + pixels[idx+1] + pixels[idx+2]) / 3;
+                        currentBits += lum > 130 ? "1" : "0";
+                    }
+                }
+
+                if (currentBits !== lastBitString && currentBits !== "0".repeat(64)) {
+                    // Nouveau paquet détecté
+                    for (let i = 0; i < currentBits.length; i += 8) {
+                        const byte = currentBits.substring(i, i + 8);
+                        const charCode = parseInt(byte, 2);
+                        if (charCode >= 32 && charCode <= 126) {
+                            fullMessage += String.fromCharCode(charCode);
+                        }
+                    }
+                    decodedMsg.innerText = fullMessage;
+                    logStream.innerText = "> Flux : " + currentBits.substring(0, 16) + "...";
+                    lastBitString = currentBits;
+                }
+            }
+
+            requestAnimationFrame(loop);
         };
-        analyze();
-    };
+        loop();
+    }
 </script>
 </body>
 </html>
