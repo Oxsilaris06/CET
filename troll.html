@@ -4,117 +4,115 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Spectral Flow v4 - Fixed Anchor</title>
+    <title>Spectral Flow v5 - High Reliability</title>
     <style>
-        :root { --bg: #030712; --primary: #0ea5e9; --accent: #f43f5e; --success: #10b981; }
-        body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: #f1f5f9; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        :root { --bg: #030712; --primary: #0ea5e9; --success: #10b981; --warning: #f59e0b; }
+        body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: #f1f5f9; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
         
         .layout { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 25px; width: 100%; max-width: 1100px; }
         .card { background: #0f172a; border-radius: 20px; padding: 25px; border: 1px solid #1e293b; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); }
         
-        /* Emetteur */
         #emitter-canvas { width: 100%; aspect-ratio: 1; background: #000; border-radius: 12px; margin-top: 15px; border: 2px solid #334155; }
         
-        /* Récepteur */
         .camera-container { position: relative; width: 100%; aspect-ratio: 1; border-radius: 12px; overflow: hidden; background: #000; }
         #camera-feed { width: 100%; height: 100%; object-fit: cover; }
         
-        /* Overlay de visée fixe */
-        .guide-frame { position: absolute; top: 10%; left: 10%; width: 80%; height: 80%; border: 2px solid rgba(255,255,255,0.1); pointer-events: none; box-sizing: border-box; }
-        .guide-corner { position: absolute; width: 20px; height: 20px; border: 3px solid var(--primary); }
-        .tl { top: -2px; left: -2px; border-right: none; border-bottom: none; }
-        .tr { top: -2px; right: -2px; border-left: none; border-bottom: none; }
-        .bl { bottom: -2px; left: -2px; border-right: none; border-top: none; }
-        .br { bottom: -2px; right: -2px; border-left: none; border-top: none; }
+        .guide-frame { position: absolute; top: 10%; left: 10%; width: 80%; height: 80%; border: 2px solid rgba(255,255,255,0.05); pointer-events: none; }
+        .guide-corner { position: absolute; width: 25px; height: 25px; border: 4px solid var(--primary); opacity: 0.5; }
+        .tl { top: -4px; left: -4px; border-right: none; border-bottom: none; }
+        .tr { top: -4px; right: -4px; border-left: none; border-bottom: none; }
+        .bl { bottom: -4px; left: -4px; border-right: none; border-top: none; }
+        .br { bottom: -4px; right: -4px; border-left: none; border-top: none; }
 
-        .status-pill { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; font-weight: 600; padding: 6px 16px; border-radius: 99px; width: fit-content; margin-bottom: 15px; background: #1e293b; }
-        .indicator { width: 8px; height: 8px; border-radius: 50%; background: #64748b; }
-        .active .indicator { background: var(--success); box-shadow: 0 0 10px var(--success); }
+        .status-pill { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; font-weight: 700; padding: 8px 16px; border-radius: 99px; background: #1e293b; width: fit-content; margin-bottom: 15px; }
+        .dot { width: 10px; height: 10px; border-radius: 50%; background: #475569; }
+        .active .dot { background: var(--success); box-shadow: 0 0 12px var(--success); }
+        .syncing .dot { background: var(--warning); animation: blink 0.5s infinite; }
 
-        textarea { width: 100%; background: #030712; border: 1px solid #334155; color: var(--primary); border-radius: 10px; padding: 15px; font-family: 'Courier New', monospace; box-sizing: border-box; }
-        button { width: 100%; background: var(--primary); color: white; border: none; padding: 16px; border-radius: 10px; font-weight: 700; cursor: pointer; margin-top: 15px; transition: all 0.2s; }
-        button:hover { filter: brightness(1.1); }
+        @keyframes blink { 50% { opacity: 0.3; } }
+
+        textarea { width: 100%; background: #030712; border: 1px solid #334155; color: var(--primary); border-radius: 10px; padding: 15px; font-family: monospace; box-sizing: border-box; font-size: 1rem; }
+        button { width: 100%; background: var(--primary); color: white; border: none; padding: 16px; border-radius: 10px; font-weight: 800; cursor: pointer; margin-top: 15px; }
         
-        .output-area { background: #030712; border-radius: 10px; padding: 15px; margin-top: 20px; min-height: 60px; border-left: 4px solid var(--primary); }
-        .log-stream { font-size: 0.7rem; color: #64748b; font-family: monospace; margin-top: 10px; height: 40px; overflow: hidden; }
+        .output-box { background: #030712; border-radius: 12px; padding: 15px; margin-top: 20px; border-left: 4px solid var(--success); min-height: 80px; }
+        #decodedMsg { word-break: break-all; font-family: 'Courier New', monospace; line-height: 1.4; color: #fff; }
+        .debug-info { font-size: 0.7rem; color: #64748b; font-family: monospace; margin-top: 10px; display: flex; justify-content: space-between; }
     </style>
 </head>
 <body>
 
-    <h1 style="letter-spacing: -1px; margin-bottom: 5px;">SPECTRAL FLOW <span style="color:var(--primary)">ANCHOR</span></h1>
-    <p style="opacity: 0.5; margin-bottom: 30px;">Transmission optique sécurisée par ancrage visuel</p>
+    <h1 style="margin-bottom: 5px;">SPECTRAL FLOW <span style="color:var(--primary)">V5</span></h1>
+    <p style="opacity: 0.5; margin-bottom: 30px;">Transmission Robuste - Analyse de Surface & Seuil Dynamique</p>
 
     <div class="layout">
-        <!-- EMETTEUR -->
         <div class="card">
             <div class="status-pill" id="emitStatus">
-                <div class="indicator"></div> EMISSION STOPPÉE
+                <div class="dot"></div> PRÊT POUR ENVOI
             </div>
-            <textarea id="msgInput" rows="3">SYSTEME DE TRANSMISSION SPECTRAL OK</textarea>
-            <button id="btnSend">GÉNÉRER LE FLUX D'ANCRAGE</button>
+            <textarea id="msgInput" rows="3">MESSAGE TEST V5: STABILITE RENFORCEE</textarea>
+            <button id="btnSend">TRANSMETTRE FLUX ROBUSTE</button>
             <canvas id="emitter-canvas"></canvas>
         </div>
 
-        <!-- RECEPTEUR -->
         <div class="card">
             <div class="status-pill" id="recvStatus">
-                <div class="indicator"></div> RECHERCHE D'ANCRAGE
+                <div class="dot"></div> ATTENTE ANCRAGE
             </div>
             <div class="camera-container">
                 <video id="camera-feed" autoplay playsinline></video>
-                <div class="guide-frame" id="visualGuide">
+                <div class="guide-frame" id="guide">
                     <div class="guide-corner tl"></div>
                     <div class="guide-corner tr"></div>
                     <div class="guide-corner bl"></div>
                     <div class="guide-corner br"></div>
                 </div>
             </div>
-            <button id="btnStartCam" style="background: #334155;">ACTIVER LA CAMERA</button>
-            <div class="output-area">
-                <div style="font-size: 0.7rem; color: #64748b; margin-bottom: 5px;">MESSAGE DÉCODÉ :</div>
-                <div id="decodedMsg" style="font-weight: 600; color: var(--success);">---</div>
+            <button id="btnStartCam" style="background: #334155;">ACTIVER RÉCEPTION</button>
+            <div class="output-box">
+                <div style="font-size: 0.7rem; opacity: 0.5; margin-bottom: 5px;">TEXTE DÉCODÉ :</div>
+                <div id="decodedMsg">---</div>
             </div>
-            <div class="log-stream" id="logStream">> Initialisation...</div>
+            <div class="debug-info">
+                <span id="debugStability">Stabilité: 0/3</span>
+                <span id="debugThreshold">Seuil: --</span>
+            </div>
         </div>
     </div>
 
 <script>
-    /** * CONSTANTES DE TRANSMISSION 
-     * GRID : 8x8 pour les données
-     * ANCHOR : Le cadre fixe pour le verrouillage
-     */
     const GRID = 8;
-    const FREQ = 120; // ms par frame
+    const FRAME_RATE = 150; // ms
     
     const emitterCanvas = document.getElementById('emitter-canvas');
     const eCtx = emitterCanvas.getContext('2d');
     const emitStatus = document.getElementById('emitStatus');
     const recvStatus = document.getElementById('recvStatus');
-    const logStream = document.getElementById('logStream');
     const decodedMsg = document.getElementById('decodedMsg');
+    const debugStability = document.getElementById('debugStability');
+    const debugThreshold = document.getElementById('debugThreshold');
 
     let isEmitting = false;
 
-    // --- LOGIQUE DE L'EMETTEUR ---
+    // --- EMETTEUR ---
     emitterCanvas.width = 512;
     emitterCanvas.height = 512;
 
     const drawFrame = (dataBits) => {
         const size = emitterCanvas.width;
-        const cellSize = size / (GRID + 4); // On laisse de la place pour l'ancrage
+        const cellSize = size / (GRID + 4);
         
         eCtx.fillStyle = "black";
         eCtx.fillRect(0, 0, size, size);
 
-        // 1. DESSINER L'ANCRAGE FIXE (Coins blancs massifs)
+        // Ancrage statique
         eCtx.fillStyle = "white";
         const anchorSize = cellSize * 1.5;
-        eCtx.fillRect(0, 0, anchorSize, anchorSize); // TL
-        eCtx.fillRect(size - anchorSize, 0, anchorSize, anchorSize); // TR
-        eCtx.fillRect(0, size - anchorSize, anchorSize, anchorSize); // BL
-        eCtx.fillRect(size - anchorSize, size - anchorSize, anchorSize, anchorSize); // BR
+        eCtx.fillRect(0, 0, anchorSize, anchorSize);
+        eCtx.fillRect(size - anchorSize, 0, anchorSize, anchorSize);
+        eCtx.fillRect(0, size - anchorSize, anchorSize, anchorSize);
+        eCtx.fillRect(size - anchorSize, size - anchorSize, anchorSize, anchorSize);
 
-        // 2. DESSINER LA GRILLE DE DONNEES (Au centre)
+        // Grille centre
         const offset = cellSize * 2;
         const dataCellSize = (size - offset * 2) / GRID;
 
@@ -122,9 +120,8 @@
             const x = i % GRID;
             const y = Math.floor(i / GRID);
             const bit = dataBits[i] || '0';
-            
-            eCtx.fillStyle = bit === '1' ? "white" : "#0a0a0a";
-            eCtx.fillRect(offset + x * dataCellSize + 1, offset + y * dataCellSize + 1, dataCellSize - 2, dataCellSize - 2);
+            eCtx.fillStyle = bit === '1' ? "#FFFFFF" : "#080808";
+            eCtx.fillRect(offset + x * dataCellSize + 2, offset + y * dataCellSize + 2, dataCellSize - 4, dataCellSize - 4);
         }
     };
 
@@ -132,7 +129,7 @@
         if(isEmitting) return;
         isEmitting = true;
         emitStatus.classList.add('active');
-        emitStatus.innerHTML = '<div class="indicator"></div> EMISSION EN COURS';
+        emitStatus.innerHTML = '<div class="dot"></div> TRANSMISSION EN COURS';
 
         const binary = document.getElementById('msgInput').value.split('').map(c => c.charCodeAt(0).toString(2).padStart(8, '0')).join('');
         let packets = [];
@@ -146,112 +143,126 @@
                 clearInterval(timer);
                 isEmitting = false;
                 emitStatus.classList.remove('active');
-                emitStatus.innerHTML = '<div class="indicator"></div> EMISSION TERMINEE';
+                emitStatus.innerHTML = '<div class="dot"></div> TRANSMISSION TERMINÉE';
                 drawFrame("0".repeat(64));
                 return;
             }
             drawFrame(packets[idx]);
             idx++;
-        }, FREQ);
+        }, FRAME_RATE);
     };
 
-    // Initialisation avec l'ancrage visible
     drawFrame("0".repeat(64));
 
-    // --- LOGIQUE DU RECEPTEUR ---
+    // --- RECEPTEUR ---
     const video = document.getElementById('camera-feed');
-    const visualGuide = document.getElementById('visualGuide');
-    let analysisActive = false;
+    const guide = document.getElementById('guide');
+    let streamActive = false;
 
     document.getElementById('btnStartCam').onclick = async () => {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: 640, height: 640 } });
             video.srcObject = stream;
-            analysisActive = true;
-            startProcessing();
-            logStream.innerText = "> Caméra prête. Alignez les coins.";
+            streamActive = true;
+            processLoop();
         } catch (e) {
-            logStream.innerText = "> Erreur caméra : " + e.message;
+            alert("Erreur caméra : " + e.message);
         }
     };
 
-    function startProcessing() {
+    function processLoop() {
         const pCanvas = document.createElement('canvas');
         const pCtx = pCanvas.getContext('2d', { willReadFrequently: true });
-        pCanvas.width = 128;
-        pCanvas.height = 128;
+        pCanvas.width = 160;
+        pCanvas.height = 160;
 
-        let lastBitString = "";
-        let fullMessage = "";
-        let lockCount = 0;
+        let stabilityCounter = 0;
+        let lastStableBits = "";
+        let currentCandidate = "";
+        let finalMessage = "";
 
-        const loop = () => {
-            if(!analysisActive) return;
+        const analyze = () => {
+            if(!streamActive) return;
 
-            // On capture le centre de l'image
-            pCtx.drawImage(video, video.videoWidth * 0.15, video.videoHeight * 0.15, video.videoWidth * 0.7, video.videoHeight * 0.7, 0, 0, 128, 128);
-            const pixels = pCtx.getImageData(0, 0, 128, 128).data;
+            // Capture centre (70% du flux)
+            pCtx.drawImage(video, video.videoWidth*0.15, video.videoHeight*0.15, video.videoWidth*0.7, video.videoHeight*0.7, 0, 0, 160, 160);
+            const pixels = pCtx.getImageData(0, 0, 160, 160).data;
 
-            // 1. VERIFICATION DE L'ANCRAGE (Les coins doivent être brillants)
-            // On vérifie quelques pixels stratégiques dans les coins du canvas de calcul
-            const checkAnchor = (x, y) => {
-                const idx = (y * 128 + x) * 4;
-                return (pixels[idx] + pixels[idx+1] + pixels[idx+2]) / 3 > 180;
+            // 1. ANCRAGE & SEUIL DYNAMIQUE
+            const getLum = (x, y) => {
+                const idx = (y * 160 + x) * 4;
+                return (pixels[idx] + pixels[idx+1] + pixels[idx+2]) / 3;
             };
 
-            const isAnchored = checkAnchor(5, 5) && checkAnchor(123, 5) && checkAnchor(5, 123) && checkAnchor(123, 123);
+            const corners = [getLum(5,5), getLum(155,5), getLum(5,155), getLum(155,155)];
+            const isAnchored = corners.every(l => l > 170);
 
-            if (isAnchored) {
-                lockCount = Math.min(lockCount + 1, 10);
-                visualGuide.style.borderColor = "var(--success)";
-                recvStatus.classList.add('active');
-                recvStatus.innerHTML = '<div class="indicator"></div> SIGNAL VERROUILLÉ';
-            } else {
-                lockCount = Math.max(lockCount - 1, 0);
-                if (lockCount === 0) {
-                    visualGuide.style.borderColor = "rgba(255,255,255,0.1)";
-                    recvStatus.classList.remove('active');
-                    recvStatus.innerHTML = '<div class="indicator"></div> RECHERCHE D\'ANCRAGE';
-                }
+            if (!isAnchored) {
+                recvStatus.className = "status-pill";
+                recvStatus.innerHTML = '<div class="dot"></div> ATTENTE ANCRAGE';
+                guide.style.borderColor = "rgba(255,255,255,0.05)";
+                requestAnimationFrame(analyze);
+                return;
             }
 
-            // 2. DECODAGE SI VERROUILLE
-            if (lockCount > 5) {
-                let currentBits = "";
-                // On échantillonne la grille centrale (8x8)
-                // Offset de 25% pour éviter les bords d'ancrage
-                const start = 32; 
-                const end = 96;
-                const step = (end - start) / GRID;
+            // Calcul du seuil moyen (Dynamic Threshold)
+            // On prend la moyenne entre le fond sombre (0) et les coins brillants (1)
+            const dynamicThreshold = (Math.min(...corners) + 20) / 1.8;
+            debugThreshold.innerText = "Seuil: " + Math.round(dynamicThreshold);
 
-                for (let y = 0; y < GRID; y++) {
-                    for (let x = 0; x < GRID; x++) {
-                        const px = Math.floor(start + x * step + step/2);
-                        const py = Math.floor(start + y * step + step/2);
-                        const idx = (py * 128 + px) * 4;
-                        const lum = (pixels[idx] + pixels[idx+1] + pixels[idx+2]) / 3;
-                        currentBits += lum > 130 ? "1" : "0";
-                    }
-                }
+            // 2. ANALYSE DE GRILLE (Échantillonnage de surface)
+            let frameBits = "";
+            const start = 40; 
+            const end = 120;
+            const step = (end - start) / GRID;
 
-                if (currentBits !== lastBitString && currentBits !== "0".repeat(64)) {
-                    // Nouveau paquet détecté
-                    for (let i = 0; i < currentBits.length; i += 8) {
-                        const byte = currentBits.substring(i, i + 8);
-                        const charCode = parseInt(byte, 2);
-                        if (charCode >= 32 && charCode <= 126) {
-                            fullMessage += String.fromCharCode(charCode);
+            for (let y = 0; y < GRID; y++) {
+                for (let x = 0; x < GRID; x++) {
+                    const cx = Math.floor(start + x * step + step/2);
+                    const cy = Math.floor(start + y * step + step/2);
+                    
+                    // On moyenne sur un carré de 3x3 pixels pour chaque cellule
+                    let cellSum = 0;
+                    for(let dy=-1; dy<=1; dy++) {
+                        for(let dx=-1; dx<=1; dx++) {
+                            cellSum += getLum(cx+dx, cy+dy);
                         }
                     }
-                    decodedMsg.innerText = fullMessage;
-                    logStream.innerText = "> Flux : " + currentBits.substring(0, 16) + "...";
-                    lastBitString = currentBits;
+                    frameBits += (cellSum / 9) > dynamicThreshold ? "1" : "0";
                 }
             }
 
-            requestAnimationFrame(loop);
+            // 3. FILTRE DE STABILITÉ (Anti-transition)
+            if (frameBits === currentCandidate && frameBits !== "0".repeat(64)) {
+                stabilityCounter++;
+            } else {
+                currentCandidate = frameBits;
+                stabilityCounter = 0;
+            }
+
+            debugStability.innerText = `Stabilité: ${stabilityCounter}/3`;
+
+            // Validation du paquet
+            if (stabilityCounter === 3 && frameBits !== lastStableBits) {
+                lastStableBits = frameBits;
+                recvStatus.className = "status-pill active";
+                recvStatus.innerHTML = '<div class="dot"></div> RÉCEPTION...';
+                guide.style.borderColor = "var(--success)";
+                
+                // Décodage
+                for (let i = 0; i < frameBits.length; i += 8) {
+                    const byte = frameBits.substring(i, i + 8);
+                    const charCode = parseInt(byte, 2);
+                    if (charCode >= 32 && charCode <= 126) {
+                        finalMessage += String.fromCharCode(charCode);
+                    }
+                }
+                decodedMsg.innerText = finalMessage;
+            }
+
+            requestAnimationFrame(analyze);
         };
-        loop();
+        analyze();
     }
 </script>
 </body>
