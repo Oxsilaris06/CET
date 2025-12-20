@@ -4,266 +4,196 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Spectral Flow v5 - High Reliability</title>
+    <title>Spectral Flow v6 - Ultra-Sync</title>
     <style>
-        :root { --bg: #030712; --primary: #0ea5e9; --success: #10b981; --warning: #f59e0b; }
+        :root { --bg: #020617; --primary: #38bdf8; --success: #22c55e; --panel: #1e293b; }
         body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: #f1f5f9; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
-        
-        .layout { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 25px; width: 100%; max-width: 1100px; }
-        .card { background: #0f172a; border-radius: 20px; padding: 25px; border: 1px solid #1e293b; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); }
-        
-        #emitter-canvas { width: 100%; aspect-ratio: 1; background: #000; border-radius: 12px; margin-top: 15px; border: 2px solid #334155; }
-        
-        .camera-container { position: relative; width: 100%; aspect-ratio: 1; border-radius: 12px; overflow: hidden; background: #000; }
+        .layout { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 20px; width: 100%; max-width: 1000px; }
+        .card { background: var(--panel); border-radius: 20px; padding: 20px; border: 1px solid #334155; }
+        #emitter-canvas { width: 100%; aspect-ratio: 1; background: #000; border-radius: 10px; margin-top: 15px; border: 2px solid #334155; image-rendering: pixelated; }
+        .camera-box { position: relative; width: 100%; aspect-ratio: 1; border-radius: 10px; overflow: hidden; background: #000; }
         #camera-feed { width: 100%; height: 100%; object-fit: cover; }
-        
-        .guide-frame { position: absolute; top: 10%; left: 10%; width: 80%; height: 80%; border: 2px solid rgba(255,255,255,0.05); pointer-events: none; }
-        .guide-corner { position: absolute; width: 25px; height: 25px; border: 4px solid var(--primary); opacity: 0.5; }
-        .tl { top: -4px; left: -4px; border-right: none; border-bottom: none; }
-        .tr { top: -4px; right: -4px; border-left: none; border-bottom: none; }
-        .bl { bottom: -4px; left: -4px; border-right: none; border-top: none; }
-        .br { bottom: -4px; right: -4px; border-left: none; border-top: none; }
-
-        .status-pill { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; font-weight: 700; padding: 8px 16px; border-radius: 99px; background: #1e293b; width: fit-content; margin-bottom: 15px; }
-        .dot { width: 10px; height: 10px; border-radius: 50%; background: #475569; }
-        .active .dot { background: var(--success); box-shadow: 0 0 12px var(--success); }
-        .syncing .dot { background: var(--warning); animation: blink 0.5s infinite; }
-
-        @keyframes blink { 50% { opacity: 0.3; } }
-
-        textarea { width: 100%; background: #030712; border: 1px solid #334155; color: var(--primary); border-radius: 10px; padding: 15px; font-family: monospace; box-sizing: border-box; font-size: 1rem; }
-        button { width: 100%; background: var(--primary); color: white; border: none; padding: 16px; border-radius: 10px; font-weight: 800; cursor: pointer; margin-top: 15px; }
-        
-        .output-box { background: #030712; border-radius: 12px; padding: 15px; margin-top: 20px; border-left: 4px solid var(--success); min-height: 80px; }
-        #decodedMsg { word-break: break-all; font-family: 'Courier New', monospace; line-height: 1.4; color: #fff; }
-        .debug-info { font-size: 0.7rem; color: #64748b; font-family: monospace; margin-top: 10px; display: flex; justify-content: space-between; }
+        .guide { position: absolute; top: 10%; left: 10%; width: 80%; height: 80%; border: 2px dashed rgba(255,255,255,0.2); pointer-events: none; display: grid; grid-template-columns: repeat(8, 1fr); grid-template-rows: repeat(8, 1fr); }
+        .guide div { border: 0.1px solid rgba(255,255,255,0.05); }
+        .status { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; font-weight: bold; padding: 6px 12px; border-radius: 20px; background: #0f172a; width: fit-content; margin-bottom: 10px; }
+        .dot { width: 8px; height: 8px; border-radius: 50%; background: #475569; }
+        .locked .dot { background: var(--success); box-shadow: 0 0 10px var(--success); }
+        textarea { width: 100%; background: #020617; border: 1px solid #334155; color: var(--primary); border-radius: 8px; padding: 12px; font-family: monospace; box-sizing: border-box; }
+        button { width: 100%; background: var(--primary); color: #020617; border: none; padding: 14px; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        .output { background: #020617; border-radius: 10px; padding: 15px; margin-top: 20px; border-left: 4px solid var(--success); min-height: 60px; font-family: monospace; font-size: 1.1rem; color: #fff; word-break: break-all; }
+        .debug { font-size: 0.7rem; color: #64748b; margin-top: 10px; display: flex; justify-content: space-between; }
     </style>
 </head>
 <body>
 
-    <h1 style="margin-bottom: 5px;">SPECTRAL FLOW <span style="color:var(--primary)">V5</span></h1>
-    <p style="opacity: 0.5; margin-bottom: 30px;">Transmission Robuste - Analyse de Surface & Seuil Dynamique</p>
+    <h1 style="color: var(--primary); margin-bottom: 5px;">SPECTRAL <span style="font-weight: 300;">ULTRA-SYNC</span></h1>
+    <p style="opacity: 0.5; margin-bottom: 25px;">V6 : Calibration par Header & Anti-Double Lecture</p>
 
     <div class="layout">
         <div class="card">
-            <div class="status-pill" id="emitStatus">
-                <div class="dot"></div> PRÊT POUR ENVOI
-            </div>
-            <textarea id="msgInput" rows="3">MESSAGE TEST V5: STABILITE RENFORCEE</textarea>
-            <button id="btnSend">TRANSMETTRE FLUX ROBUSTE</button>
+            <div class="status" id="eStatus"><div class="dot"></div> ÉMETTEUR PRÊT</div>
+            <textarea id="msgInput">HELLO SPECTRAL V6</textarea>
+            <button id="btnSend">TRANSMETTRE (SYNC ON)</button>
             <canvas id="emitter-canvas"></canvas>
         </div>
 
         <div class="card">
-            <div class="status-pill" id="recvStatus">
-                <div class="dot"></div> ATTENTE ANCRAGE
-            </div>
-            <div class="camera-container">
+            <div class="status" id="rStatus"><div class="dot"></div> ATTENTE SIGNAL</div>
+            <div class="camera-box">
                 <video id="camera-feed" autoplay playsinline></video>
-                <div class="guide-frame" id="guide">
-                    <div class="guide-corner tl"></div>
-                    <div class="guide-corner tr"></div>
-                    <div class="guide-corner bl"></div>
-                    <div class="guide-corner br"></div>
-                </div>
+                <div class="guide" id="guideOverlay"></div>
             </div>
-            <button id="btnStartCam" style="background: #334155;">ACTIVER RÉCEPTION</button>
-            <div class="output-box">
-                <div style="font-size: 0.7rem; opacity: 0.5; margin-bottom: 5px;">TEXTE DÉCODÉ :</div>
-                <div id="decodedMsg">---</div>
-            </div>
-            <div class="debug-info">
-                <span id="debugStability">Stabilité: 0/3</span>
-                <span id="debugThreshold">Seuil: --</span>
+            <button id="btnCam" style="background: #475569; color: white;">ACTIVER RÉCEPTION</button>
+            <div class="output" id="outMsg">---</div>
+            <div class="debug">
+                <span id="dbSync">Sync: Non</span>
+                <span id="dbFreq">Freq: -- ms</span>
             </div>
         </div>
     </div>
 
 <script>
     const GRID = 8;
-    const FRAME_RATE = 150; // ms
+    const HEADER = "10101010"; // Première ligne de calibration
+    const FRAME_TIME = 200; // Plus lent pour la stabilité
     
-    const emitterCanvas = document.getElementById('emitter-canvas');
-    const eCtx = emitterCanvas.getContext('2d');
-    const emitStatus = document.getElementById('emitStatus');
-    const recvStatus = document.getElementById('recvStatus');
-    const decodedMsg = document.getElementById('decodedMsg');
-    const debugStability = document.getElementById('debugStability');
-    const debugThreshold = document.getElementById('debugThreshold');
+    const eCanvas = document.getElementById('emitter-canvas');
+    const eCtx = eCanvas.getContext('2d');
+    const outMsg = document.getElementById('outMsg');
+    const dbSync = document.getElementById('dbSync');
 
-    let isEmitting = false;
+    let toggle = false;
 
     // --- EMETTEUR ---
-    emitterCanvas.width = 512;
-    emitterCanvas.height = 512;
+    eCanvas.width = 400;
+    eCanvas.height = 400;
 
-    const drawFrame = (dataBits) => {
-        const size = emitterCanvas.width;
-        const cellSize = size / (GRID + 4);
-        
+    const draw = (data) => {
+        const size = 400;
+        const cellSize = size / GRID;
         eCtx.fillStyle = "black";
-        eCtx.fillRect(0, 0, size, size);
+        eCtx.fillRect(0,0,size,size);
 
-        // Ancrage statique
-        eCtx.fillStyle = "white";
-        const anchorSize = cellSize * 1.5;
-        eCtx.fillRect(0, 0, anchorSize, anchorSize);
-        eCtx.fillRect(size - anchorSize, 0, anchorSize, anchorSize);
-        eCtx.fillRect(0, size - anchorSize, anchorSize, anchorSize);
-        eCtx.fillRect(size - anchorSize, size - anchorSize, anchorSize, anchorSize);
-
-        // Grille centre
-        const offset = cellSize * 2;
-        const dataCellSize = (size - offset * 2) / GRID;
-
+        // On dessine le motif de données
         for (let i = 0; i < GRID * GRID; i++) {
             const x = i % GRID;
             const y = Math.floor(i / GRID);
-            const bit = dataBits[i] || '0';
-            eCtx.fillStyle = bit === '1' ? "#FFFFFF" : "#080808";
-            eCtx.fillRect(offset + x * dataCellSize + 2, offset + y * dataCellSize + 2, dataCellSize - 4, dataCellSize - 4);
+            let bit = data[i] || '0';
+            
+            // Forcer la première ligne (Header)
+            if (y === 0) bit = HEADER[x];
+            // Forcer le premier bit de la seconde ligne (Toggle bit)
+            if (x === 0 && y === 1) bit = toggle ? "1" : "0";
+
+            eCtx.fillStyle = bit === "1" ? "#FFFFFF" : "#0A0A0A";
+            eCtx.fillRect(x * cellSize + 2, y * cellSize + 2, cellSize - 4, cellSize - 4);
         }
     };
 
     document.getElementById('btnSend').onclick = () => {
-        if(isEmitting) return;
-        isEmitting = true;
-        emitStatus.classList.add('active');
-        emitStatus.innerHTML = '<div class="dot"></div> TRANSMISSION EN COURS';
-
-        const binary = document.getElementById('msgInput').value.split('').map(c => c.charCodeAt(0).toString(2).padStart(8, '0')).join('');
+        const bin = document.getElementById('msgInput').value.split('').map(c => c.charCodeAt(0).toString(2).padStart(8, '0')).join('');
+        // On ne peut envoyer que 55 bits de data par frame (64 - 8 header - 1 toggle)
+        const DATA_PER_FRAME = 55;
         let packets = [];
-        for (let i = 0; i < binary.length; i += 64) {
-            packets.push(binary.substring(i, i + 64).padEnd(64, '0'));
+        for (let i = 0; i < bin.length; i += DATA_PER_FRAME) {
+            packets.push(bin.substring(i, i + DATA_PER_FRAME).padEnd(DATA_PER_FRAME, '0'));
         }
 
         let idx = 0;
         const timer = setInterval(() => {
             if (idx >= packets.length) {
                 clearInterval(timer);
-                isEmitting = false;
-                emitStatus.classList.remove('active');
-                emitStatus.innerHTML = '<div class="dot"></div> TRANSMISSION TERMINÉE';
-                drawFrame("0".repeat(64));
+                draw("0".repeat(64));
                 return;
             }
-            drawFrame(packets[idx]);
+            toggle = !toggle; // Change à chaque frame
+            // Reconstruit la frame : Header(8) + Toggle(1) + Data(55)
+            const frameData = HEADER + (toggle ? "1" : "0") + packets[idx];
+            draw(frameData);
             idx++;
-        }, FRAME_RATE);
+        }, FRAME_TIME);
     };
+    draw("0".repeat(64));
 
-    drawFrame("0".repeat(64));
-
-    // --- RECEPTEUR ---
+    // --- RÉCEPTEUR ---
     const video = document.getElementById('camera-feed');
-    const guide = document.getElementById('guide');
-    let streamActive = false;
-
-    document.getElementById('btnStartCam').onclick = async () => {
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: 640, height: 640 } });
-            video.srcObject = stream;
-            streamActive = true;
-            processLoop();
-        } catch (e) {
-            alert("Erreur caméra : " + e.message);
-        }
+    let active = false;
+    document.getElementById('btnCam').onclick = async () => {
+        const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+        video.srcObject = s;
+        active = true;
+        loop();
     };
 
-    function processLoop() {
-        const pCanvas = document.createElement('canvas');
-        const pCtx = pCanvas.getContext('2d', { willReadFrequently: true });
-        pCanvas.width = 160;
-        pCanvas.height = 160;
+    const loop = () => {
+        const c = document.createElement('canvas');
+        const ctx = c.getContext('2d', { willReadFrequently: true });
+        c.width = 80; c.height = 80;
 
-        let stabilityCounter = 0;
-        let lastStableBits = "";
-        let currentCandidate = "";
-        let finalMessage = "";
+        let lastToggle = null;
+        let fullBin = "";
 
-        const analyze = () => {
-            if(!streamActive) return;
+        const run = () => {
+            if(!active) return;
+            // Crop centre 60%
+            ctx.drawImage(video, video.videoWidth*0.2, video.videoHeight*0.2, video.videoWidth*0.6, video.videoHeight*0.6, 0, 0, 80, 80);
+            const img = ctx.getImageData(0,0,80,80).data;
 
-            // Capture centre (70% du flux)
-            pCtx.drawImage(video, video.videoWidth*0.15, video.videoHeight*0.15, video.videoWidth*0.7, video.videoHeight*0.7, 0, 0, 160, 160);
-            const pixels = pCtx.getImageData(0, 0, 160, 160).data;
-
-            // 1. ANCRAGE & SEUIL DYNAMIQUE
-            const getLum = (x, y) => {
-                const idx = (y * 160 + x) * 4;
-                return (pixels[idx] + pixels[idx+1] + pixels[idx+2]) / 3;
-            };
-
-            const corners = [getLum(5,5), getLum(155,5), getLum(5,155), getLum(155,155)];
-            const isAnchored = corners.every(l => l > 170);
-
-            if (!isAnchored) {
-                recvStatus.className = "status-pill";
-                recvStatus.innerHTML = '<div class="dot"></div> ATTENTE ANCRAGE';
-                guide.style.borderColor = "rgba(255,255,255,0.05)";
-                requestAnimationFrame(analyze);
-                return;
-            }
-
-            // Calcul du seuil moyen (Dynamic Threshold)
-            // On prend la moyenne entre le fond sombre (0) et les coins brillants (1)
-            const dynamicThreshold = (Math.min(...corners) + 20) / 1.8;
-            debugThreshold.innerText = "Seuil: " + Math.round(dynamicThreshold);
-
-            // 2. ANALYSE DE GRILLE (Échantillonnage de surface)
             let frameBits = "";
-            const start = 40; 
-            const end = 120;
-            const step = (end - start) / GRID;
+            let maxB = 0, minB = 255;
 
+            // 1. Analyse de grille
             for (let y = 0; y < GRID; y++) {
                 for (let x = 0; x < GRID; x++) {
-                    const cx = Math.floor(start + x * step + step/2);
-                    const cy = Math.floor(start + y * step + step/2);
-                    
-                    // On moyenne sur un carré de 3x3 pixels pour chaque cellule
-                    let cellSum = 0;
-                    for(let dy=-1; dy<=1; dy++) {
-                        for(let dx=-1; dx<=1; dx++) {
-                            cellSum += getLum(cx+dx, cy+dy);
-                        }
-                    }
-                    frameBits += (cellSum / 9) > dynamicThreshold ? "1" : "0";
+                    const px = x * 10 + 5; // Centre de la cellule
+                    const py = y * 10 + 5;
+                    const idx = (py * 80 + px) * 4;
+                    const b = (img[idx] + img[idx+1] + img[idx+2]) / 3;
+                    if(b > maxB) maxB = b; if(b < minB) minB = b;
+                    frameBits += b > 130 ? "1" : "0"; // Seuil fixe mais avec header check
                 }
             }
 
-            // 3. FILTRE DE STABILITÉ (Anti-transition)
-            if (frameBits === currentCandidate && frameBits !== "0".repeat(64)) {
-                stabilityCounter++;
-            } else {
-                currentCandidate = frameBits;
-                stabilityCounter = 0;
-            }
-
-            debugStability.innerText = `Stabilité: ${stabilityCounter}/3`;
-
-            // Validation du paquet
-            if (stabilityCounter === 3 && frameBits !== lastStableBits) {
-                lastStableBits = frameBits;
-                recvStatus.className = "status-pill active";
-                recvStatus.innerHTML = '<div class="dot"></div> RÉCEPTION...';
-                guide.style.borderColor = "var(--success)";
+            // 2. Validation par Header
+            const detectedHeader = frameBits.substring(0, 8);
+            if (detectedHeader === HEADER) {
+                dbSync.innerText = "Sync: OUI";
+                document.getElementById('rStatus').classList.add('locked');
                 
-                // Décodage
-                for (let i = 0; i < frameBits.length; i += 8) {
-                    const byte = frameBits.substring(i, i + 8);
-                    const charCode = parseInt(byte, 2);
-                    if (charCode >= 32 && charCode <= 126) {
-                        finalMessage += String.fromCharCode(charCode);
-                    }
+                const currentToggle = frameBits[8];
+                if (currentToggle !== lastToggle) {
+                    // Nouveau paquet !
+                    const dataPart = frameBits.substring(9);
+                    fullBin += dataPart;
+                    lastToggle = currentToggle;
+                    decode(fullBin);
                 }
-                decodedMsg.innerText = finalMessage;
+            } else {
+                dbSync.innerText = "Sync: NON";
+                document.getElementById('rStatus').classList.remove('locked');
             }
 
-            requestAnimationFrame(analyze);
+            requestAnimationFrame(run);
         };
-        analyze();
-    }
+        run();
+    };
+
+    const decode = (bin) => {
+        let txt = "";
+        for (let i = 0; i < bin.length; i += 8) {
+            const byte = bin.substring(i, i + 8);
+            if(byte.length === 8) {
+                const char = String.fromCharCode(parseInt(byte, 2));
+                // Filtrer les caractères valides
+                if (/[ -~]/.test(char)) txt += char;
+            }
+        }
+        outMsg.innerText = txt || "---";
+    };
+
+    // Guide visuel
+    const g = document.getElementById('guideOverlay');
+    for(let i=0; i<64; i++) g.appendChild(document.createElement('div'));
 </script>
 </body>
 </html>
