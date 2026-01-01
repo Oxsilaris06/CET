@@ -12,14 +12,7 @@
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     
     <link rel="icon" href="favicon.ico" type="image/x-icon">
-    <link rel="apple-touch-icon" href="apple-touch-icon-57x57.png" sizes="57x57">
-    <link rel="apple-touch-icon" href="apple-touch-icon-60x60.png" sizes="60x60">
-    <link rel="apple-touch-icon" href="apple-touch-icon-72x72.png" sizes="72x72">
-    <link rel="apple-touch-icon" href="apple-touch-icon-76x76.png" sizes="76x76">
-    <link rel="apple-touch-icon" href="apple-touch-icon-114x114.png" sizes="114x114">
-    <link rel="apple-touch-icon" href="apple-touch-icon-120x120.png" sizes="120x120">
-    <link rel="apple-touch-icon" href="apple-touch-icon-144x144.png" sizes="144x144">
-    <link rel="apple-touch-icon" href="apple-touch-icon-152x152.png" sizes="152x152">
+    <!-- Icônes Apple Touch (conservées) -->
     <link rel="apple-touch-icon" href="apple-touch-icon-180x180.png" sizes="180x180">
     <link rel="icon" type="image/png" href="android-icon-192x192.png" sizes="192x192">
 
@@ -30,9 +23,11 @@
             --hub-border: #333;
             --hub-accent: #3b82f6; /* Bleu Cyber */
             --hub-text: #e4e4e7;
-            --hub-header-h: 70px;
             
-            /* Variables Modal (importées de index.html) */
+            /* Hauteur Header Adaptable */
+            --header-height: 70px;
+            
+            /* Variables Modal */
             --bg-container: rgba(18, 18, 18, 0.95);
             --text-primary: #e0e0e0;
             --accent-blue: #5b9bd5;
@@ -42,36 +37,42 @@
         
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         
-        body {
+        html, body {
             margin: 0; padding: 0;
             background-color: var(--hub-bg);
             color: var(--hub-text);
             font-family: 'Chakra Petch', sans-serif;
-            height: 100vh; /* Fallback */
-            height: 100dvh; /* Dynamic viewport height pour mobile */
-            width: 100vw;
-            display: flex; flex-direction: column;
-            overflow: hidden;
+            width: 100%;
+            height: 100%;
+            overflow: hidden; /* Empêche le scroll global, seul l'iframe scroll si besoin */
+        }
+
+        body {
+            display: flex;
+            flex-direction: column;
+            /* Support pour hauteur dynamique mobile (barre adresse) */
+            height: 100vh;
+            height: 100dvh; 
         }
 
         /* HEADER NAVIGATION */
         header {
-            flex: 0 0 auto;
-            min-height: var(--hub-header-h);
+            flex: 0 0 auto; /* Ne rétrécit pas */
+            height: var(--header-height);
             background: rgba(10, 10, 10, 0.95);
             border-bottom: 1px solid var(--hub-border);
             display: flex; align-items: center; justify-content: space-between;
-            padding: 0 30px;
+            padding: 0 1.5rem;
             box-shadow: 0 5px 20px rgba(0,0,0,0.5);
             z-index: 100;
             transition: transform 0.3s ease-in-out;
             position: relative;
-            touch-action: none; 
         }
 
         header.hidden {
             transform: translateY(-100%);
-            margin-bottom: calc(var(--hub-header-h) * -1); 
+            /* Margin négative pour remonter le contenu dessous */
+            margin-bottom: calc(var(--header-height) * -1); 
         }
 
         .brand {
@@ -81,8 +82,9 @@
             letter-spacing: 2px;
             display: flex; align-items: center; gap: 10px;
             white-space: nowrap;
+            margin-right: 20px;
         }
-        .brand span { color: var(--hub-accent); }
+        .brand span.accent { color: var(--hub-accent); }
 
         .nav-container {
             display: flex; gap: 10px;
@@ -90,7 +92,8 @@
             -webkit-overflow-scrolling: touch;
             scrollbar-width: none;
             padding: 5px 0;
-            touch-action: pan-x; 
+            align-items: center;
+            height: 100%;
         }
         .nav-container::-webkit-scrollbar { display: none; }
 
@@ -99,7 +102,8 @@
             background: #111;
             border: 1px solid var(--hub-border);
             color: #888;
-            padding: 10px 20px;
+            padding: 0.5rem 1rem;
+            height: 40px; /* Hauteur fixe pour alignement */
             border-radius: 4px;
             font-family: 'Chakra Petch', sans-serif;
             font-weight: 600;
@@ -109,6 +113,7 @@
             display: flex; align-items: center; gap: 8px;
             white-space: nowrap;
             flex-shrink: 0;
+            font-size: 0.9rem;
         }
 
         .nav-btn:hover {
@@ -124,12 +129,8 @@
             box-shadow: 0 0 15px rgba(59, 130, 246, 0.4);
         }
 
-        /* Classe pour les éléments sécurisés cachés */
-        .secured-nav {
-            display: none; /* Caché par défaut */
-        }
+        .secured-nav { display: none; }
 
-        /* Bouton Cadenas Spécifique */
         #lockBtn {
             border-color: #d32f2f;
             color: #d32f2f;
@@ -139,9 +140,19 @@
             box-shadow: 0 0 10px rgba(211, 47, 47, 0.3);
         }
 
-        /* IFRAME CONTAINER */
+        /* IFRAME CONTAINER - LE COEUR DU FIX */
+        .iframe-wrapper {
+            flex: 1 1 auto; /* Prend tout l'espace restant */
+            position: relative;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            min-height: 0; /* CRUCIAL pour que flexbox autorise le rétrécissement */
+        }
+
         .presentation-frame {
-            flex: 1 1 auto;
             width: 100%;
             height: 100%;
             border: none;
@@ -149,10 +160,10 @@
             display: block;
         }
 
-        /* BOUTON PLEIN ÉCRAN */
+        /* BOUTONS FLOTTANTS */
         .fullscreen-btn {
             position: fixed;
-            bottom: 30px; right: 30px; /* Position Desktop */
+            bottom: 30px; right: 30px;
             width: 50px; height: 50px;
             border-radius: 50%;
             background: rgba(10, 10, 10, 0.8);
@@ -162,7 +173,7 @@
             cursor: pointer;
             box-shadow: 0 0 20px rgba(0,0,0,0.5);
             z-index: 1000;
-            transition: all 0.3s;
+            transition: transform 0.2s;
             backdrop-filter: blur(5px);
         }
         .fullscreen-btn:hover {
@@ -171,62 +182,52 @@
             transform: scale(1.1);
         }
 
-        /* INDICATEUR SWIPE (MOBILE ONLY) */
+        /* MOBILE HINTS */
         .swipe-hint {
-            display: none;
+            display: none; /* Active via JS ou Media Query */
             position: fixed;
-            top: 80px; 
+            top: 20%; 
             left: 50%;
             transform: translateX(-50%);
-            background: rgba(0, 0, 0, 0.7);
-            color: #aaa;
-            padding: 8px 15px;
-            border-radius: 20px;
-            font-size: 0.8rem;
+            background: rgba(0, 0, 0, 0.8);
+            color: #fff;
+            padding: 10px 20px;
+            border-radius: 30px;
+            font-size: 0.9rem;
             z-index: 999;
             pointer-events: none;
-            border: 1px solid #333;
+            border: 1px solid var(--hub-accent);
             align-items: center;
-            gap: 5px;
-            animation: fadeHint 4s forwards;
+            gap: 10px;
+            opacity: 0;
+            transition: opacity 0.5s;
         }
-        .swipe-hint span { font-size: 1.2em; animation: bounceUp 1.5s infinite; }
-
-        @keyframes bounceUp {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-3px); }
-        }
-        @keyframes fadeHint {
-            0% { opacity: 0; transform: translateX(-50%) translateY(10px); }
-            10% { opacity: 1; transform: translateX(-50%) translateY(0); }
+        .swipe-hint.show { opacity: 1; animation: fadeOutHint 4s forwards; }
+        
+        @keyframes fadeOutHint {
+            0% { opacity: 1; }
             80% { opacity: 1; }
-            100% { opacity: 0; visibility: hidden; }
+            100% { opacity: 0; }
         }
 
+        /* ZONE TRIGGER POUR LE HEADER SUR MOBILE */
         .header-trigger {
             position: fixed;
-            top: 0; left: 0; width: 100%; height: 30px; 
+            top: 0; left: 0; width: 100%; height: 20px; 
             z-index: 90; 
             display: none; 
         }
 
-        /* --- STYLE MODAL LOGIN (Porté depuis index.html) --- */
+        /* --- MODAL LOGIN --- */
         .login-modal {
             position: fixed;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
-            background-color: rgba(0, 0, 0, 0.8);
-            display: flex; justify-content: center; align-items: center;
-            z-index: 2000; /* Au dessus de tout */
-            display: none;
-            opacity: 0;
-            transition: opacity 0.3s ease;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(0, 0, 0, 0.9);
+            display: none; justify-content: center; align-items: center;
+            z-index: 2000;
+            opacity: 0; transition: opacity 0.3s ease;
         }
-
-        .login-modal.active {
-            display: flex;
-            opacity: 1;
-        }
+        .login-modal.active { display: flex; opacity: 1; }
 
         .login-box {
             background-color: var(--bg-container);
@@ -234,136 +235,66 @@
             border-radius: 8px;
             border: 1px solid var(--border-color);
             text-align: center;
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
-            width: 90%;
-            max-width: 400px;
+            width: 90%; max-width: 400px;
         }
-        
-        .login-box legend {
-            font-size: 1.8em;
-            padding: 0 10px;
-            color: var(--text-primary);
-            font-weight: 500;
-            font-family: 'Oswald', sans-serif;
-            text-transform: uppercase;
-            margin-bottom: 20px;
-        }
-
-        .login-box label {
-            display: block;
-            text-align: left;
-            margin-bottom: 8px;
-            color: var(--text-primary);
-            font-size: 1rem;
-            font-family: 'Oswald', sans-serif;
-        }
-
-        .login-box select, .login-box input {
-            width: 100%;
-            padding: 12px;
-            margin-bottom: 20px;
-            border: 1px solid var(--border-color);
-            border-radius: 4px;
-            font-size: 1.1em;
-            background-color: var(--bg-interactive);
-            color: var(--text-primary);
-            outline: none;
-        }
-        
-        .login-box select:focus, .login-box input:focus {
-            border-color: var(--accent-blue);
-        }
-
-        .action-button {
-            display: block;
-            width: 100%;
-            padding: 12px;
-            margin-top: 10px;
-            font-family: 'Oswald', sans-serif;
-            font-size: 1.2em;
-            font-weight: 500;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            text-transform: uppercase;
-            text-align: center;
-            transition: background-color 0.2s ease-in-out;
-            background-color: var(--accent-blue);
-        }
-        
-        .action-button:hover { opacity: 0.9; }
-        
-        .login-message {
-            margin-top: 15px;
-            color: #ff6b6b;
-            font-size: 1rem;
-            min-height: 1.2em;
-        }
-
-        .back-icon {
-            cursor: pointer;
-            margin-top: 20px;
-            font-size: 30px;
-            color: rgba(255, 255, 255, 0.6);
-            transition: color 0.2s ease;
-        }
+        .login-box legend { color: var(--text-primary); font-family: 'Oswald', sans-serif; font-size: 1.5rem; margin-bottom: 20px; text-transform: uppercase;}
+        .login-box label { display: block; text-align: left; margin-bottom: 5px; color: #ccc; font-family: 'Oswald'; }
+        .login-box input, .login-box select { width: 100%; padding: 10px; margin-bottom: 20px; background: #222; border: 1px solid #444; color: #fff; }
+        .action-button { width: 100%; padding: 12px; background: var(--accent-blue); color: #fff; border: none; font-weight: bold; cursor: pointer; text-transform: uppercase; }
+        .back-icon { margin-top: 15px; cursor: pointer; color: #888; }
         .back-icon:hover { color: #fff; }
 
+        /* --- MEDIA QUERIES --- */
 
-        /* MOBILE & TABLETTE ADAPTATION */
+        /* 1. MOBILE & TABLETTE */
         @media (max-width: 1024px) {
+            :root { --header-height: auto; }
+            
             header { 
                 flex-direction: column; 
                 align-items: stretch;
                 padding: 10px; 
                 gap: 10px;
-                height: auto; 
-                min-height: auto;
             }
             
-            header.hidden {
-                margin-bottom: -115px; 
-            }
-
-            .brand { 
-                justify-content: flex-start;
-                padding-left: 5px; 
-                font-size: 1.3rem; 
-                margin-bottom: 5px;
-                position: relative;
-                max-width: 85%;
-            }
-
+            .brand { justify-content: center; margin-right: 0; }
+            
             .nav-container { 
-                justify-content: flex-start;
                 padding-bottom: 5px;
-                margin: 0 -10px; padding: 0 10px 10px 10px;
             }
 
-            .nav-btn { font-size: 0.85rem; padding: 8px 15px; }
+            .nav-btn { font-size: 0.8rem; padding: 0 12px; height: 36px; }
             
             .fullscreen-btn { 
-                width: 40px; height: 40px; 
-                bottom: auto; top: 15px; right: 15px; 
+                top: 10px; right: 10px; 
+                bottom: auto; 
+                width: 40px; height: 40px;
                 opacity: 0.8;
-                background: rgba(0,0,0,0.6);
+                background: rgba(0,0,0,0.8);
                 border: none;
             }
             
-            .swipe-hint { display: flex; }
             .header-trigger { display: block; }
         }
-        
-        /* TV / GRANDS ÉCRANS (4K) */
-        @media (min-width: 2000px) {
-            :root { --hub-header-h: 100px; }
+
+        /* 2. TV / GRANDS ÉCRANS (Optimisation Lisibilité) */
+        @media (min-width: 1920px) {
+            :root { --header-height: 90px; }
+            
+            html, body { font-size: 18px; } /* Base font scaling */
+            
             .brand { font-size: 2.5rem; }
-            .nav-btn { font-size: 1.2rem; padding: 15px 30px; }
-            .material-symbols-outlined { font-size: 1.5em; }
+            .nav-btn { 
+                font-size: 1.2rem; 
+                height: 60px; 
+                padding: 0 30px; 
+            }
+            
+            .login-box { max-width: 600px; padding: 60px; }
+            .login-box legend { font-size: 2.5rem; }
+            .login-box input, .login-box select, .action-button { font-size: 1.5rem; padding: 20px; }
         }
+
     </style>
 </head>
 <body>
@@ -373,7 +304,7 @@
     <header id="mainHeader">
         <div class="brand">
             <span class="material-symbols-outlined" style="font-size: 1.2em; margin-right: 10px;">hub</span>
-            HUB<span>INSTRUCTION</span>
+            HUB<span class="accent">INSTRUCTION</span>
         </div>
         
         <div class="nav-container">
@@ -393,6 +324,7 @@
                 <span class="material-symbols-outlined">adjust</span> AIRSOFT
             </button>
             
+            <!-- Boutons Sécurisés -->
             <button class="nav-btn secured-nav" onclick="loadPres('reco.html', this)">
                 <span class="material-symbols-outlined">visibility</span> RECO
             </button>
@@ -416,87 +348,113 @@
 
     <div class="swipe-hint" id="swipeHint">
         <span class="material-symbols-outlined">touch_app</span>
-        Commandes Tactiles Activées
+        Swipe pour naviguer
     </div>
 
-    <iframe id="mainFrame" class="presentation-frame" src="adi1.html" title="Zone de Présentation" allowfullscreen></iframe>
+    <!-- Wrapper Flex pour Iframe -->
+    <div class="iframe-wrapper">
+        <iframe id="mainFrame" class="presentation-frame" src="adi1.html" title="Zone de Présentation" allowfullscreen></iframe>
+    </div>
 
     <button class="fullscreen-btn" id="fsBtn" onclick="toggleFullScreen()">
         <span class="material-symbols-outlined" id="fsIcon">fullscreen</span>
     </button>
 
+    <!-- Modal Login -->
     <div id="loginModal" class="login-modal">
         <div class="login-box">
             <fieldset style="border:none; padding:0; margin:0;">
                 <legend>Accès Sécurisé</legend>
                 <div class="item-selector">
                     <label for="member-select">Nom du membre</label>
-                    <select id="member-select">
-                        <option value="">Sélectionner un membre</option>
-                    </select>
+                    <select id="member-select"><option value="">Chargement...</option></select>
                 </div>
                 <div class="item-selector">
                     <label for="password-input">Mot de passe</label>
                     <input type="password" id="password-input" placeholder="••••">
                 </div>
-                <button onclick="validateLogin()" class="action-button">
-                    Valider
-                </button>
+                <button onclick="validateLogin()" class="action-button">Valider</button>
                 <div style="text-align: center;">
                     <span class="material-icons back-icon" onclick="closeLoginModal()">arrow_back</span>
                 </div>
-                <div id="loginMessage" class="login-message"></div>
+                <div id="loginMessage" style="margin-top:15px; color:#ff6b6b; min-height:1.2em;"></div>
             </fieldset>
         </div>
     </div>
 
     <script>
-        // --- 1. Gestion de l'Iframe & Injection CSS/Events ---
+        const frame = document.getElementById('mainFrame');
+        const header = document.getElementById('mainHeader');
+        
+        // --- 1. Chargement & Gestion Iframe ---
         function loadPres(filename, btnElement) {
-            const frame = document.getElementById('mainFrame');
+            // Éviter rechargement inutile
             if (frame.getAttribute('src') === filename) return;
 
+            // Feedback visuel
             frame.style.opacity = '0';
+            
+            // Mise à jour boutons
+            if (btnElement) {
+                document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+                btnElement.classList.add('active');
+            }
+
             setTimeout(() => {
                 frame.src = filename;
-                if (btnElement) {
-                    document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
-                    btnElement.classList.add('active');
-                }
                 
                 frame.onload = function() {
                     frame.style.opacity = '1';
                     frame.contentWindow.focus();
+                    
+                    // Tentatives d'améliorations UX
                     injectMobileStyles(frame); 
-                    setupFrameTouchEvents(frame); 
+                    setupFrameTouchEvents(frame);
+                    
+                    // Astuce pour mobile : scroller en haut pour cacher barre adresse si possible
+                    window.scrollTo(0, 1);
                 };
-                setTimeout(() => frame.style.opacity = '1', 300);
-            }, 150);
+            }, 200);
         }
 
+        // --- 2. Adaptation Mobile/Contenu ---
         function injectMobileStyles(iframe) {
             if (window.innerWidth <= 1024) {
                 try {
                     const doc = iframe.contentDocument || iframe.contentWindow.document;
+                    
+                    // On vérifie si style déjà injecté
+                    if(doc.getElementById('hub-mobile-fix')) return;
+
                     const style = doc.createElement('style');
+                    style.id = 'hub-mobile-fix';
+                    // On force le contenu à s'adapter et on cache les éléments parasites
                     style.textContent = `
-                        .navigation { display: none !important; }
-                        .slide-footer { display: none !important; }
-                        .slide-container { padding-bottom: 20px !important; }
+                        body { overflow-x: hidden; }
+                        .navigation, .slide-footer { display: none !important; }
+                        /* Ajustement générique pour conteneurs de slides */
+                        .slide-container, .reveal { 
+                            height: 100vh !important; 
+                            width: 100vw !important;
+                            padding: 0 !important;
+                        }
                     `;
                     doc.head.appendChild(style);
                 } catch (e) {
-                    console.warn("Impossible d'injecter le style (Cross-Origin restricted?)", e);
+                    console.log("Cross-Origin : Impossible d'injecter le CSS mobile directement.");
                 }
             }
         }
 
-        // --- 2. Gestion Plein Écran ---
+        // --- 3. Plein Écran Robuste ---
         function toggleFullScreen() {
             if (!document.fullscreenElement) {
-                document.documentElement.requestFullscreen().catch(err => {
-                    console.log(`Error: ${err.message}`);
-                });
+                // Compatible avec plus de navigateurs
+                if(document.documentElement.requestFullscreen) {
+                    document.documentElement.requestFullscreen();
+                } else if(document.documentElement.webkitRequestFullscreen) {
+                    document.documentElement.webkitRequestFullscreen();
+                }
             } else {
                 if (document.exitFullscreen) {
                     document.exitFullscreen();
@@ -508,61 +466,83 @@
             const icon = document.getElementById('fsIcon');
             if (document.fullscreenElement) {
                 icon.textContent = 'fullscreen_exit';
+                // En mode fullscreen TV, on cache souvent le header par défaut pour immersion
+                // Mais on le garde accessible au mousemove/touch
             } else {
                 icon.textContent = 'fullscreen';
-                document.getElementById('mainHeader').classList.remove('hidden');
+                header.classList.remove('hidden');
             }
         });
 
-        // --- 3. Gestion Tactile ---
-        const header = document.getElementById('mainHeader');
-        const headerTrigger = document.getElementById('headerTrigger');
-        let headerStartY = 0;
-        let triggerStartY = 0;
+        // --- 4. Gestion Tactile et Header Auto-Hide ---
+        let lastScrollY = 0;
+        let startY = 0;
+        let startX = 0;
 
-        header.addEventListener('touchstart', e => { headerStartY = e.changedTouches[0].screenY; }, {passive: true});
-        header.addEventListener('touchend', e => {
-            const headerEndY = e.changedTouches[0].screenY;
-            if (headerStartY - headerEndY > 30) header.classList.add('hidden');
+        // Header Hide Logic (Mobile)
+        document.addEventListener('touchstart', e => {
+            startY = e.touches[0].clientY;
         }, {passive: true});
 
-        headerTrigger.addEventListener('touchstart', e => { triggerStartY = e.changedTouches[0].screenY; }, {passive: true});
-        headerTrigger.addEventListener('touchend', e => {
-            const triggerEndY = e.changedTouches[0].screenY;
-            if (triggerEndY - triggerStartY > 30) header.classList.remove('hidden');
+        document.addEventListener('touchend', e => {
+            // Si on touche tout en haut, on montre le header
+            if (startY < 50) {
+                header.classList.remove('hidden');
+            }
         }, {passive: true});
+
+        // Trigger Zone
+        const trigger = document.getElementById('headerTrigger');
+        trigger.addEventListener('click', () => header.classList.remove('hidden'));
+        trigger.addEventListener('mouseover', () => header.classList.remove('hidden'));
 
         function setupFrameTouchEvents(iframe) {
             try {
                 const doc = iframe.contentDocument || iframe.contentWindow.document;
-                let frameStartX = 0;
-                let frameStartY = 0;
+                
                 doc.addEventListener('touchstart', e => {
-                    frameStartX = e.changedTouches[0].screenX;
-                    frameStartY = e.changedTouches[0].screenY;
+                    startX = e.touches[0].clientX;
+                    startY = e.touches[0].clientY;
                 }, {passive: true});
 
                 doc.addEventListener('touchend', e => {
-                    const diffX = frameStartX - e.changedTouches[0].screenX;
-                    const diffY = frameStartY - e.changedTouches[0].screenY;
-                    if (Math.abs(diffX) > Math.abs(diffY)) {
-                        if (Math.abs(diffX) > 50) {
-                            const win = iframe.contentWindow;
-                            win.document.dispatchEvent(new KeyboardEvent('keydown', {'key': diffX > 0 ? 'ArrowRight' : 'ArrowLeft'}));
-                        }
-                    } else {
-                        if (diffY < -50 && header.classList.contains('hidden')) {
-                             header.classList.remove('hidden');
-                        }
+                    const endX = e.changedTouches[0].clientX;
+                    const endY = e.changedTouches[0].clientY;
+                    const diffX = startX - endX;
+                    const diffY = startY - endY;
+
+                    // Swipe Horizontal (Slides)
+                    if (Math.abs(diffX) > 50 && Math.abs(diffX) > Math.abs(diffY)) {
+                        const win = iframe.contentWindow;
+                        // Envoi flèches clavier
+                        win.document.dispatchEvent(new KeyboardEvent('keydown', {'key': diffX > 0 ? 'ArrowRight' : 'ArrowLeft', 'keyCode': diffX > 0 ? 39 : 37}));
+                    }
+                    
+                    // Swipe Vertical (Afficher Header si swipe bas depuis le haut)
+                    if (diffY < -50 && startY < 100) {
+                        header.classList.remove('hidden');
+                    }
+                    
+                    // Cacher Header si swipe haut
+                    if (diffY > 50) {
+                        header.classList.add('hidden');
                     }
                 }, {passive: true});
+                
+                // Indication visuelle au premier chargement sur mobile
+                if(window.innerWidth < 1024 && !sessionStorage.getItem('hintShown')) {
+                     const hint = document.getElementById('swipeHint');
+                     hint.style.display = 'flex';
+                     setTimeout(() => hint.classList.add('show'), 100);
+                     sessionStorage.setItem('hintShown', 'true');
+                }
+
             } catch (e) {
-                console.warn("Cross-Origin frame access blocked");
+                // Cross origin safety
             }
         }
 
-        // --- 4. GESTION SÉCURITÉ & LOGIN (NOUVEAU) ---
-        
+        // --- 5. Sécurité (Authentification) ---
         let backendUrl = "";
         let allMembers = [];
         const loginModal = document.getElementById('loginModal');
@@ -570,125 +550,90 @@
         const passwordInput = document.getElementById('password-input');
         const loginMessage = document.getElementById('loginMessage');
 
-        // Chargement de la config et des événements de base
+        // Initialisation
         window.onload = async function() {
-            // Init Iframe
-            const frame = document.getElementById('mainFrame');
-            frame.style.transition = "opacity 0.3s ease";
-            frame.onload = function() {
-                injectMobileStyles(frame);
-                setupFrameTouchEvents(frame);
-                frame.contentWindow.focus();
-            };
-
-            // Init Config Sécurité
+            // Chargement Config
             try {
-                const response = await fetch('all.json');
-                if (response.ok) {
-                    const config = await response.json();
-                    backendUrl = config.backendUrl || '';
+                const res = await fetch('all.json');
+                if(res.ok) {
+                    const cfg = await res.json();
+                    backendUrl = cfg.backendUrl || '';
                 }
-            } catch (error) {
-                console.error("Erreur chargement all.json:", error);
+            } catch(e) { console.error("Config missing"); }
+            
+            // Init Iframe events
+            if(frame.contentWindow) {
+                frame.onload();
             }
         };
 
-        window.addEventListener('resize', () => {
-             const frame = document.getElementById('mainFrame');
-             injectMobileStyles(frame);
-        });
-
-        // Logique Modale
-        async function fetchMembers() {
-            if (!backendUrl) {
-                loginMessage.innerText = "Erreur config (URL)";
-                return;
-            }
-            try {
-                const url = new URL(backendUrl);
-                url.searchParams.append('action', 'getMembers');
-                const response = await fetch(url);
-                const data = await response.json();
-                allMembers = data.map(member => member.trim());
-                
-                memberSelect.innerHTML = '<option value="">Sélectionner un membre</option>';
-                allMembers.forEach(member => {
-                    const option = document.createElement('option');
-                    option.value = member.trim();
-                    option.textContent = member.trim();
-                    memberSelect.appendChild(option);
-                });
-            } catch (error) {
-                console.error("Erreur chargement membres:", error);
-                loginMessage.innerText = "Erreur réseau";
-            }
-        }
-
-        window.openLoginModal = function() {
-            loginMessage.innerText = '';
-            passwordInput.value = '';
-            memberSelect.value = '';
+        window.openLoginModal = async function() {
             loginModal.classList.add('active');
-            if (allMembers.length === 0) fetchMembers();
-        }
+            loginMessage.innerText = '';
+            
+            if (allMembers.length === 0 && backendUrl) {
+                try {
+                    const url = new URL(backendUrl);
+                    url.searchParams.append('action', 'getMembers');
+                    const res = await fetch(url);
+                    const data = await res.json();
+                    allMembers = data.map(m => m.trim());
+                    
+                    memberSelect.innerHTML = '<option value="">Choisir un membre</option>';
+                    allMembers.forEach(m => {
+                        const opt = document.createElement('option');
+                        opt.value = m;
+                        opt.textContent = m;
+                        memberSelect.appendChild(opt);
+                    });
+                } catch (e) {
+                    loginMessage.innerText = "Erreur connexion serveur";
+                }
+            } else if (!backendUrl) {
+                memberSelect.innerHTML = '<option>Erreur Config</option>';
+            }
+        };
 
         window.closeLoginModal = function() {
             loginModal.classList.remove('active');
-        }
+        };
 
         window.validateLogin = async function() {
-            const selectedMember = memberSelect.value;
-            const password = passwordInput.value;
-
-            if (!selectedMember || !password) {
-                loginMessage.innerText = 'Champs incomplets';
+            if(!memberSelect.value || !passwordInput.value) {
+                loginMessage.innerText = "Veuillez tout remplir";
                 return;
             }
+            loginMessage.innerText = "Vérification...";
             
-            loginMessage.innerText = 'Vérification...';
-            loginMessage.style.color = "#ccc";
-
             try {
                 const url = new URL(backendUrl);
                 url.searchParams.append('action', 'authenticate');
-                url.searchParams.append('member', selectedMember);
-                url.searchParams.append('password', password);
-                const response = await fetch(url);
-                const result = await response.json();
-
-                if (result.result === 'success') {
-                    // SUCCÈS : On débloque l'interface
-                    unlockInterface();
+                url.searchParams.append('member', memberSelect.value);
+                url.searchParams.append('password', passwordInput.value);
+                
+                const res = await fetch(url);
+                const json = await res.json();
+                
+                if(json.result === 'success') {
+                    document.querySelectorAll('.secured-nav').forEach(el => {
+                        el.style.display = 'inline-flex';
+                        el.style.animation = 'fadeHint 1s';
+                    });
+                    document.getElementById('lockBtn').style.display = 'none';
                     closeLoginModal();
                 } else {
-                    loginMessage.style.color = "#ff6b6b";
-                    loginMessage.innerText = 'Mot de passe incorrect.';
+                    loginMessage.innerText = "Mot de passe incorrect";
                 }
-            } catch (error) {
-                console.error("Erreur auth:", error);
-                loginMessage.style.color = "#ff6b6b";
-                loginMessage.innerText = "Erreur de connexion.";
+            } catch(e) {
+                loginMessage.innerText = "Erreur technique";
             }
-        }
+        };
 
-        function unlockInterface() {
-            // Affiche les boutons sécurisés
-            document.querySelectorAll('.secured-nav').forEach(btn => {
-                btn.style.display = 'flex'; // ou inline-flex selon css
-                // Animation simple d'apparition
-                btn.style.opacity = '0';
-                setTimeout(() => btn.style.opacity = '1', 50);
-            });
-
-            // Masque le bouton cadenas
-            const lockBtn = document.getElementById('lockBtn');
-            if(lockBtn) lockBtn.style.display = 'none';
-
-            // Optionnel : Charger directement RECO
-            // loadPres('reco.html', document.querySelector('.secured-nav')); 
-        }
+        // Fermer modal si clic dehors
+        loginModal.addEventListener('click', (e) => {
+            if(e.target === loginModal) closeLoginModal();
+        });
 
     </script>
-
 </body>
 </html>
