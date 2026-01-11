@@ -12,7 +12,7 @@
     <!-- PWA MANIFEST (INTEGRÉ) - Utilise les images du repo -->
     <link rel="manifest" href='data:application/json;charset=utf-8,%7B%22name%22%3A%22COM%20TAC%20v13%22%2C%22short_name%22%3A%22COMTAC%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23050505%22%2C%22theme_color%22%3A%22%23050505%22%2C%22orientation%22%3A%22portrait%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22android-icon-192x192.png%22%2C%22sizes%22%3A%22192x192%22%2C%22type%22%3A%22image%2Fpng%22%7D%2C%7B%22src%22%3A%22android-launchericon-512-512.png%22%2C%22sizes%22%3A%22512x512%22%2C%22type%22%3A%22image%2Fpng%22%7D%2C%7B%22src%22%3A%22maskable_icon_x512.png%22%2C%22sizes%22%3A%22512x512%22%2C%22type%22%3A%22image%2Fpng%22%2C%22purpose%22%3A%22any%20maskable%22%7D%5D%7D'>
     
-    <title>COM TAC v13.3</title>
+    <title>COM TAC v13.4</title>
     
     <!-- ICO & APPLE TOUCH ICON -->
     <link rel="icon" href="favicon.ico" sizes="any">
@@ -406,7 +406,7 @@
     <!-- STRUCTURE UI -->
     <header>
         <div class="brand">
-            <span class="material-symbols-outlined">satellite_alt</span> COM<span>TAC</span> v13.3
+            <span class="material-symbols-outlined">satellite_alt</span> COM<span>TAC</span> v13.4
         </div>
         <div class="nav-group">
             <div class="btn-nav" id="btn-toggle-map" onclick="App.toggleMap()">
@@ -824,7 +824,7 @@
                             navigator.mediaSession.metadata = new MediaMetadata({
                                 title: "COM TAC",
                                 artist: "Canal Sécurisé",
-                                album: "v13.3 Active",
+                                album: "v13.4 Active",
                                 artwork: [
                                     { src: 'android-launchericon-512-512.png', sizes: '512x512', type: 'image/png' },
                                     { src: 'android-icon-192x192.png', sizes: '192x192', type: 'image/png' }
@@ -860,6 +860,29 @@
                     console.error("Fatal Audio Init Error", e);
                     App.toast("Erreur Audio Critique: " + e.message, true); 
                     return false; 
+                }
+            },
+
+            // --- NOUVEAU: GÉNÉRATEUR DE SONS TACTIQUES ---
+            playTone: (type = 'in') => {
+                if (!AudioService.ctx) return;
+                const osc = AudioService.ctx.createOscillator();
+                const gain = AudioService.ctx.createGain();
+                osc.connect(gain); gain.connect(AudioService.ctx.destination);
+                
+                const now = AudioService.ctx.currentTime;
+                if (type === 'out') { // Son de sortie (descendant)
+                    osc.frequency.setValueAtTime(880, now);
+                    osc.frequency.exponentialRampToValueAtTime(440, now + 0.5);
+                    gain.gain.setValueAtTime(0.1, now);
+                    gain.gain.linearRampToValueAtTime(0, now + 0.5);
+                    osc.start(); osc.stop(now + 0.5);
+                } else { // Son d'entrée / promo (ascendant)
+                    osc.frequency.setValueAtTime(440, now);
+                    osc.frequency.exponentialRampToValueAtTime(880, now + 0.3);
+                    gain.gain.setValueAtTime(0.1, now);
+                    gain.gain.linearRampToValueAtTime(0, now + 0.3);
+                    osc.start(); osc.stop(now + 0.3);
                 }
             },
 
@@ -1311,6 +1334,27 @@
                     if (d.type === 'PING_MOVE') { if (MapService.pings[d.id]) MapService.pings[d.id].marker.setLatLng([d.lat, d.lng]); if (App.isHost) NetService.broadcast(d); }
                     if (d.type === 'PING_DELETE') { MapService.removePing(d.id); if (App.isHost) NetService.broadcast(d); }
                     if (d.type === 'SILENCE') App.setSilence(d.state);
+
+                    // --- NOUVEAU: GESTION DÉCONNEXION & PROMOTION ---
+                    if (d.type === 'BYE') {
+                        AudioService.playTone('out');
+                        if (App.peers[d.from]) {
+                            if (App.peers[d.from].marker) MapService.map?.removeLayer(App.peers[d.from].marker);
+                            if (App.peers[d.from].trail) MapService.map?.removeLayer(App.peers[d.from].trail);
+                            delete App.peers[d.from];
+                        }
+                        App.renderGrid();
+                    }
+                    if (d.type === 'PROMOTION') {
+                        App.isHost = true;
+                        App.user.role = 'HOST';
+                        document.body.classList.add('is-host');
+                        document.getElementById('btn-silence').style.display = 'block';
+                        MixerService.init(AudioService.stream);
+                        NetService.startHeartbeat();
+                        App.toast("VOUS ÊTES LE NOUVEAU COMMANDANT");
+                        AudioService.playTone('in');
+                    }
                     
                     if (d.type === 'PRIVATE_REQ') {
                         if (confirm(`Appel Privé de ${App.peers[d.from]?.data?.callsign || d.from} ?`)) {
@@ -1338,7 +1382,13 @@
                     NetService.broadcast();
                 });
                 
-                conn.on('close', () => { delete App.peers[conn.peer]; App.renderGrid(); });
+                conn.on('close', () => { 
+                    if(App.peers[conn.peer]) {
+                        if (App.peers[conn.peer].marker) MapService.map?.removeLayer(App.peers[conn.peer].marker);
+                        delete App.peers[conn.peer]; 
+                    }
+                    App.renderGrid(); 
+                });
             },
             
             broadcast: (msg) => {
@@ -1396,13 +1446,19 @@
 
             promoteNewHost: () => {
                 if (!App.isHost) return;
-                const candidates = Object.keys(App.peers);
+                // Tri par ancienneté (le plus ancien en premier)
+                const candidates = Object.values(App.peers)
+                    .filter(p => p.data && p.data.id)
+                    .sort((a,b) => (a.data.joinedAt || Infinity) - (b.data.joinedAt || Infinity));
+
                 if (candidates.length > 0) {
-                    const nextLeaderId = candidates[0]; 
-                    if(App.peers[nextLeaderId].conn) App.peers[nextLeaderId].conn.send({ type: 'PROMOTION' });
-                    candidates.forEach(cid => {
-                        if (cid !== nextLeaderId && App.peers[cid].conn) {
-                            App.peers[cid].conn.send({ type: 'REDIRECT_HOST', newHostId: nextLeaderId });
+                    const nextLeader = candidates[0]; 
+                    if(nextLeader.conn) nextLeader.conn.send({ type: 'PROMOTION' });
+                    
+                    // Notifier les autres du changement (optionnel car SYNC s'en chargera via le nouveau host)
+                    Object.values(App.peers).forEach(p => {
+                        if (p.data.id !== nextLeader.data.id && p.conn?.open) {
+                            p.conn.send({ type: 'BYE', from: App.user.id });
                         }
                     });
                 }
@@ -1513,19 +1569,19 @@
                 localStorage.setItem(CONFIG.sessionKey, JSON.stringify({ callsign: App.user.callsign, freq: freq, isHost: App.isHost })); 
             },
             
-            leaveSession: (full = false) => { 
-                if (App.isHost && full) {
-                    if (confirm("Transmettre le commandement avant de quitter ?")) {
-                        NetService.promoteNewHost();
-                        setTimeout(() => {
-                            if (NetService.peer) NetService.peer.destroy(); 
-                            if (full) localStorage.removeItem(CONFIG.sessionKey); 
-                            location.reload(); 
-                        }, 500); 
-                        return;
-                    }
-                }
+            // --- MODIFIÉ: SIGNAL DE DÉCONNEXION & SONS ---
+            leaveSession: async (full = false) => { 
+                AudioService.playTone('out');
                 
+                if (App.isHost) {
+                    NetService.promoteNewHost();
+                } else {
+                    NetService.broadcast({ type: 'BYE', from: App.user.id });
+                }
+
+                // Délai pour laisser le signal partir
+                await new Promise(r => setTimeout(r, 600));
+
                 if (NetService.peer) NetService.peer.destroy(); 
                 if (full) localStorage.removeItem(CONFIG.sessionKey); 
                 location.reload(); 
