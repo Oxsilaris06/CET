@@ -494,7 +494,11 @@
             <div class="map-btn" onclick="MapService.toggleMode()">
                 <span class="material-symbols-outlined" id="icon-map-mode">light_mode</span>
             </div>
-            <!-- Toggle Trails (Nouveau) -->
+            <!-- Toggle Satellite (Nouveau) -->
+            <div class="map-btn" id="btn-toggle-sat" onclick="MapService.toggleSatellite()">
+                <span class="material-symbols-outlined" id="icon-sat">layers</span>
+            </div>
+            <!-- Toggle Trails -->
             <div class="map-btn" id="btn-toggle-trails" onclick="MapService.toggleTrails()">
                 <span class="material-symbols-outlined" id="icon-trails">timeline</span>
             </div>
@@ -561,6 +565,7 @@
                         { urls: 'stun:stun.l.google.com:19302' },
                         { urls: 'stun:stun1.l.google.com:19302' },
                         { urls: 'stun:stun.l.google.com:443' },
+                        { urls: 'stun:stun1.l.google.com:443' },
                     ],
                 }
             }
@@ -594,6 +599,7 @@
             map: null, layer: null, geoId: null, 
             lastLat: 0, lastLng: 0, 
             mode: 'dark', // 'dark' ou 'light'
+            isSatellite: false, // État Satellite
             pings: {}, showTrails: true,
             
             init: () => {
@@ -605,14 +611,22 @@
             
             loadLayer: () => {
                 if (MapService.layer) MapService.map.removeLayer(MapService.layer);
-                const url = MapService.mode === 'dark' 
-                    ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png' 
-                    : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+                
+                let url;
+                if (MapService.isSatellite) {
+                    url = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+                } else {
+                    url = MapService.mode === 'dark' 
+                        ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png' 
+                        : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+                }
                 
                 const OfflineLayer = L.TileLayer.extend({
                     createTile: function(coords, done) {
                         const tile = document.createElement('img');
-                        const k = `${MapService.mode}_${coords.z}_${coords.x}_${coords.y}`;
+                        // Ajout du préfixe de mode dans la clé de cache
+                        const modePrefix = MapService.isSatellite ? 'sat' : MapService.mode;
+                        const k = `${modePrefix}_${coords.z}_${coords.x}_${coords.y}`;
                         const u = this.getTileUrl(coords);
                         
                         DBService.getTile(k).then(b => {
@@ -628,9 +642,18 @@
             },
             
             toggleMode: () => {
+                MapService.isSatellite = false; // Désactive satellite si on change de mode jour/nuit
+                document.getElementById('btn-toggle-sat').classList.remove('active');
                 MapService.mode = MapService.mode === 'dark' ? 'light' : 'dark';
                 document.getElementById('icon-map-mode').innerText = MapService.mode === 'dark' ? 'light_mode' : 'dark_mode';
                 MapService.loadLayer();
+            },
+
+            toggleSatellite: () => {
+                MapService.isSatellite = !MapService.isSatellite;
+                document.getElementById('btn-toggle-sat').classList.toggle('active', MapService.isSatellite);
+                MapService.loadLayer();
+                App.toast(MapService.isSatellite ? "Mode SATELLITE" : "Mode PLAN");
             },
 
             toggleTrails: () => {
@@ -1277,7 +1300,6 @@
                         if (App.isHost) NetService.broadcast(d); 
                     }
                     if (d.type === 'SYNC') { 
-                        // Fusion intelligente lors de la réception d'une liste
                         d.list.forEach(u => NetService.updatePeer(u)); 
                         
                         const meInList = d.list.find(u => u.id === App.user.id);
@@ -1329,31 +1351,25 @@
                 if (!user || user.id === App.user.id) return;
 
                 // --- LOGIQUE ROBUSTE DE FUSION DES DOUBLONS PAR TRIGRAMME ---
-                // Si on reçoit un update pour un utilisateur dont le Trigramme existe déjà sous un autre ID
                 for (const oldId in App.peers) {
                     const existingPeer = App.peers[oldId];
                     if (existingPeer.data && existingPeer.data.callsign === user.callsign && oldId !== user.id) {
                         console.log(`Fusion Doublon: ${user.callsign} (${oldId} -> ${user.id})`);
                         
-                        // Transférer les données historiques (tracés)
                         if (existingPeer.trailPts && !App.peers[user.id]?.trailPts) {
                             if (!App.peers[user.id]) App.peers[user.id] = { data: {} };
                             App.peers[user.id].trailPts = existingPeer.trailPts;
                         }
 
-                        // Nettoyer l'ancienne instance sur la carte
                         if (existingPeer.marker) MapService.map?.removeLayer(existingPeer.marker);
                         if (existingPeer.trail) MapService.map?.removeLayer(existingPeer.trail);
                         
-                        // Optionnel : Fermer l'ancienne connection si elle traîne
                         if (existingPeer.conn && existingPeer.conn.open) {
                             try { existingPeer.conn.close(); } catch(e){}
                         }
-
                         delete App.peers[oldId];
                     }
                 }
-                // --- FIN DE FUSION ---
 
                 if (!App.peers[user.id]) App.peers[user.id] = { data: {} };
                 App.peers[user.id].data = { ...App.peers[user.id].data, ...user };
@@ -1365,7 +1381,6 @@
             startHeartbeat: () => {
                 setInterval(() => {
                     if (!App.isHost) return;
-                    // Déduplication de la liste avant envoi du SYNC par l'hôte
                     const uniqueMap = new Map();
                     Object.values(App.peers).forEach(p => {
                         if (p.data && p.data.callsign) uniqueMap.set(p.data.callsign, p.data);
