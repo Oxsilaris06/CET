@@ -8,7 +8,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
     
-    <link rel="manifest" href='data:application/json;charset=utf-8,%7B%22name%22%3A%22COM%20TAC%20v13%22%2C%22short_name%22%3A%22COMTAC%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23050505%22%2C%22theme_color%22%3A%22%23050505%22%2C%22orientation%22%3A%22portrait%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22android-icon-192x192.png%22%2C%22sizes%22%3A%22192x192%22%2C%22type%22%3A%22image%2Fpng%22%7D%2C%7B%22src%22%3A%22android-launchericon-512-512.png%22%2C%22sizes%22%3A%22512x512%22%2C%22type%22%3A%22image%2Fpng%22%7D%2C%7B%22src%22%3A%22maskable_icon_x512.png%22%2C%22sizes%22%3A%22512x512%22%2C%22type%22%3A%22image%2Fpng%22%2C%22purpose%22%3A%22any%20maskable%22%7D%5D%7D'>
+    <link rel="manifest" href='data:application/json;charset=utf-8,%7B%22name%22%3A%22COM%20TAC%20v14%22%2C%22short_name%22%3A%22COMTAC%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23050505%22%2C%22theme_color%22%3A%22%23050505%22%2C%22orientation%22%3A%22portrait%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22android-icon-192x192.png%22%2C%22sizes%22%3A%22192x192%22%2C%22type%22%3A%22image%2Fpng%22%7D%2C%7B%22src%22%3A%22android-launchericon-512-512.png%22%2C%22sizes%22%3A%22512x512%22%2C%22type%22%3A%22image%2Fpng%22%7D%2C%7B%22src%22%3A%22maskable_icon_x512.png%22%2C%22sizes%22%3A%22512x512%22%2C%22type%22%3A%22image%2Fpng%22%2C%22purpose%22%3A%22any%20maskable%22%7D%5D%7D'>
     
     <title>COM TAC v1.3</title>
     
@@ -35,6 +35,7 @@
             --color-green: #22c55e;
             --color-yellow: #eab308;
             --color-purple: #a855f7; /* Couleur Privé/Busy */
+            --color-cyan: #06b6d4;   /* Couleur Messages Rapides */
             --color-text: #e4e4e7;
             --color-dim: #71717a;
             
@@ -245,9 +246,19 @@
         .op-role { font-size: 0.7rem; color: var(--color-dim); font-weight: 700; background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px; }
         .op-role.HOST { color: var(--color-yellow); border: 1px solid rgba(234, 179, 8, 0.3); }
 
-        .op-callsign { font-family: var(--font-mono); font-size: 1.2rem; font-weight: 800; margin-bottom: 5px; }
-        .op-status { font-size: 0.8rem; font-weight: 700; text-transform: uppercase; margin-top: auto; }
-        .op-bat { font-size: 0.7rem; color: var(--color-dim); margin-top: 5px; }
+        .op-callsign { font-family: var(--font-mono); font-size: 1.2rem; font-weight: 800; margin-bottom: 2px; }
+        .op-status { font-size: 0.8rem; font-weight: 700; text-transform: uppercase; }
+        
+        /* STYLE MESSAGE RAPIDE SUR CARTE */
+        .op-last-msg {
+            font-size: 0.75rem; color: var(--color-cyan); font-weight: bold;
+            margin-top: 4px; min-height: 14px;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+            animation: flash-msg 0.5s;
+        }
+        @keyframes flash-msg { 0% { opacity: 0; } 100% { opacity: 1; } }
+
+        .op-bat { font-size: 0.7rem; color: var(--color-dim); margin-top: auto; padding-top: 5px; }
         
         .btn-private {
             position: absolute; right: 10px; bottom: 10px;
@@ -290,6 +301,10 @@
         
         .chip.pip-btn { border-color: #555; color: #aaa; }
         .chip.pip-btn.active { border-color: var(--color-blue); color: var(--color-blue); background: rgba(59, 130, 246, 0.1); }
+        
+        /* Bouton Messages Rapides */
+        .chip.msg-btn { border-color: var(--color-cyan); color: var(--color-cyan); }
+        .chip.msg-btn:active { background: var(--color-cyan); color: black; }
 
         .chip.private-exit-btn { border-color: var(--color-purple); color: var(--color-purple); width: 100%; text-align: center; justify-content: center; display: none; }
         body.private-active .chip.private-exit-btn { display: flex; animation: pulse-btn 2s infinite; }
@@ -419,13 +434,30 @@
         
         /* Elements cachés pour le PIP */
         #pip-video { position: absolute; top: -9999px; left: -9999px; width: 1px; height: 1px; opacity: 0.01; pointer-events: none; }
+
+        /* Styles Modale Message Rapide */
+        .quick-msg-container {
+            background: #111; width: 85%; max-height: 80%; 
+            border-radius: 12px; overflow-y: auto; border: 1px solid #333;
+        }
+        .quick-msg-title {
+            text-align: center; padding: 15px; color: var(--color-cyan); 
+            border-bottom: 1px solid #333; margin: 0; font-size: 1rem;
+        }
+        .quick-msg-item {
+            padding: 15px; border-bottom: 1px solid #222;
+            color: white; text-align: center; font-weight: bold;
+            cursor: pointer; transition: background 0.1s;
+        }
+        .quick-msg-item:active { background: #222; }
+        .quick-msg-item:last-child { border-bottom: none; }
     </style>
 </head>
 <body>
 
     <header>
         <div class="brand">
-            <span class="material-symbols-outlined">satellite_alt</span> COM<span>TAC</span> v1.3
+            <span class="material-symbols-outlined">satellite_alt</span> COM<span>TAC</span> v1.4
         </div>
         <div class="nav-group">
             <div class="btn-nav" id="btn-toggle-map" onclick="App.toggleMap()">
@@ -454,6 +486,15 @@
         <div style="text-align: center; width: 100%; padding: 20px; display: flex; flex-direction: column; align-items: center;">
             <div id="qr-code-region"></div>
             <div id="qr-text-val" style="margin-top: 20px; font-family: var(--font-mono); color: var(--color-blue); font-size: 1.5rem; word-break: break-all;">...</div>
+        </div>
+    </div>
+
+    <!-- Modale Messages Rapides -->
+    <div id="overlay-quickmsg" class="overlay">
+        <div class="close-overlay" onclick="App.closeQuickMsg()">✕</div>
+        <div class="quick-msg-container">
+            <h3 class="quick-msg-title">MESSAGE RAPIDE</h3>
+            <div id="quick-msg-list"></div>
         </div>
     </div>
 
@@ -531,6 +572,9 @@
             <div class="chip" onclick="App.setStatus('CLEAR')" data-val="CLEAR">CLEAR</div>
             <div class="chip" onclick="App.setStatus('APPUI')" data-val="APPUI">EN APPUI</div>
             
+            <!-- BOUTON MESSAGES RAPIDES -->
+            <div class="chip msg-btn" onclick="App.openQuickMsg()">MSG</div>
+
             <div class="chip pip-btn" onclick="App.togglePiP()" id="btn-pip">BG MODE</div>
 
             <div class="chip silence-btn" id="btn-silence" onclick="App.toggleSilence()" style="display:none;">SILENCE</div>
@@ -563,10 +607,10 @@
     </div>
 
     <script>
-        // --- CONFIGURATION RÉSEAU ---
+        // --- CONSTANTES ---
         const CONFIG = {
-            sessionKey: 'comtac_v13_session',
-            trigramKey: 'comtac_v13_trigram',
+            sessionKey: 'comtac_v14_session',
+            trigramKey: 'comtac_v14_trigram',
             peerConfig: { 
                 debug: 1,
                 config: {
@@ -579,6 +623,20 @@
                 }
             }
         };
+
+        // LISTE DES MESSAGES RAPIDES
+        const QUICK_MESSAGES = [
+            "Demande de renfort",
+            "Demande de munitions",
+            "Tous sur moi",
+            "Demande cyno",
+            "Demande drone",
+            "Demande EOR",
+            "Demande BBAL",
+            "Demande Chef",
+            "Demande VL",
+            "RAS / Effacer"
+        ];
 
         // --- MODULE BASE DE DONNÉES (Cache Carte) ---
         const DBService = {
@@ -833,7 +891,7 @@
                             navigator.mediaSession.metadata = new MediaMetadata({
                                 title: "COM TAC",
                                 artist: "Canal Sécurisé",
-                                album: "v13.3 Active",
+                                album: "v14 Active",
                                 artwork: [
                                     { src: 'android-launchericon-512-512.png', sizes: '512x512', type: 'image/png' },
                                     { src: 'android-icon-192x192.png', sizes: '192x192', type: 'image/png' }
@@ -1527,7 +1585,7 @@
 
         // --- CONTRÔLEUR PRINCIPAL ---
         const App = {
-            user: { id: null, callsign: '', role: 'OPR', status: 'CLEAR', lat: 0, lng: 0, head: 0, bat: null, isTx: false, joinedAt: null }, 
+            user: { id: null, callsign: '', role: 'OPR', status: 'CLEAR', lat: 0, lng: 0, head: 0, bat: null, isTx: false, joinedAt: null, lastMsg: '' }, 
             peers: {}, isHost: false, pingMode: false, silenceActive: false,
             privatePeerId: null, privateCall: null, hostAudioElement: null,
             isTryingToReclaimHost: false, 
@@ -1655,6 +1713,33 @@
                 NetService.broadcast(); App.renderGrid(); 
             },
 
+            // --- FONCTIONS MESSAGES RAPIDES ---
+            openQuickMsg: () => {
+                const list = document.getElementById('quick-msg-list');
+                list.innerHTML = '';
+                QUICK_MESSAGES.forEach(msg => {
+                    const div = document.createElement('div');
+                    div.className = 'quick-msg-item';
+                    div.innerText = msg;
+                    div.onclick = () => App.sendQuickMsg(msg);
+                    list.appendChild(div);
+                });
+                document.getElementById('overlay-quickmsg').style.display = 'flex';
+            },
+
+            closeQuickMsg: () => {
+                document.getElementById('overlay-quickmsg').style.display = 'none';
+            },
+
+            sendQuickMsg: (msg) => {
+                const finalMsg = msg === "RAS / Effacer" ? "" : msg;
+                App.user.lastMsg = finalMsg;
+                NetService.broadcast();
+                App.renderGrid();
+                App.closeQuickMsg();
+                App.toast(finalMsg ? "Message Envoyé" : "Message Effacé");
+            },
+
             togglePiP: async () => {
                 const vid = document.getElementById('pip-video');
                 if (document.pictureInPictureElement) {
@@ -1779,11 +1864,14 @@
                     } else if (u.id === App.privatePeerId) {
                         btnPrivate = `<div class="btn-private" style="color:var(--color-purple)"><span class="material-symbols-outlined" style="font-size:16px;">lock_open</span></div>`;
                     }
+                    
+                    const msgDisplay = u.lastMsg ? `<div class="op-last-msg">${u.lastMsg}</div>` : '';
 
                     div.innerHTML = `
                         <div class="op-header"><span class="op-role ${u.role === 'HOST' ? 'HOST' : ''}">${u.role}</span>${u.isTx ? '<span class="material-symbols-outlined" style="color:var(--color-green); font-size:1rem;">graphic_eq</span>' : ''}</div>
                         <div class="op-callsign">${u.callsign}</div>
                         <div class="op-status" style="color:${col}">${u.status}</div>
+                        ${msgDisplay}
                         <div class="op-bat">${bat}</div>
                         <div class="viz-bar"><div class="viz-fill" style="width:${u.isTx ? '100%' : '0%'}"></div></div>
                         ${btnPrivate}
