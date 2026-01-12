@@ -8,9 +8,9 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
     
-    <link rel="manifest" href='data:application/json;charset=utf-8,%7B%22name%22%3A%22COM%20TAC%20v16%22%2C%22short_name%22%3A%22COMTAC%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23050505%22%2C%22theme_color%22%3A%22%23050505%22%2C%22orientation%22%3A%22portrait%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22android-icon-192x192.png%22%2C%22sizes%22%3A%22192x192%22%2C%22type%22%3A%22image%2Fpng%22%7D%2C%7B%22src%22%3A%22android-launchericon-512-512.png%22%2C%22sizes%22%3A%22512x512%22%2C%22type%22%3A%22image%2Fpng%22%7D%2C%7B%22src%22%3A%22maskable_icon_x512.png%22%2C%22sizes%22%3A%22512x512%22%2C%22type%22%3A%22image%2Fpng%22%2C%22purpose%22%3A%22any%20maskable%22%7D%5D%7D'>
+    <link rel="manifest" href='data:application/json;charset=utf-8,%7B%22name%22%3A%22COM%20TAC%20v17%22%2C%22short_name%22%3A%22COMTAC%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23050505%22%2C%22theme_color%22%3A%22%23050505%22%2C%22orientation%22%3A%22portrait%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22android-icon-192x192.png%22%2C%22sizes%22%3A%22192x192%22%2C%22type%22%3A%22image%2Fpng%22%7D%2C%7B%22src%22%3A%22android-launchericon-512-512.png%22%2C%22sizes%22%3A%22512x512%22%2C%22type%22%3A%22image%2Fpng%22%7D%2C%7B%22src%22%3A%22maskable_icon_x512.png%22%2C%22sizes%22%3A%22512x512%22%2C%22type%22%3A%22image%2Fpng%22%2C%22purpose%22%3A%22any%20maskable%22%7D%5D%7D'>
     
-    <title>COM TAC v1.6</title>
+    <title>COM TAC v1.7</title>
     
     <link rel="icon" href="favicon.ico" sizes="any">
     <link rel="apple-touch-icon" href="apple-touch-icon-180x180.png">
@@ -311,6 +311,10 @@
         body.private-active .chip.private-exit-btn { display: flex; animation: pulse-btn 2s infinite; }
         body.private-active .chip:not(.private-exit-btn) { display: none; } /* Cache les autres status en privé */
 
+        /* Bouton Déconnexion Mobile */
+        .chip.danger-btn { border-color: #ef4444; color: #ef4444; }
+        .chip.danger-btn:active { background: #ef4444; color: white; }
+
         @keyframes pulse-btn { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
 
         /* --- CONTROLEUR VOX SLIDER --- */
@@ -458,7 +462,7 @@
 
     <header>
         <div class="brand">
-            <span class="material-symbols-outlined">satellite_alt</span> COM<span>TAC</span> v1.6
+            <span class="material-symbols-outlined">satellite_alt</span> COM<span>TAC</span> v1.7
         </div>
         <div class="nav-group">
             <a href="https://github.com/Oxsilaris06/Comtac/releases/download/latest/ComTac.apk" class="btn-nav">
@@ -582,6 +586,9 @@
             <div class="chip pip-btn" onclick="App.togglePiP()" id="btn-pip">BG MODE</div>
 
             <div class="chip silence-btn" id="btn-silence" onclick="App.toggleSilence()" style="display:none;">SILENCE</div>
+            
+            <!-- BOUTON DECONNEXION MOBILE -->
+            <div class="chip danger-btn" onclick="App.leaveSession(true)">DECO</div>
         </div>
 
         <div id="vox-controls">
@@ -613,8 +620,8 @@
     <script>
         // --- CONSTANTES ---
         const CONFIG = {
-            sessionKey: 'comtac_v16_session',
-            trigramKey: 'comtac_v16_trigram',
+            sessionKey: 'comtac_v17_session',
+            trigramKey: 'comtac_v17_trigram',
             peerConfig: { 
                 debug: 1,
                 config: {
@@ -895,7 +902,7 @@
                             navigator.mediaSession.metadata = new MediaMetadata({
                                 title: "COM TAC",
                                 artist: "Canal Sécurisé",
-                                album: "v16 Active",
+                                album: "v17 Active",
                                 artwork: [
                                     { src: 'android-launchericon-512-512.png', sizes: '512x512', type: 'image/png' },
                                     { src: 'android-icon-192x192.png', sizes: '192x192', type: 'image/png' }
@@ -1324,6 +1331,8 @@
                 });
                 
                 peer.on('call', (call) => { 
+                    if (call.peer === App.user.id) return;
+
                     if (App.privatePeerId && call.peer === App.privatePeerId) {
                          call.answer(AudioService.privateStream);
                          call.on('stream', s => {
@@ -1414,6 +1423,7 @@
                 
                 conn.on('data', (d) => {
                     if (!d.from) d.from = conn.peer;
+                    if (d.from === App.user.id) return;
 
                     // Si on reçoit un signal de promotion (on devient le nouvel hôte)
                     if (d.type === 'PROMOTION') {
@@ -1671,15 +1681,18 @@
             },
             
             leaveSession: (full = false) => { 
-                if (App.isHost && full) {
-                    if (confirm("Transmettre le commandement avant de quitter ?")) {
+                if (full) {
+                    if (App.isHost) {
+                        if (!confirm("Transmettre le commandement avant de quitter ?")) return;
                         NetService.promoteNewHost();
                         setTimeout(() => {
                             if (NetService.peer) NetService.peer.destroy(); 
-                            if (full) localStorage.removeItem(CONFIG.sessionKey); 
+                            localStorage.removeItem(CONFIG.sessionKey); 
                             location.reload(); 
                         }, 500); 
                         return;
+                    } else {
+                        if (!confirm("Quitter le canal définitivement ?")) return;
                     }
                 }
                 
