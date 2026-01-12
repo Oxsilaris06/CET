@@ -8,9 +8,9 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
     
-    <link rel="manifest" href='data:application/json;charset=utf-8,%7B%22name%22%3A%22COM%20TAC%20v17%22%2C%22short_name%22%3A%22COMTAC%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23050505%22%2C%22theme_color%22%3A%22%23050505%22%2C%22orientation%22%3A%22portrait%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22android-icon-192x192.png%22%2C%22sizes%22%3A%22192x192%22%2C%22type%22%3A%22image%2Fpng%22%7D%2C%7B%22src%22%3A%22android-launchericon-512-512.png%22%2C%22sizes%22%3A%22512x512%22%2C%22type%22%3A%22image%2Fpng%22%7D%2C%7B%22src%22%3A%22maskable_icon_x512.png%22%2C%22sizes%22%3A%22512x512%22%2C%22type%22%3A%22image%2Fpng%22%2C%22purpose%22%3A%22any%20maskable%22%7D%5D%7D'>
+    <link rel="manifest" href='data:application/json;charset=utf-8,%7B%22name%22%3A%22COM%20TAC%20v18%22%2C%22short_name%22%3A%22COMTAC%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23050505%22%2C%22theme_color%22%3A%22%23050505%22%2C%22orientation%22%3A%22portrait%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22android-icon-192x192.png%22%2C%22sizes%22%3A%22192x192%22%2C%22type%22%3A%22image%2Fpng%22%7D%2C%7B%22src%22%3A%22android-launchericon-512-512.png%22%2C%22sizes%22%3A%22512x512%22%2C%22type%22%3A%22image%2Fpng%22%7D%2C%7B%22src%22%3A%22maskable_icon_x512.png%22%2C%22sizes%22%3A%22512x512%22%2C%22type%22%3A%22image%2Fpng%22%2C%22purpose%22%3A%22any%20maskable%22%7D%5D%7D'>
     
-    <title>COM TAC v1.7</title>
+    <title>COM TAC v1.8</title>
     
     <link rel="icon" href="favicon.ico" sizes="any">
     <link rel="apple-touch-icon" href="apple-touch-icon-180x180.png">
@@ -462,7 +462,7 @@
 
     <header>
         <div class="brand">
-            <span class="material-symbols-outlined">satellite_alt</span> COM<span>TAC</span> v1.7
+            <span class="material-symbols-outlined">satellite_alt</span> COM<span>TAC</span> v1.8
         </div>
         <div class="nav-group">
             <a href="https://github.com/Oxsilaris06/Comtac/releases/download/latest/ComTac.apk" class="btn-nav">
@@ -620,8 +620,8 @@
     <script>
         // --- CONSTANTES ---
         const CONFIG = {
-            sessionKey: 'comtac_v17_session',
-            trigramKey: 'comtac_v17_trigram',
+            sessionKey: 'comtac_v18_session',
+            trigramKey: 'comtac_v18_trigram',
             peerConfig: { 
                 debug: 1,
                 config: {
@@ -902,7 +902,7 @@
                             navigator.mediaSession.metadata = new MediaMetadata({
                                 title: "COM TAC",
                                 artist: "Canal Sécurisé",
-                                album: "v17 Active",
+                                album: "v18 Active",
                                 artwork: [
                                     { src: 'android-launchericon-512-512.png', sizes: '512x512', type: 'image/png' },
                                     { src: 'android-icon-192x192.png', sizes: '192x192', type: 'image/png' }
@@ -1213,47 +1213,68 @@
             }
         };
 
-        // --- MODULE MIXEUR AUDIO HÔTE (Pour Relais - ISOLÉ) ---
+        // --- MODULE MIXEUR AUDIO HÔTE (Mix-Minus) ---
+        // Permet d'éviter que le client s'entende lui-même
         const MixerService = {
-            ctx: null, destination: null, localSource: null, analyser: null, compressor: null,
+            ctx: null, 
+            localSource: null, 
+            clients: {}, // Stocke les sources et destinations par PeerID
             
             init: (localStream) => {
-                if (MixerService.destination) return; 
-                
                 try {
-                    MixerService.ctx = AudioService.ctx; 
-                    MixerService.destination = MixerService.ctx.createMediaStreamDestination();
-                    
-                    MixerService.compressor = MixerService.ctx.createDynamicsCompressor();
-                    MixerService.compressor.threshold.value = -10; 
-                    MixerService.compressor.ratio.value = 12;
-                    
-                    MixerService.analyser = MixerService.ctx.createAnalyser(); 
-                    
-                    MixerService.compressor.connect(MixerService.analyser);
-                    MixerService.analyser.connect(MixerService.destination);
-    
-                    if (localStream && localStream.getAudioTracks().length > 0) {
+                    MixerService.ctx = AudioService.ctx;
+                    // On utilise le stream traité (AudioService.stream) comme source locale si disponible
+                    // Note: AudioService.stream est la sortie du Gate.
+                    if (localStream) {
                         MixerService.localSource = MixerService.ctx.createMediaStreamSource(localStream);
-                        MixerService.localSource.connect(MixerService.compressor);
                     }
-                    console.log("Mixer Initialized Successfully");
-                } catch(e) {
-                    console.error("Mixer Init Error:", e);
-                    App.toast("Err Audio Mixer", true);
-                }
+                    console.log("Mixer (Mix-Minus) Initialized");
+                } catch(e) { console.error("Mixer Init:", e); }
             },
             
-            connectRemoteStream: (stream) => {
-                if (!MixerService.ctx || !MixerService.compressor) return;
-                try {
-                    const remoteSource = MixerService.ctx.createMediaStreamSource(stream);
-                    remoteSource.connect(MixerService.compressor);
-                    return remoteSource;
-                } catch(e) { console.error("Err Connect Remote", e); }
+            // Crée un mix spécifique pour un client (Lui envoie tout SAUF sa propre voix)
+            getClientMix: (targetPeerId) => {
+                if (!MixerService.ctx) return AudioService.stream; // Fallback
+                
+                const dest = MixerService.ctx.createMediaStreamDestination();
+                
+                // 1. Ajouter le micro du Host (si actif)
+                if (MixerService.localSource) MixerService.localSource.connect(dest);
+                
+                // 2. Ajouter tous les AUTRES clients
+                Object.keys(MixerService.clients).forEach(pid => {
+                    if (pid !== targetPeerId && MixerService.clients[pid].source) {
+                        MixerService.clients[pid].source.connect(dest);
+                    }
+                });
+                
+                // Enregistrer ce mix pour ce client pour le mettre à jour plus tard
+                if (!MixerService.clients[targetPeerId]) MixerService.clients[targetPeerId] = {};
+                MixerService.clients[targetPeerId].dest = dest;
+                
+                return dest.stream;
             },
             
-            getStream: () => MixerService.destination ? MixerService.destination.stream : AudioService.stream
+            // Ajoute la voix d'un nouveau client au système
+            addSource: (peerId, stream) => {
+                if (!MixerService.ctx) return;
+                
+                const source = MixerService.ctx.createMediaStreamSource(stream);
+                
+                // Connecter cette nouvelle source aux mix des AUTRES clients (sauf lui-même)
+                Object.keys(MixerService.clients).forEach(pid => {
+                    if (pid !== peerId && MixerService.clients[pid].dest) {
+                        source.connect(MixerService.clients[pid].dest);
+                    }
+                });
+                
+                if (!MixerService.clients[peerId]) MixerService.clients[peerId] = {};
+                MixerService.clients[peerId].source = source;
+            },
+            
+            removeClient: (peerId) => {
+                if (MixerService.clients[peerId]) delete MixerService.clients[peerId];
+            }
         };
 
         // --- MODULE RÉSEAU (PeerJS) ---
@@ -1344,11 +1365,14 @@
                     }
 
                     if (App.isHost) {
-                        call.answer(MixerService.getStream()); 
+                        // Utilise le Mix Spécifique (Mix-Minus) au lieu du mix global
+                        call.answer(MixerService.getClientMix(call.peer)); 
+                        
                         call.on('stream', s => { 
-                            AudioService.playRemote(s);
-                            MixerService.connectRemoteStream(s);
+                            AudioService.playRemote(s); // L'Hôte entend le client
+                            MixerService.addSource(call.peer, s); // Ajoute le client au mix des autres
                         });
+                        
                         if (App.peers[call.peer]) App.peers[call.peer].call = call;
                     } else {
                         call.answer(null); 
@@ -1498,6 +1522,7 @@
                     if (App.peers[conn.peer]) {
                         AudioService.notify('DISCONNECT'); // Joue le son de déconnexion
                         delete App.peers[conn.peer]; // Désactive la tuile
+                        if (App.isHost) MixerService.removeClient(conn.peer); // Nettoyage Mixer
                         App.renderGrid(); 
                     }
                 });
