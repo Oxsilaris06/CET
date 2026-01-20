@@ -2237,6 +2237,25 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
             }, { offset: Number.NEGATIVE_INFINITY }).element;
         }
 
+        // Helper pour le layout en grille (photos) qui gère vertical et horizontal
+        function getDragAfterElementGrid(container, x, y) {
+             const draggableElements = [...container.querySelectorAll('.draggable:not(.dragging)')];
+             
+             // On cherche le premier élément (dans l'ordre du DOM) pour lequel le curseur est "avant"
+             return draggableElements.find(child => {
+                const box = child.getBoundingClientRect();
+                // Si le curseur est au-dessus de la moitié inférieure de l'élément
+                if (y < box.bottom) {
+                    // Si on est clairement au-dessus (ligne précédente) OU
+                    // Si on est sur la même ligne (y > box.top) ET à gauche du centre
+                    if (y < box.top || x < box.left + box.width / 2) {
+                        return true;
+                    }
+                }
+                return false;
+            });
+        }
+
         function handleDragEnter(e) {
             e.preventDefault();
             const targetContainer = e.currentTarget;
@@ -2252,14 +2271,26 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
         function handleDragOver(e) {
             e.preventDefault(); 
             const targetContainer = e.currentTarget;
-            if (draggedItem && draggedItem.classList.contains('patracdvr-member-btn')) {
+            // FIX: Utilisation de .dragging car dataTransfer.getData n'est pas accessible ici
+            const currentDragged = document.querySelector('.dragging');
+
+            if (!currentDragged) return;
+
+            if (currentDragged.classList.contains('patracdvr-member-btn')) {
                 if(targetContainer.id !== 'trashCan') {
                     const afterElement = getDragAfterElement(targetContainer, e.clientY);
                     if (afterElement == null) { 
-                        targetContainer.appendChild(draggedItem); 
+                        targetContainer.appendChild(currentDragged); 
                     } else { 
-                        targetContainer.insertBefore(draggedItem, afterElement); 
+                        targetContainer.insertBefore(currentDragged, afterElement); 
                     }
+                }
+            } else if (currentDragged.classList.contains('image-preview-item') && targetContainer.classList.contains('image-preview-container')) {
+                 const afterElement = getDragAfterElementGrid(targetContainer, e.clientX, e.clientY);
+                if (afterElement == null) {
+                    targetContainer.appendChild(currentDragged);
+                } else {
+                    targetContainer.insertBefore(currentDragged, afterElement);
                 }
             }
         }
@@ -2309,6 +2340,9 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
                 
                 saveFormData();
                 draggedItem = null; 
+            } else if (draggedItem && draggedItem.classList.contains('image-preview-item')) {
+                saveFormData();
+                draggedItem = null;
             }
         }
 
