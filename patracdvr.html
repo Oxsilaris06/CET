@@ -235,6 +235,27 @@
         }
         input[type="text"]:focus { border-color: var(--accent-blue); }
 
+        /* --- DIALOG / MODAL --- */
+        dialog {
+            background: var(--bg-glass-heavy); color: var(--text-primary);
+            border: 1px solid var(--border-glass); border-radius: var(--radius-md);
+            padding: 20px; backdrop-filter: blur(20px);
+            box-shadow: 0 20px 50px rgba(0,0,0,0.8); margin: auto;
+            max-width: 500px; width: 90%;
+        }
+        dialog::backdrop { background: rgba(0,0,0,0.8); backdrop-filter: blur(5px); }
+        dialog h3 { color: var(--accent-blue); border-bottom: 1px solid var(--border-glass); padding-bottom: 10px; margin-bottom: 15px; text-transform: uppercase; font-family: var(--font-title); }
+        .modal-form { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .modal-form .full-width { grid-column: 1 / -1; }
+        .modal-form label { font-size: 0.85em; color: var(--text-secondary); margin-bottom: 4px; display: block; text-transform: uppercase; }
+        .modal-form select, .modal-form input { 
+            width: 100%; background: var(--bg-input); 
+            border: 1px solid var(--border-glass); border-radius: 4px; 
+            padding: 10px; color: white; font-family: var(--font-ui);
+        }
+        .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; border-top: 1px solid var(--border-glass); padding-top: 15px; }
+
+
         /* Configuration Buttons */
         #vehicle_creation_buttons { 
             display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; 
@@ -253,6 +274,7 @@
             h1 { font-size: 1.8em; }
             .patracdvr-vehicle-row { min-width: 100%; }
             .quick-edit-content { grid-template-columns: 1fr; }
+            .modal-form { grid-template-columns: 1fr; }
         }
     </style>
 </head>
@@ -268,7 +290,7 @@
             </button>
             <div style="display:flex; gap:10px;">
                 <button type="button" id="importDefaultConfigBtn" class="add-btn" title="Config par défaut">
-                    <span class="material-symbols-outlined">settings_suggest</span> Défaut
+                    <span class="material-symbols-outlined">settings_suggest</span> Chargement (Fichier)
                 </button>
                 <button type="button" id="exportSessionBtn" class="add-btn" title="Sauvegarder Session">
                     <span class="material-symbols-outlined">save</span>
@@ -319,6 +341,25 @@
         </footer>
     </div>
 
+    <!-- MODALE CRÉATION MEMBRE -->
+    <dialog id="newMemberModal">
+        <h3>Nouveau Membre</h3>
+        <form id="newMemberForm" method="dialog" class="modal-form">
+            <div class="full-width">
+                <label for="new_trigramme">Trigramme</label>
+                <input type="text" id="new_trigramme" placeholder="Ex: T1, CDG..." required autofocus>
+            </div>
+            
+            <!-- Les selects seront générés dynamiquement par JS -->
+            <div id="modal_dynamic_fields" style="display: contents;"></div>
+            
+        </form>
+        <div class="modal-actions">
+            <button type="button" class="remove-btn" id="cancelNewMemberBtn" style="color: var(--text-secondary); font-size: 1em;">Annuler</button>
+            <button type="button" class="add-btn" id="confirmNewMemberBtn" style="background-color: var(--success-green); border-color: var(--success-green);">Ajouter</button>
+        </div>
+    </dialog>
+
     <!-- LIBRAIRIE PDF -->
     <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
 
@@ -338,9 +379,11 @@
         };
 
         const availableVehicles = ['Sharan', 'Kodiaq', 'Kodiaq Bana', '5008', 'Scénic', 'Expert', 'Traffic'];
-        const quickEditMapping = {
-            'Cellule': { key: 'cellules', attribute: 'cellule' },
+        
+        // MAPPING pour l'interface (Modal & QuickEdit)
+        const attributeMapping = {
             'Fonction': { key: 'fonctions', attribute: 'fonction' },
+            'Cellule': { key: 'cellules', attribute: 'cellule' },
             'Arme P.': { key: 'principales', attribute: 'principales' },
             'Arme S.': { key: 'secondaires', attribute: 'secondaires' },
             'A.F.I.': { key: 'afis', attribute: 'afis' },
@@ -350,6 +393,7 @@
             'Tenue': { key: 'tenues', attribute: 'tenue' },
             'GPB': { key: 'gpbs', attribute: 'gpb' }
         };
+
         const multiSelectAttributes = ['fonction', 'equipement', 'equipement2', 'afis'];
 
         // --- STATE ---
@@ -358,6 +402,7 @@
         const patracdvrContainer = document.getElementById('patracdvr_container');
         const unassignedContainer = document.getElementById('unassigned_members_container');
         const quickEditPanel = document.getElementById('quickEditPanel');
+        const newMemberModal = document.getElementById('newMemberModal');
 
         // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', () => {
@@ -367,7 +412,12 @@
             
             // Event Listeners globaux
             document.getElementById('addManualVehicleBtn').addEventListener('click', addManualVehicle);
-            document.getElementById('addManualMemberBtn').addEventListener('click', addManualMember);
+            
+            // MODIFICATION 2: Bouton "Créer membre" ouvre la modale
+            document.getElementById('addManualMemberBtn').addEventListener('click', openNewMemberModal);
+            document.getElementById('cancelNewMemberBtn').addEventListener('click', () => newMemberModal.close());
+            document.getElementById('confirmNewMemberBtn').addEventListener('click', addNewMemberFromModal);
+
             document.getElementById('resetBtn').addEventListener('click', resetAll);
             document.getElementById('importDefaultConfigBtn').addEventListener('click', loadDefaultConfig);
             document.getElementById('exportSessionBtn').addEventListener('click', exportData);
@@ -385,9 +435,6 @@
             document.addEventListener('dragstart', handleDragStart);
             document.addEventListener('dragend', handleDragEnd);
             
-            const dropZones = document.querySelectorAll('#patracdvr_container, #unassigned_members_container, #trashCan');
-            // Note: Les conteneurs dynamiques (membres à l'intérieur des véhicules) doivent aussi être des drop zones.
-            // On gère cela via délégation ou ajout dynamique, ici délégation via l'event global dragover
             document.addEventListener('dragover', handleDragOver);
             document.addEventListener('drop', handleDrop);
             document.addEventListener('dragenter', handleDragEnter);
@@ -460,15 +507,6 @@
             members.forEach(m => addPatracdvrMember(membersContainer, m));
         }
 
-        function addManualMember() {
-            const trig = prompt("Trigramme (ex: T1) :");
-            if(trig) {
-                const finalTrig = trig.toUpperCase();
-                addPatracdvrMember(unassignedContainer, { trigramme: finalTrig });
-                saveData();
-            }
-        }
-
         function addPatracdvrMember(container, data = {}) {
             const btn = document.createElement('button');
             btn.type = 'button';
@@ -507,13 +545,71 @@
             }
         }
 
+        // --- MODAL LOGIC (MODIFICATION 2) ---
+
+        function openNewMemberModal() {
+            // Reset input
+            document.getElementById('new_trigramme').value = '';
+            
+            // Génération dynamique des champs select
+            const container = document.getElementById('modal_dynamic_fields');
+            container.innerHTML = '';
+            
+            for (const [label, conf] of Object.entries(attributeMapping)) {
+                const wrapper = document.createElement('div');
+                const selectId = `new_mem_${conf.attribute}`;
+                
+                let optionsHtml = '';
+                const options = memberConfig[conf.key] || [];
+                options.forEach(opt => {
+                    // Par défaut, sélectionner 'Sans' ou le premier élément
+                    const isSelected = opt === 'Sans' ? 'selected' : '';
+                    optionsHtml += `<option value="${opt}" ${isSelected}>${opt}</option>`;
+                });
+
+                wrapper.innerHTML = `
+                    <label for="${selectId}">${label}</label>
+                    <select id="${selectId}">${optionsHtml}</select>
+                `;
+                container.appendChild(wrapper);
+            }
+
+            newMemberModal.showModal();
+        }
+
+        function addNewMemberFromModal() {
+            const trigramme = document.getElementById('new_trigramme').value.trim().toUpperCase();
+            if (!trigramme) {
+                alert("Le trigramme est obligatoire.");
+                return;
+            }
+
+            const newData = { trigramme: trigramme };
+            
+            // Récupérer les valeurs des selects
+            for (const [label, conf] of Object.entries(attributeMapping)) {
+                const selectId = `new_mem_${conf.attribute}`;
+                const val = document.getElementById(selectId).value;
+                newData[conf.attribute] = val;
+            }
+
+            // Logique d'auto-assignation (optionnelle, pour cohérence)
+            if (newData.cellule === 'Sans') newData.fonction = 'Sans';
+            if (newData.fonction !== 'Sans' && newData.cellule === 'Sans') newData.cellule = 'India 1';
+
+            addPatracdvrMember(unassignedContainer, newData);
+            saveData();
+            newMemberModal.close();
+        }
+
+
         // --- QUICK EDIT PANEL ---
 
         function setupQuickEditPanelUI() {
             const content = quickEditPanel.querySelector('.quick-edit-content');
             content.innerHTML = '';
 
-            for (const [label, conf] of Object.entries(quickEditMapping)) {
+            for (const [label, conf] of Object.entries(attributeMapping)) {
                 const catDiv = document.createElement('div');
                 catDiv.className = 'quick-edit-category';
                 catDiv.innerHTML = `<h5>${label}</h5>`;
@@ -632,7 +728,6 @@
             document.querySelectorAll('#patracdvr_container, #unassigned_members_container, .patracdvr-members-container').forEach(el => el.style.borderStyle = 'dashed');
         }
 
-        // Ajout de la fonction manquante handleDragEnter
         function handleDragEnter(e) {
             e.preventDefault();
             const target = e.target.closest('#trashCan, .patracdvr-members-container, #unassigned_members_container');
@@ -671,11 +766,7 @@
         function handleDragLeave(e) {
             const target = e.target.closest('#trashCan, .patracdvr-members-container, #unassigned_members_container');
             if (target) {
-                // Fix: prevent flickering when dragging over child elements
-                if (e.relatedTarget && target.contains(e.relatedTarget)) {
-                    return;
-                }
-
+                if (e.relatedTarget && target.contains(e.relatedTarget)) { return; }
                 target.classList.remove('drag-over');
                 target.style.borderStyle = 'dashed';
                 target.style.borderColor = 'var(--border-glass)';
@@ -700,12 +791,10 @@
 
             const targetContainer = e.target.closest('.patracdvr-members-container, #unassigned_members_container');
             if (targetContainer && draggedItem) {
-                // Logic on drop
                 if (targetContainer.id === 'unassigned_members_container') {
                     draggedItem.dataset.cellule = 'Sans';
                     draggedItem.dataset.fonction = 'Sans';
                 } else {
-                    // If moving to a vehicle and has no cell, default to India 1
                     if (draggedItem.dataset.cellule === 'Sans') draggedItem.dataset.cellule = 'India 1';
                 }
                 updateMemberButtonVisuals(draggedItem);
@@ -786,24 +875,35 @@
             a.click();
         }
 
-        // Simule un chargement de config défaut (ici juste exemple pour la structure)
-        function loadDefaultConfig() {
-            if(confirm("Charger configuration par défaut ? (Effacera les données actuelles)")) {
+        // MODIFICATION 1: Chargement de la config depuis un fichier racine
+        async function loadDefaultConfig() {
+            if(!confirm("Charger la configuration depuis members_config.json ? (Ceci écrasera les données actuelles)")) return;
+            
+            try {
+                const response = await fetch('members_config.json');
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                const config = await response.json();
+
+                // 1. Update Config Options
+                if (config.options) {
+                    Object.assign(memberConfig, config.options);
+                    setupQuickEditPanelUI(); // Refresh panels
+                }
+
+                // 2. Clear & Load Members
                 patracdvrContainer.innerHTML = '';
                 unassignedContainer.innerHTML = '';
                 
-                // Exemple simple
-                addPatracdvrRow("Kodiaq");
-                const m1 = addPatracdvrMember(null, { trigramme: "CDG", fonction: "Chef inter", cellule: "India 1" });
-                const m2 = addPatracdvrMember(null, { trigramme: "A", fonction: "Inter", cellule: "India 1" });
-                const m3 = addPatracdvrMember(null, { trigramme: "B", fonction: "Effrac", cellule: "India 1" });
+                if (config.members && Array.isArray(config.members)) {
+                     config.members.forEach(m => addPatracdvrMember(unassignedContainer, m));
+                }
                 
-                const kodiaqContainer = document.querySelector('[data-vehicle-name="Kodiaq"] .patracdvr-members-container');
-                kodiaqContainer.appendChild(m1);
-                kodiaqContainer.appendChild(m2);
-                kodiaqContainer.appendChild(m3);
-
                 saveData();
+                alert("Configuration chargée avec succès.");
+
+            } catch (e) {
+                console.error("Erreur chargement config:", e);
+                alert("Impossible de charger members_config.json. Vérifiez qu'il est à la racine. Erreur: " + e.message);
             }
         }
 
