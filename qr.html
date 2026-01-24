@@ -9,10 +9,10 @@
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Oswald:wght@300;400;500&family=Saira+Stencil+One&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
     
-    <!-- NOUVELLE LIBRAIRIE QR (Plus robuste pour les gros JSON) -->
+    <!-- LIBRAIRIE QR Code Generator (qrcode-generator) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
     
-    <!-- QR Code Scanner Lib -->
+    <!-- LIBRAIRIE QR Scanner (html5-qrcode) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 
     <style>
@@ -270,10 +270,9 @@
             box-shadow: 0 0 20px rgba(0,0,0,0.5);
             max-width: 100%;
             overflow: hidden;
-            min-height: 250px; /* Evite le saut d'interface */
+            min-height: 250px; 
         }
 
-        /* SVG Styling for the new library */
         #qrcode-container svg {
             width: 100%;
             height: auto;
@@ -384,7 +383,6 @@
                 </div>
 
                 <label>DONNÉES VÉHICULE (JSON):</label>
-                <!-- JSON par défaut : 5008 (SÉRIGRAPHIÉ) pour test -->
                 <textarea id="jsonInput" placeholder="Collez le JSON ici...">{
   "vehicule": "5008 (SÉRIGRAPHIÉ)",
   "inventaire": {
@@ -467,7 +465,7 @@
     </div>
 
     <div class="system-footer">
-        SYS.CORE.VER.3.2 // SECURE // TACTICAL GLASS UI
+        SYS.CORE.VER.3.2.1 // SECURE // TACTICAL GLASS UI
     </div>
 
     <script>
@@ -484,20 +482,20 @@
             }
         }
 
-        // --- GENERATOR LOGIC (NOUVELLE LIBRAIRIE) ---
+        // --- GENERATOR LOGIC ---
         function generateQR() {
             const rawInput = document.getElementById('jsonInput').value;
             const container = document.getElementById('qrcode-container');
             const statusLine = document.getElementById('genStatus');
             
-            container.innerHTML = ""; // Clean previous
+            container.innerHTML = ""; 
 
             if (!rawInput.trim()) {
                 alert("Veuillez entrer des données JSON.");
                 return;
             }
 
-            // 1. Minification stricte : suppression espaces/newlines
+            // 1. Minification stricte
             let optimizedData = rawInput;
             try {
                 const jsonObject = JSON.parse(rawInput);
@@ -507,25 +505,25 @@
                 optimizedData = rawInput.replace(/\s+/g, ' ').trim();
             }
 
-            console.log(`Payload size: ${optimizedData.length} chars (approx ${optimizedData.length} bytes in ASCII, more in UTF8)`);
+            console.log(`Payload size: ${optimizedData.length} chars`);
 
-            // 2. Génération avec qrcode-generator
+            // 2. Génération
             try {
-                // TypeNumber 0 = Auto-detect (va essayer de fit jusqu'à version 40)
-                // ErrorCorrection 'L' = Low (7%) pour maximiser l'espace données
+                // Type 0 = auto-detect
                 var qr = qrcode(0, 'L'); 
                 qr.addData(optimizedData);
                 qr.make();
                 
-                // Rendu SVG (meilleure qualité)
                 container.innerHTML = qr.createSvgTag({ scalable: true });
                 
-                statusLine.innerHTML = `<span style="color:var(--success)">SUCCÈS // TAILLE: ${optimizedData.length} chars // V${qr.getTypeNumber()}</span>`;
+                // CORRECTION: qr.typeNumber est une propriété, pas une fonction
+                const version = qr.typeNumber || "?";
+                statusLine.innerHTML = `<span style="color:var(--success)">SUCCÈS // TAILLE: ${optimizedData.length} chars // V${version}</span>`;
                 
             } catch (e) {
                 console.error(e);
                 statusLine.innerHTML = `<span style="color:var(--danger)">ERREUR CRITIQUE: DONNÉES TROP VOLUMINEUSES</span>`;
-                alert("Erreur: Le contenu est trop volumineux, même pour un QR Code HD (Version 40). Essayez de réduire les descriptions.");
+                alert("Erreur: Le contenu est trop volumineux. Essayez de réduire les données.");
             }
         }
 
@@ -558,7 +556,7 @@
         }
 
         function onScanFailure(error) {
-            // Ignorer les erreurs frame par frame
+            // Ignorer erreurs
         }
 
         function startScanner() {
