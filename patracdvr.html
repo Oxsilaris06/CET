@@ -295,7 +295,6 @@
     <div class="container">
         <h1>PATRACDVR </h1>
 
-        <!-- ACTION BAR -->
         <div class="action-bar">
             <button type="button" id="resetBtn" class="add-btn remove-btn" title="Tout Effacer" style="color: var(--trash-color); border: 1px solid var(--trash-color);">
                 <span class="material-symbols-outlined">delete_forever</span> RAZ
@@ -314,7 +313,6 @@
             </div>
         </div>
 
-        <!-- MISSION INFO AREA -->
         <div class="mission-inputs">
             <div class="mission-input-group">
                 <label for="missionTitleInput">Titre de la mission</label>
@@ -326,7 +324,6 @@
             </div>
         </div>
 
-        <!-- QUICK EDIT PANEL -->
         <div id="quickEditPanel">
             <div class="member-info-header">
                 <h4 style="margin: 0; border:none; color: var(--accent-blue);">Édition : <span id="selectedMemberTrigramme" style="font-weight: bold;">Aucun</span></h4>
@@ -338,12 +335,10 @@
             <div class="quick-edit-content"></div>
         </div>
 
-        <!-- CREATION ZONES -->
         <h4>1. Gestion des Véhicules</h4>
         <div id="vehicle_creation_buttons">
             <button type="button" class="add-btn" id="addManualVehicleBtn" style="border-color: var(--accent-blue); color: var(--accent-blue);">➕ Créer Véhicule</button>
-            <!-- Les boutons de véhicules prédéfinis seront injectés ici -->
-        </div>
+            </div>
 
         <h4>2. Composition des Véhicules</h4>
         <div id="patracdvr_container"></div>
@@ -352,13 +347,11 @@
         <button type="button" class="add-btn" id="addManualMemberBtn" style="margin-bottom: 10px;">➕ Créer Membre</button>
         <div id="unassigned_members_container"></div>
 
-        <!-- TRASH -->
         <div id="trashCan">
             <span class="material-symbols-outlined">auto_delete</span>
             Glisser ici pour supprimer
         </div>
 
-        <!-- GENERATE BUTTON -->
         <button id="generatePdfBtn" type="button">
             <span class="material-symbols-outlined" style="vertical-align: middle; margin-right:10px;">picture_as_pdf</span>
             Générer le PATRACDVR
@@ -369,7 +362,6 @@
         </footer>
     </div>
 
-    <!-- MODALE CRÉATION MEMBRE -->
     <dialog id="newMemberModal">
         <h3>Nouveau Membre</h3>
         <form id="newMemberForm" method="dialog" class="modal-form">
@@ -378,7 +370,6 @@
                 <input type="text" id="new_trigramme" placeholder="Ex: T1, CDG..." required autofocus>
             </div>
             
-            <!-- Les selects seront générés dynamiquement par JS -->
             <div id="modal_dynamic_fields" style="display: contents;"></div>
             
         </form>
@@ -388,7 +379,6 @@
         </div>
     </dialog>
 
-    <!-- LIBRAIRIE PDF -->
     <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
 
     <script>
@@ -441,7 +431,7 @@
             // Event Listeners globaux
             document.getElementById('addManualVehicleBtn').addEventListener('click', addManualVehicle);
             
-            // MODIFICATION 2: Bouton "Créer membre" ouvre la modale
+            // Bouton "Créer membre" ouvre la modale
             document.getElementById('addManualMemberBtn').addEventListener('click', openNewMemberModal);
             document.getElementById('cancelNewMemberBtn').addEventListener('click', () => newMemberModal.close());
             document.getElementById('confirmNewMemberBtn').addEventListener('click', addNewMemberFromModal);
@@ -508,7 +498,7 @@
         function addPatracdvrRow(vehicleName, members = []) {
             // Check doublon
             if (document.querySelector(`.patracdvr-vehicle-row[data-vehicle-name="${vehicleName}"]`)) {
-                alert("Ce véhicule existe déjà.");
+                // Si le véhicule existe déjà, on ne fait rien (utile lors du restore)
                 return;
             }
 
@@ -539,7 +529,9 @@
 
             patracdvrContainer.appendChild(row);
             const membersContainer = row.querySelector('.patracdvr-members-container');
-            members.forEach(m => addPatracdvrMember(membersContainer, m));
+            if (members && members.length > 0) {
+                members.forEach(m => addPatracdvrMember(membersContainer, m));
+            }
         }
 
         function addPatracdvrMember(container, data = {}) {
@@ -555,8 +547,15 @@
             };
             
             // Merge defaults and data
+            // Note: on ignore les clés comme 'vehicle_assigned' pour l'affichage, elles ne servent qu'à la restoration
             const memberData = { ...defaults, ...data };
-            Object.keys(memberData).forEach(k => btn.dataset[k] = memberData[k]);
+            
+            // Stocker les données dans le dataset du bouton
+            Object.keys(memberData).forEach(k => {
+                if (k !== 'vehicle_assigned') {
+                     btn.dataset[k] = memberData[k];
+                }
+            });
 
             updateMemberButtonVisuals(btn);
             btn.onclick = (e) => handleMemberSelection(e, btn);
@@ -580,7 +579,7 @@
             }
         }
 
-        // --- MODAL LOGIC (MODIFICATION 2) ---
+        // --- MODAL LOGIC ---
 
         function openNewMemberModal() {
             // Reset input
@@ -852,28 +851,6 @@
 
         // --- DATA & PERSISTENCE ---
 
-        function saveData() {
-            const data = {
-                rows: [],
-                unassigned: [],
-                missionTitle: document.getElementById('missionTitleInput').value,
-                rallyTime: document.getElementById('rallyTimeInput').value
-            };
-
-            document.querySelectorAll('.patracdvr-vehicle-row').forEach(row => {
-                const vehicle = row.dataset.vehicleName;
-                const members = [];
-                row.querySelectorAll('.patracdvr-member-btn').forEach(btn => members.push(getMemberData(btn)));
-                data.rows.push({ vehicle, members });
-            });
-
-            unassignedContainer.querySelectorAll('.patracdvr-member-btn').forEach(btn => {
-                data.unassigned.push(getMemberData(btn));
-            });
-
-            localStorage.setItem('patracdvr_standalone_data', JSON.stringify(data));
-        }
-
         function getMemberData(btn) {
             const d = btn.dataset;
             return {
@@ -882,6 +859,43 @@
                 grenades: d.grenades, equipement: d.equipement, equipement2: d.equipement2,
                 tenue: d.tenue, gpb: d.gpb
             };
+        }
+
+        /**
+         * SAVE DATA - Modifié pour respecter le canevas members_config.json
+         * Structure: { options: {...}, members: [ {..., vehicle_assigned: "vName" } ], mission_info: {...} }
+         */
+        function saveData() {
+            const allMembers = [];
+
+            // 1. Récupérer les non-assignés
+            unassignedContainer.querySelectorAll('.patracdvr-member-btn').forEach(btn => {
+                const m = getMemberData(btn);
+                m.vehicle_assigned = null; // Marqueur interne
+                allMembers.push(m);
+            });
+
+            // 2. Récupérer les assignés (dans les véhicules)
+            document.querySelectorAll('.patracdvr-vehicle-row').forEach(row => {
+                const vName = row.dataset.vehicleName;
+                row.querySelectorAll('.patracdvr-member-btn').forEach(btn => {
+                    const m = getMemberData(btn);
+                    m.vehicle_assigned = vName; // Marqueur interne
+                    allMembers.push(m);
+                });
+            });
+
+            const data = {
+                options: memberConfig,
+                members: allMembers,
+                mission_info: {
+                    title: document.getElementById('missionTitleInput').value,
+                    rally: document.getElementById('rallyTimeInput').value
+                }
+            };
+
+            localStorage.setItem('patracdvr_standalone_data', JSON.stringify(data));
+            return data;
         }
 
         function loadData() {
@@ -893,24 +907,57 @@
             } catch (e) { console.error("Load error", e); }
         }
 
-        // Nouvelle fonction pour restaurer l'état depuis un objet (utilisée par loadData et import)
+        /**
+         * RESTORE DATA - Modifié pour lire le format plat avec vehicle_assigned
+         */
         function restoreDataFromObject(data) {
             // Nettoyage
             patracdvrContainer.innerHTML = '';
             unassignedContainer.innerHTML = '';
 
-            // Restoration inputs mission
-            if (data.missionTitle) document.getElementById('missionTitleInput').value = data.missionTitle;
-            if (data.rallyTime) document.getElementById('rallyTimeInput').value = data.rallyTime;
-
-            // Restoration vehicules
-            if (data.rows) {
-                data.rows.forEach(r => addPatracdvrRow(r.vehicle, r.members));
+            // 1. Restauration Configuration Options (si présente)
+            if (data.options) {
+                Object.assign(memberConfig, data.options);
+                setupQuickEditPanelUI();
             }
-            
-            // Restoration non assignés
-            if (data.unassigned) {
-                data.unassigned.forEach(m => addPatracdvrMember(unassignedContainer, m));
+
+            // 2. Restauration Mission Info
+            // Supporte l'ancien format (root) et le nouveau format (mission_info)
+            const mTitle = data.mission_info ? data.mission_info.title : (data.missionTitle || '');
+            const mRally = data.mission_info ? data.mission_info.rally : (data.rallyTime || '');
+            document.getElementById('missionTitleInput').value = mTitle;
+            document.getElementById('rallyTimeInput').value = mRally;
+
+            // 3. Restauration Membres & Véhicules
+            // Cas A : Nouveau format (members list with vehicle_assigned)
+            if (data.members && Array.isArray(data.members)) {
+                
+                // Identifier les véhicules à créer
+                const vehiclesToCreate = [...new Set(data.members
+                    .filter(m => m.vehicle_assigned)
+                    .map(m => m.vehicle_assigned))];
+
+                // Créer les lignes de véhicules
+                vehiclesToCreate.forEach(vName => addPatracdvrRow(vName));
+
+                // Distribuer les membres
+                data.members.forEach(m => {
+                    if (m.vehicle_assigned) {
+                        const row = document.querySelector(`.patracdvr-vehicle-row[data-vehicle-name="${m.vehicle_assigned}"]`);
+                        if (row) {
+                            addPatracdvrMember(row.querySelector('.patracdvr-members-container'), m);
+                        } else {
+                            addPatracdvrMember(unassignedContainer, m); // Fallback
+                        }
+                    } else {
+                        addPatracdvrMember(unassignedContainer, m);
+                    }
+                });
+            } 
+            // Cas B : Ancien format de sauvegarde (rows array + unassigned array) - Rétrocompatibilité
+            else if (data.rows || data.unassigned) {
+                if (data.rows) data.rows.forEach(r => addPatracdvrRow(r.vehicle, r.members));
+                if (data.unassigned) data.unassigned.forEach(m => addPatracdvrMember(unassignedContainer, m));
             }
         }
 
@@ -922,13 +969,15 @@
         }
 
         function exportData() {
-            saveData();
-            const data = localStorage.getItem('patracdvr_standalone_data');
-            const blob = new Blob([data], {type: 'application/json'});
+            const data = saveData();
+            const jsonStr = JSON.stringify(data, null, 2);
+            const blob = new Blob([jsonStr], {type: 'application/json'});
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `PATRACDVR_${new Date().toISOString().slice(0,10)}.json`;
+            // Format demandé : PATRACDVR-DATE
+            const dateStr = new Date().toISOString().slice(0,10);
+            a.download = `PATRACDVR-${dateStr}.json`;
             a.click();
         }
 
@@ -940,8 +989,6 @@
             reader.onload = function(e) {
                 try {
                     const data = JSON.parse(e.target.result);
-                    // Validation simple
-                    if (!data.rows && !data.unassigned) throw new Error("Format invalide");
                     
                     if(confirm("Importer ce fichier va écraser la session actuelle. Continuer ?")) {
                         restoreDataFromObject(data);
@@ -957,7 +1004,7 @@
             reader.readAsText(file);
         }
 
-        // MODIFICATION 1: Chargement de la config depuis un fichier racine
+        // Chargement de la config depuis un fichier racine
         async function loadDefaultConfig() {
             if(!confirm("Charger la configuration depuis members_config.json ? (Ceci écrasera les données actuelles)")) return;
             
@@ -965,20 +1012,11 @@
                 const response = await fetch('members_config.json');
                 if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
                 const config = await response.json();
-
-                // 1. Update Config Options
-                if (config.options) {
-                    Object.assign(memberConfig, config.options);
-                    setupQuickEditPanelUI(); // Refresh panels
-                }
-
-                // 2. Clear & Load Members
-                patracdvrContainer.innerHTML = '';
-                unassignedContainer.innerHTML = '';
                 
-                if (config.members && Array.isArray(config.members)) {
-                     config.members.forEach(m => addPatracdvrMember(unassignedContainer, m));
-                }
+                // On utilise la fonction restore unifiée.
+                // Le fichier members_config.json n'a pas de propriété 'vehicle_assigned', 
+                // donc tous les membres iront dans "Non attribué", ce qui est le comportement attendu pour un chargement de roster.
+                restoreDataFromObject(config);
                 
                 saveData();
                 alert("Configuration chargée avec succès.");
