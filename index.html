@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -24,20 +23,6 @@
     <meta name="msapplication-TileColor" content="#ffffff">
     <meta name="msapplication-TileImage" content="ms-icon-144x144.png">
 
-    <!-- Préchargement des images -->
-    <link rel="preload" as="image" href="OPS.png">
-    <link rel="preload" as="image" href="POPOTE.png">
-    <link rel="preload" as="image" href="MATOS.png">
-    <link rel="preload" as="image" href="TUTOS.png">
-    <link rel="preload" as="image" href="OI2.png">
-
-    <link rel="preload" as="image" href="PCTAC.png">
-    <link rel="preload" as="image" href="Checklist.png">
-    <link rel="preload" as="image" href="MERCH.png">
-    <link rel="preload" as="image" href="OI.png">
-    <link rel="preload" as="image" href="Présenter.png">
-    <link rel="preload" as="image" href="icon2.png">
-    
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -636,8 +621,7 @@
         </div>
         
         <div class="tools-grid" id="toolsGrid">
-            <!-- Les boutons initiaux seront injectés ici par JavaScript -->
-        </div>
+            </div>
 
         
 <div class="bottom-icons">
@@ -719,6 +703,9 @@
             </a>
             <a href="check.html" class="tool-button image-mode">
                 <img src="Checklist.png" alt="Checklist">
+            </a>
+            <a href="patracdvr.html" class="tool-button image-mode">
+                <img src="PATRAC.png" alt="PATRACDVR">
             </a>
             <a href="adi3.html" class="tool-button image-mode">
                 <img src="icon2.png" alt="Praxis">
@@ -830,11 +817,67 @@
             setTimeout(deactivateRGB, 100); 
         }
 
+        // --- GESTIONNAIRE INDEXEDDB POUR IMAGES ---
+        const imagesToCache = [
+            'OPS.png', 'POPOTE.png', 'MATOS.png', 'TUTOS.png', 'OI2.png',
+            'PCTAC.png', 'Checklist.png', 'MERCH.png', 'OI.png', 'Présenter.png',
+            'icon2.png', 'PATRAC.png'
+        ];
+
+        function initImageCache() {
+            if (!window.indexedDB) return;
+            const request = indexedDB.open('PSIGImageCache', 1);
+
+            request.onupgradeneeded = function(event) {
+                const db = event.target.result;
+                if (!db.objectStoreNames.contains('images')) {
+                    db.createObjectStore('images');
+                }
+            };
+
+            request.onsuccess = function(event) {
+                const db = event.target.result;
+                cacheImages(db);
+            };
+
+            request.onerror = function(event) {
+                console.error('Erreur IndexedDB:', event.target.errorCode);
+            };
+        }
+
+        function cacheImages(db) {
+            imagesToCache.forEach(url => {
+                const transaction = db.transaction(['images'], 'readonly');
+                const store = transaction.objectStore('images');
+                const request = store.get(url);
+
+                request.onsuccess = function(event) {
+                    if (!event.target.result) {
+                        // L'image n'est pas dans la DB, on la télécharge et on la stocke
+                        fetch(url)
+                            .then(response => {
+                                if(response.ok) return response.blob();
+                                throw new Error('Network response was not ok');
+                            })
+                            .then(blob => {
+                                const writeTx = db.transaction(['images'], 'readwrite');
+                                const writeStore = writeTx.objectStore('images');
+                                writeStore.put(blob, url);
+                            })
+                            .catch(err => console.log('Image cache info: ' + url, err));
+                    }
+                };
+            });
+        }
+
 
         document.addEventListener('DOMContentLoaded', async () => {
             setVideoSource();
             window.addEventListener('resize', setVideoSource);
             showInitialButtons('init');
+            
+            // Lancer la mise en cache
+            initImageCache();
 
             try {
                 const response = await fetch('all.json');
