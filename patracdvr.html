@@ -393,20 +393,20 @@
 
     <script>
         // --- CONFIGURATION ---
-         memberConfig = {
-            fonctions: ["Chef inter", "Chef dispo", "Chef Oscar", "Conducteur", "Chef de bord", "DE", "Cyno", "Inter","Effrac", "AO", "Sans"],
-            cellules: ["AO1", "AO2", "AO3", "AO4", "AO5", "AO6", "AO7", "AO8", "India 1", "India 2", "India 3", "India 4", "India 5", "Effrac", "Sans"], 
+        const memberConfig = {
+            fonctions: ["Chef inter", "Chef dispo", "Chef Oscar", "Conducteur", "Chef de bord", "DE", "Cyno", "Inter", "Effrac", "AO", "Sans"],
+            cellules: ["AO1", "AO2", "AO3", "AO4", "India 1", "India 2", "India 3", "India 4", "India 5", "Effrac", "Sans"],
             principales: ["UMP9", "G36", "FAP", "Sans"],
             afis: ["PIE", "LBD40", "LBD44", "Sans"],
             secondaires: ["PSA"],
             grenades: ["GENL", "MP7", "Sans"],
-            equipements: ["Sans", "Casque Lourd", "Casque MO", "BBAL","Bouclier MO", "Belier","Lacry", "IL", "Lot 5.11"],
-            equipements2: ["Sans","HDR50","OP71","DoorRaider", "Cam pieton", "Échelle", "Stop stick", "Lacry", "Cale", "IL", "Pass"],
+            equipements: ["Sans", "Casque Lourd", "Casque MO", "BBAL", "Belier", "Lacry", "IL", "Lot 5.11"],
+            equipements2: ["Sans", "Cam pieton", "Échelle", "Stop stick", "Lacry", "Cale", "IL", "Pass"],
             tenues: ["UBAS", "4S", "Bleu", "Civile", "Ghillie", "Treillis"],
             gpbs: ["GPBL", "GPBPD", "Sans"]
         };
 
-        const availableVehicles = ['Sharan', 'Kodiaq', 'Kodiaq Bana', '5008'];
+        const availableVehicles = ['Sharan', 'Kodiaq', 'Kodiaq Bana', '5008', 'Scénic', 'Expert', 'Traffic'];
         
         // MAPPING pour l'interface (Modal & QuickEdit)
         const attributeMapping = {
@@ -649,7 +649,7 @@
 
         // --- QUICK EDIT PANEL ---
 
-        function setupQuickEditPanelUI() {
+        function setupQuickEditPanelUI(targetMember = null) {
             const content = quickEditPanel.querySelector('.quick-edit-content');
             content.innerHTML = '';
 
@@ -660,7 +660,26 @@
                 const optsDiv = document.createElement('div');
                 optsDiv.className = 'quick-edit-options';
 
-                (memberConfig[conf.key] || []).forEach(opt => {
+                // 1. Get Base Options
+                let options = [...(memberConfig[conf.key] || [])];
+
+                // 2. Merge with Member's Custom Values if present
+                if (targetMember) {
+                    const memberVal = targetMember.dataset[conf.attribute];
+                    if (memberVal && memberVal !== 'Sans') {
+                        const values = multiSelectAttributes.includes(conf.attribute) 
+                                       ? memberVal.split(', ') 
+                                       : [memberVal];
+                        
+                        values.forEach(v => {
+                             if (v !== 'Sans' && !options.includes(v)) {
+                                 options.push(v);
+                             }
+                        });
+                    }
+                }
+
+                options.forEach(opt => {
                     const b = document.createElement('button');
                     b.className = 'quick-edit-btn';
                     b.type = 'button';
@@ -697,6 +716,9 @@
             // Populate panel
             document.getElementById('selectedMemberTrigramme').textContent = btn.dataset.trigramme;
             document.getElementById('quick_edit_trigramme_input').value = btn.dataset.trigramme;
+            
+            // Generate Buttons with potential custom values from this member
+            setupQuickEditPanelUI(btn);
             
             refreshQuickEditButtons(btn);
             
