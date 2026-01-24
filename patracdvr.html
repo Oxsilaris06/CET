@@ -1,0 +1,918 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PATRACDVR Autonome</title>
+    <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Saira+Stencil+One&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
+    <style>
+        /* --- VARIABLES & THEME TACTICAL GLASS --- */
+        :root {
+            --bg-body: #050505;
+            --bg-glass: rgba(22, 22, 25, 0.7);
+            --bg-glass-heavy: rgba(15, 15, 20, 0.95);
+            --bg-input: rgba(0, 0, 0, 0.4);
+            --bg-element: rgba(255, 255, 255, 0.03);
+            --border-glass: rgba(255, 255, 255, 0.08);
+            
+            --font-ui: 'Oswald', sans-serif;
+            --font-title: 'Saira Stencil One', cursive;
+
+            --accent-blue: #3b82f6;
+            --accent-hover: #2563eb;
+            --accent-glow: rgba(59, 130, 246, 0.3);
+            --text-primary: #e0e0e0;
+            --text-secondary: #94a3b8;
+            
+            --danger-red: #ef4444;
+            --success-green: #22c55e;
+            --trash-color: #6c757d;
+
+            --radius-md: 12px;
+            --radius-sm: 6px;
+        }
+
+        /* --- LAYOUT GLOBAL --- */
+        * { box-sizing: border-box; margin: 0; padding: 0; outline: none; -webkit-tap-highlight-color: transparent; }
+        
+        body {
+            font-family: var(--font-ui);
+            background-color: var(--bg-body);
+            color: var(--text-primary);
+            background-image: 
+                linear-gradient(rgba(59, 130, 246, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(59, 130, 246, 0.03) 1px, transparent 1px);
+            background-size: 40px 40px;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            width: 100%; max-width: 1200px; margin: auto;
+            background: var(--bg-glass);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border-glass);
+            border-radius: var(--radius-md);
+            padding: 25px;
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.2);
+            padding-bottom: 80px;
+        }
+
+        h1 {
+            font-family: var(--font-title);
+            font-size: 2.2em;
+            color: var(--accent-blue);
+            text-align: center;
+            text-shadow: 0 0 20px var(--accent-glow);
+            letter-spacing: 2px;
+            margin-bottom: 25px;
+        }
+
+        h4 {
+            font-size: 1.1em;
+            color: var(--text-secondary);
+            margin-top: 15px;
+            margin-bottom: 8px;
+            font-weight: normal;
+            border-bottom: 1px solid var(--border-glass);
+            padding-bottom: 5px;
+        }
+
+        /* --- BOUTONS --- */
+        button {
+            font-family: var(--font-ui);
+            cursor: pointer;
+            border: none;
+            transition: all 0.2s;
+        }
+
+        button.add-btn {
+            background-color: var(--bg-element);
+            color: var(--text-primary);
+            border: 1px solid var(--border-glass);
+            border-radius: 4px;
+            padding: 8px 12px;
+            min-height: 44px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        button.add-btn:hover {
+            background-color: rgba(255,255,255,0.1);
+            border-color: var(--accent-blue);
+        }
+
+        button.remove-btn {
+            background-color: transparent;
+            color: var(--danger-red);
+            padding: 5px;
+            font-size: 1.2em;
+        }
+
+        .action-bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 20px;
+            padding: 10px;
+            border: 1px dashed var(--border-glass);
+            border-radius: 5px;
+            justify-content: space-between;
+            background: rgba(0,0,0,0.2);
+        }
+
+        #generatePdfBtn {
+            background-color: var(--accent-blue);
+            color: white;
+            width: 100%;
+            margin-top: 20px;
+            padding: 15px;
+            font-size: 1.2em;
+            font-weight: bold;
+            box-shadow: 0 0 15px var(--accent-glow);
+        }
+        #generatePdfBtn:hover { background-color: var(--accent-hover); }
+
+        /* --- PATRACDVR & DRAG-DROP --- */
+        #patracdvr_container, #unassigned_members_container { 
+            display: flex; flex-wrap: wrap; gap: 10px; padding: 15px; min-height: 70px; 
+            border: 1px dashed var(--border-glass); border-radius: var(--radius-sm); align-content: flex-start;
+            background: rgba(0,0,0,0.2); margin-top: 10px; transition: border-color 0.2s;
+        }
+        
+        .draggable { cursor: grab; user-select: none; }
+        .draggable.dragging { opacity: 0.5; cursor: grabbing; border: 1px dashed var(--accent-blue); }
+
+        /* Lignes Véhicules */
+        .patracdvr-vehicle-row {
+            background: rgba(255,255,255,0.03); border: 1px solid var(--border-glass);
+            border-radius: var(--radius-sm); padding: 10px; padding-top: 40px; 
+            margin-bottom: 10px; position: relative;
+            display: flex; flex-direction: column; min-width: 160px; width: auto; flex-grow: 1;
+            align-items: flex-start; justify-content: flex-start; gap: 8px;
+        }
+        .vehicle-header {
+            position: absolute; top: 0; left: 0; right: 0; 
+            background: rgba(255,255,255,0.05); padding: 5px 10px;
+            border-bottom: 1px solid var(--border-glass);
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .vehicle-name { color: var(--accent-blue); font-weight: bold; font-family: var(--font-ui); font-size: 0.9em; text-transform: uppercase; }
+        
+        .patracdvr-members-container {
+            min-height: 60px; width: 100%; display: flex; flex-wrap: wrap; gap: 8px;
+            border: 1px dashed var(--border-glass); border-radius: 4px; padding: 5px;
+            align-content: flex-start;
+        }
+
+        /* Boutons Membres */
+        .patracdvr-member-btn { 
+            background: var(--bg-glass-heavy); border: 1px solid var(--border-glass); 
+            color: var(--text-primary); padding: 8px; border-radius: 4px; 
+            min-height: 56px; min-width: 90px; transition: all 0.2s;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            cursor: grab; position: relative;
+        }
+        .patracdvr-member-btn:hover { border-color: var(--accent-blue); transform: translateY(-2px); }
+        .patracdvr-member-btn.member-active { 
+            border-color: var(--accent-blue); box-shadow: 0 0 10px var(--accent-glow); color: white; background: var(--accent-blue);
+        }
+        .patracdvr-member-btn .trigramme { font-weight: bold; font-family: var(--font-title); letter-spacing: 1px; font-size: 1.2em; }
+        .patracdvr-member-btn .fonction { font-size: 0.75em; color: var(--text-secondary); display: block; margin-top: 2px; }
+        .patracdvr-member-btn.member-active .fonction { color: rgba(255,255,255,0.9); }
+
+        /* Corbeille */
+        #trashCan {
+            margin-top: 20px; padding: 20px;
+            border: 3px dashed var(--trash-color); border-radius: 10px;
+            text-align: center; color: var(--trash-color); background: rgba(0,0,0,0.2);
+            transition: all 0.3s; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100px; font-weight: bold;
+        }
+        #trashCan.drag-over { border-color: var(--danger-red); background: rgba(239, 68, 68, 0.1); color: var(--danger-red); }
+        #trashCan .material-symbols-outlined { font-size: 40px; margin-bottom: 5px; }
+
+        /* --- QUICK EDIT PANEL --- */
+        #quickEditPanel {
+            background: var(--bg-element); border: 1px solid var(--border-glass);
+            padding: 15px; border-radius: var(--radius-sm); margin-bottom: 20px;
+            display: none; flex-direction: column;
+            animation: fadeIn 0.3s ease-out;
+        }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+
+        #quickEditPanel .member-info-header { 
+            display: flex; align-items: center; gap: 20px; margin-bottom: 15px; 
+            padding-bottom: 10px; border-bottom: 1px solid var(--border-glass); 
+            flex-wrap: wrap;
+        }
+
+        .quick-edit-content { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; }
+        
+        .quick-edit-category { margin-bottom: 10px; }
+        .quick-edit-category h5 { 
+            border-bottom: 1px solid var(--border-glass); padding-bottom: 5px; margin-bottom: 8px; 
+            color: var(--text-secondary); font-size: 0.9em; text-transform: uppercase; 
+        }
+        .quick-edit-options { display: flex; flex-wrap: wrap; gap: 6px; }
+        
+        .quick-edit-btn {
+            background: var(--bg-input); border: 1px solid var(--border-glass);
+            color: var(--text-secondary); padding: 4px 8px; border-radius: 4px; 
+            font-size: 0.85em; font-family: var(--font-ui);
+        }
+        .quick-edit-btn:hover { border-color: var(--accent-blue); color: var(--text-primary); }
+        .quick-edit-btn.selected { 
+            background: var(--accent-blue); color: white; border-color: transparent; 
+            box-shadow: 0 0 5px var(--accent-glow);
+        }
+
+        input[type="text"] {
+            background: var(--bg-input); border: 1px solid var(--border-glass);
+            border-radius: 4px; padding: 8px; color: white; font-family: var(--font-ui);
+        }
+        input[type="text"]:focus { border-color: var(--accent-blue); }
+
+        /* Configuration Buttons */
+        #vehicle_creation_buttons { 
+            display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; 
+            padding: 10px; border: 1px dashed var(--border-glass); 
+            border-radius: 5px; 
+        }
+
+        /* Footer */
+        footer {
+            margin-top: 40px; text-align: center; color: var(--text-secondary);
+            font-size: 0.8em; border-top: 1px solid var(--border-glass); padding-top: 10px;
+        }
+
+        @media (max-width: 767px) {
+            .container { padding: 10px; }
+            h1 { font-size: 1.8em; }
+            .patracdvr-vehicle-row { min-width: 100%; }
+            .quick-edit-content { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>PATRACDVR Generator</h1>
+
+        <!-- ACTION BAR -->
+        <div class="action-bar">
+            <button type="button" id="resetBtn" class="add-btn remove-btn" title="Tout Effacer" style="color: var(--trash-color); border: 1px solid var(--trash-color);">
+                <span class="material-symbols-outlined">delete_forever</span> RAZ
+            </button>
+            <div style="display:flex; gap:10px;">
+                <button type="button" id="importDefaultConfigBtn" class="add-btn" title="Config par défaut">
+                    <span class="material-symbols-outlined">settings_suggest</span> Défaut
+                </button>
+                <button type="button" id="exportSessionBtn" class="add-btn" title="Sauvegarder Session">
+                    <span class="material-symbols-outlined">save</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- QUICK EDIT PANEL -->
+        <div id="quickEditPanel">
+            <div class="member-info-header">
+                <h4 style="margin: 0; border:none; color: var(--accent-blue);">Édition : <span id="selectedMemberTrigramme" style="font-weight: bold;">Aucun</span></h4>
+                <div style="flex-grow: 1;">
+                    <input type="text" id="quick_edit_trigramme_input" placeholder="Trigramme" style="max-width: 150px;">
+                </div>
+                <button type="button" id="closeQuickEdit" class="remove-btn"><span class="material-symbols-outlined">close</span></button>
+            </div>
+            <div class="quick-edit-content"></div>
+        </div>
+
+        <!-- CREATION ZONES -->
+        <h4>1. Gestion des Véhicules</h4>
+        <div id="vehicle_creation_buttons">
+            <button type="button" class="add-btn" id="addManualVehicleBtn" style="border-color: var(--accent-blue); color: var(--accent-blue);">➕ Créer Véhicule</button>
+            <!-- Les boutons de véhicules prédéfinis seront injectés ici -->
+        </div>
+
+        <h4>2. Composition des Véhicules</h4>
+        <div id="patracdvr_container"></div>
+
+        <h4>3. Personnel non attribué</h4>
+        <button type="button" class="add-btn" id="addManualMemberBtn" style="margin-bottom: 10px;">➕ Créer Membre</button>
+        <div id="unassigned_members_container"></div>
+
+        <!-- TRASH -->
+        <div id="trashCan">
+            <span class="material-symbols-outlined">auto_delete</span>
+            Glisser ici pour supprimer
+        </div>
+
+        <!-- GENERATE BUTTON -->
+        <button id="generatePdfBtn" type="button">
+            <span class="material-symbols-outlined" style="vertical-align: middle; margin-right:10px;">picture_as_pdf</span>
+            Générer la Fiche PATRACDVR
+        </button>
+
+        <footer>
+            Strategica Web - Module PATRACDVR Autonome
+        </footer>
+    </div>
+
+    <!-- LIBRAIRIE PDF -->
+    <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
+
+    <script>
+        // --- CONFIGURATION ---
+        const memberConfig = {
+            fonctions: ["Chef inter", "Chef dispo", "Chef Oscar", "Conducteur", "Chef de bord", "DE", "Cyno", "Inter", "Effrac", "AO", "Sans"],
+            cellules: ["AO1", "AO2", "AO3", "AO4", "India 1", "India 2", "India 3", "India 4", "India 5", "Effrac", "Sans"],
+            principales: ["UMP9", "G36", "FAP", "Sans"],
+            afis: ["PIE", "LBD40", "LBD44", "Sans"],
+            secondaires: ["PSA"],
+            grenades: ["GENL", "MP7", "Sans"],
+            equipements: ["Sans", "Casque Lourd", "Casque MO", "BBAL", "Belier", "Lacry", "IL", "Lot 5.11"],
+            equipements2: ["Sans", "Cam pieton", "Échelle", "Stop stick", "Lacry", "Cale", "IL", "Pass"],
+            tenues: ["UBAS", "4S", "Bleu", "Civile", "Ghillie", "Treillis"],
+            gpbs: ["GPBL", "GPBPD", "Sans"]
+        };
+
+        const availableVehicles = ['Sharan', 'Kodiaq', 'Kodiaq Bana', '5008', 'Scénic', 'Expert', 'Traffic'];
+        const quickEditMapping = {
+            'Cellule': { key: 'cellules', attribute: 'cellule' },
+            'Fonction': { key: 'fonctions', attribute: 'fonction' },
+            'Arme P.': { key: 'principales', attribute: 'principales' },
+            'Arme S.': { key: 'secondaires', attribute: 'secondaires' },
+            'A.F.I.': { key: 'afis', attribute: 'afis' },
+            'Grenades': { key: 'grenades', attribute: 'grenades' },
+            'Équip. 1': { key: 'equipements', attribute: 'equipement' },
+            'Équip. 2': { key: 'equipements2', attribute: 'equipement2' },
+            'Tenue': { key: 'tenues', attribute: 'tenue' },
+            'GPB': { key: 'gpbs', attribute: 'gpb' }
+        };
+        const multiSelectAttributes = ['fonction', 'equipement', 'equipement2', 'afis'];
+
+        // --- STATE ---
+        let activeMemberId = null;
+        let draggedItem = null;
+        const patracdvrContainer = document.getElementById('patracdvr_container');
+        const unassignedContainer = document.getElementById('unassigned_members_container');
+        const quickEditPanel = document.getElementById('quickEditPanel');
+
+        // --- INITIALIZATION ---
+        document.addEventListener('DOMContentLoaded', () => {
+            setupQuickEditPanelUI();
+            setupVehicleButtons();
+            loadData();
+            
+            // Event Listeners globaux
+            document.getElementById('addManualVehicleBtn').addEventListener('click', addManualVehicle);
+            document.getElementById('addManualMemberBtn').addEventListener('click', addManualMember);
+            document.getElementById('resetBtn').addEventListener('click', resetAll);
+            document.getElementById('importDefaultConfigBtn').addEventListener('click', loadDefaultConfig);
+            document.getElementById('exportSessionBtn').addEventListener('click', exportData);
+            document.getElementById('closeQuickEdit').addEventListener('click', () => {
+                quickEditPanel.style.display = 'none';
+                if(activeMemberId) {
+                    const btn = document.getElementById(activeMemberId);
+                    if(btn) btn.classList.remove('member-active');
+                    activeMemberId = null;
+                }
+            });
+            document.getElementById('generatePdfBtn').addEventListener('click', generatePatracdvrPdf);
+
+            // Drag and Drop global listeners
+            document.addEventListener('dragstart', handleDragStart);
+            document.addEventListener('dragend', handleDragEnd);
+            
+            const dropZones = document.querySelectorAll('#patracdvr_container, #unassigned_members_container, #trashCan');
+            // Note: Les conteneurs dynamiques (membres à l'intérieur des véhicules) doivent aussi être des drop zones.
+            // On gère cela via délégation ou ajout dynamique, ici délégation via l'event global dragover
+            document.addEventListener('dragover', handleDragOver);
+            document.addEventListener('drop', handleDrop);
+            document.addEventListener('dragenter', handleDragEnter);
+            document.addEventListener('dragleave', handleDragLeave);
+
+            // Input trigramme listener
+            document.getElementById('quick_edit_trigramme_input').addEventListener('input', (e) => {
+                if(activeMemberId) {
+                    const member = document.getElementById(activeMemberId);
+                    member.dataset.trigramme = e.target.value.toUpperCase();
+                    updateMemberButtonVisuals(member);
+                    saveData();
+                }
+            });
+        });
+
+        // --- CORE FUNCTIONS ---
+
+        function setupVehicleButtons() {
+            const container = document.getElementById('vehicle_creation_buttons');
+            availableVehicles.forEach(v => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'add-btn';
+                btn.textContent = `➕ ${v}`;
+                btn.onclick = () => { addPatracdvrRow(v); saveData(); };
+                container.insertBefore(btn, document.getElementById('addManualVehicleBtn')); // Insert before manual btn
+            });
+        }
+
+        function addManualVehicle() {
+            const name = prompt("Nom du véhicule :");
+            if (name) { addPatracdvrRow(name); saveData(); }
+        }
+
+        function addPatracdvrRow(vehicleName, members = []) {
+            // Check doublon
+            if (document.querySelector(`.patracdvr-vehicle-row[data-vehicle-name="${vehicleName}"]`)) {
+                alert("Ce véhicule existe déjà.");
+                return;
+            }
+
+            const row = document.createElement('div');
+            row.className = 'patracdvr-vehicle-row';
+            row.dataset.vehicleName = vehicleName;
+            row.innerHTML = `
+                <div class="vehicle-header">
+                    <span class="vehicle-name">${vehicleName}</span>
+                    <button type="button" class="remove-btn" title="Supprimer Véhicule">❌</button>
+                </div>
+                <div class="patracdvr-members-container drop-zone"></div>
+            `;
+
+            // Delete handler
+            row.querySelector('.remove-btn').onclick = () => {
+                if(confirm(`Supprimer ${vehicleName} et désattribuer les membres ?`)) {
+                    const membersContainer = row.querySelector('.patracdvr-members-container');
+                    Array.from(membersContainer.children).forEach(btn => {
+                        btn.dataset.cellule = 'Sans';
+                        updateMemberButtonVisuals(btn);
+                        unassignedContainer.appendChild(btn);
+                    });
+                    row.remove();
+                    saveData();
+                }
+            };
+
+            patracdvrContainer.appendChild(row);
+            const membersContainer = row.querySelector('.patracdvr-members-container');
+            members.forEach(m => addPatracdvrMember(membersContainer, m));
+        }
+
+        function addManualMember() {
+            const trig = prompt("Trigramme (ex: T1) :");
+            if(trig) {
+                const finalTrig = trig.toUpperCase();
+                addPatracdvrMember(unassignedContainer, { trigramme: finalTrig });
+                saveData();
+            }
+        }
+
+        function addPatracdvrMember(container, data = {}) {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'patracdvr-member-btn draggable';
+            btn.id = `mem_${Date.now()}_${Math.random().toString(36).substr(2,5)}`;
+            btn.draggable = true;
+            
+            const defaults = {
+                trigramme: 'N/A', fonction: 'Sans', cellule: 'Sans', principales: 'Sans', secondaires: 'PSA',
+                afis: 'Sans', grenades: 'Sans', equipement: 'Sans', equipement2: 'Sans', tenue: 'UBAS', gpb: 'GPBL'
+            };
+            
+            // Merge defaults and data
+            const memberData = { ...defaults, ...data };
+            Object.keys(memberData).forEach(k => btn.dataset[k] = memberData[k]);
+
+            updateMemberButtonVisuals(btn);
+            btn.onclick = (e) => handleMemberSelection(e, btn);
+            container.appendChild(btn);
+            return btn;
+        }
+
+        function updateMemberButtonVisuals(btn) {
+            const trig = btn.dataset.trigramme;
+            const func = btn.dataset.fonction !== 'Sans' ? btn.dataset.fonction : '';
+            const cell = btn.dataset.cellule !== 'Sans' ? btn.dataset.cellule : '';
+            
+            let subText = '';
+            if (cell && func) subText = `${cell} / ${func}`;
+            else if (cell) subText = cell;
+            else if (func) subText = func;
+
+            btn.innerHTML = `<span class="trigramme">${trig}</span>`;
+            if (subText && !btn.closest('#unassigned_members_container')) {
+                btn.innerHTML += `<span class="fonction">${subText}</span>`;
+            }
+        }
+
+        // --- QUICK EDIT PANEL ---
+
+        function setupQuickEditPanelUI() {
+            const content = quickEditPanel.querySelector('.quick-edit-content');
+            content.innerHTML = '';
+
+            for (const [label, conf] of Object.entries(quickEditMapping)) {
+                const catDiv = document.createElement('div');
+                catDiv.className = 'quick-edit-category';
+                catDiv.innerHTML = `<h5>${label}</h5>`;
+                const optsDiv = document.createElement('div');
+                optsDiv.className = 'quick-edit-options';
+
+                (memberConfig[conf.key] || []).forEach(opt => {
+                    const b = document.createElement('button');
+                    b.className = 'quick-edit-btn';
+                    b.type = 'button';
+                    b.textContent = opt;
+                    b.dataset.attribute = conf.attribute;
+                    b.dataset.value = opt;
+                    b.onclick = (e) => handleQuickEditClick(e, b);
+                    optsDiv.appendChild(b);
+                });
+                catDiv.appendChild(optsDiv);
+                content.appendChild(catDiv);
+            }
+        }
+
+        function handleMemberSelection(e, btn) {
+            e.stopPropagation();
+            // Toggle selection
+            if (activeMemberId === btn.id) {
+                btn.classList.remove('member-active');
+                activeMemberId = null;
+                quickEditPanel.style.display = 'none';
+                return;
+            }
+
+            // Deselect old
+            if (activeMemberId) {
+                const old = document.getElementById(activeMemberId);
+                if (old) old.classList.remove('member-active');
+            }
+
+            activeMemberId = btn.id;
+            btn.classList.add('member-active');
+            
+            // Populate panel
+            document.getElementById('selectedMemberTrigramme').textContent = btn.dataset.trigramme;
+            document.getElementById('quick_edit_trigramme_input').value = btn.dataset.trigramme;
+            
+            refreshQuickEditButtons(btn);
+            
+            quickEditPanel.style.display = 'flex';
+            // Scroll to panel on mobile
+            if(window.innerWidth < 768) quickEditPanel.scrollIntoView({behavior: "smooth"});
+        }
+
+        function refreshQuickEditButtons(btn) {
+            document.querySelectorAll('.quick-edit-btn').forEach(qBtn => {
+                const attr = qBtn.dataset.attribute;
+                const val = qBtn.dataset.value;
+                const memberVal = btn.dataset[attr];
+                
+                if (multiSelectAttributes.includes(attr)) {
+                    const current = memberVal ? memberVal.split(', ') : [];
+                    qBtn.classList.toggle('selected', current.includes(val));
+                } else {
+                    qBtn.classList.toggle('selected', memberVal === val);
+                }
+            });
+        }
+
+        function handleQuickEditClick(e, qBtn) {
+            if (!activeMemberId) return;
+            const btn = document.getElementById(activeMemberId);
+            const attr = qBtn.dataset.attribute;
+            const val = qBtn.dataset.value;
+
+            if (multiSelectAttributes.includes(attr)) {
+                let current = btn.dataset[attr] && btn.dataset[attr] !== 'Sans' ? btn.dataset[attr].split(', ') : [];
+                
+                if (val === 'Sans') {
+                    current = ['Sans'];
+                } else {
+                    if (current.includes('Sans')) current = [];
+                    if (current.includes(val)) current = current.filter(x => x !== val);
+                    else current.push(val);
+                }
+                if (current.length === 0) current = ['Sans'];
+                btn.dataset[attr] = current.join(', ');
+            } else {
+                // Single select logic with auto-assignment
+                btn.dataset[attr] = val;
+                
+                // Auto-Assign Logic
+                if (attr === 'cellule' && val === 'Sans') btn.dataset.fonction = 'Sans';
+                if (attr === 'fonction' && val !== 'Sans' && btn.dataset.cellule === 'Sans') btn.dataset.cellule = 'India 1';
+            }
+
+            updateMemberButtonVisuals(btn);
+            refreshQuickEditButtons(btn);
+            saveData();
+        }
+
+        // --- DRAG AND DROP ---
+        
+        function handleDragStart(e) {
+            if (e.target.classList.contains('draggable')) {
+                draggedItem = e.target;
+                e.target.classList.add('dragging');
+                e.dataTransfer.effectAllowed = 'move';
+            }
+        }
+
+        function handleDragEnd(e) {
+            if (draggedItem) {
+                draggedItem.classList.remove('dragging');
+                draggedItem = null;
+            }
+            document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+            document.getElementById('trashCan').classList.remove('drag-over');
+            document.querySelectorAll('#patracdvr_container, #unassigned_members_container, .patracdvr-members-container').forEach(el => el.style.borderStyle = 'dashed');
+        }
+
+        // Ajout de la fonction manquante handleDragEnter
+        function handleDragEnter(e) {
+            e.preventDefault();
+            const target = e.target.closest('#trashCan, .patracdvr-members-container, #unassigned_members_container');
+            if (target && draggedItem) {
+                if (target.id === 'trashCan') {
+                    target.classList.add('drag-over');
+                } else {
+                    target.style.borderStyle = 'solid';
+                    target.style.borderColor = 'var(--accent-blue)';
+                }
+            }
+        }
+
+        function handleDragOver(e) {
+            e.preventDefault();
+            const target = e.target.closest('#trashCan, .patracdvr-members-container, #unassigned_members_container');
+            if (!target) return;
+            
+            if (target.id === 'trashCan') {
+                target.classList.add('drag-over');
+            } else {
+                target.style.borderStyle = 'solid';
+                target.style.borderColor = 'var(--accent-blue)';
+                
+                const afterElement = getDragAfterElement(target, e.clientY);
+                if (draggedItem) {
+                    if (afterElement == null) {
+                        target.appendChild(draggedItem);
+                    } else {
+                        target.insertBefore(draggedItem, afterElement);
+                    }
+                }
+            }
+        }
+
+        function handleDragLeave(e) {
+            const target = e.target.closest('#trashCan, .patracdvr-members-container, #unassigned_members_container');
+            if (target) {
+                // Fix: prevent flickering when dragging over child elements
+                if (e.relatedTarget && target.contains(e.relatedTarget)) {
+                    return;
+                }
+
+                target.classList.remove('drag-over');
+                target.style.borderStyle = 'dashed';
+                target.style.borderColor = 'var(--border-glass)';
+            }
+        }
+
+        function handleDrop(e) {
+            e.preventDefault();
+            const trash = e.target.closest('#trashCan');
+            
+            if (trash && draggedItem) {
+                if (confirm(`Supprimer définitivement ${draggedItem.dataset.trigramme} ?`)) {
+                    if (activeMemberId === draggedItem.id) {
+                        quickEditPanel.style.display = 'none';
+                        activeMemberId = null;
+                    }
+                    draggedItem.remove();
+                    saveData();
+                }
+                return;
+            }
+
+            const targetContainer = e.target.closest('.patracdvr-members-container, #unassigned_members_container');
+            if (targetContainer && draggedItem) {
+                // Logic on drop
+                if (targetContainer.id === 'unassigned_members_container') {
+                    draggedItem.dataset.cellule = 'Sans';
+                    draggedItem.dataset.fonction = 'Sans';
+                } else {
+                    // If moving to a vehicle and has no cell, default to India 1
+                    if (draggedItem.dataset.cellule === 'Sans') draggedItem.dataset.cellule = 'India 1';
+                }
+                updateMemberButtonVisuals(draggedItem);
+                saveData();
+            }
+        }
+
+        function getDragAfterElement(container, y) {
+            const draggableElements = [...container.querySelectorAll('.draggable:not(.dragging)')];
+            return draggableElements.reduce((closest, child) => {
+                const box = child.getBoundingClientRect();
+                const offset = y - box.top - box.height / 2;
+                if (offset < 0 && offset > closest.offset) {
+                    return { offset: offset, element: child };
+                } else {
+                    return closest;
+                }
+            }, { offset: Number.NEGATIVE_INFINITY }).element;
+        }
+
+        // --- DATA & PERSISTENCE ---
+
+        function saveData() {
+            const data = {
+                rows: [],
+                unassigned: []
+            };
+
+            document.querySelectorAll('.patracdvr-vehicle-row').forEach(row => {
+                const vehicle = row.dataset.vehicleName;
+                const members = [];
+                row.querySelectorAll('.patracdvr-member-btn').forEach(btn => members.push(getMemberData(btn)));
+                data.rows.push({ vehicle, members });
+            });
+
+            unassignedContainer.querySelectorAll('.patracdvr-member-btn').forEach(btn => {
+                data.unassigned.push(getMemberData(btn));
+            });
+
+            localStorage.setItem('patracdvr_standalone_data', JSON.stringify(data));
+        }
+
+        function getMemberData(btn) {
+            const d = btn.dataset;
+            return {
+                trigramme: d.trigramme, fonction: d.fonction, cellule: d.cellule,
+                principales: d.principales, secondaires: d.secondaires, afis: d.afis,
+                grenades: d.grenades, equipement: d.equipement, equipement2: d.equipement2,
+                tenue: d.tenue, gpb: d.gpb
+            };
+        }
+
+        function loadData() {
+            const json = localStorage.getItem('patracdvr_standalone_data');
+            if (!json) return;
+            try {
+                const data = JSON.parse(json);
+                data.rows.forEach(r => addPatracdvrRow(r.vehicle, r.members));
+                data.unassigned.forEach(m => addPatracdvrMember(unassignedContainer, m));
+            } catch (e) { console.error("Load error", e); }
+        }
+
+        function resetAll() {
+            if (confirm("Tout effacer ?")) {
+                localStorage.removeItem('patracdvr_standalone_data');
+                location.reload();
+            }
+        }
+
+        function exportData() {
+            saveData();
+            const data = localStorage.getItem('patracdvr_standalone_data');
+            const blob = new Blob([data], {type: 'application/json'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `PATRACDVR_${new Date().toISOString().slice(0,10)}.json`;
+            a.click();
+        }
+
+        // Simule un chargement de config défaut (ici juste exemple pour la structure)
+        function loadDefaultConfig() {
+            if(confirm("Charger configuration par défaut ? (Effacera les données actuelles)")) {
+                patracdvrContainer.innerHTML = '';
+                unassignedContainer.innerHTML = '';
+                
+                // Exemple simple
+                addPatracdvrRow("Kodiaq");
+                const m1 = addPatracdvrMember(null, { trigramme: "CDG", fonction: "Chef inter", cellule: "India 1" });
+                const m2 = addPatracdvrMember(null, { trigramme: "A", fonction: "Inter", cellule: "India 1" });
+                const m3 = addPatracdvrMember(null, { trigramme: "B", fonction: "Effrac", cellule: "India 1" });
+                
+                const kodiaqContainer = document.querySelector('[data-vehicle-name="Kodiaq"] .patracdvr-members-container');
+                kodiaqContainer.appendChild(m1);
+                kodiaqContainer.appendChild(m2);
+                kodiaqContainer.appendChild(m3);
+
+                saveData();
+            }
+        }
+
+        // --- PDF GENERATION ---
+        
+        async function generatePatracdvrPdf() {
+            const { PDFDocument, StandardFonts, rgb, PageSizes } = PDFLib;
+            const pdfDoc = await PDFDocument.create();
+            const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
+            const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+            // Helpers PDF
+            let page = pdfDoc.addPage([PageSizes.A4[1], PageSizes.A4[0]]); // Landscape
+            let { width, height } = page.getSize();
+            let y = height - 40;
+            const margin = 40;
+
+            const drawText = (text, size, font, x, y, color = rgb(0,0,0)) => {
+                page.drawText(String(text), { x, y, size, font, color });
+            };
+
+            const addNewPageIfNeeded = (neededHeight) => {
+                if (y - neededHeight < margin) {
+                    page = pdfDoc.addPage([PageSizes.A4[1], PageSizes.A4[0]]);
+                    y = height - 40;
+                    return true;
+                }
+                return false;
+            };
+
+            // Title
+            drawText("FICHE PATRACDVR", 24, helveticaBold, margin, y, rgb(0, 51/255, 160/255));
+            y -= 40;
+
+            // Headers
+            const headers = ["PAX", "Fct", "Cel.", "Arme P.", "Arme S.", "AFI", "Gren.", "Equip 1", "Equip 2", "Tenue", "GPB"];
+            const colWidths = [50, 70, 60, 70, 50, 60, 60, 80, 80, 60, 60];
+            const startX = margin;
+            
+            // Collect Data
+            const rowsData = [];
+            document.querySelectorAll('.patracdvr-vehicle-row').forEach(row => {
+                const vName = row.dataset.vehicleName;
+                rowsData.push({ type: 'header', text: `VÉHICULE : ${vName}` });
+                
+                row.querySelectorAll('.patracdvr-member-btn').forEach(btn => {
+                    const d = btn.dataset;
+                    rowsData.push({
+                        type: 'data',
+                        cells: [d.trigramme, d.fonction, d.cellule, d.principales, d.secondaires, d.afis, d.grenades, d.equipement, d.equipement2, d.tenue, d.gpb]
+                    });
+                });
+                // Spacer
+                rowsData.push({ type: 'spacer' });
+            });
+
+            // Draw Table
+            const rowHeight = 20;
+            const fontSize = 10;
+            const cellPadding = 5;
+
+            // Draw Column Headers initial
+            const drawColumnHeaders = () => {
+                let currentX = startX;
+                headers.forEach((h, i) => {
+                    page.drawRectangle({ x: currentX, y: y - rowHeight + 5, width: colWidths[i], height: rowHeight, color: rgb(0.9, 0.9, 0.9), borderColor: rgb(0,0,0), borderWidth: 1 });
+                    drawText(h, 9, helveticaBold, currentX + 2, y - 5);
+                    currentX += colWidths[i];
+                });
+                y -= rowHeight;
+            };
+
+            drawColumnHeaders();
+
+            for (const row of rowsData) {
+                if (addNewPageIfNeeded(30)) {
+                    drawColumnHeaders();
+                }
+
+                if (row.type === 'header') {
+                    // Vehicle Header Row
+                    page.drawRectangle({ x: startX, y: y - 20, width: width - 2*margin, height: 20, color: rgb(0.85, 0.93, 1) });
+                    drawText(row.text, 12, helveticaBold, startX + 5, y - 15, rgb(0, 0.2, 0.6));
+                    y -= 25;
+                } else if (row.type === 'data') {
+                    // Data Row
+                    let currentX = startX;
+                    row.cells.forEach((cellText, i) => {
+                        // Truncate if too long basic logic
+                        let text = cellText === 'Sans' ? '-' : cellText;
+                        page.drawRectangle({ x: currentX, y: y - 15, width: colWidths[i], height: 20, borderColor: rgb(0.8,0.8,0.8), borderWidth: 0.5 });
+                        drawText(text, fontSize, helveticaFont, currentX + 2, y - 10);
+                        currentX += colWidths[i];
+                    });
+                    y -= 20;
+                } else if (row.type === 'spacer') {
+                    y -= 10;
+                }
+            }
+
+            // Save
+            const pdfBytes = await pdfDoc.save();
+            const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `PATRACDVR_${new Date().toISOString().slice(0,10)}.pdf`;
+            link.click();
+        }
+
+    </script>
+</body>
+</html>
