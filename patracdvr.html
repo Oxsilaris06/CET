@@ -229,11 +229,23 @@
             box-shadow: 0 0 5px var(--accent-glow);
         }
 
-        input[type="text"] {
+        input[type="text"], input[type="time"] {
             background: var(--bg-input); border: 1px solid var(--border-glass);
             border-radius: 4px; padding: 8px; color: white; font-family: var(--font-ui);
         }
-        input[type="text"]:focus { border-color: var(--accent-blue); }
+        input[type="text"]:focus, input[type="time"]:focus { border-color: var(--accent-blue); }
+
+        /* Mission Inputs Area */
+        .mission-inputs {
+            display: flex; gap: 15px; flex-wrap: wrap;
+            margin-bottom: 20px; padding: 15px;
+            background: var(--bg-element); border: 1px solid var(--border-glass);
+            border-radius: 5px;
+        }
+        .mission-input-group { flex-grow: 1; min-width: 200px; }
+        .mission-input-group label { display: block; color: var(--text-secondary); font-size: 0.8em; margin-bottom: 5px; text-transform: uppercase; }
+        .mission-input-group input { width: 100%; }
+
 
         /* --- DIALOG / MODAL --- */
         dialog {
@@ -281,20 +293,36 @@
 <body>
 
     <div class="container">
-        <h1>PATRACDVR Generator</h1>
+        <h1>PATRACDVR </h1>
 
         <!-- ACTION BAR -->
         <div class="action-bar">
             <button type="button" id="resetBtn" class="add-btn remove-btn" title="Tout Effacer" style="color: var(--trash-color); border: 1px solid var(--trash-color);">
                 <span class="material-symbols-outlined">delete_forever</span> RAZ
             </button>
-            <div style="display:flex; gap:10px;">
+            <div style="display:flex; gap:10px; flex-wrap: wrap;">
                 <button type="button" id="importDefaultConfigBtn" class="add-btn" title="Config par défaut">
-                    <span class="material-symbols-outlined">settings_suggest</span> Chargement (Fichier)
+                    <span class="material-symbols-outlined">settings_suggest</span> Defaut (PSIG)
                 </button>
+                <button type="button" id="importSessionBtn" class="add-btn" title="Importer une sauvegarde JSON">
+                    <span class="material-symbols-outlined">upload_file</span> Importer Sauvegarde
+                </button>
+                <input type="file" id="importFileInput" accept=".json" style="display: none;">
                 <button type="button" id="exportSessionBtn" class="add-btn" title="Sauvegarder Session">
                     <span class="material-symbols-outlined">save</span>
                 </button>
+            </div>
+        </div>
+
+        <!-- MISSION INFO AREA -->
+        <div class="mission-inputs">
+            <div class="mission-input-group">
+                <label for="missionTitleInput">Titre de la mission</label>
+                <input type="text" id="missionTitleInput" placeholder="Ex: Opération Sunrise">
+            </div>
+            <div class="mission-input-group">
+                <label for="rallyTimeInput">Heure de rassemblement</label>
+                <input type="text" id="rallyTimeInput" placeholder="Ex: 14h00 / 0630Z">
             </div>
         </div>
 
@@ -333,11 +361,11 @@
         <!-- GENERATE BUTTON -->
         <button id="generatePdfBtn" type="button">
             <span class="material-symbols-outlined" style="vertical-align: middle; margin-right:10px;">picture_as_pdf</span>
-            Générer la Fiche PATRACDVR
+            Générer le PATRACDVR
         </button>
 
         <footer>
-            Strategica Web - Module PATRACDVR Autonome
+             Module PATRACDVR Autonome
         </footer>
     </div>
 
@@ -421,6 +449,9 @@
             document.getElementById('resetBtn').addEventListener('click', resetAll);
             document.getElementById('importDefaultConfigBtn').addEventListener('click', loadDefaultConfig);
             document.getElementById('exportSessionBtn').addEventListener('click', exportData);
+            document.getElementById('importSessionBtn').addEventListener('click', () => document.getElementById('importFileInput').click());
+            document.getElementById('importFileInput').addEventListener('change', importData);
+
             document.getElementById('closeQuickEdit').addEventListener('click', () => {
                 quickEditPanel.style.display = 'none';
                 if(activeMemberId) {
@@ -430,6 +461,10 @@
                 }
             });
             document.getElementById('generatePdfBtn').addEventListener('click', generatePatracdvrPdf);
+            
+            // Listeners pour sauvegarde auto des inputs mission
+            document.getElementById('missionTitleInput').addEventListener('input', saveData);
+            document.getElementById('rallyTimeInput').addEventListener('input', saveData);
 
             // Drag and Drop global listeners
             document.addEventListener('dragstart', handleDragStart);
@@ -820,7 +855,9 @@
         function saveData() {
             const data = {
                 rows: [],
-                unassigned: []
+                unassigned: [],
+                missionTitle: document.getElementById('missionTitleInput').value,
+                rallyTime: document.getElementById('rallyTimeInput').value
             };
 
             document.querySelectorAll('.patracdvr-vehicle-row').forEach(row => {
@@ -852,9 +889,29 @@
             if (!json) return;
             try {
                 const data = JSON.parse(json);
-                data.rows.forEach(r => addPatracdvrRow(r.vehicle, r.members));
-                data.unassigned.forEach(m => addPatracdvrMember(unassignedContainer, m));
+                restoreDataFromObject(data);
             } catch (e) { console.error("Load error", e); }
+        }
+
+        // Nouvelle fonction pour restaurer l'état depuis un objet (utilisée par loadData et import)
+        function restoreDataFromObject(data) {
+            // Nettoyage
+            patracdvrContainer.innerHTML = '';
+            unassignedContainer.innerHTML = '';
+
+            // Restoration inputs mission
+            if (data.missionTitle) document.getElementById('missionTitleInput').value = data.missionTitle;
+            if (data.rallyTime) document.getElementById('rallyTimeInput').value = data.rallyTime;
+
+            // Restoration vehicules
+            if (data.rows) {
+                data.rows.forEach(r => addPatracdvrRow(r.vehicle, r.members));
+            }
+            
+            // Restoration non assignés
+            if (data.unassigned) {
+                data.unassigned.forEach(m => addPatracdvrMember(unassignedContainer, m));
+            }
         }
 
         function resetAll() {
@@ -873,6 +930,31 @@
             a.href = url;
             a.download = `PATRACDVR_${new Date().toISOString().slice(0,10)}.json`;
             a.click();
+        }
+
+        function importData(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    // Validation simple
+                    if (!data.rows && !data.unassigned) throw new Error("Format invalide");
+                    
+                    if(confirm("Importer ce fichier va écraser la session actuelle. Continuer ?")) {
+                        restoreDataFromObject(data);
+                        saveData(); // Persist le nouvel état
+                        alert("Importation réussie !");
+                    }
+                } catch(err) {
+                    alert("Erreur lors de l'importation : " + err.message);
+                }
+                // Reset input pour permettre de réimporter le même fichier
+                event.target.value = '';
+            };
+            reader.readAsText(file);
         }
 
         // MODIFICATION 1: Chargement de la config depuis un fichier racine
@@ -958,8 +1040,11 @@
                 return lines;
             };
 
-            // Title
-            drawText("FICHE PATRACDVR", 24, helveticaBold, margin, y, rgb(0, 51/255, 160/255));
+            // Title Logic
+            const missionTitle = document.getElementById('missionTitleInput').value.trim();
+            const mainTitle = missionTitle ? `PATRACDVR - Mission : ${missionTitle}` : "FICHE PATRACDVR";
+
+            drawText(mainTitle, 24, helveticaBold, margin, y, rgb(0, 51/255, 160/255));
             y -= 40;
 
             // Headers
@@ -1054,12 +1139,34 @@
                 }
             }
 
+            // --- RALLY TIME FOOTER ---
+            const rallyTime = document.getElementById('rallyTimeInput').value.trim();
+            if (rallyTime) {
+                const footerText = `Heure de rassemblement : ${rallyTime}`;
+                // Ensure space
+                if (y < margin + 30) {
+                     page = pdfDoc.addPage([PageSizes.A4[1], PageSizes.A4[0]]);
+                     y = height - 40;
+                } else {
+                    y -= 20; // Space from table
+                }
+                
+                page.drawText(footerText, {
+                    x: margin,
+                    y: y,
+                    size: 14,
+                    font: helveticaBold,
+                    color: rgb(0,0,0)
+                });
+            }
+
             // Save
             const pdfBytes = await pdfDoc.save();
             const blob = new Blob([pdfBytes], { type: 'application/pdf' });
             const link = document.createElement('a');
             link.href = URL.createObjectURL(blob);
-            link.download = `PATRACDVR_${new Date().toISOString().slice(0,10)}.pdf`;
+            const safeTitle = missionTitle ? missionTitle.replace(/[^a-z0-9]/gi, '_').toLowerCase() : 'patracdvr';
+            link.download = `PATRACDVR_${safeTitle}_${new Date().toISOString().slice(0,10)}.pdf`;
             link.click();
         }
 
