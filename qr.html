@@ -9,10 +9,10 @@
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Oswald:wght@300;400;500&family=Saira+Stencil+One&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
     
-    <!-- LIBRAIRIE QR Code Generator (qrcode-generator) -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+    <!-- NOUVELLE LIBRAIRIE QR (Standard Moderne: node-qrcode v1.5.1) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode/1.5.1/qrcode.min.js"></script>
     
-    <!-- LIBRAIRIE QR Scanner (html5-qrcode) -->
+    <!-- LIBRAIRIE QR Scanner (html5-qrcode v2.3.8 - Dernière stable) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 
     <style>
@@ -276,7 +276,8 @@
         #qrcode-container svg {
             width: 100%;
             height: auto;
-            max-width: 350px;
+            max-width: 100%; /* S'adapte au conteneur */
+            display: block;
         }
 
         /* --- SCANNER --- */
@@ -379,7 +380,7 @@
             <div id="generator" class="section active">
                 <div class="info-bar">
                     <span class="material-symbols-outlined" style="font-size:1.2rem;">info</span>
-                    Mode haute capacité activé. Le JSON sera compressé.
+                    Moteur V.3 (Optimized) : Compression intelligente des données.
                 </div>
 
                 <label>DONNÉES VÉHICULE (JSON):</label>
@@ -465,7 +466,7 @@
     </div>
 
     <div class="system-footer">
-        SYS.CORE.VER.3.2.1 // SECURE // TACTICAL GLASS UI
+        SYS.CORE.VER.3.5 // SECURE // TACTICAL GLASS UI
     </div>
 
     <script>
@@ -482,7 +483,7 @@
             }
         }
 
-        // --- GENERATOR LOGIC ---
+        // --- GENERATOR LOGIC (NOUVELLE LIBRAIRIE node-qrcode) ---
         function generateQR() {
             const rawInput = document.getElementById('jsonInput').value;
             const container = document.getElementById('qrcode-container');
@@ -507,24 +508,35 @@
 
             console.log(`Payload size: ${optimizedData.length} chars`);
 
-            // 2. Génération
-            try {
-                // Type 0 = auto-detect
-                var qr = qrcode(0, 'L'); 
-                qr.addData(optimizedData);
-                qr.make();
+            // 2. Génération avec node-qrcode
+            // Cette librairie gère mieux l'optimisation des segments (chiffres vs lettres)
+            QRCode.toString(optimizedData, {
+                type: 'svg',
+                errorCorrectionLevel: 'L', // Low pour max data
+                margin: 1,
+                color: {
+                    dark: '#000000',
+                    light: '#ffffff'
+                }
+            }, function (err, string) {
+                if (err) {
+                    console.error(err);
+                    statusLine.innerHTML = `<span style="color:var(--danger)">ERREUR CAPACITÉ DÉPASSÉE</span>`;
+                    alert("Erreur: Le contenu est trop volumineux pour être encodé.");
+                    return;
+                }
                 
-                container.innerHTML = qr.createSvgTag({ scalable: true });
+                container.innerHTML = string;
                 
-                // CORRECTION: qr.typeNumber est une propriété, pas une fonction
-                const version = qr.typeNumber || "?";
-                statusLine.innerHTML = `<span style="color:var(--success)">SUCCÈS // TAILLE: ${optimizedData.length} chars // V${version}</span>`;
-                
-            } catch (e) {
-                console.error(e);
-                statusLine.innerHTML = `<span style="color:var(--danger)">ERREUR CRITIQUE: DONNÉES TROP VOLUMINEUSES</span>`;
-                alert("Erreur: Le contenu est trop volumineux. Essayez de réduire les données.");
-            }
+                // Ajustement CSS pour le SVG généré
+                const svgElement = container.querySelector('svg');
+                if (svgElement) {
+                    svgElement.removeAttribute('width');
+                    svgElement.removeAttribute('height');
+                }
+
+                statusLine.innerHTML = `<span style="color:var(--success)">SUCCÈS // TAILLE: ${optimizedData.length} chars // OPTIMISÉ</span>`;
+            });
         }
 
         // --- SCANNER LOGIC ---
@@ -556,7 +568,7 @@
         }
 
         function onScanFailure(error) {
-            // Ignorer erreurs
+            // Ignorer erreurs frame par frame
         }
 
         function startScanner() {
