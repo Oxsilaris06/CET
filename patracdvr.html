@@ -318,7 +318,7 @@
         <div class="mission-inputs">
             <div class="mission-input-group">
                 <label for="missionTitleInput">Titre de la mission</label>
-                <input type="text" id="missionTitleInput" placeholder="Ex: OP JUD">
+                <input type="text" id="missionTitleInput" placeholder="Ex: OP JUD X">
             </div>
             <div class="mission-input-group">
                 <label for="rallyTimeInput">Heure de rassemblement</label>
@@ -393,7 +393,7 @@
 
     <script>
         // --- CONFIGURATION ---
-        const memberConfig = {
+        const DEFAULT_MEMBER_CONFIG = {
             fonctions: ["Chef inter", "Chef dispo", "Chef Oscar", "Conducteur", "Chef de bord", "DE", "Cyno", "Inter", "Effrac", "AO", "Sans"],
             cellules: ["AO1", "AO2", "AO3", "AO4", "India 1", "India 2", "India 3", "India 4", "India 5", "Effrac", "Sans"],
             principales: ["UMP9", "G36", "FAP", "Sans"],
@@ -405,6 +405,9 @@
             tenues: ["UBAS", "4S", "Bleu", "Civile", "Ghillie", "Treillis"],
             gpbs: ["GPBL", "GPBPD", "Sans"]
         };
+
+        // Configuration active (copie modifiable des défauts)
+        let memberConfig = JSON.parse(JSON.stringify(DEFAULT_MEMBER_CONFIG));
 
         const availableVehicles = ['Sharan', 'Kodiaq', 'Kodiaq Bana', '5008', 'Scénic', 'Expert', 'Traffic'];
         
@@ -948,7 +951,27 @@
 
             // 1. Restauration Configuration Options (si présente)
             if (data.options) {
-                Object.assign(memberConfig, data.options);
+                // Fusion intelligente : Constantes par défaut + Valeurs importées uniques
+                Object.keys(DEFAULT_MEMBER_CONFIG).forEach(key => {
+                    const defaultValues = DEFAULT_MEMBER_CONFIG[key];
+                    const importedValues = data.options[key] || [];
+                    
+                    if (Array.isArray(defaultValues)) {
+                        // Merge arrays et suppression des doublons
+                        const combined = [...defaultValues, ...importedValues];
+                        memberConfig[key] = [...new Set(combined)];
+                    } else {
+                        memberConfig[key] = importedValues;
+                    }
+                });
+
+                // Ajouter les clés qui existent dans l'import mais pas dans les défauts
+                Object.keys(data.options).forEach(key => {
+                    if (!DEFAULT_MEMBER_CONFIG.hasOwnProperty(key)) {
+                        memberConfig[key] = data.options[key];
+                    }
+                });
+
                 setupQuickEditPanelUI();
             }
 
