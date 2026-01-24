@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TACTICAL QR OPS</title>
+    
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
+    
+    <!-- QR Code Generator Lib -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    
+    <!-- QR Code Scanner Lib (Requested) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+
+    <style>
+        :root {
+            --primary: #00f3ff; /* Cyan tactique */
+            --secondary: #004d52;
+            --bg-dark: #050505;
+            --glass: rgba(10, 20, 30, 0.75);
+            --glass-border: 1px solid rgba(0, 243, 255, 0.3);
+            --danger: #ff2a2a;
+            --success: #00ff41;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            background-image: 
+                linear-gradient(rgba(0, 243, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 243, 255, 0.03) 1px, transparent 1px);
+            background-size: 30px 30px;
+            font-family: 'Rajdhani', sans-serif;
+            color: #e0e0e0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+
+        /* --- UI CONTAINER --- */
+        .tactical-frame {
+            width: 100%;
+            max-width: 600px;
+            background: var(--glass);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: var(--glass-border);
+            border-radius: 4px;
+            box-shadow: 0 0 20px rgba(0, 243, 255, 0.1);
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Decorative Corners */
+        .tactical-frame::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0;
+            width: 20px; height: 20px;
+            border-top: 2px solid var(--primary);
+            border-left: 2px solid var(--primary);
+        }
+        .tactical-frame::after {
+            content: '';
+            position: absolute;
+            bottom: 0; right: 0;
+            width: 20px; height: 20px;
+            border-bottom: 2px solid var(--primary);
+            border-right: 2px solid var(--primary);
+        }
+
+        /* --- HEADER --- */
+        header {
+            padding: 15px;
+            border-bottom: 1px solid rgba(0, 243, 255, 0.2);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(0, 20, 30, 0.8);
+        }
+
+        h1 {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 1.2rem;
+            color: var(--primary);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            text-shadow: 0 0 5px var(--primary);
+        }
+
+        /* --- TABS --- */
+        .tabs {
+            display: flex;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .tab-btn {
+            flex: 1;
+            padding: 15px;
+            background: transparent;
+            border: none;
+            color: rgba(255,255,255,0.5);
+            font-family: 'Rajdhani', sans-serif;
+            font-weight: 700;
+            font-size: 1.1rem;
+            cursor: pointer;
+            transition: 0.3s;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .tab-btn.active {
+            color: var(--bg-dark);
+            background: var(--primary);
+            box-shadow: 0 0 15px var(--primary);
+        }
+
+        /* --- CONTENT AREA --- */
+        .content-area {
+            padding: 20px;
+            min-height: 400px;
+        }
+
+        .section {
+            display: none;
+            animation: fadeIn 0.4s ease-in-out;
+        }
+
+        .section.active {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* --- GENERATOR STYLES --- */
+        textarea {
+            width: 100%;
+            height: 150px;
+            background: rgba(0,0,0,0.5);
+            border: 1px solid rgba(0, 243, 255, 0.3);
+            color: var(--primary);
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.8rem;
+            padding: 10px;
+            resize: vertical;
+            outline: none;
+        }
+
+        textarea:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 10px rgba(0, 243, 255, 0.2);
+        }
+
+        .btn {
+            background: rgba(0, 243, 255, 0.1);
+            border: 1px solid var(--primary);
+            color: var(--primary);
+            padding: 12px 20px;
+            font-family: 'Rajdhani', sans-serif;
+            font-weight: 700;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn:hover {
+            background: var(--primary);
+            color: var(--bg-dark);
+            box-shadow: 0 0 15px var(--primary);
+        }
+
+        .btn-danger {
+            border-color: var(--danger);
+            color: var(--danger);
+            background: rgba(255, 42, 42, 0.1);
+        }
+        .btn-danger:hover {
+            background: var(--danger);
+            color: white;
+            box-shadow: 0 0 15px var(--danger);
+        }
+
+        #qrcode-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            background: white; /* QR needs white bg for contrast */
+            border-radius: 4px;
+            margin-top: 10px;
+            align-self: center;
+            opacity: 0.8;
+        }
+
+        /* --- SCANNER STYLES --- */
+        #reader {
+            width: 100%;
+            border: 1px solid rgba(0, 243, 255, 0.3);
+            background: black;
+            position: relative;
+            overflow: hidden;
+            min-height: 250px;
+        }
+        
+        /* Customizing html5-qrcode overlays if possible, 
+           mostly handled by their library, but we can style the container */
+
+        .scan-result-box {
+            background: rgba(0, 0, 0, 0.6);
+            border: 1px dashed var(--success);
+            padding: 15px;
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.9rem;
+            color: var(--success);
+            word-break: break-all;
+            display: none; /* Hidden by default */
+            position: relative;
+        }
+
+        .scan-result-box.visible {
+            display: block;
+        }
+
+        .copy-btn {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background: transparent;
+            border: none;
+            color: var(--success);
+            cursor: pointer;
+            opacity: 0.7;
+        }
+        .copy-btn:hover { opacity: 1; }
+
+        .status-line {
+            font-size: 0.8rem;
+            color: rgba(255,255,255,0.5);
+            text-align: center;
+            margin-top: 5px;
+        }
+
+        /* --- FOOTER DECO --- */
+        .system-footer {
+            margin-top: 20px;
+            text-align: center;
+            font-size: 0.7rem;
+            color: rgba(0, 243, 255, 0.3);
+            letter-spacing: 2px;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="tactical-frame">
+        <header>
+            <h1><span class="material-symbols-outlined" style="vertical-align: middle;">qr_code_scanner</span> TACTICAL QR OPS</h1>
+            <div style="width: 10px; height: 10px; background: var(--success); border-radius: 50%; box-shadow: 0 0 10px var(--success);"></div>
+        </header>
+
+        <nav class="tabs">
+            <button class="tab-btn active" onclick="switchTab('generator')">GÉNÉRATEUR</button>
+            <button class="tab-btn" onclick="switchTab('scanner')">SCANNER</button>
+        </nav>
+
+        <div class="content-area">
+            
+            <!-- SECTION GÉNÉRATEUR -->
+            <div id="generator" class="section active">
+                <label style="color:var(--primary); font-size: 0.9rem;">DONNÉES VÉHICULE (JSON):</label>
+                <textarea id="jsonInput" placeholder="Collez le JSON ici...">{
+  "vehicule": "SHARAN (BANA)",
+  "inventaire": {
+    "Sac Médical Rouge": [
+      "4 garrot tourniquet (sv)",
+      "2 lunettes protection",
+      "4 bandage Israëlien",
+      "1 marqueur",
+      "1 Pansement",
+      "2 Easy ice",
+      "8 lot gants vinyle",
+      "2 Écharpe triangulaire",
+      "1 Jesco",
+      "1 Scotch 3M",
+      "3 Bande extensible 3M",
+      "9 Sérum phy",
+      "1 Quikclot",
+      "2 Pansement brûlures",
+      "2 Cyalumes rouges",
+      "3 pack de gaze (3 côtés)",
+      "1 chlorhexidine",
+      "1 Savon liquide",
+      "(Brancard souple)"
+    ],
+    "Dossier Molle": [
+      "Dépistage stup",
+      "Lacry",
+      "Jumelles",
+      "Embout alcoo",
+      "Ethylo + chargeur 12V",
+      "Cahier PJ (fiche doc terrain + forcené)",
+      "Rubalise",
+      "1 Batteries externes CROSSCALL"
+    ],
+    "Sac Oscar": [
+      "Sac MILTEC Wasp",
+      "Tarp Woodland",
+      "Jumelles 10x50",
+      "Sécateur",
+      "Pince coupante",
+      "Filet de masquage",
+      "Carnet imperméable",
+      "Ghillie"
+    ],
+    "Lot Reco": [
+      "Tenue Métropole",
+      "Gilet Jaune Shneider Electric"
+    ],
+    "Lot INDIA": [
+      "Bouclier balistique + Housse",
+      "Claie de portage avec sangles",
+      "Lampe BBAL",
+      "Batterie BBAL",
+      "Bouton bluetooth modifié BBAL"
+    ],
+    "DIVERS": [
+      "1 Echelle télescopique",
+      "Triangle",
+      "Extincteur",
+      "Kit forcené (feuilles)",
+      "Rubalise",
+      "TIS",
+      "Tricoise",
+      "Couverture anti feu"
+    ],
+    "INTERCEPTION": [
+      "1 Kit stop stick avec housse"
+    ]
+  }
+}</textarea>
+                
+                <button class="btn" onclick="generateQR()">
+                    <span class="material-symbols-outlined">qr_code_2</span> GÉNÉRER LE CODE
+                </button>
+
+                <div id="qrcode-container">
+                    <div id="qrcode"></div>
+                </div>
+                <div class="status-line">PRÊT POUR ENCODAGE</div>
+            </div>
+
+            <!-- SECTION SCANNER -->
+            <div id="scanner" class="section">
+                <div id="reader"></div>
+                
+                <div id="scanControls" style="display: flex; gap: 10px; margin-top: 10px;">
+                    <button id="startScanBtn" class="btn" style="flex:1;" onclick="startScanner()">
+                        <span class="material-symbols-outlined">videocam</span> ACTIVER CAMÉRA
+                    </button>
+                    <button id="stopScanBtn" class="btn btn-danger" style="flex:1; display:none;" onclick="stopScanner()">
+                        <span class="material-symbols-outlined">videocam_off</span> ARRÊTER
+                    </button>
+                </div>
+
+                <div id="scanResult" class="scan-result-box">
+                    <button class="copy-btn" onclick="copyResult()" title="Copier">
+                        <span class="material-symbols-outlined">content_copy</span>
+                    </button>
+                    <span style="display:block; font-size:0.7rem; color:rgba(255,255,255,0.5); margin-bottom:5px;">DONNÉES DÉCODÉES:</span>
+                    <div id="resultText"></div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <div class="system-footer">
+        SYS.VER.2.0.4 // TACTICAL GLASS UI // SECURE CONNECTION
+    </div>
+
+    <script>
+        // --- TABS LOGIC ---
+        function switchTab(tabId) {
+            // Remove active class from all buttons and sections
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.section').forEach(sec => sec.classList.remove('active'));
+
+            // Add active class to clicked button and corresponding section
+            document.querySelector(`button[onclick="switchTab('${tabId}')"]`).classList.add('active');
+            document.getElementById(tabId).classList.add('active');
+
+            // Handle scanner logic when switching
+            if (tabId === 'generator' && html5QrCode && html5QrCode.isScanning) {
+                stopScanner();
+            }
+        }
+
+        // --- GENERATOR LOGIC ---
+        let qrcodeObj = null;
+
+        function generateQR() {
+            const inputData = document.getElementById('jsonInput').value;
+            const container = document.getElementById('qrcode');
+            
+            // Clear previous
+            container.innerHTML = "";
+
+            if (!inputData.trim()) {
+                alert("Veuillez entrer des données JSON.");
+                return;
+            }
+
+            // Create QR Code
+            try {
+                qrcodeObj = new QRCode(container, {
+                    text: inputData,
+                    width: 256,
+                    height: 256,
+                    colorDark : "#000000",
+                    colorLight : "#ffffff",
+                    correctLevel : QRCode.CorrectLevel.M
+                });
+                document.querySelector('.status-line').textContent = "ENCODAGE TERMINÉ // SUCCÈS";
+                document.querySelector('.status-line').style.color = "var(--success)";
+            } catch (e) {
+                console.error(e);
+                alert("Erreur lors de la génération. Texte trop long ?");
+            }
+        }
+
+        // Initialize with default on load
+        window.onload = function() {
+            // Optional: Generate immediately on load
+            // generateQR();
+        };
+
+
+        // --- SCANNER LOGIC ---
+        let html5QrCode = null;
+
+        function onScanSuccess(decodedText, decodedResult) {
+            // Handle on success condition with the decoded message.
+            console.log(`Scan result: ${decodedText}`, decodedResult);
+            
+            const resultBox = document.getElementById('scanResult');
+            const resultText = document.getElementById('resultText');
+            
+            resultText.innerText = decodedText;
+            resultBox.classList.add('visible');
+            
+            // Optional: Stop scanning after success to save battery/avoid duplicates
+            stopScanner(); 
+            
+            // Visual feedback
+            const startBtn = document.getElementById('startScanBtn');
+            startBtn.innerHTML = '<span class="material-symbols-outlined">check_circle</span> SCAN RÉUSSI';
+            setTimeout(() => {
+                if(!html5QrCode.isScanning) {
+                    startBtn.innerHTML = '<span class="material-symbols-outlined">videocam</span> ACTIVER CAMÉRA';
+                }
+            }, 2000);
+        }
+
+        function onScanFailure(error) {
+            // handle scan failure, usually better to ignore and keep scanning.
+            // console.warn(`Code scan error = ${error}`);
+        }
+
+        function startScanner() {
+            const resultBox = document.getElementById('scanResult');
+            resultBox.classList.remove('visible');
+            
+            html5QrCode = new Html5Qrcode("reader");
+            const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+            
+            // Prefer back camera
+            html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess, onScanFailure)
+            .then(() => {
+                document.getElementById('startScanBtn').style.display = 'none';
+                document.getElementById('stopScanBtn').style.display = 'inline-flex';
+            })
+            .catch(err => {
+                console.error("Error starting scanner", err);
+                alert("Erreur démarrage caméra: " + err);
+            });
+        }
+
+        function stopScanner() {
+            if (html5QrCode) {
+                html5QrCode.stop().then((ignore) => {
+                    // QR Code scanning is stopped.
+                    document.getElementById('startScanBtn').style.display = 'inline-flex';
+                    document.getElementById('stopScanBtn').style.display = 'none';
+                    document.getElementById('reader').innerHTML = ""; // Clear video feed
+                }).catch((err) => {
+                    console.error("Stop failed", err);
+                });
+            }
+        }
+
+        function copyResult() {
+            const text = document.getElementById('resultText').innerText;
+            navigator.clipboard.writeText(text).then(() => {
+                alert("JSON copié dans le presse-papier !");
+            }, () => {
+                alert("Échec de la copie.");
+            });
+        }
+    </script>
+</body>
+</html>
