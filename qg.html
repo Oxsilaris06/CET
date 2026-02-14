@@ -72,6 +72,7 @@
             display: flex;
             flex-direction: column;
             z-index: 1000;
+            transition: transform 0.3s ease;
         }
 
         .sidebar-header {
@@ -587,11 +588,102 @@
             margin-top: 10px;
             border: 1px solid rgba(255, 255, 255, 0.2);
         }
+
+        /* --- MOBILE OPTIMIZATIONS --- */
+        #sidebar-toggle {
+            display: none;
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 1100;
+            background: var(--color-accent);
+            color: black;
+            border-radius: 50%;
+            width: 44px;
+            height: 44px;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+            cursor: pointer;
+        }
+
+        @media (max-width: 768px) {
+            .sidebar {
+                position: fixed;
+                left: 0;
+                top: 0;
+                bottom: 0;
+                transform: translateX(-100%);
+                box-shadow: 10px 0 30px rgba(0, 0, 0, 0.5);
+            }
+
+            .sidebar.mobile-open {
+                transform: translateX(0);
+            }
+
+            #sidebar-toggle {
+                display: flex;
+            }
+
+            .compass-ui {
+                top: 80px;
+            }
+
+            .sidebar-header .brand {
+                font-size: 1rem;
+            }
+
+            .add-session input {
+                font-size: 16px;
+                height: 44px;
+            }
+
+            /* Prevent iOS zoom */
+            .add-session .btn {
+                height: 44px;
+                padding: 0 20px;
+            }
+
+            .ops-panel {
+                grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            }
+        }
+
+        @media screen and (orientation: landscape) and (max-height: 500px) {
+            .sidebar-header {
+                padding: 10px;
+            }
+
+            .sidebar-footer {
+                padding: 10px;
+            }
+
+            .ops-panel {
+                max-height: 120px;
+                padding: 5px;
+            }
+
+            .op-card {
+                padding: 5px;
+                font-size: 0.7rem;
+            }
+
+            .compass-ui {
+                width: 40px;
+                height: 40px;
+                top: 10px;
+                right: 80px;
+                left: auto;
+            }
+        }
     </style>
 </head>
 
 <body>
-    <div class="sidebar">
+    <div id="sidebar-toggle" onclick="UI.toggleSidebar()">
+        <span class="material-symbols-outlined">menu</span>
+    </div>
+    <div class="sidebar" id="sidebar">
         <div class="sidebar-header">
             <span class="material-symbols-outlined">shield</span>
             <div class="brand">Praxis <span>Commandement</span></div>
@@ -801,7 +893,7 @@
                     UI.toast("RÉSEAU COMTAC ACTIF");
                     NetService.loadFromLocal();
                 });
-                setInterval(NetService.processUpdateBuffer, 3000);
+                setInterval(NetService.processUpdateBuffer, 1000);
             },
             followSession: (hostId) => {
                 if (NetService.groups[hostId]) return;
@@ -933,7 +1025,11 @@
                 Object.values(NetService.groups).forEach(g => {
                     const div = document.createElement('div'); div.className = `session-item ${g.status === 'active' ? 'active' : ''}`;
                     div.innerHTML = `<div class="session-color" style="background:${g.color}"></div><span class="material-symbols-outlined btn-session-close" onclick="event.stopPropagation(); NetService.disconnect('${g.id}')">cancel</span><div class="session-id"><span># ${g.id}</span> <span style="font-size:0.6rem; color:${g.status === 'active' ? 'var(--color-green)' : 'var(--color-red)'}">${g.status.toUpperCase()}</span></div><div class="session-stats">${Object.keys(g.operators).length} OPÉRATEURS</div>`;
-                    div.onclick = () => { const ops = Object.values(g.operators); if (ops.length > 0) MapService.map.fitBounds(ops.reduce((b, o) => b.extend([o.lng, o.lat]), new maplibregl.LngLatBounds()), { padding: 50 }); };
+                    div.onclick = () => {
+                        const ops = Object.values(g.operators);
+                        if (ops.length > 0) MapService.map.fitBounds(ops.reduce((b, o) => b.extend([o.lng, o.lat]), new maplibregl.LngLatBounds()), { padding: 50 });
+                        if (window.innerWidth <= 768) UI.toggleSidebar();
+                    };
                     list.appendChild(div);
                 });
             },
@@ -952,8 +1048,14 @@
                 MapService.followId = (MapService.followId === id) ? null : id;
                 UI.toast(MapService.followId ? `SUIVI: ${id.substring(0, 8)}` : "SUIVI DÉSACTIVÉ");
                 UI.renderOps();
+                if (window.innerWidth <= 768 && MapService.followId) UI.toggleSidebar();
             },
             toggleOps: () => document.getElementById('ops-panel').classList.toggle('active'),
+            toggleSidebar: () => {
+                document.getElementById('sidebar').classList.toggle('mobile-open');
+                const icon = document.querySelector('#sidebar-toggle .material-symbols-outlined');
+                icon.innerText = document.getElementById('sidebar').classList.contains('mobile-open') ? 'close' : 'menu';
+            },
             toggleTrails: () => {
                 MapService.showTrails = !MapService.showTrails;
                 document.getElementById('btn-trails').classList.toggle('active', MapService.showTrails);
