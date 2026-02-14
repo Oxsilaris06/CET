@@ -180,8 +180,13 @@
         }
 
         .session-item.active {
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .session-item.selected {
             border-color: var(--color-accent);
-            background: rgba(59, 130, 246, 0.05);
+            background: rgba(59, 130, 246, 0.1);
+            box-shadow: 0 0 15px rgba(59, 130, 246, 0.2);
         }
 
         .session-color {
@@ -708,6 +713,7 @@
 
         <div class="sidebar-tabs">
             <div class="tab-btn active" onclick="UI.switchTab('sessions')">SESSIONS</div>
+            <div class="tab-btn" onclick="UI.switchTab('history')">HISTORIQUE</div>
             <div class="tab-btn" onclick="UI.switchTab('logbook')">
                 MAIN COURANTE
                 <div id="log-unread" class="unread-dot"></div>
@@ -718,7 +724,15 @@
             <div class="session-list" id="session-list"></div>
         </div>
 
+        <div id="tab-history" class="sidebar-content">
+            <div style="font-size:0.7rem; color:var(--color-dim); margin-bottom:10px; text-transform:uppercase; font-weight:bold;"
+                id="history-title">SESSION: --</div>
+            <div id="history-list"></div>
+        </div>
+
         <div id="tab-logbook" class="sidebar-content">
+            <div style="font-size:0.7rem; color:var(--color-dim); margin-bottom:10px; text-transform:uppercase; font-weight:bold;"
+                id="logbook-title">SESSION: --</div>
             <div id="logbook-list"></div>
         </div>
 
@@ -797,6 +811,8 @@
                 this.status = 'connecting';
                 this.conn = null;
                 this.hasCentered = false;
+                this.logs = [];    // Chronological feed
+                this.history = []; // Tactical history (significant events)
             }
         }
 
@@ -957,6 +973,7 @@
                 if (d.type === 'UPDATE') processOp(d.user);
                 if (d.type === 'PING') NetService.updateBuffer.pings.push({ ping: d.ping, group: group });
                 if (d.type === 'CHAT') NetService.updateBuffer.logs.push({ msg: d.msg, sender: d.sender, group: group, type: 'chat' });
+                if (d.type === 'LOG') NetService.updateBuffer.logs.push({ msg: d.msg, group, important: d.severity === 'important' });
 
                 if (d.type === 'IMAGE_CHUNK') {
                     NetService.handleImageChunk(d);
@@ -997,7 +1014,19 @@
                 });
 
                 NetService.updateBuffer.logs.forEach(l => {
-                    UI.log(l.msg || `${l.sender}: ${l.msg}`, l.important, l.group, l.type);
+                    const group = l.group;
+                    if (!group) return;
+                    const logEntry = { time: new Date().toLocaleTimeString(), msg: l.msg, important: l.important, type: l.type };
+                    group.logs.unshift(logEntry);
+                    if (group.logs.length > 200) group.logs.pop();
+
+                    if (l.important || l.type === 'chat') {
+                        group.history.unshift(logEntry);
+                        if (group.history.length > 50) group.history.pop();
+                    }
+
+                    if (UI.selectedId === group.id) UI.renderSessionDetails();
+                    else document.getElementById('log-unread').classList.add('active');
                 });
 
                 NetService.updateBuffer.ops = {};
@@ -1046,20 +1075,38 @@
             addSession: () => {
                 const el = document.getElementById('input-session-id'); const id = el.value.trim().toUpperCase();
                 if (id.length < 4) return; NetService.followSession(id); el.value = '';
+                if (!UI.selectedId) UI.selectedId = id;
             },
             renderSessions: () => {
                 const list = document.getElementById('session-list'); list.innerHTML = '';
                 Object.values(NetService.groups).forEach(g => {
-                    const div = document.createElement('div'); div.className = `session-item ${g.status === 'active' ? 'active' : ''}`;
-                    div.innerHTML = `<div class="session-color" style="background:${g.color}"></div><span class="material-symbols-outlined btn-session-close" onclick="event.stopPropagation(); NetService.disconnect('${g.id}')">cancel</span><div class="session-id"><span># ${g.id}</span> <span style="font-size:0.6rem; color:${g.status === 'active' ? 'var(--color-green)' : 'var(--color-red)'}">${g.status.toUpperCase()}</span></div><div class="session-stats">${Object.keys(g.operators).length} OPÉRATEURS</div>`;
+                    const div = document.createElement('div'); div.className = `session-item ${g.status === 'active' ? 'active' : ''} ${UI.selectedId === g.id ? 'selected' : ''}`;
+                    div.innerHTML = `<div class="session-color" style="background:${g.color}"></div><span class="material-symbols-outlined btn-session-close" onclick="event.stopPropagation(); NetService.disconnect('${g.id}')">cancel</span><div class="session-id"><span># ${g.id}</span> <span style="font-size:0.6rem; color:${g.status === 'active' ? 'var(--color-green)' : 'var(--color-red)'}">${g.status.toUpperCase()}</span></div><div class="session-stats">${Object.keys(g.operators).length} UNITÉS</div>`;
                     div.onclick = () => {
+                        UI.selectedId = g.id;
                         const ops = Object.values(g.operators);
                         if (ops.length > 0) MapService.map.fitBounds(ops.reduce((b, o) => b.extend([o.lng, o.lat]), new maplibregl.LngLatBounds()), { padding: 50 });
+                        UI.renderSessions();
+                        UI.renderSessionDetails();
                         if (window.innerWidth <= 768) UI.toggleSidebar();
                     };
                     list.appendChild(div);
                 });
             },
+            renderSessionDetails: () => {
+                const group = NetService.groups[UI.selectedId];
+                if (!group) return;
+
+                document.getElementById('history-title').innerText = `HISTORIQUE: ${group.id}`;
+                document.getElementById('logbook-title').innerText = `MAIN COURANTE: ${group.id}`;
+
+                const hList = document.getElementById('history-list');
+                hList.innerHTML = group.history.map(e => `<div class="log-entry"><span class="log-time">${e.time}</span><span class="log-msg ${e.important ? 'important' : ''}">${e.msg}</span></div>`).join('');
+
+                const lList = document.getElementById('logbook-list');
+                lList.innerHTML = group.logs.map(e => `<div class="log-entry"><span class="log-time">${e.time}</span><span class="log-msg ${e.important ? 'important' : ''} ${e.type || ''}">${e.msg}</span></div>`).join('');
+            },
+            selectedId: null,
             renderOps: () => {
                 const panel = document.getElementById('ops-panel'); panel.innerHTML = '';
                 Object.values(NetService.groups).forEach(g => {
@@ -1102,14 +1149,13 @@
                 UI.toast(MapService.showTrails ? "TRACÉS AFFICHÉS" : "TRACÉS MASQUÉS");
             },
             log: (msg, important = false, group = null, type = '') => {
-                const list = document.getElementById('logbook-list');
-                const entry = document.createElement('div'); entry.className = 'log-entry';
-                const groupTag = group ? `<span class="log-group" style="--g-color: ${group.color}">[${group.id}]</span>` : '';
-                entry.innerHTML = `<span class="log-time">${new Date().toLocaleTimeString()}</span>${groupTag}<span class="log-msg ${important ? 'important' : ''} ${type}">${msg}</span>`;
-                list.prepend(entry); if (list.children.length > 200) list.lastChild.remove();
-
-                if (!document.getElementById('tab-logbook').classList.contains('active')) {
-                    document.getElementById('log-unread').classList.add('active');
+                // Legacy log replaced by session-specific buffers, but kept for system messages if needed
+                if (!group) {
+                    const list = document.getElementById('logbook-list');
+                    const entry = document.createElement('div'); entry.className = 'log-entry';
+                    entry.innerHTML = `<span class="log-time">${new Date().toLocaleTimeString()}</span><span class="log-msg ${important ? 'important' : ''} ${type}">${msg}</span>`;
+                    list.prepend(entry);
+                    return;
                 }
             },
             togglePings: () => {
