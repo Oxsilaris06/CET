@@ -45,7 +45,7 @@
             --font-mono: 'JetBrains Mono', monospace;
         }
 
-        * {<
+        * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
@@ -185,6 +185,18 @@
         .log-msg.important {
             color: var(--color-red);
             font-weight: bold;
+            text-shadow: 0 0 5px rgba(239, 68, 68, 0.5);
+        }
+
+        .log-msg.system {
+            color: var(--color-accent);
+            opacity: 0.8;
+        }
+
+        .log-group {
+            font-weight: 800;
+            color: var(--g-color, var(--color-accent));
+            margin-right: 4px;
         }
 
         .sidebar-footer {
@@ -452,6 +464,58 @@
         .marker-wrapper.followed {
             filter: brightness(1.5) drop-shadow(0 0 10px var(--color-green));
         }
+
+        /* Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 2000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(5px);
+        }
+
+        .modal-content {
+            background: var(--color-surface);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            width: 90%;
+            max-width: 500px;
+            padding: 20px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding-bottom: 10px;
+            font-weight: 800;
+            font-family: var(--font-mono);
+        }
+
+        .close-btn {
+            cursor: pointer;
+            color: var(--color-dim);
+        }
+
+        .close-btn:hover {
+            color: white;
+        }
+
+        #ping-modal-image-container img {
+            width: 100%;
+            border-radius: 8px;
+            margin-top: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
     </style>
 </head>
 
@@ -508,6 +572,23 @@
         </div>
 
         <div id="ops-panel" class="ops-panel"></div>
+    </div>
+
+    <!-- Modal for Ping Details -->
+    <div id="ping-modal" class="modal-overlay" onclick="UI.closePingModal()">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <div>TACTICAL PING INFO</div>
+                <span class="material-symbols-outlined close-btn" onclick="UI.closePingModal()">close</span>
+            </div>
+            <div class="modal-body">
+                <div id="ping-modal-sender"
+                    style="font-weight: bold; color: var(--color-accent); font-family: var(--font-mono);">SOURCE: --
+                </div>
+                <div id="ping-modal-msg" style="margin: 10px 0; font-size: 1.1rem;">--</div>
+                <div id="ping-modal-image-container"></div>
+            </div>
+        </div>
     </div>
 
     <div id="toast">SYSTEM READY</div>
@@ -567,11 +648,13 @@
                     el.className = 'marker-wrapper';
                     el.innerHTML = `<div class="vision-cone" style="--v-color: ${color}33"></div><div class="marker-arrow" style="border-bottom-color: ${color}"></div><div class="marker-label" style="border-color: ${color}">${op.callsign}</div>`;
                     el.onclick = () => UI.followOp(id);
-                    MapService.markers[id] = new maplibregl.Marker({ element: el }).setLngLat([op.lng, op.lat]).addTo(MapService.map);
+                    MapService.markers[id] = new maplibregl.Marker({ element: el, rotation: op.head || 0 })
+                        .setLngLat([op.lng, op.lat])
+                        .addTo(MapService.map);
                 } else {
                     const el = MapService.markers[id].getElement();
-                    el.style.transform = `rotate(${op.head || 0}deg)`;
                     MapService.markers[id].setLngLat([op.lng, op.lat]);
+                    MapService.markers[id].setRotation(op.head || 0);
                     el.classList.toggle('followed', MapService.followId === id);
                 }
                 if (MapService.followId === id) MapService.map.easeTo({ center: [op.lng, op.lat], duration: 500 });
@@ -582,10 +665,19 @@
                 const id = ping.id;
                 const el = document.createElement('div');
                 el.className = 'ping-wrapper';
+                el.style.cursor = 'pointer';
                 el.innerHTML = `<div class="ping-label" style="background: ${color}">${ping.sender}: ${ping.msg}</div><span class="material-symbols-outlined ping-icon" style="color: ${color}">location_on</span>`;
+                el.onclick = () => UI.showPingDetails(ping);
+
                 if (MapService.pingMarkers[id]) MapService.pingMarkers[id].remove();
                 MapService.pingMarkers[id] = new maplibregl.Marker({ element: el }).setLngLat([ping.lng, ping.lat]).addTo(MapService.map);
-                setTimeout(() => { if (MapService.pingMarkers[id]) { MapService.pingMarkers[id].remove(); delete MapService.pingMarkers[id]; } }, 60000);
+
+                setTimeout(() => {
+                    if (MapService.pingMarkers[id]) {
+                        MapService.pingMarkers[id].remove();
+                        delete MapService.pingMarkers[id];
+                    }
+                }, 120000); // 2 minutes for better visibility
             },
 
             refreshTrails: () => {
@@ -604,6 +696,8 @@
 
         const NetService = {
             groups: {}, localPeer: null,
+            imageBuffers: {}, // id -> { chunks: [], total: 0, fullData: null }
+
             init: () => {
                 NetService.localPeer = new Peer(null, { config: PEER_CONFIG });
                 NetService.localPeer.on('open', () => UI.toast("RÉSEAU COMTAC ACTIF"));
@@ -613,9 +707,9 @@
                 const group = new TacticalGroup(hostId, Object.keys(NetService.groups).length);
                 NetService.groups[hostId] = group;
                 const conn = NetService.localPeer.connect(hostId, { metadata: { role: 'COMMAND', callsign: 'HQ-COMTAC' }, reliable: true });
-                conn.on('open', () => { group.status = 'active'; UI.log(`Connexion établie avec GROUPE ${hostId}`); conn.send({ type: 'FULL_REQ' }); UI.renderSessions(); });
+                conn.on('open', () => { group.status = 'active'; UI.log(`Connexion établie`, false, group); conn.send({ type: 'FULL_REQ' }); UI.renderSessions(); });
                 conn.on('data', (d) => NetService.handleData(group, d));
-                conn.on('close', () => { group.status = 'disconnected'; UI.log(`Liaison rompue avec GROUPE ${hostId}`, true); UI.renderSessions(); });
+                conn.on('close', () => { group.status = 'disconnected'; UI.log(`Liaison rompue`, true, group); UI.renderSessions(); });
                 group.conn = conn;
                 UI.renderSessions();
             },
@@ -630,14 +724,36 @@
                     }
                     group.operators[u.id] = u;
                     MapService.updateOpMarker(u, group.color);
-                    if (old && old.status !== u.status) UI.log(`[${group.id}] ${u.callsign} -> STATUT: ${u.status}`);
-                    if (u.lastMsg && (!old || old.lastMsg !== u.lastMsg)) UI.log(`[${group.id}] ${u.callsign}: ${u.lastMsg}`);
+                    if (old && old.status !== u.status) UI.log(`${u.callsign} -> STATUT: ${u.status}`, u.status === 'CONTACT', group);
+                    if (u.lastMsg && (!old || old.lastMsg !== u.lastMsg)) UI.log(`${u.callsign}: ${u.lastMsg}`, false, group);
                 };
 
                 if (d.type === 'SYNC' || d.type === 'FULL') (d.list || [d.user]).forEach(processOp);
                 if (d.type === 'UPDATE') processOp(d.user);
                 if (d.type === 'PING') MapService.addPingMarker(d.ping, group.color);
+
+                if (d.type === 'IMAGE_CHUNK') {
+                    NetService.handleImageChunk(d);
+                }
+
                 UI.renderOps();
+            },
+
+            handleImageChunk: (d) => {
+                if (!NetService.imageBuffers[d.id]) {
+                    NetService.imageBuffers[d.id] = { chunks: [], total: d.total };
+                }
+                const buffer = NetService.imageBuffers[d.id];
+                buffer.chunks[d.index] = d.chunk;
+
+                let receivedCount = 0;
+                for (let i = 0; i < buffer.total; i++) if (buffer.chunks[i]) receivedCount++;
+
+                if (receivedCount === buffer.total) {
+                    const fullData = buffer.chunks.join('');
+                    NetService.imageBuffers[d.id].fullData = fullData;
+                    UI.toast("PHOTO RÉCEPTIONNÉE");
+                }
             },
             disconnect: (hostId) => {
                 const g = NetService.groups[hostId];
@@ -688,13 +804,41 @@
             },
             toggleOps: () => document.getElementById('ops-panel').classList.toggle('active'),
             toggleTrails: () => { MapService.showTrails = !MapService.showTrails; document.getElementById('btn-trails').classList.toggle('active', MapService.showTrails); MapService.refreshTrails(); },
-            log: (msg, important = false) => {
+            log: (msg, important = false, group = null) => {
                 const list = document.getElementById('logbook-list');
                 const entry = document.createElement('div'); entry.className = 'log-entry';
-                entry.innerHTML = `<span class="log-time">${new Date().toLocaleTimeString()}</span><span class="log-msg ${important ? 'important' : ''}">${msg}</span>`;
-                list.prepend(entry); if (list.children.length > 100) list.lastChild.remove();
+                const groupTag = group ? `<span class="log-group" style="--g-color: ${group.color}">[${group.id}]</span>` : '';
+                entry.innerHTML = `<span class="log-time">${new Date().toLocaleTimeString()}</span>${groupTag}<span class="log-msg ${important ? 'important' : ''}">${msg}</span>`;
+                list.prepend(entry); if (list.children.length > 200) list.lastChild.remove();
             },
             clearPings: () => { Object.values(MapService.pingMarkers).forEach(m => m.remove()); MapService.pingMarkers = {}; UI.toast("PINGS EFFACÉS"); },
+
+            showPingDetails: (ping) => {
+                document.getElementById('ping-modal-sender').innerText = `SOURCE: ${ping.sender}`;
+                document.getElementById('ping-modal-msg').innerText = ping.msg;
+                const imgContainer = document.getElementById('ping-modal-image-container');
+                imgContainer.innerHTML = '';
+
+                if (ping.image) {
+                    const img = document.createElement('img');
+                    img.src = ping.image.startsWith('data:') ? ping.image : `data:image/jpeg;base64,${ping.image}`;
+                    imgContainer.appendChild(img);
+                } else if (ping.photoId && NetService.imageBuffers[ping.photoId]?.fullData) {
+                    const img = document.createElement('img');
+                    const data = NetService.imageBuffers[ping.photoId].fullData;
+                    img.src = data.startsWith('data:') ? data : `data:image/jpeg;base64,${data}`;
+                    imgContainer.appendChild(img);
+                } else if (ping.photoId) {
+                    imgContainer.innerHTML = '<div style="color:var(--color-dim); font-size:0.8rem; text-align:center; padding:20px;">Chargement de la photo...</div>';
+                }
+
+                document.getElementById('ping-modal').style.display = 'flex';
+            },
+
+            closePingModal: () => {
+                document.getElementById('ping-modal').style.display = 'none';
+            },
+
             toast: (msg, err = false) => {
                 const t = document.getElementById('toast'); t.innerText = msg; t.style.background = err ? 'var(--color-red)' : 'var(--color-accent)'; t.style.display = 'block'; setTimeout(() => t.style.display = 'none', 3000);
             }
