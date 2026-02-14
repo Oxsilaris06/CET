@@ -6,7 +6,14 @@
     <meta name="viewport"
         content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="theme-color" content="#000000">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="format-detection" content="telephone=no">
+    <link rel="manifest"
+        href='data:application/json;charset=utf-8,%7B%22name%22%3A%22PRAXIS%20COMMANDEMENT%22%2C%22short_name%22%3A%22PRAXIS%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23050505%22%2C%22theme_color%22%3A%22%23050505%22%7D'>
     <title>Centre de commandement Praxis</title>
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="apple-touch-icon" href="apple-touch-icon-180x180.png">
 
     <!-- Fonts & Icons -->
     <link
@@ -129,6 +136,19 @@
             left: 0;
             top: 0;
             border-radius: 4px 0 0 4px;
+        }
+
+        .btn-session-close {
+            position: absolute;
+            right: 10px;
+            top: 10px;
+            color: var(--color-dim);
+            font-size: 1.2rem;
+            cursor: pointer;
+        }
+
+        .btn-session-close:hover {
+            color: var(--color-red);
         }
 
         .sidebar-footer {
@@ -315,6 +335,62 @@
             white-space: nowrap;
             border: 1px solid var(--color-accent);
             font-family: var(--font-mono);
+            z-index: 10;
+        }
+
+        .vision-cone {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 100px;
+            height: 100px;
+            background: radial-gradient(circle at 50% 100%,
+                    rgba(59, 130, 246, 0.2) 0%,
+                    rgba(59, 130, 246, 0.1) 40%,
+                    transparent 60%);
+            clip-path: polygon(50% 100%, 0% 0%, 100% 0%);
+            transform: translate(-50%, -100%);
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        /* Ping Marker */
+        .ping-wrapper {
+            text-align: center;
+        }
+
+        .ping-icon {
+            color: var(--color-red);
+            font-size: 24px;
+            filter: drop-shadow(0 0 5px black);
+            animation: bounce 1s infinite;
+        }
+
+        .ping-label {
+            background: var(--color-red);
+            color: white;
+            padding: 2px 6px;
+            font-size: 10px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-family: var(--font-mono);
+            white-space: nowrap;
+        }
+
+        @keyframes bounce {
+
+            0%,
+            100% {
+                transform: translateY(0);
+            }
+
+            50% {
+                transform: translateY(-5px);
+            }
+
+            100% {
+                transform: translateY(0);
+            }
         }
 
         /* Group Colors */
@@ -474,16 +550,46 @@
                 if (!MapService.markers[id]) {
                     const el = document.createElement('div');
                     el.className = 'marker-wrapper';
-                    el.innerHTML = `<div class="marker-arrow" style="border-bottom-color: ${color}"></div><div class="marker-label" style="border-color: ${color}">${op.callsign}</div>`;
+                    el.innerHTML = `
+                        <div class="vision-cone" style="background: radial-gradient(circle at 50% 100%, ${color}33 0%, ${color}11 40%, transparent 60%)"></div>
+                        <div class="marker-arrow" style="border-bottom-color: ${color}"></div>
+                        <div class="marker-label" style="border-color: ${color}">${op.callsign}</div>
+                    `;
 
                     MapService.markers[id] = new maplibregl.Marker({ element: el })
                         .setLngLat([op.lng, op.lat])
                         .addTo(MapService.map);
                 } else {
                     const el = MapService.markers[id].getElement();
-                    el.style.transform = `rotate(${op.head || 0}deg)`;
+                    // Rotate the wrapper for heading
+                    const wrapper = el;
+                    wrapper.style.transform = `rotate(${op.head || 0}deg)`;
                     MapService.markers[id].setLngLat([op.lng, op.lat]);
                 }
+            },
+
+            addPingMarker: (ping, color) => {
+                const id = ping.id;
+                if (MapService.pingMarkers[id]) MapService.pingMarkers[id].remove();
+
+                const el = document.createElement('div');
+                el.className = 'ping-wrapper';
+                el.innerHTML = `
+                    <div class="ping-label" style="background: ${color}">${ping.sender}: ${ping.msg}</div>
+                    <span class="material-symbols-outlined ping-icon" style="color: ${color}">location_on</span>
+                `;
+
+                MapService.pingMarkers[id] = new maplibregl.Marker({ element: el })
+                    .setLngLat([ping.lng, ping.lat])
+                    .addTo(MapService.map);
+
+                // Auto-remove pings after 1 minute for command clarity
+                setTimeout(() => {
+                    if (MapService.pingMarkers[id]) {
+                        MapService.pingMarkers[id].remove();
+                        delete MapService.pingMarkers[id];
+                    }
+                }, 60000);
             }
         };
 
@@ -565,8 +671,30 @@
                 }
 
                 if (d.type === 'PING') {
-                    // Handle pings (visual only)
-                    UI.toast(`PING: ${d.ping.sender} -> ${d.ping.msg}`);
+                    NetService.handlePing(group, d.ping);
+                }
+            },
+
+            handlePing: (group, ping) => {
+                group.pings[ping.id] = ping;
+                MapService.addPingMarker(ping, group.color);
+                UI.toast(`PING [${group.id}]: ${ping.sender} -> ${ping.msg}`);
+            },
+
+            disconnect: (hostId) => {
+                const group = NetService.groups[hostId];
+                if (group) {
+                    if (group.conn) group.conn.close();
+                    // Cleanup markers
+                    Object.keys(group.operators).forEach(opId => {
+                        if (MapService.markers[opId]) {
+                            MapService.markers[opId].remove();
+                            delete MapService.markers[opId];
+                        }
+                    });
+                    delete NetService.groups[hostId];
+                    UI.renderSessions();
+                    UI.renderOps();
                 }
             }
         };
@@ -589,9 +717,22 @@
                     const count = Object.keys(g.operators).length;
                     div.innerHTML = `
                         <div class="session-color" style="background: ${g.color}"></div>
+                        <span class="material-symbols-outlined btn-session-close" onclick="event.stopPropagation(); NetService.disconnect('${g.id}')">cancel</span>
                         <div class="session-id"><span># ${g.id}</span> <span style="font-size:0.6rem; color:${g.status === 'active' ? 'var(--color-green)' : 'var(--color-red)'}">${g.status.toUpperCase()}</span></div>
                         <div class="session-stats">${count} OPÉRATEURS ACTIFS</div>
                     `;
+                    div.onclick = () => {
+                        // Zoom to group? Or focus?
+                        const ops = Object.values(g.operators);
+                        if (ops.length > 0) {
+                            const lats = ops.map(o => o.lat);
+                            const lngs = ops.map(o => o.lng);
+                            MapService.map.fitBounds([
+                                [Math.min(...lngs), Math.min(...lats)],
+                                [Math.max(...lngs), Math.max(...lats)]
+                            ], { padding: 50 });
+                        }
+                    };
                     list.appendChild(div);
                 });
             },
@@ -606,7 +747,8 @@
                         card.innerHTML = `
                             <div class="op-status" style="color:${g.color}">${op.status} | GROUP ${g.id}</div>
                             <div class="op-name">${op.callsign}</div>
-                            <div class="op-meta">BAT: ${op.bat || '--'}% | HEAD: ${Math.round(op.head || 0)}°</div>
+                            <div class="op-meta">ID: ${op.id.substring(0, 8)} | BAT: ${op.bat || '--'}%</div>
+                            <div class="op-meta">HEAD: ${Math.round(op.head || 0)}°</div>
                         `;
                         panel.appendChild(card);
                     });
