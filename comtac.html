@@ -43,6 +43,9 @@
             --sidebar-width: 340px;
             --font-ui: 'Chakra Petch', sans-serif;
             --font-mono: 'JetBrains Mono', monospace;
+            --tactical-contact: #ef4444;
+            --tactical-clear: #22c55e;
+            --tactical-progression: #3b82f6;
         }
 
         * {
@@ -450,6 +453,15 @@
             filter: drop-shadow(0 0 5px rgba(0, 0, 0, 0.8));
         }
 
+        .marker-rotator {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.3s ease;
+        }
+
         .marker-label {
             position: absolute;
             top: 28px;
@@ -465,6 +477,7 @@
             border: 1px solid var(--color-accent);
             z-index: 10;
             font-family: var(--font-mono);
+            pointer-events: none;
         }
 
         .vision-cone {
@@ -705,18 +718,35 @@
             updateOpMarker: (op, color) => {
                 if (!op.lat || !op.lng) return;
                 const id = op.id;
+                const statusColors = { 'CONTACT': '#ef4444', 'CLEAR': '#22c55e', 'PROGRESSION': '#3b82f6' };
+                const tactColor = statusColors[op.status?.toUpperCase()] || color;
+
                 if (!MapService.markers[id]) {
                     const el = document.createElement('div');
                     el.className = 'marker-wrapper';
-                    el.innerHTML = `<div class="vision-cone" style="--v-color: ${color}33"></div><div class="marker-arrow" style="border-bottom-color: ${color}"></div><div class="marker-label" style="border-color: ${color}">${op.callsign}</div>`;
+                    el.innerHTML = `
+                        <div class="marker-rotator" style="transform: rotate(${op.head || 0}deg)">
+                            <div class="vision-cone" style="--v-color: ${tactColor}33"></div>
+                            <div class="marker-arrow" style="border-bottom-color: ${tactColor}"></div>
+                        </div>
+                        <div class="marker-label" style="border-color: ${tactColor}">${op.callsign}</div>`;
                     el.onclick = () => UI.followOp(id);
-                    MapService.markers[id] = new maplibregl.Marker({ element: el, rotation: op.head || 0 })
+                    MapService.markers[id] = new maplibregl.Marker({ element: el })
                         .setLngLat([op.lng, op.lat])
                         .addTo(MapService.map);
                 } else {
                     const el = MapService.markers[id].getElement();
+                    const rotator = el.querySelector('.marker-rotator');
+                    const label = el.querySelector('.marker-label');
+                    const cone = el.querySelector('.vision-cone');
+                    const arrow = el.querySelector('.marker-arrow');
+
+                    if (rotator) rotator.style.transform = `rotate(${op.head || 0}deg)`;
+                    if (cone) cone.style.setProperty('--v-color', tactColor + '33');
+                    if (arrow) arrow.style.borderBottomColor = tactColor;
+                    if (label) label.style.borderColor = tactColor;
+
                     MapService.markers[id].setLngLat([op.lng, op.lat]);
-                    MapService.markers[id].setRotation(op.head || 0);
                     el.classList.toggle('followed', MapService.followId === id);
                 }
                 if (MapService.followId === id) MapService.map.easeTo({ center: [op.lng, op.lat], duration: 500 });
@@ -763,6 +793,7 @@
         const NetService = {
             groups: {}, localPeer: null,
             imageBuffers: {}, // id -> { chunks: [], total: 0, fullData: null }
+            updateBuffer: { ops: {}, logs: [], pings: [] },
 
             init: () => {
                 NetService.localPeer = new Peer(null, { config: PEER_CONFIG });
@@ -770,6 +801,7 @@
                     UI.toast("RÉSEAU COMTAC ACTIF");
                     NetService.loadFromLocal();
                 });
+                setInterval(NetService.processUpdateBuffer, 3000);
             },
             followSession: (hostId) => {
                 if (NetService.groups[hostId]) return;
@@ -799,6 +831,28 @@
             handleData: (group, d) => {
                 const processOp = (u) => {
                     if (!u) return;
+                    NetService.updateBuffer.ops[u.id] = { user: u, group: group };
+                };
+
+                if (d.type === 'SYNC' || d.type === 'FULL') (d.list || [d.user]).forEach(processOp);
+                if (d.type === 'UPDATE') processOp(d.user);
+                if (d.type === 'PING') NetService.updateBuffer.pings.push({ ping: d.ping, group: group });
+                if (d.type === 'CHAT') NetService.updateBuffer.logs.push({ msg: d.msg, sender: d.sender, group: group, type: 'chat' });
+
+                if (d.type === 'IMAGE_CHUNK') {
+                    NetService.handleImageChunk(d);
+                }
+            },
+
+            processUpdateBuffer: () => {
+                const opsToUpdate = Object.values(NetService.updateBuffer.ops);
+                if (opsToUpdate.length === 0 && NetService.updateBuffer.logs.length === 0 && NetService.updateBuffer.pings.length === 0) return;
+
+                NetService.updateBuffer.pings.forEach(({ ping, group }) => {
+                    MapService.addPingMarker(ping, group.color);
+                });
+
+                opsToUpdate.forEach(({ user: u, group }) => {
                     const old = group.operators[u.id];
                     u.trail = (old && old.trail) ? old.trail : [];
                     if (u.lat && (!old || old.lat !== u.lat || old.lng !== u.lng)) {
@@ -807,26 +861,29 @@
                     }
                     group.operators[u.id] = u;
                     MapService.updateOpMarker(u, group.color);
-                    if (old && old.status !== u.status) UI.log(`${u.callsign} -> STATUT: ${u.status}`, u.status === 'CONTACT', group);
-                    if (u.lastMsg && (!old || old.lastMsg !== u.lastMsg)) UI.log(`${u.callsign}: ${u.lastMsg}`, false, group);
-                };
 
-                if (d.type === 'SYNC' || d.type === 'FULL') (d.list || [d.user]).forEach(processOp);
-                if (d.type === 'UPDATE') processOp(d.user);
-                if (d.type === 'PING') MapService.addPingMarker(d.ping, group.color);
-                if (d.type === 'CHAT') UI.log(`${d.sender}: ${d.msg}`, false, group, 'chat');
+                    if (old && old.status !== u.status) {
+                        NetService.updateBuffer.logs.push({ msg: `${u.callsign} -> STATUT: ${u.status}`, group, important: u.status === 'CONTACT' });
+                    }
+                    if (u.lastMsg && (!old || old.lastMsg !== u.lastMsg)) {
+                        NetService.updateBuffer.logs.push({ msg: `${u.callsign}: ${u.lastMsg}`, group });
+                    }
 
-                // Auto-center on first sync
-                if (!group.hasCentered && Object.keys(group.operators).length > 0) {
-                    const ops = Object.values(group.operators);
-                    MapService.map.fitBounds(ops.reduce((b, o) => b.extend([o.lng, o.lat]), new maplibregl.LngLatBounds()), { padding: 80, duration: 2000 });
-                    group.hasCentered = true;
-                }
+                    // Auto-center on first sync
+                    if (!group.hasCentered && Object.keys(group.operators).length > 0) {
+                        const ops = Object.values(group.operators);
+                        MapService.map.fitBounds(ops.reduce((b, o) => b.extend([o.lng, o.lat]), new maplibregl.LngLatBounds()), { padding: 80, duration: 2000 });
+                        group.hasCentered = true;
+                    }
+                });
 
-                if (d.type === 'IMAGE_CHUNK') {
-                    NetService.handleImageChunk(d);
-                }
+                NetService.updateBuffer.logs.forEach(l => {
+                    UI.log(l.msg || `${l.sender}: ${l.msg}`, l.important, l.group, l.type);
+                });
 
+                NetService.updateBuffer.ops = {};
+                NetService.updateBuffer.logs = [];
+                NetService.updateBuffer.pings = [];
                 UI.renderOps();
             },
 
