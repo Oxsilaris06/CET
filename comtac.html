@@ -110,6 +110,44 @@
             background: rgba(255, 255, 255, 0.05);
         }
 
+        .tab-btn {
+            position: relative;
+        }
+
+        .unread-dot {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            width: 8px;
+            height: 8px;
+            background: var(--color-red);
+            border-radius: 50%;
+            display: none;
+            box-shadow: 0 0 10px var(--color-red);
+        }
+
+        .unread-dot.active {
+            display: block;
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0% {
+                transform: scale(1);
+                opacity: 1;
+            }
+
+            50% {
+                transform: scale(1.5);
+                opacity: 0.5;
+            }
+
+            100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+
         .sidebar-content {
             flex: 1;
             overflow-y: auto;
@@ -171,6 +209,19 @@
             border-bottom: 1px solid rgba(255, 255, 255, 0.05);
             padding: 6px 0;
             color: #aaa;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(-10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
         }
 
         .log-time {
@@ -188,10 +239,17 @@
             text-shadow: 0 0 5px rgba(239, 68, 68, 0.5);
         }
 
+        .log-msg.chat {
+            color: #fff;
+            border-left: 2px solid var(--color-accent);
+            padding-left: 5px;
+        }
+
         .log-msg.system {
             color: var(--color-accent);
             opacity: 0.8;
         }
+
 
         .log-group {
             font-weight: 800;
@@ -528,7 +586,10 @@
 
         <div class="sidebar-tabs">
             <div class="tab-btn active" onclick="UI.switchTab('sessions')">SESSIONS</div>
-            <div class="tab-btn" onclick="UI.switchTab('logbook')">MAIN COURANTE</div>
+            <div class="tab-btn" onclick="UI.switchTab('logbook')">
+                MAIN COURANTE
+                <div id="log-unread" class="unread-dot"></div>
+            </div>
         </div>
 
         <div id="tab-sessions" class="sidebar-content active">
@@ -563,10 +624,10 @@
             <div class="map-btn" onclick="UI.toggleOps()" title="Liste Opérateurs">
                 <span class="material-symbols-outlined">groups</span>
             </div>
-            <div class="map-btn" onclick="UI.toggleTrails()" id="btn-trails" title="Afficher Tracés">
+            <div class="map-btn active" onclick="UI.toggleTrails()" id="btn-trails" title="Afficher Tracés">
                 <span class="material-symbols-outlined">timeline</span>
             </div>
-            <div class="map-btn" onclick="UI.clearPings()" title="Effacer Pings">
+            <div class="map-btn active" onclick="UI.togglePings()" id="btn-pings" title="Afficher/Masquer Pings">
                 <span class="material-symbols-outlined">layers_clear</span>
             </div>
         </div>
@@ -604,11 +665,12 @@
                 this.operators = {}; // opId -> data (including trail)
                 this.status = 'connecting';
                 this.conn = null;
+                this.hasCentered = false;
             }
         }
 
         const MapService = {
-            map: null, isSatellite: false, showTrails: true,
+            map: null, isSatellite: false, showTrails: true, showPings: true,
             markers: {}, pingMarkers: {}, followId: null,
 
             init: () => {
@@ -661,27 +723,31 @@
                 MapService.refreshTrails();
             },
 
-            addPingMarker: (ping, color) => {
+            addPingMarker: (ping, groupColor) => {
+                const colors = { ami: '#22c55e', friendly: '#22c55e', adversaire: '#ef4444', hostile: '#ef4444', rens: '#eab308', intel: '#eab308' };
+                const color = colors[ping.type?.toLowerCase()] || groupColor;
                 const id = ping.id;
                 const el = document.createElement('div');
                 el.className = 'ping-wrapper';
                 el.style.cursor = 'pointer';
                 el.innerHTML = `<div class="ping-label" style="background: ${color}">${ping.sender}: ${ping.msg}</div><span class="material-symbols-outlined ping-icon" style="color: ${color}">location_on</span>`;
-                el.onclick = () => UI.showPingDetails(ping);
+                el.onclick = () => UI.showPingDetails(ping, color);
 
                 if (MapService.pingMarkers[id]) MapService.pingMarkers[id].remove();
-                MapService.pingMarkers[id] = new maplibregl.Marker({ element: el }).setLngLat([ping.lng, ping.lat]).addTo(MapService.map);
+                const marker = new maplibregl.Marker({ element: el }).setLngLat([ping.lng, ping.lat]).addTo(MapService.map);
+                if (!MapService.showPings) el.style.display = 'none';
+                MapService.pingMarkers[id] = marker;
 
                 setTimeout(() => {
                     if (MapService.pingMarkers[id]) {
                         MapService.pingMarkers[id].remove();
                         delete MapService.pingMarkers[id];
                     }
-                }, 120000); // 2 minutes for better visibility
+                }, 120000);
             },
 
             refreshTrails: () => {
-                if (!MapService.map.getSource('trails') || !MapService.showTrails) return;
+                if (!MapService.map.getSource('trails')) return;
                 const features = [];
                 Object.values(NetService.groups).forEach(g => {
                     Object.values(g.operators).forEach(op => {
@@ -700,7 +766,10 @@
 
             init: () => {
                 NetService.localPeer = new Peer(null, { config: PEER_CONFIG });
-                NetService.localPeer.on('open', () => UI.toast("RÉSEAU COMTAC ACTIF"));
+                NetService.localPeer.on('open', () => {
+                    UI.toast("RÉSEAU COMTAC ACTIF");
+                    NetService.loadFromLocal();
+                });
             },
             followSession: (hostId) => {
                 if (NetService.groups[hostId]) return;
@@ -712,6 +781,20 @@
                 conn.on('close', () => { group.status = 'disconnected'; UI.log(`Liaison rompue`, true, group); UI.renderSessions(); });
                 group.conn = conn;
                 UI.renderSessions();
+                NetService.saveToLocal();
+            },
+            saveToLocal: () => {
+                const ids = Object.keys(NetService.groups);
+                localStorage.setItem('comtac_sessions', JSON.stringify(ids));
+            },
+            loadFromLocal: () => {
+                const saved = localStorage.getItem('comtac_sessions');
+                if (saved) {
+                    try {
+                        const ids = JSON.parse(saved);
+                        ids.forEach(id => NetService.followSession(id));
+                    } catch (e) { console.error("Err persistent sessions", e); }
+                }
             },
             handleData: (group, d) => {
                 const processOp = (u) => {
@@ -731,6 +814,14 @@
                 if (d.type === 'SYNC' || d.type === 'FULL') (d.list || [d.user]).forEach(processOp);
                 if (d.type === 'UPDATE') processOp(d.user);
                 if (d.type === 'PING') MapService.addPingMarker(d.ping, group.color);
+                if (d.type === 'CHAT') UI.log(`${d.sender}: ${d.msg}`, false, group, 'chat');
+
+                // Auto-center on first sync
+                if (!group.hasCentered && Object.keys(group.operators).length > 0) {
+                    const ops = Object.values(group.operators);
+                    MapService.map.fitBounds(ops.reduce((b, o) => b.extend([o.lng, o.lat]), new maplibregl.LngLatBounds()), { padding: 80, duration: 2000 });
+                    group.hasCentered = true;
+                }
 
                 if (d.type === 'IMAGE_CHUNK') {
                     NetService.handleImageChunk(d);
@@ -762,6 +853,7 @@
                     Object.keys(g.operators).forEach(id => { if (MapService.markers[id]) MapService.markers[id].remove(); delete MapService.markers[id]; });
                     delete NetService.groups[hostId];
                     UI.renderSessions(); UI.renderOps();
+                    NetService.saveToLocal();
                 }
             }
         };
@@ -769,9 +861,11 @@
         const UI = {
             switchTab: (t) => {
                 document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-                document.querySelector(`.tab-btn[onclick*="${t}"]`).classList.add('active');
+                const btn = document.querySelector(`.tab-btn[onclick*="${t}"]`);
+                if (btn) btn.classList.add('active');
                 document.querySelectorAll('.sidebar-content').forEach(c => c.classList.remove('active'));
                 document.getElementById(`tab-${t}`).classList.add('active');
+                if (t === 'logbook') document.getElementById('log-unread').classList.remove('active');
             },
             addSession: () => {
                 const el = document.getElementById('input-session-id'); const id = el.value.trim().toUpperCase();
@@ -803,19 +897,45 @@
                 UI.renderOps();
             },
             toggleOps: () => document.getElementById('ops-panel').classList.toggle('active'),
-            toggleTrails: () => { MapService.showTrails = !MapService.showTrails; document.getElementById('btn-trails').classList.toggle('active', MapService.showTrails); MapService.refreshTrails(); },
-            log: (msg, important = false, group = null) => {
+            toggleTrails: () => {
+                MapService.showTrails = !MapService.showTrails;
+                document.getElementById('btn-trails').classList.toggle('active', MapService.showTrails);
+                if (MapService.map.getLayer('trails-layer')) {
+                    MapService.map.setLayoutProperty('trails-layer', 'visibility', MapService.showTrails ? 'visible' : 'none');
+                }
+                UI.toast(MapService.showTrails ? "TRACÉS AFFICHÉS" : "TRACÉS MASQUÉS");
+            },
+            log: (msg, important = false, group = null, type = '') => {
                 const list = document.getElementById('logbook-list');
                 const entry = document.createElement('div'); entry.className = 'log-entry';
                 const groupTag = group ? `<span class="log-group" style="--g-color: ${group.color}">[${group.id}]</span>` : '';
-                entry.innerHTML = `<span class="log-time">${new Date().toLocaleTimeString()}</span>${groupTag}<span class="log-msg ${important ? 'important' : ''}">${msg}</span>`;
+                entry.innerHTML = `<span class="log-time">${new Date().toLocaleTimeString()}</span>${groupTag}<span class="log-msg ${important ? 'important' : ''} ${type}">${msg}</span>`;
                 list.prepend(entry); if (list.children.length > 200) list.lastChild.remove();
-            },
-            clearPings: () => { Object.values(MapService.pingMarkers).forEach(m => m.remove()); MapService.pingMarkers = {}; UI.toast("PINGS EFFACÉS"); },
 
-            showPingDetails: (ping) => {
+                if (!document.getElementById('tab-logbook').classList.contains('active')) {
+                    document.getElementById('log-unread').classList.add('active');
+                }
+            },
+            togglePings: () => {
+                MapService.showPings = !MapService.showPings;
+                const btn = document.getElementById('btn-pings');
+                if (btn) btn.classList.toggle('active', !MapService.showPings); // Active when masked? Or inactive? Let's say active means "Masqué" in this context if we keep the clear icon, or active means "En cours d'affichage". User usually prefers active = functional/visible.
+                // Let's go with: active class means the filter is ON (pings are HIDDEN) or active means VISIBLE.
+                // The trail button has active when trails are shown. Let's align.
+                btn.classList.toggle('active', MapService.showPings);
+                Object.values(MapService.pingMarkers).forEach(m => {
+                    m.getElement().style.display = MapService.showPings ? 'block' : 'none';
+                });
+                UI.toast(MapService.showPings ? "PINGS AFFICHÉS" : "PINGS MASQUÉS");
+            },
+
+            showPingDetails: (ping, color) => {
                 document.getElementById('ping-modal-sender').innerText = `SOURCE: ${ping.sender}`;
-                document.getElementById('ping-modal-msg').innerText = ping.msg;
+                document.getElementById('ping-modal-sender').style.color = color;
+                document.getElementById('ping-modal-msg').innerHTML = `
+                    <div style="font-weight: bold; margin-bottom: 5px; text-transform: uppercase; font-size: 0.8rem; opacity: 0.7;">TYPE: ${ping.type || 'N/A'}</div>
+                    <div>${ping.msg}</div>
+                `;
                 const imgContainer = document.getElementById('ping-modal-image-container');
                 imgContainer.innerHTML = '';
 
