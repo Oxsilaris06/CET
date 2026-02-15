@@ -997,6 +997,7 @@
                 }
 
                 group.status = 'connecting';
+                group.intentionalDisconnect = false; // Reset flag on new connection attempt
                 UI.renderSessions();
 
                 const attemptConnection = (retryCount = 0) => {
@@ -1043,14 +1044,15 @@
                         UI.renderSessions();
 
                         // AUTO-RECONNECT LOGIC (Persistent Session)
-                        if (group.retryCount < 10) { // Limit retries to avoid infinite loops if host is gone
+                        // Only reconnect if we didn't intentionally disconnect
+                        if (!group.intentionalDisconnect && group.retryCount < 10) {
                             const delay = Math.min(3000 * (group.retryCount + 1), 30000);
                             UI.toast(`Reconnexion à ${hostId} dans ${delay / 1000}s...`);
                             setTimeout(() => {
                                 group.retryCount = (group.retryCount || 0) + 1;
                                 attemptConnection(group.retryCount);
                             }, delay);
-                        } else {
+                        } else if (!group.intentionalDisconnect) {
                             UI.toast(`Échec de la connexion à ${hostId} après plusieurs tentatives.`);
                         }
                     });
@@ -1229,7 +1231,10 @@
             disconnect: (hostId) => {
                 const g = NetService.groups[hostId];
                 if (g) {
-                    if (g.conn) g.conn.close();
+                    g.intentionalDisconnect = true; // Signal intended closure
+                    if (g.conn) {
+                        g.conn.close();
+                    }
                     Object.keys(g.operators).forEach(id => { if (MapService.markers[id]) MapService.markers[id].remove(); delete MapService.markers[id]; });
                     delete NetService.groups[hostId];
                     UI.renderSessions(); UI.renderOps();
