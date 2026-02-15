@@ -943,7 +943,27 @@
                 const group = new TacticalGroup(hostId, Object.keys(NetService.groups).length);
                 NetService.groups[hostId] = group;
                 const conn = NetService.localPeer.connect(hostId, { metadata: { role: 'SUPERVISOR', callsign: 'Superviseur' }, reliable: true });
-                conn.on('open', () => { group.status = 'active'; UI.log(`Connexion établie`, false, group); conn.send({ type: 'FULL_REQ' }); UI.renderSessions(); });
+                conn.on('open', () => {
+                    group.status = 'active';
+                    UI.log(`Connexion établie`, false, group);
+
+                    // 1. Request Full State
+                    conn.send({ type: 'FULL_REQ' });
+
+                    // 2. Announce Presence (Crucial for Operator List)
+                    conn.send({
+                        type: 'UPDATE_USER',
+                        user: {
+                            id: NetService.localPeer.id,
+                            callsign: 'Superviseur',
+                            status: 'VIGILANCE', // Neutral status
+                            lat: 0, lng: 0, // No position
+                            role: 'SUPERVISOR'
+                        }
+                    });
+
+                    UI.renderSessions();
+                });
                 conn.on('data', (d) => NetService.handleData(group, d));
                 conn.on('close', () => { group.status = 'disconnected'; UI.log(`Liaison rompue`, true, group); UI.renderSessions(); });
                 group.conn = conn;
@@ -973,7 +993,15 @@
                 if (d.type === 'UPDATE') processOp(d.user);
                 if (d.type === 'PING') NetService.updateBuffer.pings.push({ ping: d.ping, group: group });
                 if (d.type === 'CHAT') NetService.updateBuffer.logs.push({ msg: d.msg, sender: d.sender, group: group, type: 'chat' });
-                if (d.type === 'LOG') NetService.updateBuffer.logs.push({ msg: d.msg, group, important: d.severity === 'important' });
+                if (d.type === 'LOG') {
+                    // Fix: Ensure all logs go to history/main courante
+                    NetService.updateBuffer.logs.push({
+                        msg: d.msg,
+                        group,
+                        important: d.severity === 'important',
+                        type: 'log' // Distinct type
+                    });
+                }
 
                 if (d.type === 'IMAGE_CHUNK') {
                     NetService.handleImageChunk(d);
