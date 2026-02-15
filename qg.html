@@ -970,38 +970,100 @@
                     UI.toast("RÉSEAU COMTAC ACTIF");
                     NetService.loadFromLocal();
                 });
+                NetService.localPeer.on('disconnected', () => {
+                    UI.toast("RÉSEAU P2P DÉCONNECTÉ - TENTATIVE DE RECONNEXION...");
+                    setTimeout(() => NetService.localPeer.reconnect(), 2000);
+                });
+                NetService.localPeer.on('error', (err) => {
+                    console.error("Peer Error:", err);
+                    if (err.type === 'peer-unavailable') {
+                        UI.toast("Session introuvable ou fermée.");
+                        // Mark session as dead?
+                    }
+                });
                 setInterval(NetService.processUpdateBuffer, 1000);
             },
             followSession: (hostId) => {
-                if (NetService.groups[hostId]) return;
-                const group = new TacticalGroup(hostId, Object.keys(NetService.groups).length);
-                NetService.groups[hostId] = group;
-                const conn = NetService.localPeer.connect(hostId, { metadata: { role: 'SUPERVISOR', callsign: 'Superviseur' }, reliable: true });
-                conn.on('open', () => {
-                    group.status = 'active';
-                    UI.log(`Connexion établie`, false, group);
+                if (NetService.groups[hostId] && NetService.groups[hostId].status === 'active') {
+                    UI.toast("Déjà connecté à cette session.");
+                    return;
+                }
 
-                    // 1. Send HELLO (Required for Host to register us)
-                    conn.send({
-                        type: 'HELLO',
-                        user: {
-                            id: NetService.localPeer.id,
-                            callsign: 'Superviseur',
-                            role: 'SUPERVISOR',
-                            status: 'VIGILANCE',
-                            lat: 0, lng: 0, // Ignored by map, accepted by list
-                            connectionTimestamp: Date.now()
+                // CREATE OR REUSE GROUP
+                let group = NetService.groups[hostId];
+                if (!group) {
+                    group = new TacticalGroup(hostId, Object.keys(NetService.groups).length);
+                    NetService.groups[hostId] = group;
+                }
+
+                group.status = 'connecting';
+                UI.renderSessions();
+
+                const attemptConnection = (retryCount = 0) => {
+                    console.log(`Tentative de connexion à ${hostId} (essai ${retryCount + 1})...`);
+                    const conn = NetService.localPeer.connect(hostId, {
+                        metadata: { role: 'SUPERVISOR', callsign: 'Superviseur' },
+                        reliable: true
+                    });
+
+                    conn.on('open', () => {
+                        console.log(`Connecté à ${hostId}`);
+                        group.status = 'active';
+                        group.retryCount = 0; // Reset retries
+                        UI.log(`Connexion établie`, false, group);
+
+                        // 1. Send HELLO (Required for Host to register us)
+                        conn.send({
+                            type: 'HELLO',
+                            user: {
+                                id: NetService.localPeer.id,
+                                callsign: 'Superviseur',
+                                role: 'SUPERVISOR',
+                                status: 'VIGILANCE',
+                                lat: 0, lng: 0,
+                                connectionTimestamp: Date.now()
+                            }
+                        });
+
+                        // 2. Request Full State (Pings, Logs, Operators)
+                        conn.send({ type: 'FULL_REQ' });
+
+                        // 3. Request Pings specifically (to be safe)
+                        conn.send({ type: 'REQUEST_PINGS' });
+
+                        UI.renderSessions();
+                    });
+
+                    conn.on('data', (d) => NetService.handleData(group, d));
+
+                    conn.on('close', () => {
+                        console.warn(`Liaison rompue avec ${hostId}`);
+                        group.status = 'disconnected';
+                        UI.log(`Liaison rompue`, true, group);
+                        UI.renderSessions();
+
+                        // AUTO-RECONNECT LOGIC (Persistent Session)
+                        if (group.retryCount < 10) { // Limit retries to avoid infinite loops if host is gone
+                            const delay = Math.min(3000 * (group.retryCount + 1), 30000);
+                            UI.toast(`Reconnexion à ${hostId} dans ${delay / 1000}s...`);
+                            setTimeout(() => {
+                                group.retryCount = (group.retryCount || 0) + 1;
+                                attemptConnection(group.retryCount);
+                            }, delay);
+                        } else {
+                            UI.toast(`Échec de la connexion à ${hostId} après plusieurs tentatives.`);
                         }
                     });
 
-                    // 2. Request Full State
-                    conn.send({ type: 'FULL_REQ' });
+                    conn.on('error', (err) => {
+                        console.error(`Erreur connexion ${hostId}:`, err);
+                        // 'close' usually fires too, so handle retry there
+                    });
 
-                    UI.renderSessions();
-                });
-                conn.on('data', (d) => NetService.handleData(group, d));
-                conn.on('close', () => { group.status = 'disconnected'; UI.log(`Liaison rompue`, true, group); UI.renderSessions(); });
-                group.conn = conn;
+                    group.conn = conn;
+                };
+
+                attemptConnection();
                 UI.renderSessions();
                 NetService.saveToLocal();
             },
@@ -1024,32 +1086,67 @@
                     NetService.updateBuffer.ops[u.id] = { user: u, group: group };
                 };
 
-                if (d.type === 'SYNC' || d.type === 'FULL') (d.list || [d.user]).forEach(processOp);
-                if (d.type === 'UPDATE') processOp(d.user);
-                if (d.type === 'PING') NetService.updateBuffer.pings.push({ ping: d.ping, group: group });
+                // --- DATA TYPES HANDLING ---
+                if (d.type === 'SYNC' || d.type === 'FULL') {
+                    // Operators
+                    (d.list || [d.user]).forEach(processOp);
+                    // Pings (if included in FULL/SYNC or separate)
+                    if (d.pings) {
+                        d.pings.forEach(p => NetService.updateBuffer.pings.push({ ping: p, group: group }));
+                    }
+                    // Logs (if included)
+                    if (d.logs) {
+                        d.logs.forEach(l => {
+                            // Deduplicate? For now just push
+                            NetService.updateBuffer.logs.push({
+                                msg: l.msg,
+                                group,
+                                important: l.important,
+                                type: 'log'
+                            });
+                        });
+                    }
+                }
 
-                // --- FIX: PING MOVE SYNC ---
+                if (d.type === 'UPDATE') processOp(d.user);
+
+                // PING HANDLING
+                if (d.type === 'PING') NetService.updateBuffer.pings.push({ ping: d.ping, group: group });
+                if (d.type === 'PING_SYNC_RECEIVED') { // From Host response
+                    // Clear existing pings for this group?
+                    // Currently checking buffer approach.
+                    d.pings.forEach(p => NetService.updateBuffer.pings.push({ ping: p, group: group }));
+                }
+
                 if (d.type === 'PING_MOVE') {
-                    // Update local marker immediately
                     if (MapService.pingMarkers[d.id]) {
                         MapService.pingMarkers[d.id].setLngLat([d.lng, d.lat]);
                     }
-                    // Update internal data if needed (pings are ephemeral in this buffer but stored in markers)
                 }
 
+                // CHAT & LOG HANDLING
                 if (d.type === 'CHAT') NetService.updateBuffer.logs.push({ msg: d.msg, sender: d.sender, group: group, type: 'chat' });
                 if (d.type === 'LOG') {
-                    // Fix: Ensure all logs go to history/main courante
                     NetService.updateBuffer.logs.push({
                         msg: d.msg,
                         group,
                         important: d.severity === 'important',
-                        type: 'log' // Distinct type
+                        type: 'log'
                     });
+                }
+
+                // HOST STATUS / ALERTS
+                if (d.type === 'TOAST') {
+                    UI.toast(`[${group.id}] ${d.msg}`);
                 }
 
                 if (d.type === 'IMAGE_CHUNK') {
                     NetService.handleImageChunk(d);
+                }
+
+                // HEARTBEAT RESPONSE (If Host checks us)
+                if (d.type === 'HEARTBEAT_PING') {
+                    group.conn.send({ type: 'HEARTBEAT_PONG' });
                 }
             },
 
