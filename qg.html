@@ -942,7 +942,7 @@
                 if (NetService.groups[hostId]) return;
                 const group = new TacticalGroup(hostId, Object.keys(NetService.groups).length);
                 NetService.groups[hostId] = group;
-                const conn = NetService.localPeer.connect(hostId, { metadata: { role: 'COMMAND', callsign: 'HQ-COMTAC' }, reliable: true });
+                const conn = NetService.localPeer.connect(hostId, { metadata: { role: 'SUPERVISOR', callsign: 'Superviseur' }, reliable: true });
                 conn.on('open', () => { group.status = 'active'; UI.log(`Connexion établie`, false, group); conn.send({ type: 'FULL_REQ' }); UI.renderSessions(); });
                 conn.on('data', (d) => NetService.handleData(group, d));
                 conn.on('close', () => { group.status = 'disconnected'; UI.log(`Liaison rompue`, true, group); UI.renderSessions(); });
@@ -991,7 +991,12 @@
                 opsToUpdate.forEach(({ user: u, group }) => {
                     const old = group.operators[u.id];
                     u.trail = (old && old.trail) ? old.trail : [];
-                    if (u.lat && (!old || old.lat !== u.lat || old.lng !== u.lng)) {
+
+                    // TRAIL REFINEMENT: Filter out poor accuracy (> 20m) if available
+                    if (u.accuracy !== undefined && u.accuracy > 20) {
+                        // Skip poor quality
+                    }
+                    else if (u.lat && (!old || old.lat !== u.lat || old.lng !== u.lng)) {
                         u.trail.push([u.lng, u.lat]);
                         if (u.trail.length > 100) u.trail.shift();
                     }
