@@ -1019,7 +1019,7 @@
             'GPB': { key: 'gpbs', attribute: 'gpb' }
         };
 
-        const multiSelectAttributes = ['fonction', 'equipement', 'equipement2', 'afis'];
+        const multiSelectAttributes = ['fonction', 'cellule', 'equipement', 'equipement2', 'afis', 'gpb', 'grenades'];
 
         // --- STATE ---
         let activeMemberId = null;
@@ -1212,9 +1212,10 @@
                     optionsHtml += `<option value="${opt}" ${isSelected}>${opt}</option>`;
                 });
 
+                const isMulti = multiSelectAttributes.includes(conf.attribute);
                 wrapper.innerHTML = `
                     <label for="${selectId}">${label}</label>
-                    <select id="${selectId}">${optionsHtml}</select>
+                    <select id="${selectId}" ${isMulti ? 'multiple size="3" style="min-height: 80px;"' : ''}>${optionsHtml}</select>
                 `;
                 container.appendChild(wrapper);
             }
@@ -1234,8 +1235,14 @@
             // Récupérer les valeurs des selects
             for (const [label, conf] of Object.entries(attributeMapping)) {
                 const selectId = `new_mem_${conf.attribute}`;
-                const val = document.getElementById(selectId).value;
-                newData[conf.attribute] = val;
+                const selectEl = document.getElementById(selectId);
+                const isMulti = multiSelectAttributes.includes(conf.attribute);
+                if (isMulti) {
+                    const vals = Array.from(selectEl.selectedOptions).map(opt => opt.value);
+                    newData[conf.attribute] = vals.length > 0 ? vals.join(', ') : 'Sans';
+                } else {
+                    newData[conf.attribute] = selectEl.value;
+                }
             }
 
             // Logique d'auto-assignation (optionnelle, pour cohérence)
@@ -1330,6 +1337,33 @@
             return html;
         }
 
+        function buildWeaponMultiSelectorHtml(label, confKey, attribute, currentValueStr) {
+            const options = memberConfig[confKey] || ['Sans'];
+            const currentValues = currentValueStr ? currentValueStr.split(',').map(s => s.trim()) : [];
+
+            let html = `
+                <div class="weapon-category">
+                    <span class="weapon-category-label">${label}</span>
+                    <div class="weapon-scroll">
+            `;
+
+            options.forEach(opt => {
+                const isSelected = currentValues.includes(opt);
+                const selectedClass = isSelected ? 'selected' : '';
+                html += `
+                    <div class="weapon-item ${selectedClass}" onclick="toggleMultiMemberAttribute('${attribute}', '${opt}')">
+                        <div class="weapon-icon-container">
+                            ${getWeaponSvgOrFallback(opt)}
+                        </div>
+                        <span class="weapon-name">${opt}</span>
+                    </div>
+                `;
+            });
+
+            html += `</div></div>`;
+            return html;
+        }
+
         function buildGearGridHtml(label, confKey, attribute, currentValueStr) {
             const options = memberConfig[confKey] || ['Sans'];
             const currentValues = currentValueStr ? currentValueStr.split(',').map(s => s.trim()) : [];
@@ -1362,18 +1396,18 @@
             // --- TAB IDENTITY ---
             const tabId = document.getElementById('tab_identity');
             tabId.innerHTML =
-                buildStepperHtml('Fonction', 'fonctions', 'fonction', d.fonction || 'Sans') +
-                buildStepperHtml('Cellule', 'cellules', 'cellule', d.cellule || 'Sans') +
+                buildGearGridHtml('Fonction', 'fonctions', 'fonction', d.fonction || 'Sans') +
+                buildGearGridHtml('Cellule', 'cellules', 'cellule', d.cellule || 'Sans') +
                 buildStepperHtml('Tenue', 'tenues', 'tenue', d.tenue || 'UBAS') +
-                buildStepperHtml('GPB', 'gpbs', 'gpb', d.gpb || 'GPBL');
+                buildGearGridHtml('GPB', 'gpbs', 'gpb', d.gpb || 'GPBL');
 
             // --- TAB WEAPONS ---
             const tabWeapons = document.getElementById('tab_weapons');
             tabWeapons.innerHTML =
                 buildWeaponSelectorHtml('Arme Principale', 'principales', 'principales', d.principales || 'Sans') +
                 buildWeaponSelectorHtml('Arme Secondaire', 'secondaires', 'secondaires', d.secondaires || 'Sans') +
-                buildWeaponSelectorHtml('A.F.I.', 'afis', 'afis', d.afis || 'Sans') +
-                buildWeaponSelectorHtml('Grenades', 'grenades', 'grenades', d.grenades || 'Sans');
+                buildWeaponMultiSelectorHtml('A.F.I.', 'afis', 'afis', d.afis || 'Sans') +
+                buildWeaponMultiSelectorHtml('Grenades', 'grenades', 'grenades', d.grenades || 'Sans');
 
             // --- TAB GEAR ---
             const tabGear = document.getElementById('tab_gear');
@@ -1414,6 +1448,17 @@
             if (current.length === 0) current = ['Sans'];
 
             member.dataset[attribute] = current.join(', ');
+
+            // Auto-Assign Logic for multi-select
+            if (attribute === 'cellule' && current.includes('Sans') && current.length === 1) {
+                member.dataset.fonction = 'Sans';
+            }
+            if (attribute === 'fonction' && !current.includes('Sans')) {
+                const cel = member.dataset.cellule ? member.dataset.cellule.split(', ') : [];
+                if (cel.includes('Sans')) {
+                    member.dataset.cellule = 'India 1';
+                }
+            }
 
             updateMemberButtonVisuals(member);
             renderMemberEditContent();
