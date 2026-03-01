@@ -1975,6 +1975,11 @@ présumé de (Nom Adversaire 1) et (Nom Adversaire 2) après avoir bouclé celui
                                 title="Réinitialiser PATRACDVR" style="flex-grow: 1; max-width: 150px;">
                                 <span class="material-symbols-outlined">delete_forever</span>
                             </button>
+                            <a href="patracdvr.html" target="_blank" class="add-btn"
+                                title="Ouvrir PATRACDVR Autonome (Paramètres)"
+                                style="background-color: var(--accent-blue); flex-grow: 1; max-width: 150px; text-decoration: none; display: flex; align-items: center; justify-content: center;">
+                                <span class="material-symbols-outlined">settings</span>
+                            </a>
                             <!-- FIN CONFIG BUTTONS -->
                         </div>
                     </div>
@@ -2351,6 +2356,57 @@ Gestuelle et visuelle entre les éléments INDIA</textarea>
         const resetPatracdvrBtn = document.getElementById('resetPatracdvrBtn');
         const importJsonConfigBtn = document.getElementById('importJsonConfigBtn');
         const importDefaultConfigBtn = document.getElementById('importDefaultConfigBtn');
+
+        // SYNC RECIEVER FROM PATRACDVR
+        window.addEventListener('storage', (e) => {
+            if (e.key === 'patracdvr_sync_timestamp') {
+                const oiDataStr = localStorage.getItem('oiFormData');
+                if (oiDataStr) {
+                    try {
+                        const data = JSON.parse(oiDataStr);
+
+                        // Check if containers exist before doing anything
+                        const patracdvrContainer = document.getElementById('patracdvr_container');
+                        const unassignedContainer = document.getElementById('unassigned_members_container');
+                        if (!patracdvrContainer || !unassignedContainer) return;
+
+                        // Clear existing
+                        patracdvrContainer.innerHTML = '';
+                        unassignedContainer.innerHTML = '';
+
+                        // Reload vehicles and members
+                        if (data.patracdvr_rows) {
+                            data.patracdvr_rows.forEach(r => {
+                                addPatracdvrRow(r.vehicle, r.members);
+                            });
+                        }
+                        if (data.unassigned_members) {
+                            data.unassigned_members.forEach(m => {
+                                addPatracdvrMember(unassignedContainer, m);
+                            });
+                        }
+
+                        // Re-import config if provided and function exists
+                        if (data.memberConfig && typeof memberConfig !== 'undefined') {
+                            for (let key in data.memberConfig) {
+                                memberConfig[key] = data.memberConfig[key];
+                            }
+                        }
+
+                        // Show a temporary notification
+                        const tab = document.querySelector('.wizard-progress-step:nth-child(7)'); // Step 7 is PATRACDVR
+                        if (tab) {
+                            const originalColor = tab.style.backgroundColor;
+                            tab.style.transition = 'background-color 0.5s';
+                            tab.style.backgroundColor = 'var(--success-green)';
+                            setTimeout(() => { tab.style.backgroundColor = originalColor; }, 2000);
+                        }
+                    } catch (err) {
+                        console.error('Error applying PATRACDVR sync:', err);
+                    }
+                }
+            }
+        });
 
         const retexFileInput = document.getElementById('retexFileInput');
         const retexFileNames = document.getElementById('retexFileNames');
