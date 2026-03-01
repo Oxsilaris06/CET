@@ -312,7 +312,8 @@
         }
 
         /* --- NEW MEMBER EDIT MODAL & TABS --- */
-        #memberEditModal {
+        #memberEditModal,
+        #newMemberModal {
             max-width: 600px;
             width: 95%;
             padding: 0;
@@ -322,7 +323,8 @@
             flex-direction: column;
         }
 
-        #memberEditModal[open] {
+        #memberEditModal[open],
+        #newMemberModal[open] {
             display: flex;
         }
 
@@ -964,22 +966,47 @@
 
     <!-- MODALE CRÉATION MEMBRE -->
     <dialog id="newMemberModal">
-        <h3>Nouveau Membre</h3>
-        <form id="newMemberForm" method="dialog" class="modal-form">
-            <div class="full-width">
-                <label for="new_trigramme">Trigramme</label>
-                <input type="text" id="new_trigramme" placeholder="Ex: T1, CDG..." required autofocus>
+        <div class="modal-header">
+            <h3>CRÉATION : <span id="newMemberTrigrammeDisplay">Nouveau</span></h3>
+            <div style="display:flex; gap:10px; align-items:center;">
+                <input type="text" id="new_trigramme" placeholder="Trigramme"
+                    style="max-width: 100px; padding: 5px; font-size: 0.9em;" required autofocus>
+                <button type="button" id="cancelNewMemberBtnTop" class="remove-btn" style="padding: 5px;"><span
+                        class="material-symbols-outlined">close</span></button>
+            </div>
+        </div>
+
+        <!-- TABS -->
+        <div class="tabs-container">
+            <button type="button" class="tab-btn active" data-tab="new_identity">Identité</button>
+            <button type="button" class="tab-btn" data-tab="new_weapons">Armement</button>
+            <button type="button" class="tab-btn" data-tab="new_gear">Équipement</button>
+        </div>
+
+        <div class="modal-body">
+            <!-- TAB 1: IDENTITY -->
+            <div id="tab_new_identity" class="tab-content active">
+                <!-- Injection via JS -->
             </div>
 
-            <!-- Les selects seront générés dynamiquement par JS -->
-            <div id="modal_dynamic_fields" style="display: contents;"></div>
+            <!-- TAB 2: WEAPONS -->
+            <div id="tab_new_weapons" class="tab-content">
+                <!-- Injection via JS -->
+            </div>
 
-        </form>
-        <div class="modal-actions">
+            <!-- TAB 3: GEAR -->
+            <div id="tab_new_gear" class="tab-content">
+                <!-- Injection via JS -->
+            </div>
+        </div>
+
+        <div class="modal-actions"
+            style="justify-content: space-between; padding: 15px 20px; border-top: 1px solid var(--border-glass);">
             <button type="button" class="remove-btn" id="cancelNewMemberBtn"
-                style="color: var(--text-secondary); font-size: 1em;">Annuler</button>
+                style="color: var(--text-secondary);">Annuler</button>
             <button type="button" class="add-btn" id="confirmNewMemberBtn"
-                style="background-color: var(--success-green); border-color: var(--success-green);">Ajouter</button>
+                style="background-color: var(--success-green); border-color: var(--success-green);">Ajouter
+                l'opérateur</button>
         </div>
     </dialog>
 
@@ -995,10 +1022,10 @@
             afis: ["PIE", "LBD40", "LBD44", "Sans"],
             secondaires: ["SP2022", "G26", "Sans"],
             grenades: ["GENL", "MP7", "Sans"],
-            equipements: ["Sans", "Casque Lourd", "Casque MO", "BBAL", "Bouclier MO", "Belier", "Lacry", "IL", "Lot 5.11", "HDR 50","OP71"],
+            equipements: ["Sans", "Casque Lourd", "Casque MO", "BBAL", "Bouclier MO", "Belier", "Lacry", "IL", "Lot 5.11", "HDR 50", "OP71"],
             equipements2: ["Sans", "Cam pieton", "Échelle", "Stop stick", "Lacry", "Cale", "IL", "Pass"],
             tenues: ["UBAS", "4S", "Bleu", "Civile", "Ghillie", "Treillis"],
-            gpbs: ["GPBL", "GPBPD","Casque Lourd","Casque MO", "Sans"]
+            gpbs: ["GPBL", "GPBPD", "Casque Lourd", "Casque MO", "Sans"]
         };
 
         // Configuration active (copie modifiable des défauts)
@@ -1025,6 +1052,7 @@
         // --- STATE ---
         let activeMemberId = null;
         let draggedItem = null;
+        let tempNewMemberData = {};
         const patracdvrContainer = document.getElementById('patracdvr_container');
         const unassignedContainer = document.getElementById('unassigned_members_container');
         const memberEditModal = document.getElementById('memberEditModal');
@@ -1043,7 +1071,11 @@
             // Bouton "Créer membre" ouvre la modale
             document.getElementById('addManualMemberBtn').addEventListener('click', openNewMemberModal);
             document.getElementById('cancelNewMemberBtn').addEventListener('click', () => newMemberModal.close());
+            document.getElementById('cancelNewMemberBtnTop').addEventListener('click', () => newMemberModal.close());
             document.getElementById('confirmNewMemberBtn').addEventListener('click', addNewMemberFromModal);
+            document.getElementById('new_trigramme').addEventListener('input', (e) => {
+                document.getElementById('newMemberTrigrammeDisplay').textContent = e.target.value.toUpperCase() || 'Nouveau';
+            });
 
             document.getElementById('resetBtn').addEventListener('click', resetAll);
             document.getElementById('importDefaultConfigBtn').addEventListener('click', loadDefaultConfig);
@@ -1194,32 +1226,18 @@
         // --- MODAL LOGIC ---
 
         function openNewMemberModal() {
-            // Reset input
+            // Reset state
+            tempNewMemberData = {
+                trigramme: '', fonction: 'Sans', cellule: 'Sans', principales: 'Sans', secondaires: 'Sans',
+                afis: 'Sans', grenades: 'Sans', equipement: 'Sans', equipement2: 'Sans', tenue: 'UBAS', gpb: 'GPBL'
+            };
             document.getElementById('new_trigramme').value = '';
+            document.getElementById('newMemberTrigrammeDisplay').textContent = 'Nouveau';
 
-            // Génération dynamique des champs select
-            const container = document.getElementById('modal_dynamic_fields');
-            container.innerHTML = '';
+            renderNewMemberEditContent();
 
-            for (const [label, conf] of Object.entries(attributeMapping)) {
-                const wrapper = document.createElement('div');
-                const selectId = `new_mem_${conf.attribute}`;
-
-                let optionsHtml = '';
-                const options = memberConfig[conf.key] || [];
-                options.forEach(opt => {
-                    // Par défaut, sélectionner 'Sans' ou le premier élément
-                    const isSelected = opt === 'Sans' ? 'selected' : '';
-                    optionsHtml += `<option value="${opt}" ${isSelected}>${opt}</option>`;
-                });
-
-                const isMulti = multiSelectAttributes.includes(conf.attribute);
-                wrapper.innerHTML = `
-                    <label for="${selectId}">${label}</label>
-                    <select id="${selectId}" ${isMulti ? 'multiple size="3" style="min-height: 80px;"' : ''}>${optionsHtml}</select>
-                `;
-                container.appendChild(wrapper);
-            }
+            // Reset Tab to Identity
+            document.querySelector('#newMemberModal .tab-btn[data-tab="new_identity"]').click();
 
             newMemberModal.showModal();
         }
@@ -1231,26 +1249,9 @@
                 return;
             }
 
-            const newData = { trigramme: trigramme };
+            tempNewMemberData.trigramme = trigramme;
 
-            // Récupérer les valeurs des selects
-            for (const [label, conf] of Object.entries(attributeMapping)) {
-                const selectId = `new_mem_${conf.attribute}`;
-                const selectEl = document.getElementById(selectId);
-                const isMulti = multiSelectAttributes.includes(conf.attribute);
-                if (isMulti) {
-                    const vals = Array.from(selectEl.selectedOptions).map(opt => opt.value);
-                    newData[conf.attribute] = vals.length > 0 ? vals.join(', ') : 'Sans';
-                } else {
-                    newData[conf.attribute] = selectEl.value;
-                }
-            }
-
-            // Logique d'auto-assignation (optionnelle, pour cohérence)
-            if (newData.cellule === 'Sans') newData.fonction = 'Sans';
-            if (newData.fonction !== 'Sans' && newData.cellule === 'Sans') newData.cellule = 'India 1';
-
-            addPatracdvrMember(unassignedContainer, newData);
+            addPatracdvrMember(unassignedContainer, tempNewMemberData);
             saveData();
             newMemberModal.close();
         }
@@ -1259,9 +1260,18 @@
         // --- MEMBER EDIT MODAL (REPLACES QUICK EDIT PANEL) ---
 
         function setupTabs() {
-            const tabBtns = document.querySelectorAll('.tab-btn');
-            const tabContents = document.querySelectorAll('.tab-content');
+            // Edit Modal
+            const editBtns = document.querySelectorAll('#memberEditModal .tab-btn');
+            const editContents = document.querySelectorAll('#memberEditModal .tab-content');
+            setupTabGroup(editBtns, editContents);
 
+            // New Modal
+            const newBtns = document.querySelectorAll('#newMemberModal .tab-btn');
+            const newContents = document.querySelectorAll('#newMemberModal .tab-content');
+            setupTabGroup(newBtns, newContents);
+        }
+
+        function setupTabGroup(tabBtns, tabContents) {
             tabBtns.forEach(btn => {
                 btn.addEventListener('click', () => {
                     // Remove active from all
@@ -1286,7 +1296,7 @@
             return `<img src="assets/${normName}.svg" alt="${weaponName}" onerror="this.onerror=null; this.outerHTML='<span style=\\'color:var(--accent-blue); font-weight:bold; font-size:12px;\\'>${weaponName.substring(0, 4)}</span>';">`;
         }
 
-        function buildStepperHtml(label, confKey, attribute, currentValue) {
+        function buildStepperHtml(label, confKey, attribute, currentValue, isNew = false) {
             const options = memberConfig[confKey] || ['Sans'];
             let currentIndex = options.indexOf(currentValue);
             if (currentIndex === -1) currentIndex = 0;
@@ -1294,17 +1304,19 @@
             const nextIndex = (currentIndex + 1) % options.length;
             const prevIndex = (currentIndex - 1 + options.length) % options.length;
 
+            const func = isNew ? 'updateNewMemberAttribute' : 'updateMemberAttribute';
+
             return `
                 <div class="stepper-container">
                     <span class="stepper-label">${label}</span>
                     <div class="stepper-controls">
-                        <button type="button" class="stepper-btn" onclick="updateMemberAttribute('${attribute}', '${options[prevIndex]}')">
+                        <button type="button" class="stepper-btn" onclick="${func}('${attribute}', '${options[prevIndex]}')">
                             <span class="material-symbols-outlined">chevron_left</span>
                         </button>
                         <div class="stepper-value-container">
                             <span class="stepper-value">${options[currentIndex]}</span>
                         </div>
-                        <button type="button" class="stepper-btn" onclick="updateMemberAttribute('${attribute}', '${options[nextIndex]}')">
+                        <button type="button" class="stepper-btn" onclick="${func}('${attribute}', '${options[nextIndex]}')">
                             <span class="material-symbols-outlined">chevron_right</span>
                         </button>
                     </div>
@@ -1312,8 +1324,10 @@
             `;
         }
 
-        function buildWeaponSelectorHtml(label, confKey, attribute, currentValue) {
+        function buildWeaponSelectorHtml(label, confKey, attribute, currentValue, isNew = false) {
             const options = memberConfig[confKey] || ['Sans'];
+
+            const func = isNew ? 'updateNewMemberAttribute' : 'updateMemberAttribute';
 
             let html = `
                 <div class="weapon-category">
@@ -1325,7 +1339,7 @@
                 const isSelected = (currentValue === opt);
                 const selectedClass = isSelected ? 'selected' : '';
                 html += `
-                    <div class="weapon-item ${selectedClass}" onclick="updateMemberAttribute('${attribute}', '${opt}')">
+                    <div class="weapon-item ${selectedClass}" onclick="${func}('${attribute}', '${opt}')">
                         <div class="weapon-icon-container">
                             ${getWeaponSvgOrFallback(opt)}
                         </div>
@@ -1338,9 +1352,11 @@
             return html;
         }
 
-        function buildWeaponMultiSelectorHtml(label, confKey, attribute, currentValueStr) {
+        function buildWeaponMultiSelectorHtml(label, confKey, attribute, currentValueStr, isNew = false) {
             const options = memberConfig[confKey] || ['Sans'];
             const currentValues = currentValueStr ? currentValueStr.split(',').map(s => s.trim()) : [];
+
+            const func = isNew ? 'toggleNewMultiMemberAttribute' : 'toggleMultiMemberAttribute';
 
             let html = `
                 <div class="weapon-category">
@@ -1352,7 +1368,7 @@
                 const isSelected = currentValues.includes(opt);
                 const selectedClass = isSelected ? 'selected' : '';
                 html += `
-                    <div class="weapon-item ${selectedClass}" onclick="toggleMultiMemberAttribute('${attribute}', '${opt}')">
+                    <div class="weapon-item ${selectedClass}" onclick="${func}('${attribute}', '${opt}')">
                         <div class="weapon-icon-container">
                             ${getWeaponSvgOrFallback(opt)}
                         </div>
@@ -1365,9 +1381,11 @@
             return html;
         }
 
-        function buildGearGridHtml(label, confKey, attribute, currentValueStr) {
+        function buildGearGridHtml(label, confKey, attribute, currentValueStr, isNew = false) {
             const options = memberConfig[confKey] || ['Sans'];
             const currentValues = currentValueStr ? currentValueStr.split(',').map(s => s.trim()) : [];
+
+            const func = isNew ? 'toggleNewMultiMemberAttribute' : 'toggleMultiMemberAttribute';
 
             let html = `
                 <div class="weapon-category">
@@ -1379,7 +1397,7 @@
                 const isSelected = currentValues.includes(opt);
                 const selectedClass = isSelected ? 'selected' : '';
                 html += `
-                    <button type="button" class="gear-btn ${selectedClass}" onclick="toggleMultiMemberAttribute('${attribute}', '${opt}')">
+                    <button type="button" class="gear-btn ${selectedClass}" onclick="${func}('${attribute}', '${opt}')">
                         ${opt}
                     </button>
                 `;
@@ -1418,6 +1436,70 @@
         }
 
         // Exposing to global scope for onclick handlers in generated HTML
+        function renderNewMemberEditContent() {
+            const d = tempNewMemberData;
+
+            // --- TAB IDENTITY ---
+            const tabId = document.getElementById('tab_new_identity');
+            tabId.innerHTML =
+                buildGearGridHtml('Fonction', 'fonctions', 'fonction', d.fonction || 'Sans', true) +
+                buildGearGridHtml('Cellule', 'cellules', 'cellule', d.cellule || 'Sans', true) +
+                buildStepperHtml('Tenue', 'tenues', 'tenue', d.tenue || 'UBAS', true) +
+                buildGearGridHtml('GPB', 'gpbs', 'gpb', d.gpb || 'GPBL', true);
+
+            // --- TAB WEAPONS ---
+            const tabWeapons = document.getElementById('tab_new_weapons');
+            tabWeapons.innerHTML =
+                buildWeaponSelectorHtml('Arme Principale', 'principales', 'principales', d.principales || 'Sans', true) +
+                buildWeaponSelectorHtml('Arme Secondaire', 'secondaires', 'secondaires', d.secondaires || 'Sans', true) +
+                buildWeaponMultiSelectorHtml('A.F.I.', 'afis', 'afis', d.afis || 'Sans', true) +
+                buildWeaponMultiSelectorHtml('Grenades', 'grenades', 'grenades', d.grenades || 'Sans', true);
+
+            // --- TAB GEAR ---
+            const tabGear = document.getElementById('tab_new_gear');
+            tabGear.innerHTML =
+                buildGearGridHtml('Équipement 1', 'equipements', 'equipement', d.equipement || 'Sans', true) +
+                buildGearGridHtml('Équipement 2', 'equipements2', 'equipement2', d.equipement2 || 'Sans', true);
+        }
+
+        window.updateNewMemberAttribute = function (attribute, value) {
+            tempNewMemberData[attribute] = value;
+
+            // Auto-Assign Logic (Ported from React)
+            if (attribute === 'cellule' && value === 'Sans') tempNewMemberData.fonction = 'Sans';
+            if (attribute === 'fonction' && value !== 'Sans' && tempNewMemberData.cellule === 'Sans') tempNewMemberData.cellule = 'India 1';
+
+            renderNewMemberEditContent();
+        };
+
+        window.toggleNewMultiMemberAttribute = function (attribute, value) {
+            let current = tempNewMemberData[attribute] && tempNewMemberData[attribute] !== 'Sans' ? tempNewMemberData[attribute].split(', ') : [];
+
+            if (value === 'Sans') {
+                current = ['Sans'];
+            } else {
+                if (current.includes('Sans')) current = [];
+                if (current.includes(value)) current = current.filter(x => x !== value);
+                else current.push(value);
+            }
+            if (current.length === 0) current = ['Sans'];
+
+            tempNewMemberData[attribute] = current.join(', ');
+
+            // Auto-Assign Logic for multi-select
+            if (attribute === 'cellule' && current.includes('Sans') && current.length === 1) {
+                tempNewMemberData.fonction = 'Sans';
+            }
+            if (attribute === 'fonction' && !current.includes('Sans')) {
+                const cel = tempNewMemberData.cellule ? tempNewMemberData.cellule.split(', ') : [];
+                if (cel.includes('Sans')) {
+                    tempNewMemberData.cellule = 'India 1';
+                }
+            }
+
+            renderNewMemberEditContent();
+        };
+
         window.updateMemberAttribute = function (attribute, value) {
             if (!activeMemberId) return;
             const member = document.getElementById(activeMemberId);
