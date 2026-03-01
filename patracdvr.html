@@ -1334,38 +1334,42 @@
             localStorage.setItem('patracdvr_standalone_data', JSON.stringify(data));
             return data;
         }
-
         function syncWithOI() {
-            const data = saveData(); // Get current state
+            try {
+                const data = saveData(); // Get current state
 
-            // Reformat for oiFormData
-            let oiFormDataStr = localStorage.getItem('oiFormData');
-            let oiFormData = oiFormDataStr ? JSON.parse(oiFormDataStr) : {};
+                // Reformat for oiFormData
+                let oiFormDataStr = localStorage.getItem('oiFormData');
+                let oiFormData = oiFormDataStr ? JSON.parse(oiFormDataStr) : {};
 
-            // Build patracdvr_rows
-            const vehicles = [...new Set(data.members.filter(m => m.vehicle_assigned).map(m => m.vehicle_assigned))];
-            oiFormData.patracdvr_rows = vehicles.map(vName => {
-                return {
-                    vehicle: vName,
-                    members: data.members.filter(m => m.vehicle_assigned === vName)
-                };
-            });
+                // Build patracdvr_rows
+                const vehicles = [...new Set(data.members.filter(m => m.vehicle_assigned).map(m => m.vehicle_assigned))];
+                oiFormData.patracdvr_rows = vehicles.map(vName => {
+                    return {
+                        vehicle: vName,
+                        members: data.members.filter(m => m.vehicle_assigned === vName)
+                    };
+                });
 
-            // Build unassigned_members
-            oiFormData.unassigned_members = data.members.filter(m => !m.vehicle_assigned);
+                // Build patracdvr_unassigned
+                oiFormData.patracdvr_unassigned = data.members.filter(m => !m.vehicle_assigned);
 
-            // Sync config options
-            oiFormData.memberConfig = data.options;
+                // Sync config options
+                oiFormData.memberConfig = data.options;
 
-            // Save to oiFormData and trigger event for oi.html
-            localStorage.setItem('oiFormData', JSON.stringify(oiFormData));
-            localStorage.setItem('patracdvr_sync_timestamp', Date.now().toString());
+                // Save to oiFormData and trigger event for oi.html
+                localStorage.setItem('oiFormData', JSON.stringify(oiFormData));
+                localStorage.setItem('patracdvr_sync_timestamp', Date.now().toString());
 
-            // Visual feedback
-            const btn = document.getElementById('syncWithOiBtn');
-            const originalText = btn.innerHTML;
-            btn.innerHTML = `<span class="material-symbols-outlined">check_circle</span> Synchronisé`;
-            setTimeout(() => { btn.innerHTML = originalText; }, 2000);
+                // Visual feedback
+                const btn = document.getElementById('syncWithOiBtn');
+                const originalText = btn.innerHTML;
+                btn.innerHTML = `<span class="material-symbols-outlined">check_circle</span> Synchronisé`;
+                setTimeout(() => { btn.innerHTML = originalText; }, 2000);
+            } catch (err) {
+                console.error("Erreur de synchronisation:", err);
+                alert("Erreur lors de l'envoi vers OI : " + err.message);
+            }
         }
 
         function loadData() {
