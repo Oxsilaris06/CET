@@ -824,6 +824,10 @@
                 <button type="button" id="exportSessionBtn" class="add-btn" title="Sauvegarder Session">
                     <span class="material-symbols-outlined">save</span>
                 </button>
+                <button type="button" id="loadFromOiBtn" class="add-btn" title="Charger depuis OI"
+                    style="background-color: var(--accent-blue); border-color: var(--accent-blue); color: white;">
+                    <span class="material-symbols-outlined">download</span> Charger OI
+                </button>
                 <button type="button" id="syncWithOiBtn" class="add-btn" title="Envoyer à l'OI"
                     style="background-color: var(--success-green); border-color: var(--success-green); color: white;">
                     <span class="material-symbols-outlined">sync</span> Sync vers OI
@@ -1083,6 +1087,7 @@
             document.getElementById('importSessionBtn').addEventListener('click', () => document.getElementById('importFileInput').click());
             document.getElementById('importFileInput').addEventListener('change', importData);
             document.getElementById('syncWithOiBtn').addEventListener('click', syncWithOI);
+            document.getElementById('loadFromOiBtn').addEventListener('click', loadDataFromOI);
 
             document.getElementById('closeMemberEdit').addEventListener('click', closeMemberEditModal);
             document.getElementById('saveMemberEditBtn').addEventListener('click', closeMemberEditModal);
@@ -1783,32 +1788,26 @@
             }
         }
 
-        function loadData() {
-            // Check if we are specifically clearing local data
-            if (sessionStorage.getItem('ignore_oi_on_load') === 'true') {
-                sessionStorage.removeItem('ignore_oi_on_load');
-                populateConfigForm();
+        function loadDataFromOI() {
+            if (!confirm("Attention : Charger les données de l'OI écrasera votre configuration et vos membres actuels. Continuer ?")) {
                 return;
             }
 
-            // First check if coming from OI with recent data
             const oiJson = localStorage.getItem('oiFormData');
 
             if (oiJson) {
                 try {
                     const oiData = JSON.parse(oiJson);
-                    // Map oiFormData back to patracdvr_standalone format
 
                     const mappedData = {
                         options: oiData.memberConfig || JSON.parse(JSON.stringify(DEFAULT_MEMBER_CONFIG)),
                         mission_info: {
-                            title: document.getElementById('missionTitleInput')?.value || '', // OI doesn't sync these back yet
+                            title: document.getElementById('missionTitleInput')?.value || '',
                             rally: document.getElementById('rallyTimeInput')?.value || ''
                         },
                         members: []
                     };
 
-                    // Add unassigned
                     if (oiData.unassigned_members) {
                         oiData.unassigned_members.forEach(m => {
                             const newM = { ...m };
@@ -1817,7 +1816,6 @@
                         });
                     }
 
-                    // Add rows
                     if (oiData.patracdvr_rows) {
                         oiData.patracdvr_rows.forEach(row => {
                             if (row.members) {
@@ -1831,10 +1829,23 @@
                     }
 
                     restoreDataFromObject(mappedData);
-                    return; // Successfully loaded from OI
+                    saveData(); // Save loaded state locally
+                    alert("Données OI chargées avec succès.");
                 } catch (e) {
                     console.error("Error loading from oiFormData", e);
+                    alert("Erreur lors du chargement des données OI.");
                 }
+            } else {
+                alert("Aucune donnée OI trouvée.");
+            }
+        }
+
+        function loadData() {
+            // Check if we are specifically clearing local data
+            if (sessionStorage.getItem('ignore_oi_on_load') === 'true') {
+                sessionStorage.removeItem('ignore_oi_on_load');
+                populateConfigForm();
+                return;
             }
 
             // Fallback to standalone save
