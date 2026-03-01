@@ -1369,6 +1369,53 @@
         }
 
         function loadData() {
+            // First check if coming from OI with recent data
+            const oiJson = localStorage.getItem('oiFormData');
+
+            if (oiJson) {
+                try {
+                    const oiData = JSON.parse(oiJson);
+                    // Map oiFormData back to patracdvr_standalone format
+
+                    const mappedData = {
+                        options: oiData.memberConfig || JSON.parse(JSON.stringify(DEFAULT_MEMBER_CONFIG)),
+                        mission_info: {
+                            title: document.getElementById('missionTitleInput')?.value || '', // OI doesn't sync these back yet
+                            rally: document.getElementById('rallyTimeInput')?.value || ''
+                        },
+                        members: []
+                    };
+
+                    // Add unassigned
+                    if (oiData.unassigned_members) {
+                        oiData.unassigned_members.forEach(m => {
+                            const newM = { ...m };
+                            if (newM.id) delete newM.id;
+                            mappedData.members.push(newM);
+                        });
+                    }
+
+                    // Add rows
+                    if (oiData.patracdvr_rows) {
+                        oiData.patracdvr_rows.forEach(row => {
+                            if (row.members) {
+                                row.members.forEach(m => {
+                                    const newM = { ...m, vehicle_assigned: row.vehicle };
+                                    if (newM.id) delete newM.id;
+                                    mappedData.members.push(newM);
+                                });
+                            }
+                        });
+                    }
+
+                    restoreDataFromObject(mappedData);
+                    return; // Successfully loaded from OI
+                } catch (e) {
+                    console.error("Error loading from oiFormData", e);
+                }
+            }
+
+            // Fallback to standalone save
             const json = localStorage.getItem('patracdvr_standalone_data');
             if (!json) {
                 populateConfigForm();
