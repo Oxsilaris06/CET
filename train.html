@@ -1,852 +1,723 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="fr" class="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sport</title>
-    <!-- Chargement de Tailwind CSS -->
+    <title>PSIG | Op-Tracker</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
-    <link rel="icon" href="assets/favicon.ico" sizes="any" type="image/png">
-    <link rel="icon" href="assets/favicon.ico" type="image/svg+xml">
-    <link rel="apple-touch-icon" href="assets/favicon.ico">
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        tactical: {
+                            900: '#0f1115',
+                            800: '#181b21',
+                            700: '#252932',
+                            600: '#374151'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
     <style>
-        /* Styles pour le thème sombre */
         body {
-            font-family: 'Inter', sans-serif;
-            background-color: #111827; /* Gris très foncé */
-            color: #E5E7EB; /* Gris clair pour le texte */
+            background-color: #0f1115;
+            color: #e5e7eb;
+            -webkit-tap-highlight-color: transparent;
         }
-        .header-bg {
-             background-color: #1F2937; /* Gris foncé pour les en-têtes */
+        
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #0f1115; }
+        ::-webkit-scrollbar-thumb { background: #252932; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #374151; }
+
+        .glass-panel {
+            background: rgba(24, 27, 33, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
         }
-        .card {
-            transition: all 0.3s ease;
+        
+        .nav-item.active {
+            color: #3b82f6;
+            background: rgba(59, 130, 246, 0.1);
+            border-color: rgba(59, 130, 246, 0.2);
+        }
+
+        .habit-checkbox {
+            appearance: none;
+            width: 24px;
+            height: 24px;
+            border: 2px solid #374151;
+            border-radius: 6px;
+            background-color: transparent;
             cursor: pointer;
-            border-left: 4px solid transparent; /* Bordure par défaut */
-            min-height: 80px; /* Assure une bonne hauteur de cible tactile */
+            transition: all 0.2s;
+            position: relative;
+            flex-shrink: 0;
         }
-        .card.completed {
-            background-color: #10b98120; /* Vert léger */
-            border-left: 4px solid #10b981; /* Vert vibrant */
-            opacity: 1;
+        .habit-checkbox:checked {
+            background-color: #10b981;
+            border-color: #10b981;
         }
-        .card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -2px rgba(0, 0, 0, 0.3);
-            background-color: #374151;
+        .habit-checkbox:checked::after {
+            content: '✔';
+            position: absolute;
+            color: #0f1115;
+            font-size: 14px;
+            font-weight: bold;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
         }
-        .modal-overlay {
-            background-color: rgba(0, 0, 0, 0.85);
-        }
-        .modal-content {
-            background-color: #1F2937;
-            /* Scrollable sur mobile si le contenu dépasse la hauteur */
-            max-height: 95vh;
-            overflow-y: auto; /* Le contenu de la modale défile */
-        }
-        /* Style pour la progression */
-        .progress-bar-fill {
-            transition: width 1s ease-in-out;
-        }
-        .tab-button {
-            transition: background-color 0.3s, color 0.3s;
-        }
-        /* La couleur active sera désormais gérée par les classes Tailwind pour la spécificité */
-        .tab-button.active {
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
-        }
+
+        .heat-block { width: 12px; height: 12px; border-radius: 2px; }
+        .heat-0 { background-color: #1f2937; }
+        .heat-1 { background-color: #064e3b; }
+        .heat-2 { background-color: #059669; }
+        .heat-3 { background-color: #10b981; }
+        .heat-4 { background-color: #34d399; }
+
+        #toast-container { z-index: 1000; }
+        .toast-enter { animation: slideIn 0.3s ease-out forwards; }
+        .toast-leave { animation: slideOut 0.3s ease-in forwards; }
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        @keyframes slideOut { from { transform: translateX(0); opacity: 1; } to { transform: translateX(100%); opacity: 0; } }
     </style>
 </head>
-<body class="p-4 sm:p-8">
+<body class="flex flex-col md:flex-row min-h-screen">
 
-    <div class="max-w-4xl mx-auto">
-        <header class="text-center mb-6 p-4 sm:p-6 header-bg rounded-xl shadow-2xl">
-            <h1 class="text-3xl sm:text-4xl font-extrabold text-white mb-2" id="main-title">Programme d'Entraînement Combiné</h1>
-            
-            <!-- Onglets de sélection du type de sport -->
-            <div class="flex justify-center mb-6 border-b border-gray-700">
-                <!-- Classes initiales nettoyées pour laisser JS gérer l'état actif -->
-                <button id="tab-running" onclick="selectSport('running')" class="tab-button flex-1 py-3 px-4 rounded-t-lg font-bold text-sm sm:text-base">
-                    Course à Pied
-                </button>
-                <button id="tab-crossops" onclick="selectSport('crossops')" class="tab-button flex-1 py-3 px-4 rounded-t-lg font-bold text-sm sm:text-base">
-                    WODs Fonctionnels
-                </button>
-            </div>
+    <div id="toast-container" class="fixed top-4 right-4 flex flex-col gap-2 pointer-events-none"></div>
 
-
-            <!-- Sélecteur de Programme (Visible uniquement pour la course à pied) -->
-            <div id="running-selector-container">
-                <div class="mb-4 flex flex-col sm:flex-row justify-center items-center space-y-2 sm:space-y-0 sm:space-x-4">
-                    <label for="program-selector" class="text-base sm:text-lg text-gray-300 font-medium">Sélectionner l'Objectif :</label>
-                    <select id="program-selector" onchange="switchProgram()" class="w-full sm:w-auto bg-gray-700 text-white p-3 rounded-lg border border-indigo-500 focus:ring-indigo-500 text-base">
-                        <option value="3km">3 km en 13 min (8 Semaines)</option>
-                        <option value="8km">8 km en 40 min (8 Semaines)</option>
-                    </select>
+    <!-- Sidebar / Bottom Nav -->
+    <nav class="md:w-64 glass-panel border-r border-tactical-700 flex flex-col justify-between fixed bottom-0 w-full md:relative md:h-screen z-50">
+        <div class="p-4 hidden md:block">
+            <div class="flex items-center gap-3 mb-8">
+                <div class="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center font-bold text-white shadow-[0_0_15px_rgba(37,99,235,0.5)]">
+                    <i class="ph ph-shield-check text-2xl"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-gray-100 tracking-wider">PSIG TRACKER</h1>
+                    <p class="text-xs text-blue-400 font-mono">PROFIL AMIP</p>
                 </div>
             </div>
             
-            <!-- Sélecteur de Difficulté WOD (Visible uniquement pour les WODs) -->
-            <div id="crossops-selector-container" class="hidden">
-                <div class="mb-4 flex flex-col sm:flex-row justify-center items-center space-y-2 sm:space-y-0 sm:space-x-4">
-                    <label for="wod-selector" class="text-base sm:text-lg text-gray-300 font-medium">Sélectionner la Difficulté :</label>
-                    <select id="wod-selector" onchange="switchWODDifficulty()" class="w-full sm:w-auto bg-gray-700 text-white p-3 rounded-lg border border-indigo-500 focus:ring-indigo-500 text-base">
-                        <option value="easy">Facile (Débutant)</option>
-                        <option value="intermediate">Intermédiaire</option>
-                        <option value="advanced">Avancé</option>
-                    </select>
-                </div>
+            <div class="space-y-2">
+                <p class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 pl-2">Vues Opérationnelles</p>
+                <button onclick="navTo('dashboard')" id="nav-dashboard" class="nav-item active w-full flex items-center gap-3 px-4 py-3 rounded-lg text-gray-400 hover:text-gray-100 hover:bg-tactical-700 transition-colors text-sm font-medium border border-transparent">
+                    <i class="ph ph-target text-xl"></i> Quotidien
+                </button>
+                <button onclick="navTo('programs')" id="nav-programs" class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-lg text-gray-400 hover:text-gray-100 hover:bg-tactical-700 transition-colors text-sm font-medium border border-transparent">
+                    <i class="ph ph-barbell text-xl"></i> PPO Hybride (3x/sem)
+                </button>
+                <button onclick="navTo('stats')" id="nav-stats" class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-lg text-gray-400 hover:text-gray-100 hover:bg-tactical-700 transition-colors text-sm font-medium border border-transparent">
+                    <i class="ph ph-chart-line-up text-xl"></i> Statistiques
+                </button>
             </div>
-
-            <p class="text-lg sm:text-xl text-indigo-400 font-semibold" id="program-subtitle"></p>
-            <div class="mt-4">
-                <div class="text-base sm:text-lg font-medium text-gray-300 mb-2">Progression Globale : <span id="progress-text" class="text-indigo-400">0%</span></div>
-                <div class="w-full bg-gray-700 rounded-full h-3">
-                    <div id="progress-bar" class="progress-bar-fill h-3 rounded-full bg-indigo-500" style="width: 0%"></div>
-                </div>
-            </div>
-        </header>
-
-        <!-- Conteneur des Semaines -->
-        <div id="schedule-container" class="space-y-4 sm:space-y-6">
-            <!-- Les semaines seront injectées ici par JavaScript -->
         </div>
 
-        <!-- Modale de Détails de Séance -->
-        <div id="session-modal" class="fixed inset-0 z-50 hidden items-center justify-center modal-overlay p-4">
-            <div class="modal-content rounded-xl shadow-2xl w-full max-w-lg transform transition-all border border-gray-700">
-                <div class="p-4 sm:p-6">
-                    <h2 id="modal-title" class="text-xl sm:text-2xl font-bold text-white mb-2"></h2>
-                    <p id="modal-week" class="text-xs sm:text-sm text-indigo-400 mb-4"></p>
-                    <div class="space-y-3 mb-6 p-3 bg-gray-700 rounded-lg text-sm sm:text-base">
-                        <div id="modal-details" class="text-gray-200 leading-relaxed"></div>
-                        <p id="modal-reco" class="text-xs sm:text-sm font-semibold text-yellow-300"></p>
-                    </div>
+        <!-- Mobile Nav -->
+        <div class="md:hidden flex justify-around p-3 bg-tactical-800 border-t border-tactical-700 pb-6">
+            <button onclick="navTo('dashboard')" id="nav-mobile-dashboard" class="flex flex-col items-center gap-1 text-blue-500">
+                <i class="ph ph-target text-2xl"></i><span class="text-[10px]">Aujourd'hui</span>
+            </button>
+            <button onclick="navTo('programs')" id="nav-mobile-programs" class="flex flex-col items-center gap-1 text-gray-500">
+                <i class="ph ph-barbell text-2xl"></i><span class="text-[10px]">PPO</span>
+            </button>
+            <button onclick="navTo('stats')" id="nav-mobile-stats" class="flex flex-col items-center gap-1 text-gray-500">
+                <i class="ph ph-chart-line-up text-2xl"></i><span class="text-[10px]">Stats</span>
+            </button>
+        </div>
+    </nav>
 
-                    <!-- Titre Dynamique pour les Notes -->
-                    <h3 id="notes-title" class="text-lg sm:text-xl font-semibold text-gray-300 mb-2"></h3>
-                    <textarea id="modal-notes" rows="4" class="w-full p-3 border border-gray-600 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 mb-4 bg-gray-900 text-white text-base" placeholder="Votre ressenti, vos notes, les difficultés ou la facilité de la séance..."></textarea>
+    <!-- Main Content -->
+    <main class="flex-1 p-4 md:p-8 pb-24 md:pb-8 overflow-y-auto w-full max-w-6xl mx-auto" id="main-content">
+        
+        <!-- ==================== VIEW: DASHBOARD ==================== -->
+        <section id="view-dashboard" class="space-y-6 animate-fade-in">
+            <header class="flex flex-col md:flex-row md:justify-between md:items-end gap-4 mb-6">
+                <div>
+                    <h2 class="text-2xl md:text-4xl font-bold text-white tracking-tight" id="current-date-display">...</h2>
+                    <p class="text-gray-400 mt-1">Préparation Opérationnelle : <span id="daily-readiness" class="text-emerald-400 font-mono font-bold">0%</span></p>
+                </div>
+                
+                <!-- Objectifs Mensuels Widget -->
+                <div class="bg-tactical-800 border border-tactical-700 rounded-lg p-3 flex flex-col gap-2 min-w-[250px]">
+                    <div class="flex justify-between items-center mb-1">
+                        <span class="text-xs font-bold text-gray-400 uppercase tracking-wider">Objectifs du Mois</span>
+                        <span id="month-display" class="text-xs text-blue-400 font-mono"></span>
+                    </div>
+                    <label class="flex items-center gap-2 cursor-pointer text-sm">
+                        <input type="checkbox" id="m_pa" onchange="toggleMonthly('m_pa')" class="form-checkbox text-blue-500 rounded bg-tactical-900 border-tactical-600">
+                        <span class="text-gray-300">Nettoyage complet PA</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer text-sm">
+                        <input type="checkbox" id="m_gilet" onchange="toggleMonthly('m_gilet')" class="form-checkbox text-blue-500 rounded bg-tactical-900 border-tactical-600">
+                        <span class="text-gray-300">Lavage housse Gilet</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer text-sm">
+                        <input type="checkbox" id="m_secours" onchange="toggleMonthly('m_secours')" class="form-checkbox text-blue-500 rounded bg-tactical-900 border-tactical-600">
+                        <span class="text-gray-300">Drill Secourisme Tactique</span>
+                    </label>
+                </div>
+            </header>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Checklists Quotidiennes -->
+                <div class="bg-tactical-800 rounded-xl border border-tactical-700 p-5 md:p-6 shadow-lg space-y-6">
                     
-                    <!-- Champ de saisie du score/temps (Adapté pour Course J-J ou WOD) -->
-                    <div id="session-score-input-container" class="mt-4 hidden">
-                        <label for="session-score-input" class="text-gray-300 mb-1 block text-base" id="session-score-label">Temps final (Min:Sec) :</label>
-                        <input id="session-score-input" type="text" class="w-full p-3 border border-gray-600 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 bg-gray-900 text-white text-base" placeholder="Min:Sec (ex: 13:15)">
-                        <p class="text-xs text-gray-500 mt-1" id="session-score-tip">Saisir le temps réel réalisé.</p>
+                    <!-- Prise de Service -->
+                    <div>
+                        <div class="flex items-center gap-2 mb-3 border-b border-tactical-700 pb-2">
+                            <i class="ph ph-sun text-yellow-500 text-lg"></i>
+                            <h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider">Avant Départ / Prise de Service</h3>
+                        </div>
+                        <div id="habits-start" class="space-y-2"></div>
                     </div>
 
-                    <!-- Actions combinées pour une meilleure accessibilité -->
-                    <div class="flex flex-col sm:flex-row justify-between items-center mt-6 pt-4 border-t border-gray-600 space-y-3 sm:space-y-0">
-                        <label class="flex items-center space-x-2">
-                            <input id="modal-checkbox" type="checkbox" class="form-checkbox h-6 w-6 text-indigo-500 rounded focus:ring-indigo-500 bg-gray-700 border-gray-600">
-                            <span class="text-gray-300 font-medium text-base">Séance Terminée</span>
-                        </label>
-                        <div class="flex space-x-3 w-full sm:w-auto">
-                            <button onclick="closeModal()" class="flex-1 sm:flex-none text-gray-400 hover:text-white font-medium py-3 px-4 rounded-lg transition duration-200 text-base border border-gray-700 hover:bg-gray-700">
-                                Fermer
-                            </button>
-                            <button onclick="saveSessionDetails()" class="flex-1 sm:flex-none bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-4 rounded-lg transition duration-200 shadow-md text-base">
-                                Sauvegarder
-                            </button>
+                    <!-- Retour Unité -->
+                    <div>
+                        <div class="flex items-center gap-2 mb-3 border-b border-tactical-700 pb-2">
+                            <i class="ph ph-moon text-blue-400 text-lg"></i>
+                            <h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider">Retour Unité / Nuit</h3>
+                        </div>
+                        <div id="habits-end" class="space-y-2"></div>
+                    </div>
+
+                    <!-- Développement & QL -->
+                    <div>
+                        <div class="flex items-center gap-2 mb-3 border-b border-tactical-700 pb-2">
+                            <i class="ph ph-brain text-purple-400 text-lg"></i>
+                            <h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider">Développement, Repos & QL</h3>
+                        </div>
+                        <div id="habits-dev" class="space-y-2"></div>
+                        
+                        <!-- Dry Day Toggle (Special UI) -->
+                        <div class="mt-3 p-3 rounded-lg border bg-tactical-900 border-tactical-700 flex justify-between items-center">
+                            <div class="flex items-center gap-3">
+                                <div class="w-8 h-8 rounded-full bg-tactical-800 flex items-center justify-center border border-tactical-600">
+                                    <i class="ph ph-drop-slash text-cyan-400"></i>
+                                </div>
+                                <div>
+                                    <span class="text-gray-200 font-medium text-sm">Journée sans Alcool (QL)</span>
+                                    <p class="text-xs text-gray-500">Objectif de modération</p>
+                                </div>
+                            </div>
+                            <input type="checkbox" class="habit-checkbox" id="h_dryday" onchange="toggleHabit('h_dryday', this.checked)">
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- Today's PPO -->
+                <div class="flex flex-col gap-6">
+                    <div class="bg-gradient-to-br from-tactical-800 to-tactical-900 rounded-xl border border-tactical-700 p-5 md:p-6 shadow-lg relative overflow-hidden">
+                        <div class="absolute top-0 right-0 w-32 h-32 bg-blue-500 opacity-5 blur-[60px] rounded-full"></div>
+                        
+                        <div class="flex justify-between items-start mb-4 relative z-10">
+                            <div class="flex items-center gap-2">
+                                <i class="ph ph-lightning text-yellow-500 text-2xl"></i>
+                                <h3 class="text-lg font-semibold text-gray-100">Prochaine Séance PPO</h3>
+                            </div>
+                            <span id="today-program-badge" class="px-2 py-1 bg-blue-900/30 text-xs rounded text-blue-300 border border-blue-800/50 font-mono">...</span>
+                        </div>
+
+                        <div id="today-workout-container" class="relative z-10">
+                            <!-- Injected via JS -->
+                        </div>
+                    </div>
+                    
+                    <!-- Quick Stats Widget -->
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="bg-tactical-800 border border-tactical-700 p-4 rounded-xl flex items-center justify-between">
+                            <div>
+                                <p class="text-xs text-gray-500 uppercase">Sport / Sem</p>
+                                <p class="text-xl font-bold text-white font-mono mt-1" id="widget-sport-week">0/3</p>
+                            </div>
+                            <i class="ph ph-activity text-2xl text-blue-500 opacity-50"></i>
+                        </div>
+                        <div class="bg-tactical-800 border border-tactical-700 p-4 rounded-xl flex items-center justify-between">
+                            <div>
+                                <p class="text-xs text-gray-500 uppercase">Série Légale</p>
+                                <p class="text-xl font-bold text-emerald-400 font-mono mt-1" id="widget-legal-streak">0 J</p>
+                            </div>
+                            <i class="ph ph-scales text-2xl text-emerald-500 opacity-50"></i>
                         </div>
                     </div>
                 </div>
             </div>
-        </div>
-    </div>
+        </section>
+
+        <!-- ==================== VIEW: PROGRAMS (HYBRID) ==================== -->
+        <section id="view-programs" class="hidden space-y-6 animate-fade-in">
+            <header class="mb-8">
+                <h2 class="text-2xl md:text-3xl font-bold text-white tracking-tight">PPO Hybride (Force + Cardio)</h2>
+                <p class="text-gray-400 mt-1">Objectif: 3 Séances par semaine (2 WODs + 1 Cardio OBLIGATOIRE).</p>
+            </header>
+
+            <div class="bg-tactical-800 rounded-xl border border-tactical-700 p-5 md:p-6 mb-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-semibold text-gray-100">Progression globale (8 Semaines)</h3>
+                    <span id="prog-percent" class="font-mono text-blue-400">0%</span>
+                </div>
+                <div class="w-full bg-tactical-900 rounded-full h-2.5 border border-tactical-700 mb-6">
+                    <div id="prog-bar" class="bg-blue-600 h-2.5 rounded-full transition-all duration-500" style="width: 0%"></div>
+                </div>
+                <div class="flex justify-end">
+                    <button onclick="resetProgramProgress()" class="text-red-400 hover:text-red-300 text-sm flex items-center gap-1 transition-colors">
+                        <i class="ph ph-arrow-counter-clockwise"></i> Repartir de zéro
+                    </button>
+                </div>
+            </div>
+
+            <!-- Liste des semaines Hybrides -->
+            <div id="program-schedule" class="space-y-4">
+                <!-- Injected via JS -->
+            </div>
+        </section>
+
+        <!-- ==================== VIEW: STATS ==================== -->
+        <section id="view-stats" class="hidden space-y-6 animate-fade-in">
+            <header class="mb-8">
+                <h2 class="text-2xl md:text-3xl font-bold text-white tracking-tight">Analyse Opérationnelle</h2>
+                <p class="text-gray-400 mt-1">Suivi de la régularité et des objectifs secondaires.</p>
+            </header>
+
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                <div class="bg-tactical-800 border border-tactical-700 p-4 rounded-xl">
+                    <p class="text-xs text-gray-500 uppercase">Activité 30J</p>
+                    <p class="text-2xl font-bold text-white mt-1 font-mono" id="stat-30d">0%</p>
+                </div>
+                <div class="bg-tactical-800 border border-tactical-700 p-4 rounded-xl">
+                    <p class="text-xs text-gray-500 uppercase">Séances PPO</p>
+                    <p class="text-2xl font-bold text-blue-400 mt-1 font-mono" id="stat-workouts">0</p>
+                </div>
+                <div class="bg-tactical-800 border border-tactical-700 p-4 rounded-xl">
+                    <p class="text-xs text-gray-500 uppercase">Jours "Dry" (Sans Alcool)</p>
+                    <p class="text-2xl font-bold text-cyan-400 mt-1 font-mono" id="stat-dry">0</p>
+                </div>
+                <div class="bg-tactical-800 border border-tactical-700 p-4 rounded-xl">
+                    <p class="text-xs text-gray-500 uppercase">Drills (Sec/Mois)</p>
+                    <p class="text-2xl font-bold text-emerald-400 mt-1 font-mono" id="stat-drills">0</p>
+                </div>
+            </div>
+
+            <div class="bg-tactical-800 rounded-xl border border-tactical-700 p-5 md:p-6 overflow-x-auto">
+                <div class="flex items-center gap-2 mb-4">
+                    <i class="ph ph-calendar-blank text-gray-400 text-xl"></i>
+                    <h3 class="text-sm font-semibold text-gray-100">Activité Annuelle (Heatmap)</h3>
+                </div>
+                <div class="min-w-[700px]">
+                    <div id="heatmap-container" class="flex gap-1"></div>
+                    <div class="flex justify-end items-center gap-2 mt-4 text-xs text-gray-500">
+                        <span>Moins</span>
+                        <div class="heat-block heat-0"></div>
+                        <div class="heat-block heat-1"></div>
+                        <div class="heat-block heat-2"></div>
+                        <div class="heat-block heat-3"></div>
+                        <div class="heat-block heat-4"></div>
+                        <span>Plus</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
 
     <script>
-        // --- CONSTANTES ET FONCTIONS D'OUTILS ---
+        // ==========================================
+        // CONFIGURATION (Basée sur Synthèse)
+        // ==========================================
+        const HABITS_CONFIG = [
+            // PRIS DE SERVICE
+            { id: 'h_douche', name: 'Douche & Petit-déjeuner pris', category: 'start', icon: 'ph-coffee' },
+            { id: 'h_sac', name: 'Sac d\'allègement prêt (fait la veille)', category: 'start', icon: 'ph-backpack' },
+            // RETOUR UNITE
+            { id: 'h_charge', name: 'Charge Matos (NEO, Lampe, TPL)', category: 'end', icon: 'ph-battery-charging' },
+            { id: 'h_ksm', name: 'Prise KSM-66 (Récupération)', category: 'end', icon: 'ph-pill' },
+            // DEV & QL
+            { id: 'h_legal', name: 'Révision Légal / Pratique MIP', category: 'dev', icon: 'ph-scales' },
+            { id: 'h_drills', name: 'Manipulations à sec (Drills)', category: 'dev', icon: 'ph-crosshair' },
+            { id: 'h_box', name: 'Box Breathing / Imagerie Mentale', category: 'dev', icon: 'ph-wind' },
+            { id: 'h_vigik', name: 'Veille Tech: Code / Flipper Zero', category: 'dev', icon: 'ph-terminal' }
+        ];
 
-        // VMA de base pour le programme 3km initial (estimation basée sur 14:43)
-        const VMA_INITIAL = 13.5; 
-        const PROGRAM_3KM_ID = '3km';
-        const PROGRAM_8KM_ID = '8km';
-        const PROGRAM_CROSSOPS_ID = 'crossops'; // Maintenant WODs Fonctionnels
-        // Séparateur utilisé pour distinguer le WOD (Titre) des détails (Exercices) pour les WODs
-        const WOD_SEPARATOR = '|||'; 
+        // Programme Hybride (WOD + Cardio forcé)
+        const HYBRID_PLAN = [
+            { w: 1, s1: "WOD PHOENIX ||| 50-40-30-20-10 Sit-ups, 15... Burpees, Pompes", s2: "WOD BÉLIER ||| AMRAP 20m: 10 Squats sautés, 10 Pompes, 10 Genoux", s3: "CARDIO (VMA) ||| 10 x 300m à 100% VMA / r=1min" },
+            { w: 2, s1: "WOD ARMOR ||| EMOM 16m: 5 Tractions, 10 Dips, Max Burpees", s2: "WOD ARES ||| 3 Rounds: 20 Fentes, 20 V-Ups, 20s Gainage", s3: "CARDIO (Seuil) ||| 3 x 8 min au Seuil / r=2min30" },
+            { w: 3, s1: "WOD SPARTAN ||| 100 Pompes, 100 Situps (Séries courtes)", s2: "WOD THUNDER ||| AMRAP 25m: Fentes, Burpees", s3: "CARDIO (VMA) ||| 8 x 400m à 95% VMA / r=1m15" },
+            { w: 4, s1: "TEST VITESSE ||| Max rep Burpees-Pompes 5 min", s2: "MOBILITÉ ACTIVE ||| 30 min Étirements et travail articulaire", s3: "CARDIO (Test) ||| 3 x 1000m Allure cible / r=2m30" },
+            { w: 5, s1: "WOD TITAN ||| EMOM 20m: Pompes Diamant, Tractions", s2: "WOD HERCULE ||| 5 Rounds: Squats sautés, Sit-Ups", s3: "CARDIO (Mixte) ||| 10x200m Sprint + 4x400m VMA" },
+            { w: 6, s1: "WOD GAÏA ||| AMRAP 15m: Push-ups, Step-ups, Squat Jump", s2: "WOD ZEUS ||| 3 Rounds: Jumping Jacks, Fentes, Burpees", s3: "CARDIO (Pyramide) ||| 1000m + 800m + 600m + 400m" },
+            { w: 7, s1: "AFFÛTAGE FORCE ||| 3 Rounds: Pompes explo, Squats, Tirage", s2: "RAPPEL FONCTIONNEL ||| EMOM 10m: 10 Burpees, Max Situps", s3: "CARDIO (Affûtage) ||| 6 x 150m sprint + 1500m Allure" },
+            { w: 8, s1: "REPOS TOTAL ||| Hydratation, Mobilité, KSM-66", s2: "REPOS TOTAL ||| Préparation mentale", s3: "EVALUATION ||| Test CCPPM 3000m (Objectif <13:00)" }
+        ];
 
-        // Variables d'état qui seront initialisées par localStorage
-        let activeSport = 'running'; // 'running' or 'crossops'
-        let currentWODDifficulty = 'intermediate'; 
-        let currentProgramKey = PROGRAM_3KM_ID; 
-
-        let currentWorkoutPlan = []; // Initialisation à vide, remplie après chargement initial
-        let currentSessionId = null;
-
-        /**
-         * Convertit les minutes:secondes (string) en km/h.
-         * Pour 3km.
-         */
-        function timeToKmh(timeStr) {
-            const parts = timeStr.split(':');
-            if (parts.length !== 2) return 0;
-            const minutes = Number(parts[0]);
-            const seconds = Number(parts[1]);
-            if (isNaN(minutes) || isNaN(seconds)) return 0;
-            const totalHours = (minutes * 60 + seconds) / 3600;
-            // Pour 3km
-            return totalHours > 0 ? 3 / totalHours : 0;
-        }
-
-        /**
-         * Calcule la VMA estimée à partir d'un temps sur 3 km (90% de VMA).
-         */
-        function calculateNewVMA(timeStr) {
-            const V_course = timeToKmh(timeStr);
-            // La vitesse de 3km représente environ 90% de la VMA
-            return V_course > 0 ? V_course / 0.90 : VMA_INITIAL;
-        }
-
-        /**
-         * Convertit la VMA (km/h) et la distance (m) en temps (m:s).
-         * @param {number} VMA - VMA en km/h.
-         * @param {number} distanceM - Distance en mètres.
-         * @param {number} pct - Pourcentage de VMA (ex: 1.05 pour 105%).
-         * @returns {string} Temps de passage au format minutes'secondes.
-         */
-        function VMAtoPaceTime(VMA, distanceM, pct = 1.0) {
-            if (VMA === 0) return "--";
-            const speedKmh = VMA * pct;
-            const distanceKm = distanceM / 1000;
-            const totalHours = distanceKm / speedKmh;
-            const totalSeconds = totalHours * 3600;
-            const minutes = Math.floor(totalSeconds / 60);
-            const seconds = Math.round(totalSeconds % 60);
-            
-            let unit = `${distanceM}m`;
-            if (distanceM === 1000) {
-                unit = 'km'; // Pour le Seuil et les allures spécifiques
-            }
-            
-            return `${minutes}'${String(seconds).padStart(2, '0')} au ${unit}`;
-        }
-
-        // --- DÉFINITIONS DES WODS ET DES PROGRAMMES (Adaptées pour la difficulté) ---
-
-        // Nouvelle structure de données pour les WODs avec 3 niveaux de difficulté
-        const wodVariations = {
-            1: {
-                s1: {
-                    easy: `WOD PHOENIX (Facile) ||| Force & Core : <ul class="list-disc list-inside mt-1 space-y-1"><li>30-20-10 répétitions de Sit-ups (Abdos)</li><li>10-8-6 répétitions de Burpees (avec step-up)</li><li>10-8-6 répétitions de Pompes (sur les genoux)</li></ul><p class="mt-2 text-sm text-yellow-300">Format: Pour le temps (For Time), Repos si nécessaire. Diminution des répétitions chaque tour.</p>`,
-                    intermediate: `WOD PHOENIX (Inter.) ||| Force & Core : <ul class="list-disc list-inside mt-1 space-y-1"><li>50-40-30-20-10 répétitions de Sit-ups (Abdos)</li><li>15-12-9-6-3 répétitions de Burpees</li><li>15-12-9-6-3 répétitions de Pompes</li></ul><p class="mt-2 text-sm text-yellow-300">Format: Pour le temps (For Time), Viser un temps sous 20 minutes.</p>`,
-                    advanced: `WOD PHOENIX (Avancé) ||| Force & Core : <ul class="list-disc list-inside mt-1 space-y-1"><li>75-60-45-30-15 répétitions de Sit-ups (Abdos)</li><li>20-15-10-5-3 répétitions de Burpees</li><li>20-15-10-5-3 répétitions de Pompes (Pieds surélevés)</li></ul><p class="mt-2 text-sm text-yellow-300">Format: Pour le temps (For Time), Viser un temps sous 15 min.</p>`
-                },
-                s2: {
-                    easy: `WOD BÉLIER (Facile) ||| Cardio-Résistance : <ul class="list-disc list-inside mt-1 space-y-1"><li>Max de tours en 15 minutes (AMRAP)</li><li>8 Squats Classiques</li><li>8 Pompes (mains surélevées)</li><li>8 Montées de Genoux (par jambe)</li></ul><p class="mt-2 text-sm text-yellow-300">Objectif: Maintenir un rythme constant et fluide.</p>`,
-                    intermediate: `WOD BÉLIER (Inter.) ||| Cardio-Résistance : <ul class="list-disc list-inside mt-1 space-y-1"><li>Max de tours en 20 minutes (AMRAP)</li><li>10 Squats Sautés</li><li>10 Pompes (avec mains surélevées)</li><li>10 Montées de Genoux (par jambe)</li></ul><p class="mt-2 text-sm text-yellow-300">Objectif: Maintenir un effort élevé pendant 20 minutes.</p>`,
-                    advanced: `WOD BÉLIER (Avancé) ||| Cardio-Résistance : <ul class="list-disc list-inside mt-1 space-y-1"><li>Max de tours en 25 minutes (AMRAP)</li><li>15 Squats Sautés (avec touche-sol)</li><li>15 Pompes (normales ou explosives)</li><li>15 Montées de Genoux (par jambe)</li></ul><p class="mt-2 text-sm text-yellow-300">Objectif: Pousser l'endurance au maximum.</p>`
-                }
-            },
-            2: {
-                s1: {
-                    easy: `WOD ARMOR (Facile) ||| Force & Puissance : <ul class="list-disc list-inside mt-1 space-y-1"><li>À chaque minute pendant 12 minutes (EMOM)</li><li>3 Tractions Verticales (ou tirage horizontal)</li><li>6 Dips (sur chaise)</li><li>Max de Mountain Climbers dans le temps restant</li></ul>`,
-                    intermediate: `WOD ARMOR (Inter.) ||| Force & Puissance : <ul class="list-disc list-inside mt-1 space-y-1"><li>À chaque minute pendant 16 minutes (EMOM)</li><li>5 Tractions Verticales (ou tirage horizontal)</li><li>10 Dips (ou dips sur chaise)</li><li>Max de Burpees Restants</li></ul>`,
-                    advanced: `WOD ARMOR (Avancé) ||| Force & Puissance : <ul class="list-disc list-inside mt-1 space-y-1"><li>À chaque minute pendant 20 minutes (EMOM)</li><li>8 Tractions (avec bande)</li><li>15 Dips (sur barres parallèles)</li><li>Max de Burpees Box Jump dans le temps restant</li></ul>`
-                },
-                s2: {
-                    easy: `WOD ARES (Facile) ||| Endurance Core : <ul class="list-disc list-inside mt-1 space-y-1"><li>2 Rounds le plus rapidement possible (For Time)</li><li>15 Fentes (par jambe)</li><li>15 Crunches</li><li>15 secondes de Gainage Planche</li></ul><p class="mt-2 text-sm text-yellow-300">Repos 1 min 30 sec entre les tours.</p>`,
-                    intermediate: `WOD ARES (Inter.) ||| Endurance Core : <ul class="list-disc list-inside mt-1 space-y-1"><li>3 Rounds le plus rapidement possible (For Time)</li><li>20 Fentes (par jambe)</li><li>20 V-Ups (Abdos)</li><li>20 secondes de Gainage Planche</li></ul><p class="mt-2 text-sm text-yellow-300">Repos 1 min entre les tours.</p>`,
-                    advanced: `WOD ARES (Avancé) ||| Endurance Core : <ul class="list-disc list-inside mt-1 space-y-1"><li>4 Rounds le plus rapidement possible (For Time)</li><li>25 Fentes Sautées (par jambe)</li><li>25 V-Ups avec poids léger</li><li>30 secondes de Gainage Planche (avec levée de jambe alternée)</li></ul><p class="mt-2 text-sm text-yellow-300">Repos 45 secondes entre les tours.</p>`
-                }
-            },
-            3: {
-                s1: {
-                    easy: `WOD SPARTAN (Facile) ||| Force & Core : <ul class="list-disc list-inside mt-1 space-y-1"><li>50 Pompes (sur les genoux)</li><li>50 Montées de Genoux (total)</li><li>50 Sit-ups</li></ul><p class="mt-2 text-sm text-yellow-300">Diviser en séries courtes de 10-15 répétitions.</p>`,
-                    intermediate: `WOD SPARTAN (Inter.) ||| Force & Core : <ul class="list-disc list-inside mt-1 space-y-1"><li>100 Pompes</li><li>100 Montées de Genoux (total)</li><li>100 Sit-ups</li></ul><p class="mt-2 text-sm text-yellow-300">Diviser en séries courtes pour maintenir l'intensité.</p>`,
-                    advanced: `WOD SPARTAN (Avancé) ||| Force & Core : <ul class="list-disc list-inside mt-1 space-y-1"><li>150 Pompes Diamant</li><li>150 Montées de Genoux (total)</li><li>150 Sit-ups lestés</li></ul><p class="mt-2 text-sm text-yellow-300">Visez 5 sets de 30 répétitions pour chaque exercice.</p>`
-                },
-                s2: {
-                    easy: `WOD THUNDER (Facile) ||| Cardio-Résistance : <ul class="list-disc list-inside mt-1 space-y-1"><li>Max de tours en 18 minutes (AMRAP)</li><li>10 Squats Classiques</li><li>10 Fentes Marchées (par jambe)</li><li>5 Burpees (avec step-up)</li></ul>`,
-                    intermediate: `WOD THUNDER (Inter.) ||| Cardio-Résistance : <ul class="list-disc list-inside mt-1 space-y-1"><li>Max de tours en 25 minutes (AMRAP)</li><li>10 Squats Classiques</li><li>15 Fentes Marchées (par jambe)</li><li>10 Burpees</li></ul>`,
-                    advanced: `WOD THUNDER (Avancé) ||| Cardio-Résistance : <ul class="list-disc list-inside mt-1 space-y-1"><li>Max de tours en 30 minutes (AMRAP)</li><li>15 Squats Sautés</li><li>20 Fentes Marchées (par jambe, lestées)</li><li>15 Burpees</li></ul>`
-                }
-            },
-            4: {
-                s1: {
-                    easy: `WOD ATHENA (Facile) ||| Test de Vitesse-Force : <ul class="list-disc list-inside mt-1 space-y-1"><li>Max de répétitions en 4 minutes</li><li>Burpees-Pompes (sur les genoux)</li></ul><p class="mt-2 text-sm text-yellow-300">Objectif: Effectuer au moins 25 répétitions.</p>`,
-                    intermediate: `WOD ATHENA (Inter.) ||| Test de Vitesse-Force : <ul class="list-disc list-inside mt-1 space-y-1"><li>Max de répétitions en 5 minutes</li><li>Burpees-Pompes (enchaînés)</li></ul><p class="mt-2 text-sm text-yellow-300">Objectif: Effectuer au moins 40 répétitions.</p>`,
-                    advanced: `WOD ATHENA (Avancé) ||| Test de Vitesse-Force : <ul class="list-disc list-inside mt-1 space-y-1"><li>Max de répétitions en 6 minutes</li><li>Burpees-Pompes Explosives</li></ul><p class="mt-2 text-sm text-yellow-300">Objectif: Effectuer plus de 55 répétitions.</p>`
-                },
-                s2: { easy: `Repos Total`, intermediate: `Repos Total`, advanced: `Repos Total` }
-            },
-            5: {
-                s1: {
-                    easy: `WOD TITAN (Facile) ||| Force & Puissance : <ul class="list-disc list-inside mt-1 space-y-1"><li>À chaque minute pendant 15 minutes (EMOM)</li><li>5 Pompes (surélevées)</li><li>5 Tractions Verticales (ou tirage)</li><li>10 Secondes de Gainage Latéral (droite/gauche)</li></ul>`,
-                    intermediate: `WOD TITAN (Inter.) ||| Force & Puissance : <ul class="list-disc list-inside mt-1 space-y-1"><li>À chaque minute pendant 20 minutes (EMOM)</li><li>8 Pompes Diamant</li><li>8 Tractions (ou tirage)</li><li>15 Secondes de Gainage Latéral (droite/gauche)</li></ul>`,
-                    advanced: `WOD TITAN (Avancé) ||| Force & Puissance : <ul class="list-disc list-inside mt-1 space-y-1"><li>À chaque minute pendant 25 minutes (EMOM)</li><li>10 Pompes Explosives</li><li>10 Tractions (strictes)</li><li>20 Secondes de Gainage Latéral (droite/gauche)</li></ul>`
-                },
-                s2: {
-                    easy: `WOD HERCULE (Facile) ||| Endurance Core : <ul class="list-disc list-inside mt-1 space-y-1"><li>3 Rounds le plus rapidement possible (For Time)</li><li>15 Squats Classiques</li><li>10 Sit-Ups</li><li>5 Burpees (avec step-up)</li></ul>`,
-                    intermediate: `WOD HERCULE (Inter.) ||| Endurance Core : <ul class="list-disc list-inside mt-1 space-y-1"><li>5 Rounds le plus rapidement possible (For Time)</li><li>20 Squats Sautés</li><li>15 Sit-Ups</li><li>10 Burpees</li></ul>`,
-                    advanced: `WOD HERCULE (Avancé) ||| Endurance Core : <ul class="list-disc list-inside mt-1 space-y-1"><li>7 Rounds le plus rapidement possible (For Time)</li><li>25 Squats Sautés</li><li>20 Sit-Ups lestés</li><li>15 Burpees</li></ul>`
-                }
-            },
-            6: {
-                s1: {
-                    easy: `WOD GAÏA (Facile) ||| Force & Core : <ul class="list-disc list-inside mt-1 space-y-1"><li>Max de tours en 12 minutes (AMRAP)</li><li>8 Push-ups (Pompes sur genoux)</li><li>8 Step-ups (Montée sur chaise)</li><li>8 Squats Classiques</li></ul>`,
-                    intermediate: `WOD GAÏA (Inter.) ||| Force & Core : <ul class="list-disc list-inside mt-1 space-y-1"><li>Max de tours en 15 minutes (AMRAP)</li><li>10 Push-ups (Pompes)</li><li>10 Step-ups (Montée sur Box ou chaise)</li><li>10 Tirs (Squat Jump)</li></ul>`,
-                    advanced: `WOD GAÏA (Avancé) ||| Force & Core : <ul class="list-disc list-inside mt-1 space-y-1"><li>Max de tours en 20 minutes (AMRAP)</li><li>15 Push-ups (Pompes)</li><li>15 Pistol Squats (alternés)</li><li>15 Tirs (Squat Jump explosif)</li></ul>`
-                },
-                s2: {
-                    easy: `WOD ZEUS (Facile) ||| Cardio-Résistance : <ul class="list-disc list-inside mt-1 space-y-1"><li>2 Rounds le plus rapidement possible (For Time)</li><li>20 Jumping Jacks</li><li>15 Fentes avant (par jambe)</li><li>5 Burpees (avec step-up)</li></ul><p class="mt-2 text-sm text-yellow-300">Repos 45s entre chaque tour.</p>`,
-                    intermediate: `WOD ZEUS (Inter.) ||| Cardio-Résistance : <ul class="list-disc list-inside mt-1 space-y-1"><li>3 Rounds le plus rapidement possible (For Time)</li><li>30 Jumping Jacks</li><li>20 Fentes avant (par jambe)</li><li>10 Burpees</li></ul><p class="mt-2 text-sm text-yellow-300">Repos 30s entre chaque tour.</p>`,
-                    advanced: `WOD ZEUS (Avancé) ||| Cardio-Résistance : <ul class="list-disc list-inside mt-1 space-y-1"><li>4 Rounds le plus rapidement possible (For Time)</li><li>40 Jumping Jacks</li><li>25 Fentes Sautées (par jambe)</li><li>15 Burpees</li></ul><p class="mt-2 text-sm text-yellow-300">Repos 15s entre chaque tour (ou aucun repos).</p>`
-                }
-            },
-            7: {
-                s1: {
-                    easy: `WOD APOLLO (Facile) ||| Affûtage Force : <ul class="list-disc list-inside mt-1 space-y-1"><li>2 Rounds</li><li>8 Pompes (sur genoux)</li><li>8 Squats</li><li>8 Tractions Verticales (ou tirage)</li></ul><p class="mt-2 text-sm text-yellow-300">Récupération complète (3 min) entre les tours.</p>`,
-                    intermediate: `WOD APOLLO (Inter.) ||| Affûtage Force : <ul class="list-disc list-inside mt-1 space-y-1"><li>3 Rounds</li><li>10 Pompes Explosives</li><li>10 Squats</li><li>10 Tractions (ou tirage)</li></ul><p class="mt-2 text-sm text-yellow-300">Récupération complète (3 min) entre les tours.</p>`,
-                    advanced: `WOD APOLLO (Avancé) ||| Affûtage Force : <ul class="list-disc list-inside mt-1 space-y-1"><li>4 Rounds</li><li>15 Pompes Explosives</li><li>15 Squats Sautés lestés</li><li>15 Tractions (strictes)</li></ul><p class="mt-2 text-sm text-yellow-300">Récupération complète (2 min 30 sec) entre les tours.</p>`
-                },
-                s2: {
-                    easy: `WOD MARS (Facile) ||| Rappel Fonctionnel : <ul class="list-disc list-inside mt-1 space-y-1"><li>À chaque minute pendant 8 minutes (EMOM)</li><li>5 Burpees (avec step-up)</li><li>Max de Sit-ups dans le temps restant</li></ul>`,
-                    intermediate: `WOD MARS (Inter.) ||| Rappel Fonctionnel : <ul class="list-disc list-inside mt-1 space-y-1"><li>À chaque minute pendant 10 minutes (EMOM)</li><li>10 Burpees</li><li>Max de Sit-ups dans le temps restant</li></ul>`,
-                    advanced: `WOD MARS (Avancé) ||| Rappel Fonctionnel : <ul class="list-disc list-inside mt-1 space-y-1"><li>À chaque minute pendant 12 minutes (EMOM)</li><li>12 Burpees</li><li>Max de Sit-ups lestés dans le temps restant</li></ul>`
-                }
-            },
-            8: {
-                s1: { easy: `Repos Total`, intermediate: `Repos Total`, advanced: `Repos Total` },
-                s2: { easy: `Repos Total`, intermediate: `Repos Total`, advanced: `Repos Total` }
-            }
-        };
-        
-        // La structure basePrograms doit être adaptée pour utiliser wodVariations
-        const basePrograms = {
-            [PROGRAM_3KM_ID]: {
-                title: "3 km en 13 min",
-                subtitle: (vma) => `VMA Estimée: ${vma.toFixed(1)} km/h | Allure Cible: 4 min 20 sec/km (8 Semaines)`,
-                plan: [
-                    // Course à Pied (CP) - Reste inchangé
-                    { week: 1, s1: (vma) => `VMA Courte: 10 x 300m (à 13.8 km/h / ${VMAtoPaceTime(VMA_INITIAL, 300, 1.02)}) avec 1 min récup. trottée.`, s2: (vma) => `Résistance Seuil: 3 x 8 min au Seuil (4'50/km) avec 2 min 30 sec récup. trottée.` },
-                    { week: 2, s1: (vma) => `VMA Courte: 12 x 300m (à 13.8 km/h / ${VMAtoPaceTime(VMA_INITIAL, 300, 1.02)}) avec 1 min récup. trottée.`, s2: (vma) => `Résistance Seuil: 4 x 6 min au Seuil (4'50/km) avec 2 min récup. trottée.` },
-                    { week: 3, s1: (vma) => `VMA Courte: 8 x 400m (à 14.0 km/h / ${VMAtoPaceTime(VMA_INITIAL, 400, 1.04)}) avec 1 min 15 sec récup. trottée.`, s2: (vma) => `Résistance Seuil: 3 x 10 min au Seuil (4'45/km) avec 3 min récup. trottée.` },
-                    { week: 4, s1: (vma) => `Test VMA/Allure: 3 x 1000m (Allure 4'30/km) avec 2 min 30 sec récup.`, s2: (vma) => `Repos Total.` },
-                    { week: 5, s1: (vma) => `Mixte VMA: 10 x 200m (sprint max / ${VMAtoPaceTime(14.5, 200, 1.05)}) / 45 sec récup. + 4 x 400m (à 14.5 km/h / ${VMAtoPaceTime(14.5, 400, 1.0)}) / 1 min 15 sec récup.`, s2: (vma) => `Allure Spécifique: 2 x 1500m à Allure Cible (4'20/km) avec 3 min récup. trottée.` },
-                    { week: 6, s1: (vma) => `VMA Moyenne: 6 x 500m (à 14.8 km/h / ${VMAtoPaceTime(14.8, 500, 1.0)}) avec 1 min 30 sec récup. trottée.`, s2: (vma) => `Pyramide Courte: 1000m + 800m + 600m + 400m à Allure Cible (4'20/km), avec 2 min 30 sec récup.` },
-                    { week: 7, s1: (vma) => `Affûtage Vitesse: 6 x 150m (sprint max / ${VMAtoPaceTime(15.0, 150, 1.05)}) avec 1 min récup. marche.`, s2: (vma) => `Rappel Allure: 1 x 1500m à Allure Cible (4'20/km).` },
-                    { week: 8, s1: (vma) => `Repos Total`, s2: (vma) => `Course 3 km (Jour J) - Objectif 13 min.` },
-                ]
-            },
-            [PROGRAM_8KM_ID]: {
-                title: "8 km en 40 min",
-                subtitle: (vma) => `VMA Actuelle: ${vma.toFixed(1)} km/h | Allure Cible: 5 min 0 sec/km (8 Semaines)`,
-                plan: [
-                    // Course à Pied (CP) - Reste inchangé
-                    { week: 1, s1: (vma) => `VMA Longue: 3 x 1000m (à ${ (vma * 0.95).toFixed(1) } km/h / ${VMAtoPaceTime(vma, 1000, 0.95)}) avec 2 min récup. trottée.`, s2: (vma) => `Endurance Seuil: 2 x 15 min au Seuil (à ${ (vma * 0.90).toFixed(1) } km/h / ${VMAtoPaceTime(vma, 1000, 0.90)}) avec 4 min récup. trottée.` },
-                    { week: 2, s1: (vma) => `VMA Longue: 4 x 800m (à ${ (vma * 0.95).toFixed(1) } km/h / ${VMAtoPaceTime(vma, 800, 0.95)}) avec 2 min récup. trottée.`, s2: (vma) => `Endurance Seuil: 3 x 12 min au Seuil (à ${ (vma * 0.90).toFixed(1) } km/h / ${VMAtoPaceTime(vma, 1000, 0.90)}) avec 3 min récup. trottée.` },
-                    { week: 3, s1: (vma) => `VMA Longue: 2 x 1500m (à ${ (vma * 0.92).toFixed(1) } km/h / ${VMAtoPaceTime(vma, 1500, 0.92)}) avec 3 min 30 sec récup. trottée.`, s2: (vma) => `Allure Spécifique: 4 x 10 min à Allure Cible (5'00/km) avec 2 min 30 sec récup.` },
-                    { week: 4, s1: (vma) => `Test Seuil: 20 min à Allure Seuil Maximum (à ${ (vma * 0.92).toFixed(1) } km/h).`, s2: (vma) => `Repos Total.` },
-                    { week: 5, s1: (vma) => `Mixte VMA: 10 x 400m (à ${ (vma * 0.95).toFixed(1) } km/h / ${VMAtoPaceTime(vma, 400, 0.95)}) avec 1 min 30 sec récup. trottée.`, s2: (vma) => `Endurance Seuil: 2 x 20 min au Seuil (à ${ (vma * 0.90).toFixed(1) } km/h / ${VMAtoPaceTime(vma, 1000, 0.90)}) avec 5 min récup. trottée.` },
-                    { week: 6, s1: (vma) => `VMA Longue: 3 x 1200m (à ${ (vma * 0.92).toFixed(1) } km/h / ${VMAtoPaceTime(vma, 1200, 0.92)}) avec 2 min 30 sec récup. trottée.`, s2: (vma) => `Allure Spécifique: 3 x 15 min à Allure Cible (5'00/km) avec 3 min récup. trottée.` },
-                    { week: 7, s1: (vma) => `Affûtage Vitesse: 6 x 200m (rapide / ${VMAtoPaceTime(vma, 200, 1.05)}) avec 1 min récup.`, s2: (vma) => `Affûtage Seuil: 3 x 5 min à Allure Cible (5'00/km) avec 2 min récup. trottée.` },
-                    { week: 8, s1: (vma) => `Repos Total`, s2: (vma) => `Course 8 km (Jour J) - Objectif 40 min.` },
-                ]
-            },
-            [PROGRAM_CROSSOPS_ID]: {
-                title: "WODs Fonctionnels",
-                subtitle: (vma) => `Force/Cardio au Poids du Corps | Niveau: ${currentWODDifficulty.toUpperCase()} (8 Semaines)`,
-                plan: [] // Le plan sera rempli dynamiquement par getProgramPlan
+        // ==========================================
+        // STATE MANAGEMENT
+        // ==========================================
+        let appState = {
+            habitsLog: {}, 
+            workoutsLog: {}, 
+            monthlyLog: {}, // { '2023-10': { m_pa: true, m_gilet: false, m_secours: true } }
+            config: {
+                currentWeek: 1, 
+                currentSession: 1 // 1, 2, or 3 (Cardio)
             }
         };
 
+        const todayStr = getLocalISODate(new Date());
+        const currentMonthStr = todayStr.substring(0, 7); // YYYY-MM
 
-        // --- GESTION DE L'ÉTAT ET DU LOCAL STORAGE ---
-
-        // Stockage de la VMA recalculee (persiste entre les sessions)
-        function getStoredVMA() {
-            try {
-                const storedVMA = parseFloat(localStorage.getItem('userNewVMA'));
-                return isNaN(storedVMA) || storedVMA === 0 ? VMA_INITIAL : storedVMA;
-            } catch (e) {
-                return VMA_INITIAL;
-            }
+        function getLocalISODate(date) {
+            const offset = date.getTimezoneOffset();
+            return new Date(date.getTime() - (offset*60*1000)).toISOString().split('T')[0];
         }
 
-        function setStoredVMA(vma) {
-            try {
-                localStorage.setItem('userNewVMA', vma.toFixed(2));
-            } catch (e) {
-                console.error("Erreur de sauvegarde de VMA:", e);
+        function loadState() {
+            const saved = localStorage.getItem('psigTrackerV2');
+            if (saved) {
+                appState = { ...appState, ...JSON.parse(saved) };
             }
+            if (!appState.habitsLog[todayStr]) appState.habitsLog[todayStr] = {};
+            if (!appState.monthlyLog[currentMonthStr]) appState.monthlyLog[currentMonthStr] = { m_pa: false, m_gilet: false, m_secours: false };
         }
-        
-        // --- NOUVELLES FONCTIONS POUR LA GESTION DES PRÉFÉRENCES ---
-        
-        function getPreference(key, defaultValue) {
-            try {
-                return localStorage.getItem(key) || defaultValue;
-            } catch (e) {
-                console.error(`Erreur de lecture de la préférence ${key}:`, e);
-                return defaultValue;
-            }
+
+        function saveState() {
+            localStorage.setItem('psigTrackerV2', JSON.stringify(appState));
         }
-        
-        function setPreference(key, value) {
-            try {
-                localStorage.setItem(key, value);
-            } catch (e) {
-                console.error(`Erreur de sauvegarde de la préférence ${key}:`, e);
-            }
-        }
-        
-        // --- FIN DES NOUVELLES FONCTIONS ---
 
-
-        // Renvoie le plan avec les allures calculées dynamiquement
-        function getProgramPlan(key) {
-            const vma = getStoredVMA();
-            const basePlan = basePrograms[key] || basePrograms[PROGRAM_3KM_ID];
-
-            if (key === PROGRAM_CROSSOPS_ID) {
-                const difficulty = currentWODDifficulty;
-
-                // Génère le plan WOD en utilisant la difficulté sélectionnée
-                return Object.keys(wodVariations).map(weekNumber => {
-                    const weekData = wodVariations[weekNumber];
-                    const s1Content = weekData.s1[difficulty] || 'Repos Total';
-                    const s2Content = weekData.s2[difficulty] || 'Repos Total';
-
-                    return {
-                        week: parseInt(weekNumber),
-                        s1: s1Content,
-                        s2: s2Content,
-                        day1: 'Séance 1 (Force)',
-                        day2: 'Séance 2 (Cardio-Rés.)'
-                    };
-                });
-            }
-            
-            // Pour la Course à Pied
-            // Si le programme 8km est sélectionné, on utilise la VMA réelle (si calculée) pour les allures.
-            const vmaForPace = key === PROGRAM_8KM_ID ? vma : VMA_INITIAL;
-            
-            return basePlan.plan.map((weekData, index) => {
-                // Pour le 3km, on garde les allures initiales pour les semaines 1-4 car on ne recalcule
-                // la VMA qu'après la course (Semaine 8). Pour les semaines 5-8, on a des allures spécifiques.
-                // Pour le 8km, on utilise la vma actuelle dès le début.
-                
-                let s1Content = typeof weekData.s1 === 'function' ? weekData.s1(vmaForPace) : weekData.s1;
-                let s2Content = typeof weekData.s2 === 'function' ? weekData.s2(vmaForPace) : weekData.s2;
-                
-                // Correction pour s'assurer que les allures VMA du programme 3km restent sur la VMA_INITIAL
-                // pour les premières semaines si le plan n'est pas "dynamique" (ce qui est le cas ici)
-                // Le template contient déjà VMA_INITIAL pour les S1-S4 du 3km, pas besoin de surcharger.
-                // Le programme 8km utilise VMA calculée.
-
-                return {
-                    week: weekData.week,
-                    s1: s1Content, // Lundi
-                    s2: s2Content, // Vendredi
-                    day1: 'Séance 1',
-                    day2: 'Séance 2'
-                };
+        // ==========================================
+        // NAVIGATION & UI
+        // ==========================================
+        function navTo(viewId) {
+            document.querySelectorAll('.nav-item').forEach(el => {
+                el.classList.remove('active', 'text-gray-100');
+                el.classList.add('text-gray-400');
             });
-        }
-
-        // Le programme 8km utilise la VMA actuelle du coureur
-        const initialPrograms = {
-            [PROGRAM_3KM_ID]: basePrograms[PROGRAM_3KM_ID],
-            [PROGRAM_8KM_ID]: basePrograms[PROGRAM_8KM_ID],
-            [PROGRAM_CROSSOPS_ID]: basePrograms[PROGRAM_CROSSOPS_ID]
-        };
-
-
-        function loadSessionData() {
-            try {
-                // Utilise une clé de stockage basée sur le programme et la difficulté (si WOD)
-                const storageKey = activeSport === PROGRAM_CROSSOPS_ID ? 
-                                   'sessionData_' + PROGRAM_CROSSOPS_ID + '_' + currentWODDifficulty : 
-                                   'sessionData_' + currentProgramKey;
-                const data = localStorage.getItem(storageKey);
-                return data ? JSON.parse(data) : {};
-            } catch (e) {
-                console.error("Erreur de chargement du localStorage:", e);
-                return {};
-            }
-        }
-
-        function saveSessionData(data) {
-             try {
-                const storageKey = activeSport === PROGRAM_CROSSOPS_ID ? 
-                                   'sessionData_' + PROGRAM_CROSSOPS_ID + '_' + currentWODDifficulty : 
-                                   'sessionData_' + currentProgramKey;
-                localStorage.setItem(storageKey, JSON.stringify(data));
-            } catch (e) {
-                console.error("Erreur de sauvegarde du localStorage:", e);
-            }
-        }
-
-        // --- RENDU ET LOGIQUE D'INTERACTION ---
-
-        function updateProgress() {
-            const data = loadSessionData();
-            let completedCount = 0;
-            // On calcule le nombre total de sessions uniquement si le plan est chargé
-            const totalSessions = currentWorkoutPlan.length * 2; 
+            document.querySelectorAll('[id^="nav-mobile-"]').forEach(el => {
+                el.classList.remove('text-blue-500');
+                el.classList.add('text-gray-500');
+            });
             
-            if (totalSessions === 0) {
-                 document.getElementById('progress-bar').style.width = '0%';
-                 document.getElementById('progress-text').textContent = '0%';
-                 return;
-            }
+            const btn = document.getElementById(`nav-${viewId}`);
+            if(btn) { btn.classList.add('active', 'text-gray-100'); btn.classList.remove('text-gray-400'); }
+            const mobBtn = document.getElementById(`nav-mobile-${viewId}`);
+            if(mobBtn) { mobBtn.classList.add('text-blue-500'); mobBtn.classList.remove('text-gray-500'); }
 
+            ['dashboard', 'programs', 'stats'].forEach(v => {
+                document.getElementById(`view-${v}`).classList.add('hidden');
+            });
+            document.getElementById(`view-${viewId}`).classList.remove('hidden');
 
-            for (let i = 0; i < totalSessions; i++) {
-                // La clé de la session est toujours 0 à N-1
-                if (data[i] && data[i].completed) {
-                    completedCount++;
-                }
-            }
-
-            const percentage = Math.round((completedCount / totalSessions) * 100);
-
-            document.getElementById('progress-bar').style.width = percentage + '%';
-            document.getElementById('progress-text').textContent = percentage + '%';
+            if(viewId === 'dashboard') renderDashboard();
+            if(viewId === 'programs') renderProgramsView();
+            if(viewId === 'stats') renderStatsView();
         }
 
-        function renderSchedule() {
-            // Mise à jour de l'état global avant de rendre
-            if (activeSport === 'crossops') {
-                currentProgramKey = PROGRAM_CROSSOPS_ID;
-            } else {
-                currentProgramKey = document.getElementById('program-selector').value;
-            }
-            // S'assure que la difficulté WOD est à jour (important pour la clé de sauvegarde)
-            currentWODDifficulty = document.getElementById('wod-selector').value; 
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            const colors = type === 'success' ? 'bg-emerald-900/90 border-emerald-500 text-emerald-100' : 'bg-blue-900/90 border-blue-500 text-blue-100';
+            toast.className = `flex items-center gap-3 p-4 rounded-lg border shadow-lg backdrop-blur-md toast-enter ${colors}`;
+            toast.innerHTML = `<i class="ph ph-check-circle text-xl"></i><span class="text-sm font-medium">${message}</span>`;
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.classList.replace('toast-enter', 'toast-leave');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
 
-            currentWorkoutPlan = getProgramPlan(currentProgramKey); // Réactualise le plan
+        // ==========================================
+        // DASHBOARD
+        // ==========================================
+        function renderDashboard() {
+            // Header
+            let dateStr = new Date().toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+            document.getElementById('current-date-display').innerText = dateStr.charAt(0).toUpperCase() + dateStr.slice(1);
             
-            const container = document.getElementById('schedule-container');
-            container.innerHTML = '';
-            const data = loadSessionData();
-            let sessionIdCounter = 0;
-            
-            // Mise à jour des titres et sous-titres
-            const vma = getStoredVMA();
-            const programBase = basePrograms[currentProgramKey];
+            let monthName = new Date().toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+            document.getElementById('month-display').innerText = monthName.toUpperCase();
 
-            // Pour le WOD, le sous-titre doit être mis à jour avec la difficulté
-            if (currentProgramKey === PROGRAM_CROSSOPS_ID) {
-                 document.getElementById('main-title').textContent = "Programme WODs Fonctionnels - 8 Semaines";
-                 document.getElementById('program-subtitle').textContent = `Force/Cardio au Poids du Corps | Niveau: ${currentWODDifficulty.toUpperCase()} (8 Semaines)`;
-            } else {
-                 document.getElementById('main-title').textContent = "Programme Course à Pied";
-                 document.getElementById('program-subtitle').textContent = typeof programBase.subtitle === 'function' ? programBase.subtitle(vma) : programBase.subtitle;
-            }
+            // Monthly Checkbox states
+            ['m_pa', 'm_gilet', 'm_secours'].forEach(id => {
+                document.getElementById(id).checked = appState.monthlyLog[currentMonthStr][id];
+            });
 
+            // Habits
+            ['start', 'end', 'dev'].forEach(cat => {
+                document.getElementById(`habits-${cat}`).innerHTML = '';
+            });
 
-            currentWorkoutPlan.forEach(weekData => {
-                const weekElement = document.createElement('div');
-                weekElement.className = 'header-bg p-4 sm:p-6 rounded-xl shadow-lg border border-gray-700';
-                weekElement.innerHTML = `<h2 class="text-xl sm:text-2xl font-bold text-white mb-4 border-b pb-2 border-indigo-400">Semaine ${weekData.week}</h2>`;
+            const todayHabits = appState.habitsLog[todayStr] || {};
 
-                ['s1', 's2'].forEach(sessionKey => {
-                    const sessionId = sessionIdCounter++;
-                    const sessionInfo = weekData[sessionKey];
-                    const isCompleted = data[sessionId] && data[sessionId].completed;
-                    
-                    const sessionName = sessionKey === 's1' ? `${weekData.day1}` : `${weekData.day2}`;
-                    
-                    // Utilisation du séparateur approprié
-                    const separator = currentProgramKey === PROGRAM_CROSSOPS_ID ? WOD_SEPARATOR : ':';
-                    const parts = sessionInfo.split(separator);
-                    
-                    const cardTitle = parts[0].trim(); // Nom du WOD ou Type de séance CP
-                    
-                    // Pour les WODs, la sous-titre de la carte est le type de WOD + niveau.
-                    let cardSubtitle = '';
-                    if (currentProgramKey === PROGRAM_CROSSOPS_ID && parts[1]) {
-                        cardSubtitle = parts[1].split(':')[0].trim(); // Prend le type (avant le premier :)
-                    } else if (parts[1]) {
-                        cardSubtitle = parts[1].trim(); 
-                    }
-
-
-                    const card = document.createElement('div');
-                    card.className = `card p-4 rounded-lg shadow-md mb-3 flex justify-between items-center bg-gray-700 hover:bg-gray-600 border-indigo-500 ${isCompleted ? 'completed' : 'border-gray-700'}`;
-                    card.setAttribute('data-id', sessionId);
-                    card.setAttribute('data-week', weekData.week);
-                    card.setAttribute('data-type', sessionKey === 's1' ? 'Vitesse/Force' : 'Résistance/Endurance');
-                    card.setAttribute('data-details', sessionInfo); // Stocke toute l'info
-                    card.setAttribute('onclick', 'openModal(this)');
-
-                    card.innerHTML = `
-                        <div>
-                            <p class="font-semibold text-base text-gray-100">${sessionName} : ${cardTitle}</p>
-                            <p class="text-sm text-gray-400">${cardSubtitle.replace(/<[^>]*>?/gm, '').replace('Format:', '')}</p> <!-- Supprime l'HTML pour le sous-titre de la carte -->
+            HABITS_CONFIG.forEach(habit => {
+                const isChecked = todayHabits[habit.id] === true;
+                const container = document.getElementById(`habits-${habit.category}`);
+                
+                const div = document.createElement('div');
+                div.className = `flex items-center justify-between p-3 rounded-lg border transition-colors ${isChecked ? 'bg-emerald-900/10 border-emerald-500/30' : 'bg-tactical-900 border-tactical-700'}`;
+                
+                div.innerHTML = `
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-full bg-tactical-800 flex items-center justify-center border border-tactical-600">
+                            <i class="ph ${habit.icon} ${isChecked ? 'text-emerald-400' : 'text-gray-400'}"></i>
                         </div>
-                        ${isCompleted ? '<svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>' : '<div class="h-7 w-7 border-2 border-gray-500 rounded-full"></div>'}
-                    `;
-                    weekElement.appendChild(card);
-                });
-
-                container.appendChild(weekElement);
-            });
-            updateProgress();
-        }
-
-        function switchProgram() {
-            const selector = document.getElementById('program-selector');
-            const newProgramKey = selector.value;
-            
-            // Sauvegarde de la préférence du programme CP
-            setPreference('userProgramKey', newProgramKey);
-
-            if (newProgramKey !== currentProgramKey) {
-                currentProgramKey = newProgramKey;
-                renderSchedule(); 
-            }
-        }
-
-        function switchWODDifficulty() {
-            const selector = document.getElementById('wod-selector');
-            const newDifficulty = selector.value;
-            
-            // Sauvegarde de la préférence de difficulté WOD
-            setPreference('userWODDifficulty', newDifficulty);
-
-            if (newDifficulty !== currentWODDifficulty) {
-                currentWODDifficulty = newDifficulty;
-                renderSchedule(); 
-            }
-        }
-
-        function selectSport(sport) {
-            activeSport = sport;
-            setPreference('userActiveSport', sport); // Sauvegarde la préférence du sport actif
-
-            const runningSelector = document.getElementById('running-selector-container');
-            const crossopsSelector = document.getElementById('crossops-selector-container');
-            const tabRunning = document.getElementById('tab-running');
-            const tabCrossOps = document.getElementById('tab-crossops');
-
-            if (sport === 'running') {
-                runningSelector.classList.remove('hidden');
-                crossopsSelector.classList.add('hidden');
-                
-                // Set Running as Active
-                tabRunning.classList.add('active', 'bg-indigo-600', 'text-white');
-                tabRunning.classList.remove('bg-gray-700', 'text-gray-300');
-                
-                // Set CrossOps as Inactive
-                tabCrossOps.classList.remove('active', 'bg-indigo-600', 'text-white');
-                tabCrossOps.classList.add('bg-gray-700', 'text-gray-300');
-                
-                // On s'assure que currentProgramKey est bien le programme running sélectionné
-                currentProgramKey = document.getElementById('program-selector').value; 
-            } else {
-                runningSelector.classList.add('hidden');
-                crossopsSelector.classList.remove('hidden');
-                
-                // Set CrossOps as Active
-                tabCrossOps.classList.add('active', 'bg-indigo-600', 'text-white');
-                tabCrossOps.classList.remove('bg-gray-700', 'text-gray-300');
-
-                // Set Running as Inactive
-                tabRunning.classList.remove('active', 'bg-indigo-600', 'text-white');
-                tabRunning.classList.add('bg-gray-700', 'text-gray-300');
-
-                currentProgramKey = PROGRAM_CROSSOPS_ID;
-                // S'assurer que la difficulté WOD est définie
-                currentWODDifficulty = document.getElementById('wod-selector').value; 
-            }
-            renderSchedule();
-        }
-
-
-        function openModal(element) {
-            // Empêche le défilement du corps (la page entière)
-            document.body.classList.add('overflow-hidden'); 
-
-            currentSessionId = element.getAttribute('data-id');
-            const week = element.getAttribute('data-week');
-            const type = element.getAttribute('data-type');
-            const details = element.getAttribute('data-details');
-            const data = loadSessionData();
-            const sessionData = data[currentSessionId] || { completed: false, notes: '', finalTime: '' };
-
-            const separator = currentProgramKey === PROGRAM_CROSSOPS_ID ? WOD_SEPARATOR : ':';
-            const parts = details.split(separator);
-            const title = parts[0];
-            const content = parts[1]; 
-
-            document.getElementById('modal-title').textContent = title.trim();
-            document.getElementById('modal-week').textContent = `Semaine ${week} — Type : ${type}`;
-            
-            const baseReco = "Recommandation : Pensez à l'échauffement (15 min) et au retour au calme (10 min) pour chaque séance intense.";
-            
-            // Mise à jour du titre des notes (Fix pour le WOD)
-            const notesTitle = document.getElementById('notes-title');
-            notesTitle.textContent = currentProgramKey === PROGRAM_CROSSOPS_ID ? 'Mon Journal de WOD' : 'Mon Journal de Course';
-            
-            // Références aux éléments de score génériques
-            const scoreContainer = document.getElementById('session-score-input-container');
-            const scoreInput = document.getElementById('session-score-input');
-            const scoreLabel = document.getElementById('session-score-label');
-            const scoreTip = document.getElementById('session-score-tip');
-
-            // Réinitialisation
-            scoreContainer.classList.add('hidden');
-            scoreInput.value = '';
-            
-            // Logique d'affichage pour les WODs Fonctionnels
-            if (currentProgramKey === PROGRAM_CROSSOPS_ID && content) {
-                // Pour les WODs: on sépare le Type des Exercices (le Type est avant le premier :)
-                const [wodType, exerciseList] = content.split(':');
-                
-                // Affichage des détails WOD
-                let detailHTML = `
-                    <p class="font-bold text-indigo-400 mb-2">Type d'Entraînement : ${wodType.trim()}</p>
-                    <p class="text-gray-200 leading-relaxed text-base"><span class="font-bold text-red-300">Exercices du WOD :</span></p>
-                    ${exerciseList ? exerciseList.trim() : '<p>Détails non spécifiés.</p>'}
+                        <span class="${isChecked ? 'text-gray-400 line-through' : 'text-gray-200'} font-medium text-sm md:text-base">${habit.name}</span>
+                    </div>
+                    <input type="checkbox" class="habit-checkbox" ${isChecked ? 'checked' : ''} onchange="toggleHabit('${habit.id}', this.checked)">
                 `;
-                document.getElementById('modal-details').innerHTML = detailHTML;
+                container.appendChild(div);
+            });
 
-                // Configuration de l'input de score
-                if (!title.includes('Repos Total')) {
-                    scoreContainer.classList.remove('hidden');
-                    scoreInput.value = sessionData.finalTime || ''; // Réutilisation de finalTime pour le score WOD
-                    
-                    let placeholder = "Ex: 18:30 (min:sec)";
-                    let label = "Temps réalisé (Min:Sec) :";
-                    let tip = "Enregistrez votre temps pour suivre vos progrès (Format: MM:SS).";
-                    
-                    if (title.includes('(AMRAP)')) {
-                        placeholder = "Ex: 12 Rounds + 5 Reps";
-                        label = "Score AMRAP (Rounds/Reps) :";
-                        tip = "Nombre de tours et répétitions complétés.";
-                    } else if (title.includes('(EMOM)')) {
-                        placeholder = "Ex: 16 Rounds (Max 20)";
-                        label = "Score EMOM (Rounds/Reps) :";
-                        tip = "Rounds/Reps où vous avez tenu l'EMOM, ou score max.";
-                    } else if (title.includes('Test')) {
-                        placeholder = "Ex: 42 Reps";
-                        label = "Score du Test (Répétitions) :";
-                        tip = "Nombre maximum de répétitions ou score total.";
-                    }
-                    
-                    scoreLabel.textContent = label;
-                    scoreInput.placeholder = placeholder;
-                    scoreTip.textContent = tip;
-                }
+            // Dry Day Toggle
+            document.getElementById('h_dryday').checked = todayHabits['h_dryday'] === true;
 
+            // Stats Widget Update
+            updateDailyWidgets();
+            renderTodayWorkout();
+        }
+
+        function toggleHabit(habitId, state) {
+            appState.habitsLog[todayStr][habitId] = state;
+            saveState();
+            renderDashboard();
+        }
+
+        function toggleMonthly(taskId) {
+            appState.monthlyLog[currentMonthStr][taskId] = document.getElementById(taskId).checked;
+            saveState();
+            if(document.getElementById(taskId).checked) showToast("Tâche mensuelle validée !");
+        }
+
+        function updateDailyWidgets() {
+            const h = appState.habitsLog[todayStr] || {};
+            let score = 0, total = HABITS_CONFIG.length + 1; // +1 for workout
+            HABITS_CONFIG.forEach(habit => { if(h[habit.id]) score++; });
+            if (appState.workoutsLog[todayStr]?.completed) score++;
+
+            const percent = Math.round((score / total) * 100);
+            const rDisplay = document.getElementById('daily-readiness');
+            rDisplay.innerText = `${percent}%`;
+            rDisplay.className = percent >= 80 ? "text-emerald-400 font-mono font-bold" : (percent >= 40 ? "text-blue-400 font-mono font-bold" : "text-yellow-500 font-mono font-bold");
+
+            // Legal Streak Calculate
+            let lStreak = 0;
+            for(let i=0; i<30; i++) {
+                const d = getLocalISODate(new Date(new Date().setDate(new Date().getDate() - i)));
+                if(appState.habitsLog[d] && appState.habitsLog[d]['h_legal']) lStreak++;
+                else if (i>0) break; // Break if missed a day (except today)
+            }
+            document.getElementById('widget-legal-streak').innerText = `${lStreak} J`;
+
+            // Workout this week count
+            let wCount = 0;
+            for(let i=0; i<7; i++) {
+                const d = getLocalISODate(new Date(new Date().setDate(new Date().getDate() - i)));
+                if(appState.workoutsLog[d]?.completed) wCount++;
+            }
+            document.getElementById('widget-sport-week').innerText = `${wCount}/3`;
+        }
+
+        // ==========================================
+        // PPO (HYBRID PROGRAM)
+        // ==========================================
+        function getWorkoutData(week, session) {
+            if(week > 8) return null;
+            const wData = HYBRID_PLAN[week-1];
+            if(session === 1) return wData.s1;
+            if(session === 2) return wData.s2;
+            return wData.s3;
+        }
+
+        function renderTodayWorkout() {
+            const container = document.getElementById('today-workout-container');
+            const { currentWeek, currentSession } = appState.config;
+            const isDoneToday = appState.workoutsLog[todayStr]?.completed;
+            
+            let badgeText = currentSession === 3 ? `CARDIO OBLIGATOIRE - S${currentWeek}` : `WOD ${currentSession} - S${currentWeek}`;
+            document.getElementById('today-program-badge').innerText = badgeText;
+            
+            if (currentSession === 3) {
+                document.getElementById('today-program-badge').className = "px-2 py-1 bg-red-900/30 text-xs rounded text-red-400 border border-red-800/50 font-mono font-bold";
             } else {
-                // Logique pour la Course à Pied (CP)
-                let detailHTML = `<span class="font-bold text-indigo-400">Détails de la séance :</span> ${content ? content.trim() : title.trim()}`;
-
-                 // Ajout d'un encadré pour clarifier les allures
-                if (content && content.includes('/')) {
-                    const [allureKmh, allureTemps] = content.match(/\((.*?)\)/)?.[1]?.split('/') || [];
-                    if (allureKmh && allureTemps) {
-                        detailHTML += `<p class="mt-2 text-sm text-yellow-300">Allures de Référence : Vitesse = ${allureKmh.trim()}, Temps de référence = ${allureTemps.trim()}</p>`;
-                    } else if (allureKmh) {
-                        detailHTML += `<p class="mt-2 text-sm text-yellow-300">Allure de Référence : ${allureKmh.trim()}</p>`;
-                    }
-                }
-                document.getElementById('modal-details').innerHTML = detailHTML;
-
-
-                // Configuration de l'input pour la Course J-J 3KM (uniquement celle-ci)
-                const isFinal3KMSession = (currentProgramKey === PROGRAM_3KM_ID && week === '8' && type === 'Résistance/Endurance');
-                
-                if (isFinal3KMSession) {
-                    scoreContainer.classList.remove('hidden');
-                    scoreLabel.textContent = 'Temps final 3 km (ex: 13:15) :';
-                    scoreInput.placeholder = 'Min:Sec (ex: 13:15)';
-                    scoreTip.textContent = 'Saisir le temps réel réalisé pour mettre à jour la VMA.';
-                    scoreInput.value = sessionData.finalTime || '';
-                }
+                document.getElementById('today-program-badge').className = "px-2 py-1 bg-blue-900/30 text-xs rounded text-blue-300 border border-blue-800/50 font-mono";
             }
-            
-            document.getElementById('modal-reco').textContent = baseReco;
-            document.getElementById('modal-notes').value = sessionData.notes;
-            document.getElementById('modal-checkbox').checked = sessionData.completed;
 
-            document.getElementById('session-modal').classList.remove('hidden');
-            document.getElementById('session-modal').classList.add('flex');
+            if(currentWeek > 8) {
+                container.innerHTML = `<p class="text-emerald-400 font-bold">Programme de 8 semaines terminé avec succès !</p>`;
+                return;
+            }
+
+            const rawContent = getWorkoutData(currentWeek, currentSession);
+            const parts = rawContent.split('|||');
+            const title = parts[0].trim();
+            const desc = parts[1] ? parts[1].trim() : '';
+
+            container.innerHTML = `
+                <div class="mb-5">
+                    <h4 class="text-xl font-bold text-white mb-2 ${currentSession === 3 ? 'text-red-300' : ''}">${title}</h4>
+                    <div class="text-gray-300 text-sm leading-relaxed">${desc}</div>
+                    ${currentSession === 3 ? '<p class="mt-2 text-xs text-red-400 italic"><i class="ph ph-warning"></i> La séance cardio est prioritaire pour la validation de la semaine.</p>' : ''}
+                </div>
+                ${isDoneToday 
+                    ? `<div class="flex items-center gap-2 text-emerald-400 font-semibold bg-emerald-900/20 p-3 rounded-lg border border-emerald-500/30">
+                           <i class="ph ph-check-circle text-xl"></i> PPO validée aujourd'hui.
+                       </div>`
+                    : `<button onclick="completeWorkout()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-4 rounded-lg transition-colors shadow-lg flex justify-center items-center gap-2">
+                            <i class="ph ph-check-square-offset text-xl"></i> Valider la séance
+                       </button>`
+                }
+            `;
         }
 
-        function closeModal() {
-            // Permet le défilement du corps (la page entière)
-            document.body.classList.remove('overflow-hidden');
-            document.getElementById('session-modal').classList.remove('flex');
-            document.getElementById('session-modal').classList.add('hidden');
-        }
-
-        function saveSessionDetails() {
-            const data = loadSessionData();
-            const notes = document.getElementById('modal-notes').value;
-            const completed = document.getElementById('modal-checkbox').checked;
-            
-            // On récupère la valeur du champ de score générique
-            const scoreInput = document.getElementById('session-score-input');
-            const sessionScore = scoreInput.value.trim(); // Ce sera le temps de course ou le score WOD
-
-            let newVMA = getStoredVMA();
-            
-            // Détermination de la semaine pour la VMA (récupère le plan actuel car il est à jour)
-            const weekIndex = Math.floor(currentSessionId / 2);
-
-            // 1. Sauvegarde des données de la séance
-            data[currentSessionId] = {
-                notes: notes,
-                completed: completed,
-                // On utilise finalTime comme propriété générique pour stocker le score (Course ou WOD)
-                finalTime: sessionScore, 
+        function completeWorkout() {
+            appState.workoutsLog[todayStr] = {
+                week: appState.config.currentWeek,
+                session: appState.config.currentSession,
+                completed: true
             };
-            
-            // 2. Logique de recalcul de la VMA (Uniquement si c'est la session finale 3KM)
-            if (currentWorkoutPlan && currentWorkoutPlan[weekIndex]) {
-                 const week = currentWorkoutPlan[weekIndex].week;
-                 const sessionType = currentSessionId % 2 === 1 ? 'Résistance/Endurance' : 'Vitesse/Force';
-                 
-                const isFinal3KMSession = (currentProgramKey === PROGRAM_3KM_ID && week === 8 && sessionType === 'Résistance/Endurance' && sessionScore && completed);
-                
-                if (isFinal3KMSession) {
-                    newVMA = calculateNewVMA(sessionScore);
-                    setStoredVMA(newVMA);
-                    // Utilisation d'une modale personnalisée au lieu de 'alert'
-                    console.log(`Nouvelle VMA calculée : ${newVMA.toFixed(1)} km/h. Le programme 8 km sera ajusté en conséquence !`);
-                }
+
+            // Advance hybrid program logic
+            if (appState.config.currentSession < 3) {
+                appState.config.currentSession++;
+            } else {
+                appState.config.currentWeek++;
+                appState.config.currentSession = 1;
             }
 
-            saveSessionData(data);
-            closeModal();
-            renderSchedule(); 
+            saveState();
+            renderDashboard();
+            showToast("Cohésion ! Séance enregistrée.");
         }
 
-        // Initialisation de l'application
-        window.onload = function() {
-            // 1. Initialiser la VMA si elle n'existe pas
-            if (getStoredVMA() === VMA_INITIAL) {
-                setStoredVMA(VMA_INITIAL);
+        function renderProgramsView() {
+            const container = document.getElementById('program-schedule');
+            container.innerHTML = '';
+            
+            const { currentWeek, currentSession } = appState.config;
+            const totalSessions = 8 * 3;
+            const completedSessions = ((Math.min(currentWeek, 9) - 1) * 3) + (currentWeek > 8 ? 0 : currentSession - 1);
+            const percent = Math.round((completedSessions / totalSessions) * 100);
+            
+            document.getElementById('prog-percent').innerText = `${percent}%`;
+            document.getElementById('prog-bar').style.width = `${percent}%`;
+
+            HYBRID_PLAN.forEach(wData => {
+                const w = wData.w;
+                const isPastWeek = w < currentWeek;
+                const isCurrentWeek = w === currentWeek;
+                
+                const div = document.createElement('div');
+                div.className = `p-4 rounded-xl border ${isCurrentWeek ? 'bg-tactical-800 border-blue-500/50 shadow-lg' : 'bg-tactical-900 border-tactical-700 opacity-80'}`;
+                
+                const s1Done = isPastWeek || (isCurrentWeek && currentSession > 1);
+                const s2Done = isPastWeek || (isCurrentWeek && currentSession > 2);
+                const s3Done = isPastWeek;
+
+                div.innerHTML = `
+                    <h4 class="font-bold text-gray-200 mb-3 flex items-center gap-2">
+                        Semaine ${w} ${isCurrentWeek ? '<span class="px-2 py-0.5 bg-blue-600 text-[10px] rounded uppercase">En cours</span>' : ''}
+                    </h4>
+                    <div class="space-y-2">
+                        <div class="flex items-center justify-between p-2 rounded bg-tactical-800 border ${s1Done ? 'border-emerald-500/30' : 'border-tactical-600'}">
+                            <span class="text-sm ${s1Done ? 'text-gray-400 line-through' : 'text-gray-200'} font-medium">S1: ${wData.s1.split('|||')[0]}</span>
+                            <i class="ph ${s1Done ? 'ph-check-circle text-emerald-400' : 'ph-circle text-gray-600'} text-lg"></i>
+                        </div>
+                        <div class="flex items-center justify-between p-2 rounded bg-tactical-800 border ${s2Done ? 'border-emerald-500/30' : 'border-tactical-600'}">
+                            <span class="text-sm ${s2Done ? 'text-gray-400 line-through' : 'text-gray-200'} font-medium">S2: ${wData.s2.split('|||')[0]}</span>
+                            <i class="ph ${s2Done ? 'ph-check-circle text-emerald-400' : 'ph-circle text-gray-600'} text-lg"></i>
+                        </div>
+                        <div class="flex items-center justify-between p-2 rounded bg-tactical-800 border ${s3Done ? 'border-emerald-500/30' : 'border-red-900/30'}">
+                            <span class="text-sm ${s3Done ? 'text-gray-400 line-through' : 'text-red-300'} font-bold">S3 (CARDIO): ${wData.s3.split('|||')[0]}</span>
+                            <i class="ph ${s3Done ? 'ph-check-circle text-emerald-400' : 'ph-warning text-red-500'} text-lg"></i>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        function resetProgramProgress() {
+            if(confirm("Reprendre le programme Hybride à zéro ?")) {
+                appState.config.currentWeek = 1;
+                appState.config.currentSession = 1;
+                saveState();
+                renderProgramsView();
+                showToast("Progression PPO réinitialisée.");
+            }
+        }
+
+        // ==========================================
+        // STATS & HEATMAP
+        // ==========================================
+        function renderStatsView() {
+            let score30 = 0, totalWorkouts = 0, dryDays = 0, drillDays = 0;
+            const past30 = [];
+            for(let i=0; i<30; i++) {
+                past30.push(getLocalISODate(new Date(new Date().setDate(new Date().getDate() - i))));
             }
 
-            // 2. Charger les préférences de l'utilisateur
-            activeSport = getPreference('userActiveSport', 'running');
-            currentProgramKey = getPreference('userProgramKey', PROGRAM_3KM_ID);
-            currentWODDifficulty = getPreference('userWODDifficulty', 'intermediate');
+            past30.forEach(d => {
+                const h = appState.habitsLog[d] || {};
+                Object.values(h).forEach(v => { if(v) score30++; });
+                if(appState.workoutsLog[d]?.completed) totalWorkouts++;
+                if(h['h_dryday']) dryDays++;
+                if(h['h_drills']) drillDays++;
+            });
 
-            // 3. Mettre à jour les sélecteurs UI
-            const programSelector = document.getElementById('program-selector');
-            programSelector.value = currentProgramKey; 
+            document.getElementById('stat-30d').innerText = `${Math.round((score30 / (30 * HABITS_CONFIG.length)) * 100) || 0}%`;
+            document.getElementById('stat-workouts').innerText = totalWorkouts;
+            document.getElementById('stat-dry').innerText = dryDays;
+            document.getElementById('stat-drills').innerText = drillDays;
+
+            // Heatmap
+            const container = document.getElementById('heatmap-container');
+            container.innerHTML = '';
             
-            const wodSelector = document.getElementById('wod-selector');
-            wodSelector.value = currentWODDifficulty;
-            
-            // 4. Initialiser l'affichage avec le sport actif récupéré
-            selectSport(activeSport); 
+            let currentColumn = null;
+            for(let i=364; i>=0; i--) {
+                const dStr = getLocalISODate(new Date(new Date().setDate(new Date().getDate() - i)));
+                
+                if ((364 - i) % 7 === 0) {
+                    currentColumn = document.createElement('div');
+                    currentColumn.className = 'flex flex-col gap-1';
+                    container.appendChild(currentColumn);
+                }
+
+                let dScore = 0;
+                if(appState.habitsLog[dStr]) {
+                    Object.values(appState.habitsLog[dStr]).forEach(v => { if(v) dScore++; });
+                }
+                if(appState.workoutsLog[dStr]?.completed) dScore += 3; // PPO gives big boost
+
+                let heatClass = 'heat-0';
+                if (dScore >= 6) heatClass = 'heat-4';
+                else if (dScore >= 4) heatClass = 'heat-3';
+                else if (dScore >= 2) heatClass = 'heat-2';
+                else if (dScore > 0) heatClass = 'heat-1';
+
+                const block = document.createElement('div');
+                block.className = `heat-block ${heatClass}`;
+                block.title = `${dStr} : Activité`;
+                currentColumn.appendChild(block);
+            }
+        }
+
+        window.onload = () => {
+            loadState();
+            navTo('dashboard');
         };
-
-        // Fermer la modale en cliquant en dehors
-        document.getElementById('session-modal').addEventListener('click', (e) => {
-            if (e.target.id === 'session-modal') {
-                closeModal();
-            }
-        });
-
     </script>
 </body>
 </html>
