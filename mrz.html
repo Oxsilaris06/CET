@@ -689,105 +689,86 @@
      * Retourne l'objet résultat du cycle.
      */
     async function runOneCycle(source) {
-      // source = 'camera' ou un objet Image pour upload
+      const srcW = source === 'camera' ? video.videoWidth : source.width;
+      const srcH = source === 'camera' ? video.videoHeight : source.height;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
-      let fullText = '';
-      let mrzText = '';
-
-      if (source === 'camera') {
-        const srcW = video.videoWidth;
-        const srcH = video.videoHeight;
-        const ctx = canvas.getContext('2d', { willReadFrequently: true });
-
+      const tryExtraction = async (contrast, brightness, binarizeFactor) => {
         // PASS 1 : Plein cadre
         canvas.width = srcW; canvas.height = srcH;
-        ctx.filter = 'contrast(1.8) grayscale(1)';
-        ctx.drawImage(video, 0, 0);
+        ctx.filter = `contrast(${contrast}) brightness(${brightness}) grayscale(1)`;
+        if (source === 'camera') ctx.drawImage(video, 0, 0); else ctx.drawImage(source, 0, 0);
         ctx.filter = 'none';
 
         await ocrWorker.setParameters({ tessedit_char_whitelist: '', tessedit_pageseg_mode: '3' });
         const { data: fd } = await ocrWorker.recognize(canvas.toDataURL('image/jpeg', 0.85));
-        fullText = fd.text;
+        const fullText = fd.text;
 
         // PASS 2 : Bande MRZ
         const cropH = Math.round(srcH * 0.35);
         const cropY = srcH - cropH;
         canvas.width = srcW; canvas.height = cropH;
-        ctx.filter = 'contrast(2.5) grayscale(1)';
-        ctx.drawImage(video, 0, cropY, srcW, cropH, 0, 0, srcW, cropH);
+        ctx.filter = `contrast(${contrast + 0.5}) brightness(${brightness}) grayscale(1)`;
+        if (source === 'camera') ctx.drawImage(video, 0, cropY, srcW, cropH, 0, 0, srcW, cropH);
+        else ctx.drawImage(source, 0, cropY, srcW, cropH, 0, 0, srcW, cropH);
         ctx.filter = 'none';
-        binarize(ctx, srcW, cropH);
+        binarize(ctx, srcW, cropH, binarizeFactor);
 
         await ocrWorker.setParameters({ tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<', tessedit_pageseg_mode: '6' });
         const { data: md } = await ocrWorker.recognize(canvas.toDataURL('image/png'));
-        mrzText = md.text;
+        const mrzText = md.text;
 
-      } else {
-        // source = Image object
-        const img = source;
-        const ctx = canvas.getContext('2d');
+        const mrzResult = parseMrzFromText(mrzText);
+        const visible = extractVisibleFields(fullText);
 
-        // PASS 1 : Plein cadre
-        canvas.width = img.width; canvas.height = img.height;
-        ctx.filter = 'contrast(1.8) grayscale(1)';
-        ctx.drawImage(img, 0, 0);
-        ctx.filter = 'none';
+        if (mrzResult || visible.lastName) {
+          return { mrzResult, visible, fullText, mrzText };
+        }
+        return null;
+      };
 
-        await ocrWorker.setParameters({ tessedit_char_whitelist: '', tessedit_pageseg_mode: '3' });
-        const { data: fd } = await ocrWorker.recognize(canvas.toDataURL('image/jpeg', 0.85));
-        fullText = fd.text;
+      // Stratégie multi-pass pour gérer les reflets (surtout passeports)
+      const attempts = [
+        { c: 1.8, b: 1.0, f: 0.65 }, // Normal
+        { c: 2.5, b: 0.8, f: 0.55 }, // Sombre/Reflets (Passeport)
+        { c: 1.5, b: 1.2, f: 0.75 }  // Clair
+      ];
 
-        // PASS 2 : Bande MRZ
-        const cropH = Math.round(img.height * 0.35);
-        const cropY = img.height - cropH;
-        canvas.width = img.width; canvas.height = cropH;
-        ctx.filter = 'contrast(2.5) grayscale(1)';
-        ctx.drawImage(img, 0, cropY, img.width, cropH, 0, 0, img.width, cropH);
-        ctx.filter = 'none';
-        binarize(ctx, img.width, cropH);
-
-        await ocrWorker.setParameters({ tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<', tessedit_pageseg_mode: '6' });
-        const { data: md } = await ocrWorker.recognize(canvas.toDataURL('image/png'));
-        mrzText = md.text;
+      for (const att of attempts) {
+        const res = await tryExtraction(att.c, att.b, att.f);
+        if (res && res.mrzResult && res.mrzResult.valid) return finalizeCycleData(res);
+        if (res && !this.bestPartial || (res && res.mrzResult)) this.bestPartial = res;
       }
 
-      console.log('[Cycle] Visible:', fullText.substring(0, 150));
-      console.log('[Cycle] MRZ:', mrzText.substring(0, 150));
+      return finalizeCycleData(this.bestPartial || { fullText: '', mrzText: '' });
+    }
 
-      // Parser la MRZ
-      const mrzResult = parseMrzFromText(mrzText);
-
-      // Extraire les champs visibles
-      const visible = extractVisibleFields(fullText);
-
-      // Fusionner
+    function finalizeCycleData(data) {
+      const { mrzResult, visible, fullText, mrzText } = data;
       const merged = {
-        format: mrzResult?.format || visible.docType || 'UNKNOWN',
+        format: mrzResult?.format || visible?.docType || 'UNKNOWN',
         documentNumber: mrzResult?.documentNumber || null,
         valid: mrzResult?.valid || false,
         fields: {},
         details: mrzResult?.details || [],
-        _mrzFields: {}, // Garder les champs MRZ bruts pour cross-validation
-        _rawText: fullText,
-        _mrzRaw: mrzText,
+        _mrzFields: {},
+        _rawText: fullText || '',
+        _mrzRaw: mrzText || '',
       };
 
-      // Champs MRZ
       if (mrzResult?.fields) {
         for (const [k, v] of Object.entries(mrzResult.fields)) {
-          if (v) {
-            merged.fields[k] = v;
-            merged._mrzFields[k] = v;
-          }
+          if (v) { merged.fields[k] = v; merged._mrzFields[k] = v; }
         }
       }
 
-      // Combler avec les champs visibles
-      if (visible.lastName && !merged.fields.lastName) merged.fields.lastName = visible.lastName;
-      if (visible.firstName && !merged.fields.firstName) merged.fields.firstName = visible.firstName;
-      if (visible.birthDate && !merged.fields.birthDate) merged.fields.birthDate = visible.birthDate;
-      if (visible.issueDate) merged.fields.issueDate = visible.issueDate; // Jamais dans MRZ
-      if (visible.expiryDate && !merged.fields.expirationDate) merged.fields.expirationDate = visible.expiryDate;
+      if (visible) {
+        if (visible.lastName && !merged.fields.lastName) merged.fields.lastName = visible.lastName;
+        if (visible.firstName && !merged.fields.firstName) merged.fields.firstName = visible.firstName;
+        if (visible.birthDate && !merged.fields.birthDate) merged.fields.birthDate = visible.birthDate;
+        if (visible.issueDate) merged.fields.issueDate = visible.issueDate;
+        if (visible.expiryDate && !merged.fields.expirationDate) merged.fields.expirationDate = visible.expiryDate;
+      }
 
       return merged;
     }
@@ -942,12 +923,12 @@
     // =====================================================================
     // 10. BINARISATION
     // =====================================================================
-    function binarize(ctx, w, h) {
+    function binarize(ctx, w, h, factor = 0.65) {
       const imgData = ctx.getImageData(0, 0, w, h);
       const d = imgData.data;
       let sum = 0;
       for (let i = 0; i < d.length; i += 4) sum += d[i];
-      const threshold = (sum / (d.length / 4)) * 0.65;
+      const threshold = (sum / (d.length / 4)) * factor;
       for (let i = 0; i < d.length; i += 4) {
         const v = d[i] < threshold ? 0 : 255;
         d[i] = d[i + 1] = d[i + 2] = v;
