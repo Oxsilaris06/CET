@@ -458,11 +458,13 @@
     }
 
     function extractCandidateLines(rawText) {
+      if (!rawText) return [];
       return rawText.split(/\n/).map(r => {
         const clean = sanitizeLine(r);
         if (clean.length < 25) return null;
         const score = scoreLine(clean);
-        return score >= 20 ? { line: clean, score, len: clean.length } : null;
+        // On garde même les scores bas (10+) pour pouvoir réparer en groupByFormat
+        return score >= 10 ? { line: clean, score, len: clean.length } : null;
       }).filter(Boolean).sort((a, b) => b.score - a.score);
     }
 
@@ -669,11 +671,37 @@
       const names = extractNameFields(fullText);
       const upper = fullText.toUpperCase();
       let docType = null;
+      let documentNumber = null;
+
       if (upper.includes('PERMIS') && upper.includes('CONDUIRE')) docType = 'PERMIS_FR';
       else if (upper.includes('PASSEPORT') || upper.includes('PASSPORT')) docType = 'PASSEPORT';
       else if (upper.includes('CARTE') && upper.includes('IDENTIT')) docType = 'CNI';
       else if (upper.includes('TITRE') && upper.includes('SEJOUR')) docType = 'TITRE_SEJOUR';
-      return { docType, ...names, ...assigned, datesFound: dates.length };
+
+      // Extraction du numéro de titre (Titre de séjour / CNI moderne)
+      // Souvent 9 ou 10 caractères, en haut à droite ou après un label
+      const lines = upper.split('\n');
+      for (const line of lines) {
+        // Pattern 1 : Top right ou esseulé (9-10 chars alphanum)
+        const m = line.match(/(?:N[°O][\s.]*|TITRE[\s:]+|TITRE\s*N[°O]|DOCUMENT\s*N[°O])\s*([A-Z0-9\s]{8,12})/);
+        if (m) {
+          const pot = m[1].replace(/[\s.]/g, '');
+          if (pot.length >= 8 && pot.length <= 12) { documentNumber = pot; break; }
+        }
+      }
+
+      // Fallback : cherche une ligne en haut (index < 5) qui a 9 chiffres ou X
+      if (!documentNumber) {
+        for (let i = 0; i < Math.min(5, lines.length); i++) {
+          const l = lines[i].trim();
+          if (/^[A-Z0-9\s]{8,12}$/.test(l)) {
+            documentNumber = l.replace(/\s/g, '');
+            break;
+          }
+        }
+      }
+
+      return { docType, documentNumber, ...names, ...assigned, datesFound: dates.length };
     }
 
     // =====================================================================
@@ -793,31 +821,51 @@
      * Retourne l'objet résultat du cycle.
      */
     async function runOneCycle(source) {
-      const srcW = source === 'camera' ? video.videoWidth : source.width;
-      const srcH = source === 'camera' ? video.videoHeight : source.height;
+      let srcW = source === 'camera' ? video.videoWidth : source.width;
+      let srcH = source === 'camera' ? video.videoHeight : source.height;
+
+      // Cap de résolution pour performance OCR mais garde assez de détail pour OCR-B
+      const MAX_DIM = 2000;
+      if (srcW > MAX_DIM) {
+        const ratio = MAX_DIM / srcW;
+        srcW = MAX_DIM;
+        srcH = Math.round(srcH * ratio);
+      }
+
       const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
-      const tryExtraction = async (contrast, brightness, binarizeFactor, forceFullFrame) => {
+      const tryExtraction = async (contrast, brightness, binarizeFactor, mode) => {
         // PASS 1 : Plein cadre
         canvas.width = srcW; canvas.height = srcH;
         ctx.filter = `contrast(${contrast}) brightness(${brightness}) grayscale(1)`;
-        if (source === 'camera') ctx.drawImage(video, 0, 0); else ctx.drawImage(source, 0, 0);
+        if (source === 'camera') ctx.drawImage(video, 0, 0, srcW, srcH);
+        else ctx.drawImage(source, 0, 0, srcW, srcH);
         ctx.filter = 'none';
 
         await ocrWorker.setParameters({ tessedit_char_whitelist: '', tessedit_pageseg_mode: '3' });
-        const { data: fd } = await ocrWorker.recognize(canvas.toDataURL('image/jpeg', 0.85));
+        const { data: fd } = await ocrWorker.recognize(canvas); // Recognise canvas directement (plus propre)
         const fullText = fd.text;
 
         // PASS 2 : Bande MRZ
         let mrzText = '';
-        if (forceFullFrame) {
+        if (mode === 'FULL') {
           canvas.width = srcW; canvas.height = srcH;
           ctx.filter = `contrast(${contrast + 0.5}) brightness(${brightness}) grayscale(1)`;
-          if (source === 'camera') ctx.drawImage(video, 0, 0); else ctx.drawImage(source, 0, 0);
+          if (source === 'camera') ctx.drawImage(video, 0, 0, srcW, srcH);
+          else ctx.drawImage(source, 0, 0, srcW, srcH);
           ctx.filter = 'none';
           binarize(ctx, srcW, srcH, binarizeFactor);
+        } else if (mode === 'LIGHT') {
+          // Mode sans binarisation (souvent meilleur pour imports propres)
+          const cropH = Math.round(srcH * 0.45);
+          const cropY = srcH - cropH;
+          canvas.width = srcW; canvas.height = cropH;
+          ctx.filter = `contrast(${contrast + 0.7}) brightness(${brightness}) grayscale(1)`;
+          if (source === 'camera') ctx.drawImage(video, 0, cropY, srcW, cropH, 0, 0, srcW, cropH);
+          else ctx.drawImage(source, 0, cropY, srcW, cropH, 0, 0, srcW, cropH);
+          ctx.filter = 'none';
+          // Pas de binarisation ici
         } else {
-          // 45% pour inclure TD1 3-lignes (Titre de séjour)
           const cropH = Math.round(srcH * 0.45);
           const cropY = srcH - cropH;
           canvas.width = srcW; canvas.height = cropH;
@@ -830,7 +878,7 @@
 
         const tryMrz = async (psm) => {
           await ocrWorker.setParameters({ tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<', tessedit_pageseg_mode: psm });
-          const { data: md } = await ocrWorker.recognize(canvas.toDataURL('image/png'));
+          const { data: md } = await ocrWorker.recognize(canvas);
           return md.text;
         };
 
@@ -847,14 +895,15 @@
 
       // Stratégie multi-pass
       const attempts = [
-        { c: 1.8, b: 1.0, f: 0.60, full: false }, // Normal
-        { c: 2.8, b: 0.7, f: 0.50, full: false }, // Anti-reflet (Passeport/Titres gloss)
-        { c: 2.0, b: 1.0, f: 0.55, full: true }  // Full-frame fallback (pour imports)
+        { c: 1.2, b: 1.0, f: 0.0, mode: 'LIGHT' }, // Pass 0 : Direct (pour imports de qualité)
+        { c: 1.8, b: 1.0, f: 0.60, mode: 'NORMAL' },
+        { c: 2.8, b: 0.7, f: 0.50, mode: 'ANTIGLARE' }, // Anti-reflet intense
+        { c: 2.0, b: 1.0, f: 0.55, mode: 'FULL' } // Fallback import mal cadré
       ];
 
       let bestPartial = null;
       for (const att of attempts) {
-        const res = await tryExtraction(att.c, att.b, att.f, att.full);
+        const res = await tryExtraction(att.c, att.b, att.f, att.mode);
         if (res && res.mrzResult && res.mrzResult.valid) return finalizeCycleData(res);
         if (res && (!bestPartial || (res.mrzResult && res.mrzResult.valid === false && (!bestPartial.mrzResult || bestPartial.mrzResult.valid === false)))) {
           bestPartial = res;
