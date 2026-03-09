@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Scanner IA - Transformers.js</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #020617; color: white; margin: 0; overflow: hidden; font-family: system-ui, sans-serif; touch-action: none; }
+        
+        #setup-screen, #video-container, #result-panel {
+            position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+        }
+        
+        #video-container, #result-panel { display: none; }
+        
+        video { width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0; z-index: 1; }
+        #overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+        
+        /* Guide de visée optimisé pour TrOCR (Lignes) */
+        .guide-box {
+            position: relative;
+            width: 95%; max-width: 500px; height: 160px;
+            border: 2px solid rgba(16, 185, 129, 0.4); border-radius: 12px;
+            box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.85);
+            display: flex; flex-direction: column;
+        }
+        .guide-box::before { content: "ALIGNEZ LA BANDE MRZ ICI"; position: absolute; top: -25px; left: 0; width: 100%; text-align: center; font-size: 12px; color: #10b981; font-weight: 800; letter-spacing: 1px; }
+        
+        /* Les 3 lignes de coupe pour aider l'utilisateur et l'IA */
+        .slice-line { flex: 1; border-bottom: 1px dashed rgba(16, 185, 129, 0.3); }
+        .slice-line:last-child { border-bottom: none; }
+
+        #ui-layer { position: absolute; z-index: 10; width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: space-between; padding: 25px 20px; pointer-events: none; }
+        .interactive { pointer-events: auto; }
+        
+        /* Formulaire */
+        .input-group { margin-bottom: 12px; }
+        .input-field {
+            width: 100%; background-color: #0f172a; border: 1px solid #334155;
+            color: #38bdf8; border-radius: 8px; padding: 12px; font-family: monospace;
+            font-size: 15px; font-weight: bold; margin-top: 4px;
+        }
+        label { font-size: 11px; color: #94a3b8; font-weight: 600; text-transform: uppercase; }
+        
+        /* Progress Bar */
+        .progress-container { width: 100%; background-color: #1e293b; border-radius: 8px; overflow: hidden; margin-top: 8px; height: 12px; }
+        .progress-bar { height: 100%; background-color: #10b981; width: 0%; transition: width 0.2s; }
+        
+        .spinner { animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+
+    <!-- Importation de Transformers.js en tant que module -->
+    <script type="module">
+        import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.1';
+
+        // Configuration pour forcer le stockage local du modèle dans le Cache du navigateur
+        env.allowLocalModels = false; 
+        env.useBrowserCache = true; 
+
+        // Variables globales accessibles
+        window.TrOCR_Pipeline = null;
+        window.isScanning = false;
+        window.currentStream = null;
+
+        const uiSetup = document.getElementById('setup-screen');
+        const uiVideo = document.getElementById('video-container');
+        const uiResult = document.getElementById('result-panel');
+        const statusText = document.getElementById('dl-status');
+        const progressBar = document.getElementById('dl-progress');
+        const btnStart = document.getElementById('btn-start');
+        
+        const video = document.getElementById('camera-feed');
+        const captureCanvas = document.getElementById('capture-canvas');
+        const ctx = captureCanvas.getContext('2d', { willReadFrequently: true });
+
+        // --- 1. INITIALISATION DU RÉSEAU NEURONAL (TrOCR) ---
+        async function loadAIModel() {
+            try {
+                statusText.innerText = "Vérification du stockage local / Téléchargement du modèle IA (240 Mo)...";
+                
+                // On utilise le modèle TrOCR-small-printed optimisé pour le texte imprimé
+                window.TrOCR_Pipeline = await pipeline('image-to-text', 'Xenova/trocr-small-printed', {
+                    progress_callback: (data) => {
+                        if (data.status === 'downloading') {
+                            const progress = Math.round((data.loaded / data.total) * 100);
+                            progressBar.style.width = `${progress}%`;
+                            statusText.innerText = `Mise en cache du modèle... ${progress}%`;
+                        } else if (data.status === 'ready') {
+                            progressBar.style.width = `100%`;
+                        }
+                    }
+                });
+
+                statusText.innerText = "Modèle IA chargé en mémoire WASM avec succès.";
+                statusText.classList.replace('text-slate-400', 'text-green-400');
+                
+                // Affiche le bouton pour lancer la caméra
+                setTimeout(() => {
+                    document.getElementById('dl-ui').classList.add('hidden');
+                    btnStart.classList.remove('hidden');
+                }, 500);
+
+            } catch (error) {
+                console.error(error);
+                statusText.innerText = "Erreur de chargement. Veuillez vérifier votre connexion.";
+                statusText.classList.add('text-red-500');
+            }
+        }
+
+        // Lance le chargement dès l'ouverture de la page
+        loadAIModel();
+
+        // --- 2. GESTION CAMÉRA ---
+        window.startCamera = async () => {
+            uiSetup.style.display = 'none';
+            uiResult.style.display = 'none';
+            uiVideo.style.display = 'flex';
+
+            if (window.currentStream) window.currentStream.getTracks().forEach(t => t.stop());
+            
+            // Caméra dorsale forcée
+            const constraints = { 
+                video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } } 
+            };
+
+            try {
+                window.currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+                video.srcObject = window.currentStream;
+                video.onloadedmetadata = () => { 
+                    video.play(); 
+                    window.isScanning = true;
+                    processInferenceLoop(); 
+                };
+            } catch (err) {
+                alert("Impossible d'accéder à la caméra.");
+            }
+        }
+
+        btnStart.addEventListener('click', window.startCamera);
+        document.getElementById('btn-restart').addEventListener('click', window.startCamera);
+
+        // --- 3. BOUCLE D'INFÉRENCE IA (WASM) ---
+        async function processInferenceLoop() {
+            if (!window.isScanning) return;
+            if (video.videoWidth === 0) { setTimeout(processInferenceLoop, 200); return; }
+
+            const feedback = document.getElementById('scan-feedback');
+            feedback.innerText = "Extraction des tenseurs...";
+
+            // Récupère la zone du guide central
+            const rect = document.getElementById('guide-box').getBoundingClientRect();
+            const ratioX = video.videoWidth / video.clientWidth;
+            const ratioY = video.videoHeight / video.clientHeight;
+
+            const captureW = rect.width * ratioX;
+            const captureH = rect.height * ratioY;
+
+            // Astuce TrOCR : L'IA lit ligne par ligne. 
+            // On découpe la bande MRZ capturée en 3 tranches horizontales parfaites.
+            const sliceHeight = captureH / 3;
+            let mrzLines = [];
+
+            try {
+                feedback.innerText = "Inférence réseau neuronal en cours...";
+                
+                // On analyse les 3 lignes séquentiellement pour ne pas surcharger la RAM mobile
+                for (let i = 0; i < 3; i++) {
+                    captureCanvas.width = captureW;
+                    captureCanvas.height = sliceHeight;
+                    
+                    // Capture d'une seule ligne
+                    ctx.drawImage(
+                        video, 
+                        rect.left * ratioX, (rect.top * ratioY) + (i * sliceHeight), captureW, sliceHeight, 
+                        0, 0, captureW, sliceHeight
+                    );
+
+                    // Amélioration basique de contraste pour l'IA
+                    enhanceImage(ctx, captureW, sliceHeight);
+
+                    const dataUrl = captureCanvas.toDataURL('image/jpeg', 0.9);
+                    
+                    // Exécution du modèle IA Transformers.js
+                    const result = await window.TrOCR_Pipeline(dataUrl);
+                    
+                    if (result && result.length > 0) {
+                        mrzLines.push(result[0].generated_text.toUpperCase());
+                    }
+                }
+
+                const rawMRZ = mrzLines.join('\n');
+                console.log("Sortie IA Brute:", rawMRZ);
+
+                // Analyse des résultats par l'heuristique
+                const extractedData = runHeuristicEngine(rawMRZ);
+
+                if (extractedData && extractedData.docNumber && extractedData.lastName) {
+                    window.isScanning = false;
+                    if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+                    displayResults(extractedData);
+                    return; // Stoppe la boucle
+                } else if (rawMRZ.includes('<')) {
+                    feedback.innerText = "MRZ partiellement détecté, ajustez l'angle...";
+                } else {
+                    feedback.innerText = "Aucun texte valide trouvé. Gardez le document stable.";
+                }
+
+            } catch (e) {
+                console.error("Erreur d'inférence:", e);
+            }
+
+            // On boucle (avec un délai pour laisser le téléphone refroidir car l'IA consomme)
+            setTimeout(processInferenceLoop, 500);
+        }
+
+        // Augmente le contraste de la ligne pour faciliter le travail du Transformer
+        function enhanceImage(context, width, height) {
+            const imageData = context.getImageData(0, 0, width, height);
+            const data = imageData.data;
+            for (let i = 0; i < data.length; i += 4) {
+                let luma = data[i]*0.299 + data[i+1]*0.587 + data[i+2]*0.114;
+                luma = (luma - 100) * 2.0 + 100; // Contraste appuyé
+                let val = Math.max(0, Math.min(255, luma));
+                data[i] = data[i+1] = data[i+2] = val;
+            }
+            context.putImageData(imageData, 0, 0);
+        }
+
+        // --- 4. MOTEUR HEURISTIQUE & CORRECTION ---
+        function runHeuristicEngine(rawText) {
+            let data = { raw: rawText };
+            
+            // Correction des erreurs fréquentes de TrOCR sur les MRZ
+            let t = rawText.replace(/\s+/g, '').replace(/«/g, '<');
+            t = t.replace(/^[0OQ]1/, 'D1').replace(/^D[I1L]FRA/, 'D1FRA').replace(/^P[SC5]/, 'P<');
+            
+            let lines = t.split('\n').map(l => l.replace(/[^A-Z0-9<]/g, '')).filter(l => l.length >= 25);
+            if (lines.length === 0) return null;
+
+            // 1. Permis Français (D1FRA)
+            const permisFR = lines.find(l => l.startsWith('D1FRA') && l.length >= 28);
+            if (permisFR) {
+                data.type = "Permis de Conduire";
+                data.docNumber = permisFR.substring(5, 17).replace(/</g, '').replace(/[OQ]/gi, '0');
+                data.lastName = permisFR.substring(21).replace(/<+.*$/, '').trim();
+                return data;
+            }
+
+            // 2. Passeport (TD3 - 2 Lignes)
+            const td3 = lines.filter(l => l.length >= 40 && l.length <= 46).map(l => l.substring(0, 44));
+            if (td3.length >= 2) {
+                data.type = "Passeport";
+                const namesPart = td3[0].substring(5).split('<<');
+                data.lastName = namesPart[0].replace(/</g, ' ').trim();
+                data.firstName = (namesPart[1] || '').replace(/<+/g, ' ').trim();
+                data.docNumber = td3[1].substring(0, 9).replace(/</g, '');
+                data.dob = formatMRZDate(td3[1].substring(13, 19));
+                data.sex = td3[1].substring(20, 21) === 'F' ? 'Féminin' : 'Masculin';
+                data.expiry = formatMRZDate(td3[1].substring(21, 27));
+                return data;
+            }
+
+            // 3. Carte d'Identité / Séjour (TD1 - 3 Lignes)
+            const td1 = lines.filter(l => l.length >= 28 && l.length <= 32).map(l => l.substring(0, 30));
+            if (td1.length >= 3) {
+                data.type = td1[0].startsWith('C') || td1[0].startsWith('A') ? "Titre de Séjour" : "Carte d'Identité";
+                const namesPart = td1[2].split('<<');
+                data.lastName = namesPart[0].replace(/</g, ' ').trim();
+                data.firstName = (namesPart[1] || '').replace(/<+/g, ' ').trim();
+                data.docNumber = td1[0].substring(5, 14).replace(/</g, '');
+                data.dob = formatMRZDate(td1[1].substring(0, 6));
+                data.sex = td1[1].substring(7, 8) === 'F' ? 'Féminin' : 'Masculin';
+                data.expiry = formatMRZDate(td1[1].substring(8, 14));
+                return data;
+            }
+
+            return null;
+        }
+
+        function formatMRZDate(str) {
+            str = str.replace(/[OQ]/g, '0').replace(/I/g, '1');
+            if (!str || str.length !== 6 || str.includes('<')) return '';
+            const y = parseInt(str.substring(0, 2), 10);
+            const currentYear = new Date().getFullYear() % 100;
+            const century = y > currentYear + 10 ? 1900 : 2000; 
+            return `${str.substring(4, 6)}/${str.substring(2, 4)}/${century + y}`;
+        }
+
+        // --- 5. AFFICHAGE DES RÉSULTATS ---
+        function displayResults(data) {
+            document.getElementById('video-container').style.display = 'none';
+            document.getElementById('result-panel').style.display = 'flex';
+
+            const setVal = (id, val) => { const el = document.getElementById(id); if(el) el.value = val || ''; };
+
+            setVal('form-type', data.type);
+            setVal('form-numero', data.docNumber);
+            setVal('form-nom', data.lastName);
+            setVal('form-prenom', data.firstName);
+            setVal('form-naissance', data.dob);
+            setVal('form-expiration', data.expiry);
+            setVal('form-sexe', data.sex);
+            setVal('form-mrz-brut', data.raw);
+        }
+    </script>
+
+    <!-- STRUCTURE HTML DU GESTIONNAIRE D'IA -->
+    <div id="setup-screen" class="bg-slate-950 px-6 text-center z-50">
+        <div class="bg-slate-900 p-8 rounded-3xl shadow-2xl border border-slate-800 w-full max-w-md">
+            <svg class="mx-auto h-16 w-16 text-emerald-500 mb-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+            </svg>
+            <h1 class="text-2xl font-black text-white mb-2">IA Edge Vision</h1>
+            <p class="text-sm text-slate-400 mb-6" id="dl-status">Initialisation du modèle local...</p>
+            
+            <div id="dl-ui" class="w-full">
+                <div class="progress-container"><div class="progress-bar" id="dl-progress"></div></div>
+                <p class="text-[10px] text-slate-500 mt-2">Téléchargement du réseau neural (Stocké en cache de manière persistante).</p>
+            </div>
+
+            <button id="btn-start" class="hidden w-full mt-6 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-4 rounded-xl transition-transform active:scale-95 shadow-lg shadow-emerald-900/50">
+                Ouvrir la Caméra
+            </button>
+        </div>
+    </div>
+
+    <!-- RÉSULTATS -->
+    <div id="result-panel">
+        <div class="w-full max-w-md interactive pb-20 mt-4 bg-slate-900 p-6 rounded-3xl border border-slate-800 shadow-2xl">
+            <h2 class="text-2xl font-black text-white mb-6 pb-4 border-b border-slate-800">Données Extraites</h2>
+            
+            <div class="input-group">
+                <label>Document</label>
+                <input type="text" id="form-type" class="input-field text-white" readonly>
+            </div>
+            <div class="input-group">
+                <label>Numéro de Document</label>
+                <input type="text" id="form-numero" class="input-field text-emerald-400 text-xl tracking-wider">
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+                <div class="input-group"><label>Nom</label><input type="text" id="form-nom" class="input-field"></div>
+                <div class="input-group"><label>Prénom(s)</label><input type="text" id="form-prenom" class="input-field"></div>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+                <div class="input-group"><label>Naissance</label><input type="text" id="form-naissance" class="input-field"></div>
+                <div class="input-group"><label>Sexe</label><input type="text" id="form-sexe" class="input-field"></div>
+            </div>
+            <div class="input-group">
+                <label>Expiration</label>
+                <input type="text" id="form-expiration" class="input-field">
+            </div>
+            
+            <div class="pt-4 border-t border-slate-800 mt-4">
+                <label class="text-emerald-500 mb-2">Logs de l'IA (TrOCR)</label>
+                <textarea id="form-mrz-brut" rows="3" class="input-field text-[10px] text-slate-400 bg-slate-950 border-slate-800 font-mono" readonly></textarea>
+            </div>
+
+            <button id="btn-restart" class="mt-8 bg-slate-800 text-white font-bold py-4 rounded-xl w-full border border-slate-700">Scanner à nouveau</button>
+        </div>
+    </div>
+</body>
+</html>
