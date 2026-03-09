@@ -282,7 +282,9 @@
     // Cycle : MRZ→Visible→MRZ→Visible → Synthèse → Cross-validation
     // =========================================================================
 
-    let ocrWorker = null;
+    // Pool de workers pour le parallélisme pro (v7)
+    let ocrWorkers = [];
+    const NUM_WORKERS = 4;
     let mrzParse = null;
     let inferenceTimeout = null;
     let isRecognizing = false;
@@ -353,7 +355,7 @@
     async function loadEngine() {
       const status = document.getElementById('load-status');
       const bar = document.getElementById('load-progress');
-      const log = (t) => { status.innerText = t; console.log('[MRZ]', t); };
+      const log = (t) => { status.innerText = t; console.log('[MRZ-V7]', t); };
 
       try {
         log('Chargement parser ICAO...');
@@ -369,26 +371,32 @@
           } catch (e) { console.warn('CDN échoué:', cdn, e.message); }
         }
 
-        bar.style.width = '25%';
-        log('Chargement moteur OCR...');
+        bar.style.width = '20%';
+        log(`Initialisation de ${NUM_WORKERS} workers parallèles...`);
 
-        ocrWorker = await Tesseract.createWorker('eng', 1, {
-          logger: (m) => {
-            if (m.progress !== undefined) bar.style.width = (25 + Math.round(m.progress * 65)) + '%';
-            if (m.status) log(m.status);
-          }
+        // Création parallèle des workers
+        const workerPromises = Array.from({ length: NUM_WORKERS }).map(async (_, i) => {
+          const w = await Tesseract.createWorker('eng', 1, {
+            logger: (m) => {
+              if (i === 0 && m.progress !== undefined) {
+                bar.style.width = (20 + Math.round(m.progress * 80)) + '%';
+                if (m.status) log(`Worker 1: ${m.status}...`);
+              }
+            }
+          });
+          await w.setParameters({
+            tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<',
+            tessedit_pageseg_mode: '6',
+          });
+          return w;
         });
 
-        await ocrWorker.setParameters({
-          tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<',
-          tessedit_pageseg_mode: '6',
-        });
-
+        ocrWorkers = await Promise.all(workerPromises);
         bar.style.width = '100%';
-        log('Prêt !');
+        log('Moteur Pro V7 prêt !');
         setTimeout(() => switchView('ready'), 400);
       } catch (err) {
-        log('ERREUR: ' + err.message);
+        log('ERREUR CRITIQUE: ' + err.message);
       }
     }
 
@@ -650,17 +658,22 @@
      */
     function extractNameFields(text) {
       const r = { lastName: null, firstName: null };
-      const lines = text.split(/\n/).map(l => l.trim());
+      const lines = text.split(/\n/).map(l => l.trim()).filter(l => l.length > 0);
 
       const findVal = (idx, regex) => {
-        // Cherche sur la ligne courante ou les 2 suivantes (Lookahead)
-        for (let j = 0; j <= 2 && idx + j < lines.length; j++) {
+        // Lookahead agressif (5 lignes) pour le mode Pro V7
+        for (let j = 0; j <= 4 && idx + j < lines.length; j++) {
           const l = lines[idx + j].toUpperCase();
           const m = l.match(regex);
           if (m && m[1].length >= 2) return stripLogoNoise(m[1].trim());
-          // Si la ligne suivante semble être une donnée brute (que des lettres et espaces)
-          if (j > 0 && /^[A-ZÀÂÄÉÈÊËÏÎÔÙÛÜŸ\s\-']{2,25}$/.test(lines[idx + j].toUpperCase())) {
-            return stripLogoNoise(lines[idx + j].toUpperCase());
+
+          // Si on trouve une ligne purement alphabétique proche du label
+          if (j > 0 && /^[A-ZÀÂÄÉÈÊËÏÎÔÙÛÜŸ\s\-']{3,25}$/.test(lines[idx + j].toUpperCase())) {
+            const val = lines[idx + j].toUpperCase();
+            // Eviter les labels eux-mêmes
+            if (!/NOM|NAME|PRENOM|GIVEN|SEXE|NAT|DATE/.test(val)) {
+              return stripLogoNoise(val);
+            }
           }
         }
         return null;
@@ -669,21 +682,22 @@
       for (let i = 0; i < lines.length; i++) {
         const upper = lines[i].toUpperCase();
 
-        // Pattern spécifique Titre de Séjour (Labels empilés) :
-        // NOMS Prénoms / SURNAMES Forenames
-        // [NOM]
-        // [PRENOM]
-        if (upper.includes('NOMS') && (upper.includes('PRÉNOMS') || upper.includes('PRINOMS') || upper.includes('FORENAMES'))) {
-          if (!r.lastName && i + 1 < lines.length) r.lastName = stripLogoNoise(lines[i + 1].toUpperCase());
-          if (!r.firstName && i + 2 < lines.length) r.firstName = stripLogoNoise(lines[i + 2].toUpperCase());
-          if (r.lastName && r.firstName) return r;
+        // 1. Détection de Géométrie (Anchors)
+        const isFrenchDoc = upper.includes('REPUBLIQUE') || upper.includes('FRANCAISE');
+        const isBelgianDoc = upper.includes('BELGIQUE') || upper.includes('BELGIE') || upper.includes('BELGIEN');
+
+        // 2. Pattern empilé Titre de Séjour (v7)
+        if (upper.includes('NOMS') && (upper.includes('PRÉNOMS') || upper.includes('SURNAMES') || upper.includes('FORENAMES'))) {
+          // On cherche dans les 3 lignes suivantes
+          if (!r.lastName) r.lastName = findVal(i + 1, /^([A-ZÀÂÄÉÈÊËÏÎÔÙÛÜŸ\s\-']{2,})/);
+          if (!r.firstName) r.firstName = findVal(i + 2, /^([A-ZÀÂÄÉÈÊËÏÎÔÙÛÜŸ\s\-']{2,})/);
         }
 
         // --- NOM ---
         if (!r.lastName) {
           if (/(?:^|\s)1[.\s:]+/.test(upper)) r.lastName = findVal(i, /(?:^|\s)1[.\s:]+([A-ZÀÂÄÉÈÊËÏÎÔÙÛÜŸ\s\-']{2,})/);
           else {
-            const m = upper.match(/(?:NOM|SURNAME|NOM\s+DE\s+FAMILLE|NOM\s*[\/]\s*SURNAME|NOMS?|SURNAMES?)[\s:]+([A-ZÀÂÄÉÈÊËÏÎÔÙÛÜŸ\s\-']{2,})/);
+            const m = upper.match(/(?:NOM|SURNAME|SURNAMES?)[\s:]+([A-ZÀÂÄÉÈÊËÏÎÔÙÛÜŸ\s\-']{2,})/);
             if (m) r.lastName = stripLogoNoise(m[1].trim());
             else if (/(?:NOM|SURNAME|NOMS?|SURNAMES?)\s*$/i.test(upper)) r.lastName = findVal(i + 1, /^([A-ZÀÂÄÉÈÊËÏÎÔÙÛÜŸ\s\-']{2,})/);
           }
@@ -693,7 +707,7 @@
         if (!r.firstName) {
           if (/(?:^|\s)2[.\s:]+/.test(upper)) r.firstName = findVal(i, /(?:^|\s)2[.\s:]+([A-ZÀÂÄÉÈÊËÏÎÔÙÛÜŸ\s\-']{2,})/);
           else {
-            const m = upper.match(/(?:PRENOM|PR[ÉE]NOM|GIVEN|FIRST\s*NAME|PR[ÉE]NOMS?\s*[\/]\s*GIVEN\s*NAMES|PR[ÉE]NOMS?|GIVEN\s*NAMES?)[\s:]+([A-ZÀÂÄÉÈÊËÏÎÔÙÛÜŸ\s\-']{2,})/);
+            const m = upper.match(/(?:PRENOM|PR[ÉE]NOM|GIVEN|FIRST\s*NAME|PR[ÉE]NOMS?|GIVEN\s*NAMES?)[\s:]+([A-ZÀÂÄÉÈÊËÏÎÔÙÛÜŸ\s\-']{2,})/);
             if (m) r.firstName = stripLogoNoise(m[1].trim());
             else if (/(?:PRENOM|PR[ÉE]NOM|GIVEN|PR[ÉE]NOMS?)\s*$/i.test(upper)) r.firstName = findVal(i + 1, /^([A-ZÀÂÄÉÈÊËÏÎÔÙÛÜŸ\s\-']{2,})/);
           }
@@ -795,41 +809,43 @@
       if (cycles.length === 0) return null;
       if (cycles.length === 1) return cycles[0];
 
-      const c1 = cycles[0];
-      const c2 = cycles[1];
-      const result = {
-        format: c1.format || c2.format,
-        documentNumber: voteField(c1.documentNumber, c2.documentNumber),
-        fields: {},
-        valid: c1.valid || c2.valid,
-        details: c1.details || c2.details || [],
-        _strategy: 'Synthèse 2 cycles',
-      };
+      // Pro V7 : Vote probabiliste GLOBAL
+      const fieldVotes = {};
 
-      // Pour chaque champ, voter
-      const allKeys = new Set([...Object.keys(c1.fields || {}), ...Object.keys(c2.fields || {})]);
-      for (const key of allKeys) {
-        const v1 = c1.fields?.[key];
-        const v2 = c2.fields?.[key];
+      cycles.forEach(c => {
+        if (!c.fields) return;
+        Object.entries(c.fields).forEach(([k, v]) => {
+          if (!v) return;
+          if (!fieldVotes[k]) fieldVotes[k] = {};
+          fieldVotes[k][v] = (fieldVotes[k][v] || 0) + 1;
+        });
 
-        if (key === 'lastName' || key === 'firstName') {
-          // Cross-validation nom : utiliser la logique MRZ vs visible
-          const mrzVal = c1._mrzFields?.[key] || c2._mrzFields?.[key];
-          const visVal = v1 || v2;
-          result.fields[key] = crossValidateName(mrzVal, visVal);
-        } else {
-          result.fields[key] = voteField(v1, v2);
+        // Document Number
+        if (c.documentNumber) {
+          if (!fieldVotes.documentNumber) fieldVotes.documentNumber = {};
+          fieldVotes.documentNumber[c.documentNumber] = (fieldVotes.documentNumber[c.documentNumber] || 0) + 1;
         }
-      }
+      });
 
-      // Cross-valider le document number
-      if (c1.documentNumber && c2.documentNumber) {
-        result.documentNumber = c1.documentNumber === c2.documentNumber
-          ? c1.documentNumber
-          : (c1.valid ? c1.documentNumber : c2.documentNumber);
-      }
+      const bestFields = {};
+      Object.entries(fieldVotes).forEach(([k, votes]) => {
+        const sorted = Object.entries(votes).sort((a, b) => b[1] - a[1]);
+        bestFields[k] = sorted[0][0];
+      });
 
-      return result;
+      // On garde les propriétés globales du cycle le plus complet (ou le premier)
+      const c1 = cycles.find(c => c.valid) || cycles[0];
+
+      return {
+        format: c1.format,
+        documentNumber: bestFields.documentNumber || c1.documentNumber,
+        fields: bestFields,
+        valid: cycles.some(c => c.valid),
+        details: c1.details || [],
+        _rawText: cycles.map(c => c._rawText).join('\n---\n'),
+        _mrzRaw: cycles.map(c => c._mrzRaw).join('\n---\n'),
+        _strategy: 'Vote Probabiliste (V7)',
+      };
     }
 
     /**
@@ -860,95 +876,79 @@
     async function runOneCycle(source) {
       let srcW = source === 'camera' ? video.videoWidth : source.width;
       let srcH = source === 'camera' ? video.videoHeight : source.height;
-
-      // Cap de résolution pour performance OCR mais garde assez de détail pour OCR-B
       const MAX_DIM = 2000;
       if (srcW > MAX_DIM) {
         const ratio = MAX_DIM / srcW;
-        srcW = MAX_DIM;
-        srcH = Math.round(srcH * ratio);
+        srcW = MAX_DIM; srcH = Math.round(srcH * ratio);
       }
 
+      // Préparation du canvas source unique
+      canvas.width = srcW; canvas.height = srcH;
       const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      if (source === 'camera') ctx.drawImage(video, 0, 0, srcW, srcH);
+      else ctx.drawImage(source, 0, 0, srcW, srcH);
 
-      const tryExtraction = async (contrast, brightness, binarizeFactor, mode) => {
-        // PASS 1 : Plein cadre
-        canvas.width = srcW; canvas.height = srcH;
-        ctx.filter = `contrast(${contrast}) brightness(${brightness}) grayscale(1)`;
-        if (source === 'camera') ctx.drawImage(video, 0, 0, srcW, srcH);
-        else ctx.drawImage(source, 0, 0, srcW, srcH);
-        ctx.filter = 'none';
-
-        await ocrWorker.setParameters({ tessedit_char_whitelist: '', tessedit_pageseg_mode: '3' });
-        const { data: fd } = await ocrWorker.recognize(canvas); // Recognise canvas directement (plus propre)
-        const fullText = fd.text;
-
-        // PASS 2 : Bande MRZ
-        let mrzText = '';
-        if (mode === 'FULL') {
-          canvas.width = srcW; canvas.height = srcH;
-          ctx.filter = `contrast(${contrast + 0.5}) brightness(${brightness}) grayscale(1)`;
-          if (source === 'camera') ctx.drawImage(video, 0, 0, srcW, srcH);
-          else ctx.drawImage(source, 0, 0, srcW, srcH);
-          ctx.filter = 'none';
-          binarize(ctx, srcW, srcH, binarizeFactor);
-        } else if (mode === 'LIGHT') {
-          // Mode sans binarisation (souvent meilleur pour imports propres)
-          const cropH = Math.round(srcH * 0.45);
-          const cropY = srcH - cropH;
-          canvas.width = srcW; canvas.height = cropH;
-          ctx.filter = `contrast(${contrast + 0.7}) brightness(${brightness}) grayscale(1)`;
-          if (source === 'camera') ctx.drawImage(video, 0, cropY, srcW, cropH, 0, 0, srcW, cropH);
-          else ctx.drawImage(source, 0, cropY, srcW, cropH, 0, 0, srcW, cropH);
-          ctx.filter = 'none';
-          // Pas de binarisation ici
-        } else {
-          const cropH = Math.round(srcH * 0.45);
-          const cropY = srcH - cropH;
-          canvas.width = srcW; canvas.height = cropH;
-          ctx.filter = `contrast(${contrast + 0.5}) brightness(${brightness}) grayscale(1)`;
-          if (source === 'camera') ctx.drawImage(video, 0, cropY, srcW, cropH, 0, 0, srcW, cropH);
-          else ctx.drawImage(source, 0, cropY, srcW, cropH, 0, 0, srcW, cropH);
-          ctx.filter = 'none';
-          binarize(ctx, srcW, cropH, binarizeFactor);
-        }
-
-        const tryMrz = async (psm) => {
-          await ocrWorker.setParameters({ tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<', tessedit_pageseg_mode: psm });
-          const { data: md } = await ocrWorker.recognize(canvas);
-          return md.text;
-        };
-
-        mrzText = await tryMrz('6');
-        let mrzResult = parseMrzFromText(mrzText);
-        if (!mrzResult) { mrzText = await tryMrz('3'); mrzResult = parseMrzFromText(mrzText); }
-
-        const visible = extractVisibleFields(fullText);
-        // FILTRE SOUPLE : On accepte si MRZ OU Nom OU N° Document
-        if (mrzResult || visible.lastName || visible.documentNumber) {
-          return { mrzResult, visible, fullText, mrzText };
-        }
-        return { fullText, error: 'Extraction partielle insuffisante' };
-      };
-
-      // Stratégie multi-pass
-      const attempts = [
-        { c: 1.2, b: 1.0, f: 0.0, mode: 'LIGHT' }, // Pass 0 : Direct (pour imports de qualité)
-        { c: 1.8, b: 1.0, f: 0.60, mode: 'NORMAL' },
-        { c: 2.8, b: 0.7, f: 0.50, mode: 'ANTIGLARE' }, // Anti-reflet intense
-        { c: 2.0, b: 1.0, f: 0.55, mode: 'FULL' } // Fallback import mal cadré
+      const strategies = [
+        { c: 1.2, b: 1.1, f: 0.0, mode: 'LIGHT', label: 'LUMIÈRE' },
+        { c: 1.8, b: 1.0, f: 0.60, mode: 'NORMAL', label: 'STANDARD' },
+        { c: 2.8, b: 0.7, f: 0.50, mode: 'ANTIGLARE', label: 'ANTI-REFLET' },
+        { c: 2.0, b: 1.0, f: 0.55, mode: 'FULL', label: 'GRAND-ANGLE' }
       ];
 
-      let bestPartial = null;
-      for (const att of attempts) {
-        const res = await tryExtraction(att.c, att.b, att.f, att.mode);
-        if (res && res.mrzResult && res.mrzResult.valid) return finalizeCycleData(res);
-        if (res && !res.error && (!bestPartial || (res.mrzResult && res.mrzResult.valid === false && (!bestPartial.mrzResult || bestPartial.mrzResult.valid === false)))) {
-          bestPartial = res;
-        }
-      }
+      // Exécution parallèle du pool V7
+      const results = await Promise.all(strategies.map((strat, idx) => {
+        const worker = ocrWorkers[idx % ocrWorkers.length];
+        return tryExtraction(worker, strat, srcW, srcH);
+      }));
 
-      return finalizeCycleData(bestPartial || { fullText: '', mrzText: '' });
+      const validResults = results.filter(r => !r.error);
+      if (validResults.length === 0) return results[0];
+
+      // Priorité : Validité MRZ > Présence de Nom
+      const best = validResults.find(r => r.mrzResult && r.mrzResult.valid) || validResults[0];
+      return finalizeCycleData(best);
+    }
+
+    async function tryExtraction(worker, strat, w, h) {
+      try {
+        const offCanvas = document.createElement('canvas');
+        const offCtx = offCanvas.getContext('2d');
+        offCanvas.width = w; offCanvas.height = h;
+        offCtx.filter = `contrast(${strat.c}) brightness(${strat.b}) grayscale(1)`;
+        offCtx.drawImage(canvas, 0, 0);
+        offCtx.filter = 'none';
+
+        // 1. Visible (3 = Fully automatic page segmentation)
+        await worker.setParameters({ tessedit_char_whitelist: '', tessedit_pageseg_mode: '3' });
+        const { data: fd } = await worker.recognize(offCanvas);
+        const fullText = fd.text;
+
+        // 2. MRZ (6 = Assume a single uniform block of text)
+        let mrzSrc = offCanvas;
+        if (strat.mode !== 'FULL') {
+          const mrzCanvas = document.createElement('canvas');
+          const cH = Math.round(h * 0.45);
+          mrzCanvas.width = w; mrzCanvas.height = cH;
+          const mCtx = mrzCanvas.getContext('2d');
+          mCtx.drawImage(offCanvas, 0, h - cH, w, cH, 0, 0, w, cH);
+          if (strat.mode !== 'LIGHT') binarize(mCtx, w, cH, strat.f);
+          mrzSrc = mrzCanvas;
+        }
+
+        await worker.setParameters({ tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<', tessedit_pageseg_mode: '6' });
+        const { data: md } = await worker.recognize(mrzSrc);
+        const mrzText = md.text;
+        const mrzResult = parseMrzFromText(mrzText);
+        const visible = extractVisibleFields(fullText);
+
+        if (mrzResult || visible.lastName || visible.documentNumber) {
+          if (mrzResult) mrzResult._strategy = strat.label;
+          return { mrzResult, visible, fullText, mrzText, _strategy: strat.label };
+        }
+        return { fullText, error: 'Insuffisant', _strategy: strat.label };
+      } catch (e) {
+        return { error: e.message, _strategy: strat.label };
+      }
     }
 
     function finalizeCycleData(data) {
@@ -1013,7 +1013,7 @@
     async function inferenceLoop() {
       if (!video.srcObject || video.paused || video.ended) return;
 
-      if (!isRecognizing && ocrWorker && currentCycle < TOTAL_CYCLES) {
+      if (!isRecognizing && ocrWorkers.length > 0 && currentCycle < TOTAL_CYCLES) {
         isRecognizing = true;
         try {
           const stepIdx = currentCycle * 2 + 1; // dot index : 1,2 pour cycle 1, 3,4 pour cycle 2
@@ -1063,7 +1063,7 @@
     }
 
     async function manualCapture() {
-      if (!ocrWorker || !video.srcObject) return;
+      if (ocrWorkers.length === 0 || !video.srcObject) return;
       if (inferenceTimeout) { clearTimeout(inferenceTimeout); inferenceTimeout = null; }
       isRecognizing = true;
 
