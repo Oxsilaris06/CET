@@ -115,6 +115,39 @@
       transform: rotate(-90deg);
       transform-origin: 50% 50%;
     }
+
+    /* Sélecteur de types */
+    .doc-selector {
+      display: flex;
+      gap: 0.5rem;
+      width: 100%;
+      max-width: 24rem;
+      margin-top: 1.5rem;
+      overflow-x: auto;
+      padding-bottom: 0.5rem;
+    }
+
+    .doc-btn {
+      flex: 1;
+      min-width: 80px;
+      padding: 0.6rem;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 0.75rem;
+      font-size: 0.65rem;
+      font-weight: 600;
+      color: #94a3b8;
+      text-align: center;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+
+    .doc-btn.active {
+      background: #3b82f6;
+      color: #fff;
+      border-color: #3b82f6;
+      box-shadow: 0 4px 12px rgba(59, 131, 246, 0.3);
+    }
   </style>
 </head>
 
@@ -142,6 +175,14 @@
       <p class="text-slate-400 text-sm">Passeport · CNI · Permis · Titre de séjour</p>
       <p class="text-slate-600 text-xs mt-1">Double lecture + synthèse croisée</p>
     </div>
+    <div class="doc-selector mb-2" id="ready-selector">
+      <button class="doc-btn active" data-type="AUTO">AUTO</button>
+      <button class="doc-btn" data-type="PASSEPORT">🛂 PASSPORT</button>
+      <button class="doc-btn" data-type="PERMIS_FR">🚗 PERMIS</button>
+      <button class="doc-btn" data-type="TITRE_SEJOUR">📜 SÉJOUR</button>
+      <button class="doc-btn" data-type="CNI">🆔 CNI</button>
+    </div>
+
     <button onclick="startCamera()"
       class="w-full max-w-sm bg-blue-600 hover:bg-blue-500 py-4 rounded-xl font-bold text-lg transition-all">
       📷 Scanner avec la caméra
@@ -180,6 +221,15 @@
           </div>
           <p id="scan-feedback" class="text-xs font-medium text-slate-300 flex-1">Démarrage...</p>
         </div>
+
+        <div class="doc-selector !mt-0 !mb-3 !max-w-none scale-90 -mx-2" id="scan-selector">
+          <button class="doc-btn active" data-type="AUTO">AUTO</button>
+          <button class="doc-btn" data-type="PASSEPORT">🛂 PASS</button>
+          <button class="doc-btn" data-type="PERMIS_FR">🚗 PERMIS</button>
+          <button class="doc-btn" data-type="TITRE_SEJOUR">📜 SÉJOUR</button>
+          <button class="doc-btn" data-type="CNI">🆔 CNI</button>
+        </div>
+
         <p id="scan-debug" class="text-[9px] font-mono text-slate-700 truncate"></p>
         <div class="flex gap-2 mt-2">
           <button onclick="cancelScan()"
@@ -237,13 +287,10 @@
     let inferenceTimeout = null;
     let isRecognizing = false;
 
-    // Accumulateur pour les 2 cycles de lecture
-    let scanCycles = [];
-    let currentCycle = 0;
-    const TOTAL_CYCLES = 2; // 2 lectures complètes
-
     // Résultat final pour copie
     let finalFields = {};
+
+    let selectedDocType = 'AUTO';
 
     const views = {};
     let video, canvas, scanFeedback;
@@ -256,6 +303,21 @@
       canvas = document.getElementById('canvas-mrz');
       scanFeedback = document.getElementById('scan-feedback');
       document.getElementById('fileUpload').addEventListener('change', handleFileUpload);
+
+      // Doc selector logic
+      document.querySelectorAll('.doc-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const type = btn.getAttribute('data-type');
+          selectedDocType = type;
+          // Sync all selectors
+          document.querySelectorAll('.doc-btn').forEach(b => {
+            if (b.getAttribute('data-type') === type) b.classList.add('active');
+            else b.classList.remove('active');
+          });
+          console.log('[Selector] Mode:', type);
+        });
+      });
+
       loadEngine();
     }
 
@@ -367,6 +429,13 @@
       if (line.length < 25) return 0;
       let s = 0;
       const len = line.length;
+
+      // Bonus si le format correspond au type sélectionné
+      if (selectedDocType === 'PASSEPORT' && len >= 40 && len <= 48) s += 50;
+      if (selectedDocType === 'PERMIS_FR' && len >= 28 && len <= 32) s += 50;
+      if (selectedDocType === 'TITRE_SEJOUR' && len >= 28 && len <= 32) s += 50;
+      if (selectedDocType === 'CNI' && len >= 28 && len <= 38) s += 50;
+
       if (len >= 40 && len <= 48) {
         s += 30; // Priorité Passeport
         if (/^[P0OD][<0O]/.test(line)) s += 20;
@@ -394,29 +463,45 @@
 
     function groupByFormat(candidates) {
       const groups = [];
+
       // TD3 (Passeport) - 2 lignes de 44
-      // Beaucoup plus souple : cherche 2 lignes longues qui "se ressemblent"
-      const td3 = candidates.filter(c => c.len >= 38 && c.len <= 50);
-      if (td3.length >= 1) {
-        // Ligne 1 : Cherche P< ou beaucoup de <<
-        const l1c = td3.filter(c => /^[P0OD][<0O]/.test(c.line) || (c.line.match(/<{2,}/g) || []).length >= 2);
-        if (l1c.length >= 1) {
-          const l1 = l1c[0].line;
-          const others = td3.filter(c => c.line !== l1).sort((a, b) => b.score - a.score);
-          if (others.length >= 1) {
-            groups.push({ format: 'TD3', lines: [normalizeTo(l1, 44), normalizeTo(others[0].line, 44)], score: l1c[0].score + others[0].score + 20 });
-          } else if (l1.includes('<<<<')) {
-            groups.push({ format: 'TD3', lines: [normalizeTo(l1, 44), '<'.repeat(44)], score: l1c[0].score });
+      if (selectedDocType === 'AUTO' || selectedDocType === 'PASSEPORT') {
+        const td3 = candidates.filter(c => c.len >= 38 && c.len <= 50);
+        if (td3.length >= 1) {
+          const l1c = td3.filter(c => /^[P0OD][<0O]/.test(c.line) || (c.line.match(/<{2,}/g) || []).length >= 2);
+          if (l1c.length >= 1) {
+            const l1 = l1c[0].line;
+            const others = td3.filter(c => c.line !== l1).sort((a, b) => b.score - a.score);
+            if (others.length >= 1) {
+              groups.push({ format: 'TD3', lines: [normalizeTo(l1, 44), normalizeTo(others[0].line, 44)], score: l1c[0].score + others[0].score + 20 });
+            } else if (l1.includes('<<<<')) {
+              groups.push({ format: 'TD3', lines: [normalizeTo(l1, 44), '<'.repeat(44)], score: l1c[0].score });
+            }
           }
         }
       }
-      const td1 = candidates.filter(c => c.len >= 28 && c.len <= 32);
-      if (td1.length >= 3) groups.push({ format: 'TD1', lines: td1.slice(0, 3).map(c => normalizeTo(c.line, 30)), score: td1.slice(0, 3).reduce((s, c) => s + c.score, 0) });
-      if (td1.length === 2) groups.push({ format: 'TD1', lines: [...td1.map(c => normalizeTo(c.line, 30)), '<'.repeat(30)], score: td1.reduce((s, c) => s + c.score, 0) - 10 });
+
+      // TD1 (CNI moderne, Titre Séjour) - 3 lignes de 30
+      if (selectedDocType === 'AUTO' || selectedDocType === 'TITRE_SEJOUR' || selectedDocType === 'CNI') {
+        const td1 = candidates.filter(c => c.len >= 28 && c.len <= 34);
+        if (td1.length >= 3) {
+          groups.push({ format: 'TD1', lines: td1.slice(0, 3).map(c => normalizeTo(c.line, 30)), score: td1.slice(0, 3).reduce((s, c) => s + (c.score || 0), 0) + 15 });
+        } else if (td1.length === 2 && (selectedDocType === 'TITRE_SEJOUR' || selectedDocType === 'CNI')) {
+          // Si on a forcé le mode, on tente de compléter la 3ème ligne manquante
+          groups.push({ format: 'TD1', lines: [...td1.map(c => normalizeTo(c.line, 30)), '<'.repeat(30)], score: td1.reduce((s, c) => s + (c.score || 0), 0) - 5 });
+        }
+      }
+
+      // TD2 - 2 lignes de 36
       const td2 = candidates.filter(c => c.len >= 34 && c.len <= 38);
       if (td2.length >= 2) groups.push({ format: 'TD2', lines: td2.slice(0, 2).map(c => normalizeTo(c.line, 36)), score: td2.slice(0, 2).reduce((s, c) => s + c.score, 0) });
-      const permis = candidates.filter(c => c.len >= 28 && c.len <= 32 && /^D[1I]/.test(c.line));
-      if (permis.length >= 1) groups.push({ format: 'PERMIS_FR', lines: [normalizeTo(permis[0].line, 30)], score: permis[0].score + 10 });
+
+      // Permis de conduire (FR) - 1 ligne de 30 entêtée par D1/DI
+      if (selectedDocType === 'AUTO' || selectedDocType === 'PERMIS_FR') {
+        const permis = candidates.filter(c => c.len >= 28 && c.len <= 32 && /^[D0][1I]/.test(c.line));
+        if (permis.length >= 1) groups.push({ format: 'PERMIS_FR', lines: [normalizeTo(permis[0].line, 30)], score: permis[0].score + 25 });
+      }
+
       groups.sort((a, b) => b.score - a.score);
       return groups;
     }
@@ -554,7 +639,7 @@
           }
         }
         // Labels Passeport : "Nom / Surname", "Surname"
-        m = upper.match(/(?:NOM|SURNAME|NOM\s+DE\s+FAMILLE|NOM\s*[\/]\s*SURNAME)[\s:]+([A-ZÀÂÄÉÈÊËÏÎÔÙÛÜŸ\s\-']{2,})/);
+        m = upper.match(/(?:NOM|SURNAME|NOM\s+DE\s+FAMILLE|NOM\s*[\/]\s*SURNAME|NOMS?)[\s:]+([A-ZÀÂÄÉÈÊËÏÎÔÙÛÜŸ\s\-']{2,})/);
         if (m && !r.lastName) r.lastName = stripLogoNoise(m[1].trim());
 
         // --- PRÉNOM ---
@@ -566,8 +651,8 @@
             r.firstName = stripLogoNoise(next.toUpperCase());
           }
         }
-        // Labels Passeport : "Prénoms / Given names", "Given names"
-        m = upper.match(/(?:PRENOM|PR[ÉE]NOM|GIVEN|FIRST\s*NAME|PR[ÉE]NOMS\s*[\/]\s*GIVEN\s*NAMES)[\s:]+([A-ZÀÂÄÉÈÊËÏÎÔÙÛÜŸ\s\-']{2,})/);
+        // Labels Passeport : "Prénoms / Given names", "Given names", "Prénoms"
+        m = upper.match(/(?:PRENOM|PR[ÉE]NOM|GIVEN|FIRST\s*NAME|PR[ÉE]NOMS?\s*[\/]\s*GIVEN\s*NAMES|PR[ÉE]NOMS?)[\s:]+([A-ZÀÂÄÉÈÊËÏÎÔÙÛÜŸ\s\-']{2,})/);
         if (m && !r.firstName) r.firstName = stripLogoNoise(m[1].trim());
       }
       return r;
@@ -707,7 +792,7 @@
       const srcH = source === 'camera' ? video.videoHeight : source.height;
       const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
-      const tryExtraction = async (contrast, brightness, binarizeFactor) => {
+      const tryExtraction = async (contrast, brightness, binarizeFactor, forceFullFrame) => {
         // PASS 1 : Plein cadre
         canvas.width = srcW; canvas.height = srcH;
         ctx.filter = `contrast(${contrast}) brightness(${brightness}) grayscale(1)`;
@@ -718,15 +803,25 @@
         const { data: fd } = await ocrWorker.recognize(canvas.toDataURL('image/jpeg', 0.85));
         const fullText = fd.text;
 
-        // PASS 2 : Bande MRZ (Augmentée pour Passeport)
-        const cropH = Math.round(srcH * 0.45);
-        const cropY = srcH - cropH;
-        canvas.width = srcW; canvas.height = cropH;
-        ctx.filter = `contrast(${contrast + 0.5}) brightness(${brightness}) grayscale(1)`;
-        if (source === 'camera') ctx.drawImage(video, 0, cropY, srcW, cropH, 0, 0, srcW, cropH);
-        else ctx.drawImage(source, 0, cropY, srcW, cropH, 0, 0, srcW, cropH);
-        ctx.filter = 'none';
-        binarize(ctx, srcW, cropH, binarizeFactor);
+        // PASS 2 : Bande MRZ
+        let mrzText = '';
+        if (forceFullFrame) {
+          canvas.width = srcW; canvas.height = srcH;
+          ctx.filter = `contrast(${contrast + 0.5}) brightness(${brightness}) grayscale(1)`;
+          if (source === 'camera') ctx.drawImage(video, 0, 0); else ctx.drawImage(source, 0, 0);
+          ctx.filter = 'none';
+          binarize(ctx, srcW, srcH, binarizeFactor);
+        } else {
+          // 45% pour inclure TD1 3-lignes (Titre de séjour)
+          const cropH = Math.round(srcH * 0.45);
+          const cropY = srcH - cropH;
+          canvas.width = srcW; canvas.height = cropH;
+          ctx.filter = `contrast(${contrast + 0.5}) brightness(${brightness}) grayscale(1)`;
+          if (source === 'camera') ctx.drawImage(video, 0, cropY, srcW, cropH, 0, 0, srcW, cropH);
+          else ctx.drawImage(source, 0, cropY, srcW, cropH, 0, 0, srcW, cropH);
+          ctx.filter = 'none';
+          binarize(ctx, srcW, cropH, binarizeFactor);
+        }
 
         const tryMrz = async (psm) => {
           await ocrWorker.setParameters({ tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<', tessedit_pageseg_mode: psm });
@@ -734,33 +829,27 @@
           return md.text;
         };
 
-        let mrzText = await tryMrz('6');
+        mrzText = await tryMrz('6');
         let mrzResult = parseMrzFromText(mrzText);
-
-        // Si PSM 6 échoue sur une bande large (Passeport), tenter PSM 3
-        if (!mrzResult) {
-          mrzText = await tryMrz('3');
-          mrzResult = parseMrzFromText(mrzText);
-        }
+        if (!mrzResult) { mrzText = await tryMrz('3'); mrzResult = parseMrzFromText(mrzText); }
 
         const visible = extractVisibleFields(fullText);
-
         if (mrzResult || (visible.lastName && visible.firstName)) {
           return { mrzResult, visible, fullText, mrzText };
         }
         return null;
       };
 
-      // Stratégie multi-pass pour gérer les reflets (surtout passeports)
+      // Stratégie multi-pass
       const attempts = [
-        { c: 1.8, b: 1.0, f: 0.65 }, // Normal
-        { c: 2.8, b: 0.7, f: 0.52 }, // Anti-reflet très agressif (Passeport)
-        { c: 2.2, b: 1.1, f: 0.72 }  // Haute luminosité
+        { c: 1.8, b: 1.0, f: 0.60, full: false }, // Normal
+        { c: 2.8, b: 0.7, f: 0.50, full: false }, // Anti-reflet (Passeport/Titres gloss)
+        { c: 2.0, b: 1.0, f: 0.55, full: true }  // Full-frame fallback (pour imports)
       ];
 
       let bestPartial = null;
       for (const att of attempts) {
-        const res = await tryExtraction(att.c, att.b, att.f);
+        const res = await tryExtraction(att.c, att.b, att.f, att.full);
         if (res && res.mrzResult && res.mrzResult.valid) return finalizeCycleData(res);
         if (res && (!bestPartial || (res.mrzResult && res.mrzResult.valid === false && (!bestPartial.mrzResult || bestPartial.mrzResult.valid === false)))) {
           bestPartial = res;
