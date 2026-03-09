@@ -331,369 +331,16 @@
     }
 
     // =========================================================================
-    // MRZ ENGINE v2 — INDESTRUCTIBLE DETECTION & PARSING
-    // Norme ICAO 9303, checksums, correction OCR, scoring multi-pass
+    // PERMIS DE CONDUIRE FR — ENGINE v3
+    // MRZ ligne unique 30 chars (D1FRA...) + OCR plein cadre pour noms/dates
+    // Multi-pass consensus avec vote par caractère
     // =========================================================================
 
-    // --- TABLE DE CORRECTION OCR ---
-    // Caractères fréquemment confondus par l'OCR sur les documents MRZ
-    const OCR_LETTER_TO_DIGIT = { 'O': '0', 'Q': '0', 'D': '0', 'I': '1', 'L': '1', 'Z': '2', 'S': '5', 'G': '6', 'B': '8' };
-    const OCR_DIGIT_TO_LETTER = { '0': 'O', '1': 'I', '2': 'Z', '5': 'S', '6': 'G', '8': 'B' };
+    const REQUIRED_PASSES = 6;
+    const MIN_PASSES = 3;
 
-    /** Corrige un caractère OCR : force un chiffre là où on attend un chiffre. */
-    function forceDigit(c) { return /[0-9]/.test(c) ? c : (OCR_LETTER_TO_DIGIT[c] || c); }
-    /** Corrige un caractère OCR : force une lettre là où on attend une lettre. */
-    function forceLetter(c) { return /[A-Z<]/.test(c) ? c : (OCR_DIGIT_TO_LETTER[c] || c); }
-
-    /** Applique la correction OCR sur un champ entier selon un masque (D=digit, A=alpha, X=any). */
-    function correctField(raw, mask) {
-      let out = '';
-      for (let i = 0; i < raw.length && i < mask.length; i++) {
-        const m = mask[i];
-        const c = raw[i];
-        if (m === 'D') out += forceDigit(c);
-        else if (m === 'A') out += forceLetter(c);
-        else out += c; // X = any
-      }
-      return out;
-    }
-
-    // --- CHECKSUM ICAO 9303 ---
-    const CHECKSUM_WEIGHTS = [7, 3, 1];
-    /** Calcule le check digit ICAO 9303 pour un champ MRZ. */
-    function computeCheckDigit(field) {
-      let total = 0;
-      for (let i = 0; i < field.length; i++) {
-        let val = 0;
-        const c = field[i];
-        if (c >= '0' && c <= '9') val = parseInt(c);
-        else if (c >= 'A' && c <= 'Z') val = c.charCodeAt(0) - 55; // A=10, B=11...
-        else val = 0; // < = 0
-        total += val * CHECKSUM_WEIGHTS[i % 3];
-      }
-      return (total % 10).toString();
-    }
-
-    /** Vérifie un champ + son check digit. Retourne true si valide. */
-    function verifyCheck(field, checkDigit) {
-      return computeCheckDigit(field) === forceDigit(checkDigit);
-    }
-
-    // --- NETTOYAGE ET DÉTECTION DES LIGNES MRZ ---
-
-    /** Pré-nettoie une ligne OCR brute pour la rendre MRZ-compatible. */
-    function sanitizeLine(rawLine) {
-      return rawLine
-        .toUpperCase()
-        // Tesseract lit souvent les chevrons < comme des espaces, points, virgules, tirets, underscores
-        // On les convertit TOUS en < pour reconstituer la structure MRZ
-        .replace(/[\s.,_\-;:|!`'"~^]+/g, '<')
-        // Supprimer tout ce qui n'est pas MRZ
-        .replace(/[^A-Z0-9<]/g, '')
-        .trim();
-    }
-
-    /** Score de confiance d'une ligne MRZ (0-100). Plus c'est haut, plus c'est probablement MRZ. */
-    function scoreLine(line) {
-      if (line.length < 28) return 0;
-      let score = 0;
-      // Bonus longueur standard
-      if (line.length === 30) score += 30; // TD1
-      else if (line.length === 36) score += 30; // TD2
-      else if (line.length === 44) score += 30; // TD3
-      else if (line.length >= 28 && line.length <= 46) score += 10; // Tolérance OCR
-      else return 0;
-      // Bonus présence de chevrons (typique MRZ)
-      const chevronRatio = (line.match(/</g) || []).length / line.length;
-      if (chevronRatio > 0.05) score += 20;
-      if (chevronRatio > 0.15) score += 10;
-      // Bonus séquences de chevrons (séparateurs de noms)
-      if (line.includes('<<')) score += 15;
-      // Bonus code type de doc en position 0
-      if (/^[PIACVS]/.test(line)) score += 10;
-      // Bonus code pays en position 2-4
-      const countryCode = line.substring(2, 5).replace(/</g, '');
-      if (['FRA', 'GBR', 'DEU', 'USA', 'ESP', 'ITA', 'BEL', 'CHE', 'NLD', 'PRT', 'MAR', 'DZA', 'TUN'].includes(countryCode)) score += 15;
-      return Math.min(score, 100);
-    }
-
-    /**
-     * Détecte les lignes MRZ dans le texte OCR brut.
-     * Utilise un scoring pour sélectionner les meilleures lignes candidates.
-     * Tolère les lignes légèrement trop courtes ou trop longues (erreur OCR ±2 chars).
-     */
-    function detectMrzLines(rawText) {
-      const allLines = rawText.split(/\n/);
-      const candidates = [];
-      for (const rawLine of allLines) {
-        const cleaned = sanitizeLine(rawLine);
-        if (cleaned.length < 26) continue; // Trop court même avec tolérance
-        const score = scoreLine(cleaned);
-        if (score >= 20) {
-          candidates.push({ line: cleaned, score: score });
-        }
-      }
-      // Trier par score décroissant
-      candidates.sort((a, b) => b.score - a.score);
-      return candidates;
-    }
-
-    /**
-     * Normalise une ligne MRZ à la longueur attendue.
-     * Pad avec < si trop court, tronque si trop long.
-     */
-    function normalizeLine(line, expectedLen) {
-      if (line.length === expectedLen) return line;
-      if (line.length > expectedLen) return line.substring(0, expectedLen);
-      return line + '<'.repeat(expectedLen - line.length);
-    }
-
-    // --- FORMATAGE ---
-
-    function formatMrzDate(yymmdd) {
-      if (!yymmdd || yymmdd.length !== 6) return 'Non détecté';
-      // Correction OCR sur le champ date (6 digits)
-      const corrected = correctField(yymmdd, 'DDDDDD');
-      const yy = corrected.substring(0, 2);
-      const mm = corrected.substring(2, 4);
-      const dd = corrected.substring(4, 6);
-      // Validation basique
-      const mmInt = parseInt(mm);
-      const ddInt = parseInt(dd);
-      if (mmInt < 1 || mmInt > 12 || ddInt < 1 || ddInt > 31) return 'Non détecté';
-      const century = parseInt(yy) > 50 ? '19' : '20';
-      return dd + '/' + mm + '/' + century + yy;
-    }
-
-    function extractNames(nameField) {
-      // Séparation par << (double chevron = séparateur nom/prénom ou prénom1/prénom2)
-      const parts = nameField.split('<<').filter(p => p.length > 0);
-      return parts.map(p => p.replace(/</g, ' ').trim()).filter(p => p.length > 0);
-    }
-
-    // --- PARSERS PAR FORMAT ---
-
-    function parseTD3(lines) {
-      const line1 = normalizeLine(lines[0], 44);
-      const line2 = normalizeLine(lines[1], 44);
-      const result = { confidence: 0 };
-
-      // Ligne 1 : P<FRANOM<<PRENOM<<...
-      const docType = line1.substring(0, 1);
-      const nameSection = line1.substring(5);
-      const names = extractNames(nameSection);
-      result.lastName = (names.length >= 1) ? names[0] : 'Non détecté';
-      result.firstName = (names.length >= 2) ? names.slice(1).join(' ') : 'Non détecté';
-
-      // Ligne 2, positions ICAO 9303 :
-      // [0-8] doc number, [9] check, [10-12] nationality, [13-18] birth, [19] check, [20] sex, [21-26] expiry, [27] check
-      const rawDocNum = line2.substring(0, 9);
-      const docNumCheck = line2[9];
-      result.docNumber = correctField(rawDocNum, 'XXXXXXXXX').replace(/</g, '').trim();
-
-      const rawBirth = line2.substring(13, 19);
-      const birthCheck = line2[19];
-      result.birthDate = formatMrzDate(rawBirth);
-
-      const rawExpiry = line2.substring(21, 27);
-      const expiryCheck = line2[27];
-      result.expiryDate = formatMrzDate(rawExpiry);
-
-      result.sex = line2[20];
-      result.nationality = line2.substring(10, 13).replace(/</g, '');
-
-      // Scoring de confiance via checksums
-      if (verifyCheck(rawDocNum, docNumCheck)) result.confidence += 30;
-      if (verifyCheck(rawBirth, birthCheck)) result.confidence += 25;
-      if (verifyCheck(rawExpiry, expiryCheck)) result.confidence += 25;
-      if (/^[PIACVS]/.test(docType)) result.confidence += 10;
-      if (result.lastName !== 'Non détecté') result.confidence += 10;
-
-      result.issueDate = 'Non détecté'; // Pas dans MRZ TD3
-      result.format = 'TD3';
-      return result;
-    }
-
-    function parseTD1(lines) {
-      const line1 = normalizeLine(lines[0], 30);
-      const line2 = normalizeLine(lines[1], 30);
-      const line3 = normalizeLine(lines[2], 30);
-      const result = { confidence: 0 };
-
-      // Ligne 1 : [0-1] type, [2-4] pays, [5-13] doc number, [14] check, [15-29] optional
-      const rawDocNum = line1.substring(5, 14);
-      const docNumCheck = line1[14];
-      result.docNumber = correctField(rawDocNum, 'XXXXXXXXX').replace(/</g, '').trim();
-
-      // Ligne 2 : [0-5] birth, [6] check, [7] sex, [8-13] expiry, [14] check, [15-29] optional
-      const rawBirth = line2.substring(0, 6);
-      const birthCheck = line2[6];
-      result.birthDate = formatMrzDate(rawBirth);
-
-      result.sex = line2[7];
-
-      const rawExpiry = line2.substring(8, 14);
-      const expiryCheck = line2[14];
-      result.expiryDate = formatMrzDate(rawExpiry);
-
-      // Champ optionnel ligne 2 pos 15-20 : souvent date d'émission sur CNI françaises
-      const optField = line2.substring(15, 21).replace(/</g, '');
-      if (optField.length >= 4 && /^\d+$/.test(correctField(optField, 'DDDDDD'))) {
-        const correctedOpt = correctField(optField.padEnd(6, '0'), 'DDDDDD');
-        result.issueDate = formatMrzDate(correctedOpt);
-      } else {
-        result.issueDate = 'Non détecté';
-      }
-
-      // Ligne 3 : NOM<<PRENOM<<<...
-      const names = extractNames(line3);
-      result.lastName = (names.length >= 1) ? names[0] : 'Non détecté';
-      result.firstName = (names.length >= 2) ? names.slice(1).join(' ') : 'Non détecté';
-
-      result.nationality = line1.substring(2, 5).replace(/</g, '');
-
-      // Scoring
-      if (verifyCheck(rawDocNum, docNumCheck)) result.confidence += 30;
-      if (verifyCheck(rawBirth, birthCheck)) result.confidence += 25;
-      if (verifyCheck(rawExpiry, expiryCheck)) result.confidence += 25;
-      if (result.lastName !== 'Non détecté') result.confidence += 10;
-      if (/^[IACS]/.test(line1[0])) result.confidence += 10;
-
-      result.format = 'TD1';
-      return result;
-    }
-
-    function parseTD2(lines) {
-      const line1 = normalizeLine(lines[0], 36);
-      const line2 = normalizeLine(lines[1], 36);
-      const result = { confidence: 0 };
-
-      // Ligne 1 : [0-1] type, [2-4] pays, [5-35] NOM<<PRENOM
-      const nameSection = line1.substring(5);
-      const names = extractNames(nameSection);
-      result.lastName = (names.length >= 1) ? names[0] : 'Non détecté';
-      result.firstName = (names.length >= 2) ? names.slice(1).join(' ') : 'Non détecté';
-
-      // Ligne 2 : [0-8] doc number, [9] check, [10-12] nationality, [13-18] birth, [19] check, [20] sex, [21-26] expiry, [27] check
-      const rawDocNum = line2.substring(0, 9);
-      const docNumCheck = line2[9];
-      result.docNumber = correctField(rawDocNum, 'XXXXXXXXX').replace(/</g, '').trim();
-
-      const rawBirth = line2.substring(13, 19);
-      const birthCheck = line2[19];
-      result.birthDate = formatMrzDate(rawBirth);
-
-      result.sex = line2[20];
-
-      const rawExpiry = line2.substring(21, 27);
-      const expiryCheck = line2[27];
-      result.expiryDate = formatMrzDate(rawExpiry);
-
-      result.nationality = line2.substring(10, 13).replace(/</g, '');
-      result.issueDate = 'Non détecté';
-
-      // Scoring
-      if (verifyCheck(rawDocNum, docNumCheck)) result.confidence += 30;
-      if (verifyCheck(rawBirth, birthCheck)) result.confidence += 25;
-      if (verifyCheck(rawExpiry, expiryCheck)) result.confidence += 25;
-      if (result.lastName !== 'Non détecté') result.confidence += 10;
-      if (/^[PIACVS]/.test(line1[0])) result.confidence += 10;
-
-      result.format = 'TD2';
-      return result;
-    }
-
-    // --- MOTEUR PRINCIPAL ---
-
-    /**
-     * Parser MRZ INDESTRUCTIBLE.
-     * 1. Détecte les lignes MRZ candidates avec scoring
-     * 2. Tente TOUS les formats (TD1, TD2, TD3) en parallèle
-     * 3. Sélectionne le résultat avec le meilleur score de confiance (checksums ICAO)
-     * 4. Applique des corrections OCR sur chaque champ
-     */
-    function parseMRZ(text) {
-      const rawForDisplay = text.substring(0, 400) + (text.length > 400 ? '...' : '');
-      const candidates = detectMrzLines(text);
-
-      if (candidates.length < 2) {
-        return {
-          lastName: 'Non détecté', firstName: 'Non détecté', docNumber: 'Non détecté',
-          birthDate: 'Non détecté', issueDate: 'Non détecté', expiryDate: 'Non détecté',
-          raw: rawForDisplay
-        };
-      }
-
-      const lines = candidates.map(c => c.line);
-      const allResults = [];
-
-      // Tentative TD3 (2 lignes ≥ 42 chars)
-      for (let i = 0; i < lines.length - 1; i++) {
-        if (lines[i].length >= 40 && lines[i + 1].length >= 40) {
-          try { allResults.push(parseTD3([lines[i], lines[i + 1]])); } catch (e) { }
-        }
-      }
-
-      // Tentative TD1 (3 lignes 28-32 chars)
-      for (let i = 0; i < lines.length - 2; i++) {
-        if (lines[i].length >= 26 && lines[i].length <= 34 &&
-          lines[i + 1].length >= 26 && lines[i + 1].length <= 34 &&
-          lines[i + 2].length >= 26 && lines[i + 2].length <= 34) {
-          try { allResults.push(parseTD1([lines[i], lines[i + 1], lines[i + 2]])); } catch (e) { }
-        }
-      }
-
-      // Tentative TD2 (2 lignes 34-38 chars)
-      for (let i = 0; i < lines.length - 1; i++) {
-        if (lines[i].length >= 32 && lines[i].length <= 40 &&
-          lines[i + 1].length >= 32 && lines[i + 1].length <= 40 &&
-          !(lines[i].length >= 40 && lines[i + 1].length >= 40)) {
-          try { allResults.push(parseTD2([lines[i], lines[i + 1]])); } catch (e) { }
-        }
-      }
-
-      if (allResults.length === 0) {
-        return {
-          lastName: 'Non détecté', firstName: 'Non détecté', docNumber: 'Non détecté',
-          birthDate: 'Non détecté', issueDate: 'Non détecté', expiryDate: 'Non détecté',
-          raw: rawForDisplay
-        };
-      }
-
-      // Sélectionner le meilleur résultat par score de confiance
-      allResults.sort((a, b) => b.confidence - a.confidence);
-      const best = allResults[0];
-
-      // Nettoyage final des noms (supprimer les < résiduels)
-      best.lastName = (best.lastName || '').replace(/</g, '').trim() || 'Non détecté';
-      best.firstName = (best.firstName || '').replace(/</g, '').trim() || 'Non détecté';
-      best.docNumber = (best.docNumber || '').replace(/</g, '').trim() || 'Non détecté';
-      best.raw = rawForDisplay + '\n[Format: ' + (best.format || '?') + ' | Confiance: ' + best.confidence + '%]';
-
-      // Fallback date d'émission depuis le texte brut
-      if (best.issueDate === 'Non détecté') {
-        const issueMatch = text.match(/(?:EMISSION|DELIVR|ISSUED|DATE\s*DE\s*DELIV)[^0-9]*(\d{2}[\./]?\d{2}[\./]?\d{2,4})/i);
-        if (issueMatch) {
-          let d = issueMatch[1].replace(/\./g, '/');
-          if (d.length === 6) d = formatMrzDate(d);
-          best.issueDate = d;
-        }
-      }
-
-      return best;
-    }
-
-    // =========================================================================
-    // MULTI-PASS CONSENSUS ENGINE
-    // Lit la carte N fois, vote caractère par caractère, valide par checksums ICAO
-    // =========================================================================
-
-    const REQUIRED_PASSES = 8;   // Nombre de lectures souhaitées
-    const MIN_PASSES = 3;        // Minimum pour tenter un consensus
-    const CONSENSUS_THRESHOLD = 0.6; // 60% d'accord minimum par caractère
-
-    // Accumulateur de passes : stocke les lignes MRZ détectées à chaque lecture
-    let passAccumulator = [];   // Array de { lines: string[], format: string, timestamp: number }
+    // Accumulateur multi-pass
+    let passAccumulator = [];  // { mrzLine, lastName, firstName, dates[], rawText }
     let lastOcrText = '';
 
     function resetAccumulator() {
@@ -702,13 +349,12 @@
       updateProgressUI(0);
     }
 
-    function updateProgressUI(passCount) {
-      const pct = Math.min(100, Math.round((passCount / REQUIRED_PASSES) * 100));
+    function updateProgressUI(count) {
+      const pct = Math.min(100, Math.round((count / REQUIRED_PASSES) * 100));
       const bar = document.getElementById('scan-progress-bar');
       const counter = document.getElementById('scan-pass-count');
       if (bar) bar.style.width = pct + '%';
-      if (counter) counter.innerText = passCount + '/' + REQUIRED_PASSES;
-      // Couleur de la barre selon la progression
+      if (counter) counter.innerText = count + '/' + REQUIRED_PASSES;
       if (bar) {
         if (pct < 40) bar.className = 'bg-red-500 h-2 rounded-full transition-all duration-300';
         else if (pct < 75) bar.className = 'bg-amber-500 h-2 rounded-full transition-all duration-300';
@@ -716,180 +362,292 @@
       }
     }
 
-    /**
-     * Détecte le format MRZ le plus probable à partir des lignes détectées.
-     * Retourne { format: 'TD1'|'TD2'|'TD3'|null, lines: string[] }
-     */
-    function classifyLines(mrzLines) {
-      if (mrzLines.length === 0) return { format: null, lines: [] };
+    // ===================== CORRECTION OCR =====================
 
-      // Regrouper par longueur similaire (±2 chars)
-      const groups = {};
-      for (const l of mrzLines) {
-        const bucket = Math.round(l.length / 2) * 2; // arrondi pair
-        if (!groups[bucket]) groups[bucket] = [];
-        groups[bucket].push(l);
+    const OCR_TO_DIGIT = { 'O': '0', 'Q': '0', 'D': '0', 'I': '1', 'L': '1', 'Z': '2', 'S': '5', 'G': '6', 'B': '8' };
+    function forceDigit(c) { return /[0-9]/.test(c) ? c : (OCR_TO_DIGIT[c] || c); }
+
+    // ICAO checksum
+    const CK_W = [7, 3, 1];
+    function checkDigit(field) {
+      let t = 0;
+      for (let i = 0; i < field.length; i++) {
+        const c = field[i];
+        let v = 0;
+        if (c >= '0' && c <= '9') v = parseInt(c);
+        else if (c >= 'A' && c <= 'Z') v = c.charCodeAt(0) - 55;
+        t += v * CK_W[i % 3];
       }
+      return (t % 10).toString();
+    }
+    function verifyCheck(field, cd) { return checkDigit(field) === forceDigit(cd); }
 
-      // Trouver le groupe le plus représenté
-      let bestGroup = [];
-      let bestLen = 0;
-      for (const [len, arr] of Object.entries(groups)) {
-        if (arr.length > bestGroup.length) {
-          bestGroup = arr;
-          bestLen = parseInt(len);
-        }
-      }
+    // ===================== DÉTECTION MRZ PERMIS FR =====================
+    // Le permis FR a UNE seule ligne MRZ de 30 chars : D1FRA + 9 doc num + 1 check + 6 expiry + 1 check + padding
+    // Format : D1FRAxxxxxxxxx#yymmdd#<<<<<<<
 
-      if (bestLen >= 40 && bestGroup.length >= 2) return { format: 'TD3', lines: bestGroup.slice(0, 2) };
-      if (bestLen >= 26 && bestLen <= 34 && bestGroup.length >= 3) return { format: 'TD1', lines: bestGroup.slice(0, 3) };
-      if (bestLen >= 32 && bestLen <= 40 && bestGroup.length >= 2) return { format: 'TD2', lines: bestGroup.slice(0, 2) };
-
-      // Fallback : prendre les 2-3 lignes les plus longues
-      const sorted = mrzLines.sort((a, b) => b.length - a.length);
-      if (sorted[0] && sorted[0].length >= 40) return { format: 'TD3', lines: sorted.slice(0, 2) };
-      if (sorted.length >= 3 && sorted[0].length <= 34) return { format: 'TD1', lines: sorted.slice(0, 3) };
-      return { format: 'TD2', lines: sorted.slice(0, 2) };
+    function sanitizeMrz(raw) {
+      return raw.toUpperCase().replace(/[\s.,_\-;:|!`'"~^]+/g, '<').replace(/[^A-Z0-9<]/g, '');
     }
 
     /**
-     * VOTE PAR CARACTÈRE — Le cœur de l'algorithme de correction.
-     * Prend un tableau de strings (même position, passes différentes)
-     * et retourne la string consensus + un score de confiance.
+     * Détecte la ligne MRZ du permis de conduire français.
+     * Cherche un pattern D1FRA ou D1<FRA ou similaire dans le texte OCR.
      */
-    function voteOnStrings(strings) {
-      if (strings.length === 0) return { consensus: '', confidence: 0 };
+    function detectPermisLine(rawText) {
+      const lines = rawText.split(/\n/);
 
-      // Normaliser à la longueur maximale
-      const maxLen = Math.max(...strings.map(s => s.length));
-      const padded = strings.map(s => s.padEnd(maxLen, '<'));
+      for (const raw of lines) {
+        const clean = sanitizeMrz(raw);
 
-      let consensus = '';
-      let totalConfidence = 0;
-
-      for (let pos = 0; pos < maxLen; pos++) {
-        // Compter les votes pour chaque caractère à cette position
-        const votes = {};
-        for (const s of padded) {
-          const c = s[pos] || '<';
-          votes[c] = (votes[c] || 0) + 1;
+        // Chercher D1FRA ou D1<FRA au début
+        if (clean.length >= 26 && /^D[1I][<]?FRA/.test(clean)) {
+          return clean;
         }
+      }
 
-        // Trouver le gagnant
-        let bestChar = '<';
-        let bestCount = 0;
-        for (const [c, count] of Object.entries(votes)) {
-          if (count > bestCount) {
-            bestCount = count;
-            bestChar = c;
+      // Fallback: chercher toute ligne de ~30 chars avec FRA dedans
+      for (const raw of lines) {
+        const clean = sanitizeMrz(raw);
+        if (clean.length >= 26 && clean.length <= 34 && clean.includes('FRA')) {
+          return clean;
+        }
+      }
+
+      return null;
+    }
+
+    /**
+     * Parse la ligne MRZ unique du permis de conduire français.
+     * Structure: D1FRA [doc_number:9] [check:1] [expiry_yymmdd:6] [check:1] [optional]
+     */
+    function parsePermisLine(line) {
+      // Normaliser à 30 chars
+      const norm = (line + '<'.repeat(30)).substring(0, 30);
+      const result = { docNumber: 'Non détecté', expiryDate: 'Non détecté', confidence: 0 };
+
+      // Position 0-1 : D1 (type)
+      // Position 2-4 : FRA (pays)
+      // Position 5-13 : Numéro de document (9 chars)
+      const rawDocNum = norm.substring(5, 14);
+      const docCheck = norm[14];
+      result.docNumber = rawDocNum.replace(/</g, '').trim();
+
+      // Position 15-20 : Date d'expiration YYMMDD
+      const rawExpiry = norm.substring(15, 21);
+      const expiryCheck = norm[21];
+
+      // Correction OCR sur les digits de la date
+      let expCorrected = '';
+      for (let i = 0; i < rawExpiry.length; i++) expCorrected += forceDigit(rawExpiry[i]);
+
+      const yy = expCorrected.substring(0, 2);
+      const mm = expCorrected.substring(2, 4);
+      const dd = expCorrected.substring(4, 6);
+      const mmI = parseInt(mm), ddI = parseInt(dd);
+      if (mmI >= 1 && mmI <= 12 && ddI >= 1 && ddI <= 31) {
+        const century = parseInt(yy) > 50 ? '19' : '20';
+        result.expiryDate = dd + '.' + mm + '.' + century + yy;
+      }
+
+      // Scoring via checksums ICAO
+      if (verifyCheck(rawDocNum, docCheck)) result.confidence += 40;
+      if (verifyCheck(rawExpiry, expiryCheck)) result.confidence += 30;
+      if (/^D[1I]/.test(norm)) result.confidence += 15;
+      if (norm.substring(2, 5).replace(/</g, '') === 'FRA') result.confidence += 15;
+
+      return result;
+    }
+
+    // ===================== EXTRACTION DATES DD.MM.YYYY =====================
+
+    /**
+     * Cherche toutes les dates au format DD.MM.YYYY (ou DD/MM/YYYY, DD-MM-YYYY)
+     * dans le texte OCR du document.
+     */
+    function extractVisibleDates(rawText) {
+      const datePattern = /(\d{2})[.\/-](\d{2})[.\/-](\d{4})/g;
+      const dates = [];
+      let match;
+      while ((match = datePattern.exec(rawText)) !== null) {
+        const dd = match[1], mm = match[2], yyyy = match[3];
+        const mmI = parseInt(mm), ddI = parseInt(dd), yyI = parseInt(yyyy);
+        if (mmI >= 1 && mmI <= 12 && ddI >= 1 && ddI <= 31 && yyI >= 1900 && yyI <= 2100) {
+          dates.push({
+            formatted: dd + '.' + mm + '.' + yyyy,
+            raw: match[0],
+            index: match.index,
+            year: yyI
+          });
+        }
+      }
+      return dates;
+    }
+
+    /**
+     * Assigne les dates trouvées aux bons champs en se basant sur leur position
+     * et leur contexte (labels 3., 4a., 4b. et contenu logique).
+     *
+     * Logique :
+     * - Date de naissance (3.) : la plus ancienne (année la plus petite)
+     * - Date d'émission (4a.) : date intermédiaire
+     * - Date de péremption (4b.) : la plus récente (année la plus grande)
+     *
+     * On cherche aussi les labels explicites "3.", "4a.", "4b." avant les dates.
+     */
+    function assignDates(rawText, dates) {
+      const result = { birthDate: 'Non détecté', issueDate: 'Non détecté', expiryDate: 'Non détecté' };
+      if (dates.length === 0) return result;
+
+      // Tentative par label (chercher "3." / "4a." / "4b." devant les dates)
+      for (const d of dates) {
+        // Regarder les 20 chars avant la date dans le texte brut
+        const before = rawText.substring(Math.max(0, d.index - 20), d.index).toUpperCase();
+
+        if (/3[.\s]*$/.test(before) || /NAISSANCE/.test(before) || /BIRTH/.test(before) || /DATE\s*DE\s*N/.test(before)) {
+          result.birthDate = d.formatted;
+        } else if (/4\s*A[.\s]*$/.test(before) || /4A[.\s]*$/.test(before) || /DELIVR/.test(before) || /ISSUE/.test(before)) {
+          result.issueDate = d.formatted;
+        } else if (/4\s*B[.\s]*$/.test(before) || /4B[.\s]*$/.test(before) || /VALID/.test(before) || /EXPIR/.test(before)) {
+          result.expiryDate = d.formatted;
+        }
+      }
+
+      // Fallback par tri chronologique si les labels n'ont pas fonctionné
+      if (result.birthDate === 'Non détecté' || result.issueDate === 'Non détecté' || result.expiryDate === 'Non détecté') {
+        const sorted = [...dates].sort((a, b) => a.year - b.year);
+        if (sorted.length >= 1 && result.birthDate === 'Non détecté') result.birthDate = sorted[0].formatted;
+        if (sorted.length >= 3 && result.expiryDate === 'Non détecté') result.expiryDate = sorted[sorted.length - 1].formatted;
+        if (sorted.length >= 2 && result.issueDate === 'Non détecté') {
+          // Date d'émission = celle entre naissance et péremption
+          result.issueDate = sorted[Math.floor(sorted.length / 2)].formatted;
+        }
+      }
+
+      return result;
+    }
+
+    // ===================== EXTRACTION NOM / PRÉNOM =====================
+
+    /**
+     * Extrait le nom et le prénom depuis le texte visible du document.
+     * Cherche les labels "1." et "2." suivis du texte correspondant.
+     * Sur un permis FR:
+     *   1. NOM (sur la ligne après "1." ou "1")
+     *   2. PRÉNOM (sur la ligne après "2." ou "2")
+     */
+    function extractNameFields(rawText) {
+      const result = { lastName: 'Non détecté', firstName: 'Non détecté' };
+      const lines = rawText.split(/\n/).map(l => l.trim());
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].toUpperCase();
+
+        // Chercher "1." ou "1 " suivi d'un nom
+        const matchNom = line.match(/^1[.\s]+([A-Z\s\-']+)/);
+        if (matchNom && matchNom[1].trim().length >= 2) {
+          result.lastName = matchNom[1].trim();
+          continue;
+        }
+        // Si la ligne est juste "1" ou "1.", vérifier la ligne suivante
+        if (/^1[.\s]*$/.test(line) && i + 1 < lines.length) {
+          const next = lines[i + 1].trim().toUpperCase();
+          if (next.length >= 2 && /^[A-Z\s\-']+$/.test(next)) {
+            result.lastName = next;
           }
         }
 
-        consensus += bestChar;
-        totalConfidence += bestCount / padded.length;
+        // Chercher "2." ou "2 " suivi d'un prénom
+        const matchPrenom = line.match(/^2[.\s]+([A-Z\s\-']+)/);
+        if (matchPrenom && matchPrenom[1].trim().length >= 2) {
+          result.firstName = matchPrenom[1].trim();
+          continue;
+        }
+        if (/^2[.\s]*$/.test(line) && i + 1 < lines.length) {
+          const next = lines[i + 1].trim().toUpperCase();
+          if (next.length >= 2 && /^[A-Z\s\-']+$/.test(next)) {
+            result.firstName = next;
+          }
+        }
       }
 
-      return {
-        consensus: consensus,
-        confidence: maxLen > 0 ? Math.round((totalConfidence / maxLen) * 100) : 0
-      };
+      return result;
     }
 
-    /**
-     * Moteur de Consensus Multi-Pass.
-     * Prend toutes les passes accumulées et produit le resultat final.
-     */
+    // ===================== VOTE PAR CARACTÈRE (CONSENSUS) =====================
+
+    function voteOnStrings(strings) {
+      if (strings.length === 0) return '';
+      const maxLen = Math.max(...strings.map(s => s.length));
+      const padded = strings.map(s => s.padEnd(maxLen, ' '));
+      let consensus = '';
+      for (let pos = 0; pos < maxLen; pos++) {
+        const votes = {};
+        for (const s of padded) { const c = s[pos]; votes[c] = (votes[c] || 0) + 1; }
+        let best = ' ', bestN = 0;
+        for (const [c, n] of Object.entries(votes)) { if (n > bestN) { best = c; bestN = n; } }
+        consensus += best;
+      }
+      return consensus.trim();
+    }
+
+    function voteDateField(passes, fieldName) {
+      const candidates = passes.map(p => p[fieldName]).filter(d => d && d !== 'Non détecté');
+      if (candidates.length === 0) return 'Non détecté';
+      // Vote par date entière (majorité)
+      const votes = {};
+      for (const d of candidates) votes[d] = (votes[d] || 0) + 1;
+      let best = 'Non détecté', bestN = 0;
+      for (const [d, n] of Object.entries(votes)) { if (n > bestN) { best = d; bestN = n; } }
+      return best;
+    }
+
+    // ===================== CONSENSUS MULTI-PASS =====================
+
     function buildConsensus() {
       if (passAccumulator.length < MIN_PASSES) return null;
 
-      // 1. Déterminer le format dominant
-      const formatVotes = {};
-      for (const pass of passAccumulator) {
-        if (pass.format) formatVotes[pass.format] = (formatVotes[pass.format] || 0) + 1;
-      }
-      let dominantFormat = null;
-      let maxVotes = 0;
-      for (const [fmt, count] of Object.entries(formatVotes)) {
-        if (count > maxVotes) { dominantFormat = fmt; maxVotes = count; }
+      // Vote sur la ligne MRZ
+      const mrzVariants = passAccumulator.map(p => p.mrzLine).filter(Boolean);
+      let mrzResult = { docNumber: 'Non détecté', expiryDate: 'Non détecté', confidence: 0 };
+      if (mrzVariants.length >= 2) {
+        const consensusMrz = voteOnStrings(mrzVariants);
+        mrzResult = parsePermisLine(consensusMrz);
       }
 
-      if (!dominantFormat) return null;
+      // Vote sur le nom et prénom
+      const lastNames = passAccumulator.map(p => p.lastName).filter(n => n && n !== 'Non détecté');
+      const firstNames = passAccumulator.map(p => p.firstName).filter(n => n && n !== 'Non détecté');
+      const lastName = lastNames.length > 0 ? voteOnStrings(lastNames) : 'Non détecté';
+      const firstName = firstNames.length > 0 ? voteOnStrings(firstNames) : 'Non détecté';
 
-      // 2. Filtrer les passes du format dominant
-      const relevantPasses = passAccumulator.filter(p => p.format === dominantFormat);
-      if (relevantPasses.length < MIN_PASSES) return null;
+      // Vote sur les dates
+      const birthDate = voteDateField(passAccumulator, 'birthDate');
+      const issueDate = voteDateField(passAccumulator, 'issueDate');
+      let expiryDate = voteDateField(passAccumulator, 'expiryDate');
 
-      // 3. Déterminer le nombre de lignes attendues
-      const expectedLines = dominantFormat === 'TD1' ? 3 : 2;
-
-      // 4. Pour chaque ligne, voter caractère par caractère
-      const consensusLines = [];
-      let globalConfidence = 0;
-
-      for (let lineIdx = 0; lineIdx < expectedLines; lineIdx++) {
-        const lineVariants = relevantPasses
-          .map(p => p.lines[lineIdx])
-          .filter(l => l && l.length > 0);
-
-        if (lineVariants.length === 0) return null;
-
-        const { consensus, confidence } = voteOnStrings(lineVariants);
-        consensusLines.push(consensus);
-        globalConfidence += confidence;
+      // Cross-référence date d'expiration : préférer celle de la MRZ si elle est validée par checksum
+      if (mrzResult.expiryDate !== 'Non détecté' && mrzResult.confidence >= 30) {
+        expiryDate = mrzResult.expiryDate;
       }
 
-      globalConfidence = Math.round(globalConfidence / expectedLines);
+      const raw = 'MRZ consensus: ' + (mrzVariants.length > 0 ? voteOnStrings(mrzVariants) : 'aucune') +
+        '\nPasses: ' + passAccumulator.length +
+        '\nMRZ confiance ICAO: ' + mrzResult.confidence + '%';
 
-      // 5. Parser le consensus selon le format
-      let parsed;
-      try {
-        if (dominantFormat === 'TD3') parsed = parseTD3(consensusLines);
-        else if (dominantFormat === 'TD1') parsed = parseTD1(consensusLines);
-        else parsed = parseTD2(consensusLines);
-      } catch (e) {
-        return null;
-      }
-
-      if (!parsed) return null;
-
-      // 6. Enrichir avec les méta-données du consensus
-      parsed.consensusConfidence = globalConfidence;
-      parsed.passCount = relevantPasses.length;
-      parsed.format = dominantFormat;
-
-      // 7. Score global = (ICAO checksum confidence + consensus confidence) / 2
-      parsed.confidence = Math.round(((parsed.confidence || 0) + globalConfidence) / 2);
-
-      // 8. Nettoyage final
-      parsed.lastName = (parsed.lastName || '').replace(/</g, '').trim() || 'Non détecté';
-      parsed.firstName = (parsed.firstName || '').replace(/</g, '').trim() || 'Non détecté';
-      parsed.docNumber = (parsed.docNumber || '').replace(/</g, '').trim() || 'Non détecté';
-
-      parsed.raw = consensusLines.join('\n') +
-        '\n\n[Format: ' + dominantFormat +
-        ' | Passes: ' + relevantPasses.length +
-        ' | Consensus: ' + globalConfidence + '%' +
-        ' | ICAO: ' + (parsed.confidence || 0) + '%]';
-
-      // Fallback date d'émission
-      if (parsed.issueDate === 'Non détecté') {
-        for (const pass of passAccumulator) {
-          if (pass.rawText) {
-            const issueMatch = pass.rawText.match(/(?:EMISSION|DELIVR|ISSUED|DATE\s*DE\s*DELIV)[^0-9]*(\d{2}[\./]?\d{2}[\./]?\d{2,4})/i);
-            if (issueMatch) {
-              let d = issueMatch[1].replace(/\./g, '/');
-              if (d.length === 6) d = formatMrzDate(d);
-              parsed.issueDate = d;
-              break;
-            }
-          }
-        }
-      }
-
-      return parsed;
+      return {
+        docNumber: mrzResult.docNumber || 'Non détecté',
+        lastName: lastName,
+        firstName: firstName,
+        birthDate: birthDate,
+        issueDate: issueDate,
+        expiryDate: expiryDate,
+        confidence: mrzResult.confidence,
+        raw: raw
+      };
     }
 
-    // --- BOUCLE D'INFÉRENCE MULTI-PASS ---
+    // ===================== BOUCLE D'INFÉRENCE =====================
 
     async function inferenceLoop() {
       if (!video.srcObject || video.paused || video.ended) return;
@@ -899,119 +657,123 @@
         scanAttempts++;
         const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
-        const captureW = video.videoWidth * 0.9;
-        const captureH = video.videoHeight * 0.4;
-        const startX = (video.videoWidth - captureW) / 2;
-        const startY = (video.videoHeight - captureH) / 2;
-
-        canvas.width = captureW;
-        canvas.height = captureH;
-
-        ctx.filter = 'contrast(1.8) grayscale(1)';
-        ctx.drawImage(video, startX, startY, captureW, captureH, 0, 0, captureW, captureH);
+        // Capturer le cadre COMPLET (pas juste le centre !) pour lire le document entier
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        ctx.filter = 'contrast(1.6) grayscale(1)';
+        ctx.drawImage(video, 0, 0);
         ctx.filter = 'none';
 
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
 
         try {
-          scanFeedback.innerText = "Lecture " + scanAttempts + "...";
+          scanFeedback.innerText = 'Lecture ' + scanAttempts + '...';
           const { data: { text } } = await ocrWorker.recognize(dataUrl);
-          const rawText = text.toUpperCase();
+          const rawText = text;
           lastOcrText = rawText;
 
           // Debug
           const debugEl = document.getElementById('scan-debug');
-          if (debugEl) debugEl.innerText = rawText.replace(/\n/g, ' | ').substring(0, 100);
+          if (debugEl) debugEl.innerText = rawText.replace(/\n/g, ' | ').substring(0, 120);
 
-          // Détecter les lignes MRZ dans ce pass
-          const candidates = detectMrzLines(rawText);
-          if (candidates.length >= 2) {
-            const lineTexts = candidates.map(c => c.line);
-            const classified = classifyLines(lineTexts);
+          // 1. Chercher la ligne MRZ
+          const mrzLine = detectPermisLine(rawText);
 
-            if (classified.format) {
-              passAccumulator.push({
-                lines: classified.lines,
-                format: classified.format,
-                timestamp: Date.now(),
-                rawText: rawText
-              });
+          // 2. Extraire les noms visibles
+          const names = extractNameFields(rawText);
 
-              updateProgressUI(passAccumulator.length);
-              scanFeedback.innerText = "MRZ détectée ! Lecture " + passAccumulator.length + "/" + REQUIRED_PASSES;
+          // 3. Extraire les dates visibles DD.MM.YYYY
+          const visibleDates = extractVisibleDates(rawText);
+          const datesAssigned = assignDates(rawText, visibleDates);
 
-              // Vérifier si on a assez de passes pour un consensus
-              if (passAccumulator.length >= REQUIRED_PASSES) {
-                const result = buildConsensus();
-                if (result && result.docNumber !== 'Non détecté') {
-                  showResult(result);
-                  return;
-                }
+          // Stocker ce pass
+          const hasUsefulData = (mrzLine !== null) || (names.lastName !== 'Non détecté') || (visibleDates.length > 0);
+
+          if (hasUsefulData) {
+            passAccumulator.push({
+              mrzLine: mrzLine,
+              lastName: names.lastName,
+              firstName: names.firstName,
+              birthDate: datesAssigned.birthDate,
+              issueDate: datesAssigned.issueDate,
+              expiryDate: datesAssigned.expiryDate,
+              rawText: rawText
+            });
+
+            updateProgressUI(passAccumulator.length);
+            scanFeedback.innerText = 'Données détectées ! ' + passAccumulator.length + '/' + REQUIRED_PASSES;
+
+            // Auto-finaliser si assez de passes
+            if (passAccumulator.length >= REQUIRED_PASSES) {
+              const result = buildConsensus();
+              if (result && (result.docNumber !== 'Non détecté' || result.lastName !== 'Non détecté')) {
+                showResult(result);
+                return;
               }
             }
           } else {
-            scanFeedback.innerText = "Pas de MRZ... (" + passAccumulator.length + " lectures stockées)";
+            scanFeedback.innerText = 'Pas de données... (' + passAccumulator.length + ' lectures)';
           }
 
         } catch (e) {
-          console.error("Erreur OCR:", e);
+          console.error('OCR Error:', e);
         } finally {
           isRecognizing = false;
         }
       }
 
-      // Intervalle adapté : plus rapide si on a déjà des lectures
       const interval = passAccumulator.length > 0 ? 1000 : 1500;
       inferenceTimeout = setTimeout(inferenceLoop, interval);
     }
 
-    /** Forcer la finalisation avec les passes déjà accumulées */
+    /** Forcer le résultat avec les passes accumulées */
     function forceFinalize() {
-      if (passAccumulator.length >= MIN_PASSES) {
+      if (passAccumulator.length >= 1) {
         const result = buildConsensus();
         if (result) {
           showResult(result);
           return;
         }
       }
-      // Si pas assez de passes, faire une capture manuelle complète
+      // Fallback capture manuelle
       manualCapture();
     }
 
-    /** Capture manuelle complète (full frame) */
+    /** Capture manuelle plein cadre */
     async function manualCapture() {
       if (!ocrWorker) return;
-
       const ctx = canvas.getContext('2d', { willReadFrequently: true });
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
-      ctx.filter = 'contrast(1.8) grayscale(1)';
+      ctx.filter = 'contrast(1.6) grayscale(1)';
       ctx.drawImage(video, 0, 0);
       ctx.filter = 'none';
 
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
-      scanFeedback.innerText = "Capture complète...";
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+      scanFeedback.innerText = 'Capture complète...';
 
       try {
         const { data: { text } } = await ocrWorker.recognize(dataUrl);
-        const rawText = text.toUpperCase();
-        const parsed = parseMRZ(rawText);
+        const rawText = text;
 
-        if (parsed.docNumber !== 'Non détecté') {
-          showResult(parsed);
-        } else {
-          stopCamera();
-          document.getElementById('res-docnumber').innerText = 'Aucun MRZ détecté';
-          document.getElementById('res-lastname').innerText = '-';
-          document.getElementById('res-firstname').innerText = '-';
-          document.getElementById('res-birthdate').innerText = '-';
-          document.getElementById('res-issuedate').innerText = '-';
-          document.getElementById('res-expirydate').innerText = '-';
-          document.getElementById('res-raw').innerText = rawText;
-          switchView('result');
-        }
+        // Extraction directe
+        const mrzLine = detectPermisLine(rawText);
+        const mrzResult = mrzLine ? parsePermisLine(mrzLine) : { docNumber: 'Non détecté', expiryDate: 'Non détecté', confidence: 0 };
+        const names = extractNameFields(rawText);
+        const dates = extractVisibleDates(rawText);
+        const datesAssigned = assignDates(rawText, dates);
+
+        stopCamera();
+        document.getElementById('res-docnumber').innerText = mrzResult.docNumber;
+        document.getElementById('res-lastname').innerText = names.lastName;
+        document.getElementById('res-firstname').innerText = names.firstName;
+        document.getElementById('res-birthdate').innerText = datesAssigned.birthDate;
+        document.getElementById('res-issuedate').innerText = datesAssigned.issueDate;
+        document.getElementById('res-expirydate').innerText = datesAssigned.expiryDate || mrzResult.expiryDate;
+        document.getElementById('res-raw').innerText = rawText;
+        switchView('result');
       } catch (e) {
-        scanFeedback.innerText = "Erreur: " + e.message;
+        scanFeedback.innerText = 'Erreur: ' + e.message;
       }
     }
 
