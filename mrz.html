@@ -109,18 +109,26 @@
       </div>
     </div>
 
-    <div class="absolute bottom-10 left-0 w-full px-8 space-y-4">
-      <div class="bg-slate-900/90 backdrop-blur-xl p-4 rounded-2xl border border-slate-800 text-center">
-        <p id="scan-feedback" class="text-sm font-medium animate-pulse">Démarrage du flux vidéo...</p>
-        <p id="scan-debug" class="text-[10px] font-mono text-slate-600 mt-1"></p>
+    <div class="absolute bottom-6 left-0 w-full px-6 space-y-3">
+      <!-- Barre de progression multi-pass -->
+      <div class="bg-slate-900/90 backdrop-blur-xl p-4 rounded-2xl border border-slate-800">
+        <div class="flex items-center justify-between mb-2">
+          <p id="scan-feedback" class="text-sm font-medium">Démarrage...</p>
+          <span id="scan-pass-count" class="text-xs font-mono text-blue-400">0/8</span>
+        </div>
+        <div class="w-full bg-slate-700 rounded-full h-2 overflow-hidden">
+          <div id="scan-progress-bar" class="bg-blue-500 h-2 rounded-full transition-all duration-300"
+            style="width: 0%"></div>
+        </div>
+        <p id="scan-debug" class="text-[10px] font-mono text-slate-600 mt-2 truncate"></p>
       </div>
       <div class="flex gap-3">
-        <button onclick="manualCapture()"
-          class="flex-1 bg-blue-600/80 backdrop-blur-md py-4 rounded-xl font-bold border border-blue-500/30">
-          📸 Capturer manuellement
+        <button onclick="forceFinalize()"
+          class="flex-1 bg-emerald-600/80 backdrop-blur-md py-3.5 rounded-xl font-bold border border-emerald-500/30 text-sm">
+          ✅ Forcer le résultat
         </button>
         <button onclick="cancelScan()"
-          class="flex-1 bg-white/10 backdrop-blur-md py-4 rounded-xl font-bold border border-white/10">
+          class="flex-1 bg-white/10 backdrop-blur-md py-3.5 rounded-xl font-bold border border-white/10 text-sm">
           Annuler
         </button>
       </div>
@@ -285,6 +293,7 @@
       switchView('scanning');
       scanFeedback.innerText = "Démarrage caméra...";
       isRecognizing = false;
+      resetAccumulator();
 
       const constraints = {
         video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }
@@ -313,6 +322,7 @@
 
     function cancelScan() {
       stopCamera();
+      resetAccumulator();
       switchView('ready');
     }
 
@@ -673,8 +683,213 @@
       return best;
     }
 
-    // --- 3. BOUCLE D'INFÉRENCE OCR ---
-    let lastOcrText = ''; // Pour debug
+    // =========================================================================
+    // MULTI-PASS CONSENSUS ENGINE
+    // Lit la carte N fois, vote caractère par caractère, valide par checksums ICAO
+    // =========================================================================
+
+    const REQUIRED_PASSES = 8;   // Nombre de lectures souhaitées
+    const MIN_PASSES = 3;        // Minimum pour tenter un consensus
+    const CONSENSUS_THRESHOLD = 0.6; // 60% d'accord minimum par caractère
+
+    // Accumulateur de passes : stocke les lignes MRZ détectées à chaque lecture
+    let passAccumulator = [];   // Array de { lines: string[], format: string, timestamp: number }
+    let lastOcrText = '';
+
+    function resetAccumulator() {
+      passAccumulator = [];
+      scanAttempts = 0;
+      updateProgressUI(0);
+    }
+
+    function updateProgressUI(passCount) {
+      const pct = Math.min(100, Math.round((passCount / REQUIRED_PASSES) * 100));
+      const bar = document.getElementById('scan-progress-bar');
+      const counter = document.getElementById('scan-pass-count');
+      if (bar) bar.style.width = pct + '%';
+      if (counter) counter.innerText = passCount + '/' + REQUIRED_PASSES;
+      // Couleur de la barre selon la progression
+      if (bar) {
+        if (pct < 40) bar.className = 'bg-red-500 h-2 rounded-full transition-all duration-300';
+        else if (pct < 75) bar.className = 'bg-amber-500 h-2 rounded-full transition-all duration-300';
+        else bar.className = 'bg-emerald-500 h-2 rounded-full transition-all duration-300';
+      }
+    }
+
+    /**
+     * Détecte le format MRZ le plus probable à partir des lignes détectées.
+     * Retourne { format: 'TD1'|'TD2'|'TD3'|null, lines: string[] }
+     */
+    function classifyLines(mrzLines) {
+      if (mrzLines.length === 0) return { format: null, lines: [] };
+
+      // Regrouper par longueur similaire (±2 chars)
+      const groups = {};
+      for (const l of mrzLines) {
+        const bucket = Math.round(l.length / 2) * 2; // arrondi pair
+        if (!groups[bucket]) groups[bucket] = [];
+        groups[bucket].push(l);
+      }
+
+      // Trouver le groupe le plus représenté
+      let bestGroup = [];
+      let bestLen = 0;
+      for (const [len, arr] of Object.entries(groups)) {
+        if (arr.length > bestGroup.length) {
+          bestGroup = arr;
+          bestLen = parseInt(len);
+        }
+      }
+
+      if (bestLen >= 40 && bestGroup.length >= 2) return { format: 'TD3', lines: bestGroup.slice(0, 2) };
+      if (bestLen >= 26 && bestLen <= 34 && bestGroup.length >= 3) return { format: 'TD1', lines: bestGroup.slice(0, 3) };
+      if (bestLen >= 32 && bestLen <= 40 && bestGroup.length >= 2) return { format: 'TD2', lines: bestGroup.slice(0, 2) };
+
+      // Fallback : prendre les 2-3 lignes les plus longues
+      const sorted = mrzLines.sort((a, b) => b.length - a.length);
+      if (sorted[0] && sorted[0].length >= 40) return { format: 'TD3', lines: sorted.slice(0, 2) };
+      if (sorted.length >= 3 && sorted[0].length <= 34) return { format: 'TD1', lines: sorted.slice(0, 3) };
+      return { format: 'TD2', lines: sorted.slice(0, 2) };
+    }
+
+    /**
+     * VOTE PAR CARACTÈRE — Le cœur de l'algorithme de correction.
+     * Prend un tableau de strings (même position, passes différentes)
+     * et retourne la string consensus + un score de confiance.
+     */
+    function voteOnStrings(strings) {
+      if (strings.length === 0) return { consensus: '', confidence: 0 };
+
+      // Normaliser à la longueur maximale
+      const maxLen = Math.max(...strings.map(s => s.length));
+      const padded = strings.map(s => s.padEnd(maxLen, '<'));
+
+      let consensus = '';
+      let totalConfidence = 0;
+
+      for (let pos = 0; pos < maxLen; pos++) {
+        // Compter les votes pour chaque caractère à cette position
+        const votes = {};
+        for (const s of padded) {
+          const c = s[pos] || '<';
+          votes[c] = (votes[c] || 0) + 1;
+        }
+
+        // Trouver le gagnant
+        let bestChar = '<';
+        let bestCount = 0;
+        for (const [c, count] of Object.entries(votes)) {
+          if (count > bestCount) {
+            bestCount = count;
+            bestChar = c;
+          }
+        }
+
+        consensus += bestChar;
+        totalConfidence += bestCount / padded.length;
+      }
+
+      return {
+        consensus: consensus,
+        confidence: maxLen > 0 ? Math.round((totalConfidence / maxLen) * 100) : 0
+      };
+    }
+
+    /**
+     * Moteur de Consensus Multi-Pass.
+     * Prend toutes les passes accumulées et produit le resultat final.
+     */
+    function buildConsensus() {
+      if (passAccumulator.length < MIN_PASSES) return null;
+
+      // 1. Déterminer le format dominant
+      const formatVotes = {};
+      for (const pass of passAccumulator) {
+        if (pass.format) formatVotes[pass.format] = (formatVotes[pass.format] || 0) + 1;
+      }
+      let dominantFormat = null;
+      let maxVotes = 0;
+      for (const [fmt, count] of Object.entries(formatVotes)) {
+        if (count > maxVotes) { dominantFormat = fmt; maxVotes = count; }
+      }
+
+      if (!dominantFormat) return null;
+
+      // 2. Filtrer les passes du format dominant
+      const relevantPasses = passAccumulator.filter(p => p.format === dominantFormat);
+      if (relevantPasses.length < MIN_PASSES) return null;
+
+      // 3. Déterminer le nombre de lignes attendues
+      const expectedLines = dominantFormat === 'TD1' ? 3 : 2;
+
+      // 4. Pour chaque ligne, voter caractère par caractère
+      const consensusLines = [];
+      let globalConfidence = 0;
+
+      for (let lineIdx = 0; lineIdx < expectedLines; lineIdx++) {
+        const lineVariants = relevantPasses
+          .map(p => p.lines[lineIdx])
+          .filter(l => l && l.length > 0);
+
+        if (lineVariants.length === 0) return null;
+
+        const { consensus, confidence } = voteOnStrings(lineVariants);
+        consensusLines.push(consensus);
+        globalConfidence += confidence;
+      }
+
+      globalConfidence = Math.round(globalConfidence / expectedLines);
+
+      // 5. Parser le consensus selon le format
+      let parsed;
+      try {
+        if (dominantFormat === 'TD3') parsed = parseTD3(consensusLines);
+        else if (dominantFormat === 'TD1') parsed = parseTD1(consensusLines);
+        else parsed = parseTD2(consensusLines);
+      } catch (e) {
+        return null;
+      }
+
+      if (!parsed) return null;
+
+      // 6. Enrichir avec les méta-données du consensus
+      parsed.consensusConfidence = globalConfidence;
+      parsed.passCount = relevantPasses.length;
+      parsed.format = dominantFormat;
+
+      // 7. Score global = (ICAO checksum confidence + consensus confidence) / 2
+      parsed.confidence = Math.round(((parsed.confidence || 0) + globalConfidence) / 2);
+
+      // 8. Nettoyage final
+      parsed.lastName = (parsed.lastName || '').replace(/</g, '').trim() || 'Non détecté';
+      parsed.firstName = (parsed.firstName || '').replace(/</g, '').trim() || 'Non détecté';
+      parsed.docNumber = (parsed.docNumber || '').replace(/</g, '').trim() || 'Non détecté';
+
+      parsed.raw = consensusLines.join('\n') +
+        '\n\n[Format: ' + dominantFormat +
+        ' | Passes: ' + relevantPasses.length +
+        ' | Consensus: ' + globalConfidence + '%' +
+        ' | ICAO: ' + (parsed.confidence || 0) + '%]';
+
+      // Fallback date d'émission
+      if (parsed.issueDate === 'Non détecté') {
+        for (const pass of passAccumulator) {
+          if (pass.rawText) {
+            const issueMatch = pass.rawText.match(/(?:EMISSION|DELIVR|ISSUED|DATE\s*DE\s*DELIV)[^0-9]*(\d{2}[\./]?\d{2}[\./]?\d{2,4})/i);
+            if (issueMatch) {
+              let d = issueMatch[1].replace(/\./g, '/');
+              if (d.length === 6) d = formatMrzDate(d);
+              parsed.issueDate = d;
+              break;
+            }
+          }
+        }
+      }
+
+      return parsed;
+    }
+
+    // --- BOUCLE D'INFÉRENCE MULTI-PASS ---
 
     async function inferenceLoop() {
       if (!video.srcObject || video.paused || video.ended) return;
@@ -684,7 +899,6 @@
         scanAttempts++;
         const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
-        // Cadrage central de capture
         const captureW = video.videoWidth * 0.9;
         const captureH = video.videoHeight * 0.4;
         const startX = (video.videoWidth - captureW) / 2;
@@ -693,7 +907,6 @@
         canvas.width = captureW;
         canvas.height = captureH;
 
-        // Amélioration contraste de l'image
         ctx.filter = 'contrast(1.8) grayscale(1)';
         ctx.drawImage(video, startX, startY, captureW, captureH, 0, 0, captureW, captureH);
         ctx.filter = 'none';
@@ -701,36 +914,71 @@
         const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
 
         try {
-          scanFeedback.innerText = "Analyse en cours... (" + scanAttempts + ")";
+          scanFeedback.innerText = "Lecture " + scanAttempts + "...";
           const { data: { text } } = await ocrWorker.recognize(dataUrl);
           const rawText = text.toUpperCase();
           lastOcrText = rawText;
 
-          // Afficher les 80 premiers chars du texte brut OCR pour débug
+          // Debug
           const debugEl = document.getElementById('scan-debug');
-          if (debugEl) {
-            debugEl.innerText = 'OCR: ' + rawText.replace(/\n/g, ' | ').substring(0, 100);
+          if (debugEl) debugEl.innerText = rawText.replace(/\n/g, ' | ').substring(0, 100);
+
+          // Détecter les lignes MRZ dans ce pass
+          const candidates = detectMrzLines(rawText);
+          if (candidates.length >= 2) {
+            const lineTexts = candidates.map(c => c.line);
+            const classified = classifyLines(lineTexts);
+
+            if (classified.format) {
+              passAccumulator.push({
+                lines: classified.lines,
+                format: classified.format,
+                timestamp: Date.now(),
+                rawText: rawText
+              });
+
+              updateProgressUI(passAccumulator.length);
+              scanFeedback.innerText = "MRZ détectée ! Lecture " + passAccumulator.length + "/" + REQUIRED_PASSES;
+
+              // Vérifier si on a assez de passes pour un consensus
+              if (passAccumulator.length >= REQUIRED_PASSES) {
+                const result = buildConsensus();
+                if (result && result.docNumber !== 'Non détecté') {
+                  showResult(result);
+                  return;
+                }
+              }
+            }
+          } else {
+            scanFeedback.innerText = "Pas de MRZ... (" + passAccumulator.length + " lectures stockées)";
           }
 
-          // Toujours tenter le parsing (le moteur gère le scoring lui-même)
-          const parsed = parseMRZ(rawText);
-          // Accepter si un doc number valide ET confiance ≥ 20 (abaissé pour tolérer les erreurs OCR)
-          if (parsed && parsed.docNumber !== 'Non détecté' && (parsed.confidence || 0) >= 20) {
-            showResult(parsed);
-            return;
-          }
         } catch (e) {
           console.error("Erreur OCR:", e);
         } finally {
           isRecognizing = false;
-          scanFeedback.innerText = "Alignez le MRZ... (" + scanAttempts + " scans)";
         }
       }
 
-      inferenceTimeout = setTimeout(inferenceLoop, 1500);
+      // Intervalle adapté : plus rapide si on a déjà des lectures
+      const interval = passAccumulator.length > 0 ? 1000 : 1500;
+      inferenceTimeout = setTimeout(inferenceLoop, interval);
     }
 
-    /** Capture manuelle : force un parsing sur la frame actuelle et affiche le résultat brut. */
+    /** Forcer la finalisation avec les passes déjà accumulées */
+    function forceFinalize() {
+      if (passAccumulator.length >= MIN_PASSES) {
+        const result = buildConsensus();
+        if (result) {
+          showResult(result);
+          return;
+        }
+      }
+      // Si pas assez de passes, faire une capture manuelle complète
+      manualCapture();
+    }
+
+    /** Capture manuelle complète (full frame) */
     async function manualCapture() {
       if (!ocrWorker) return;
 
@@ -742,18 +990,16 @@
       ctx.filter = 'none';
 
       const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
-      scanFeedback.innerText = "Capture manuelle...";
+      scanFeedback.innerText = "Capture complète...";
 
       try {
         const { data: { text } } = await ocrWorker.recognize(dataUrl);
         const rawText = text.toUpperCase();
         const parsed = parseMRZ(rawText);
 
-        // Forcer l'affichage même si la confiance est basse
         if (parsed.docNumber !== 'Non détecté') {
           showResult(parsed);
         } else {
-          // Afficher le texte brut sur l'écran résultat pour diagnostic
           stopCamera();
           document.getElementById('res-docnumber').innerText = 'Aucun MRZ détecté';
           document.getElementById('res-lastname').innerText = '-';
@@ -765,11 +1011,11 @@
           switchView('result');
         }
       } catch (e) {
-        scanFeedback.innerText = "Erreur capture: " + e.message;
+        scanFeedback.innerText = "Erreur: " + e.message;
       }
     }
 
-    // --- 4. AFFICHAGE ---
+    // --- AFFICHAGE ---
     function showResult(data) {
       stopCamera();
       document.getElementById('res-docnumber').innerText = data.docNumber;
