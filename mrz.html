@@ -153,6 +153,30 @@
           </div>
         </div>
 
+        <div class="grid grid-cols-3 gap-4">
+          <div class="space-y-1">
+            <label class="text-[10px] uppercase font-black text-slate-500 tracking-tighter">Date de Naissance</label>
+            <div class="flex items-center gap-2 bg-black/30 p-3 rounded-xl border border-white/5">
+              <span class="material-symbols-outlined text-amber-400" style="font-size: 1.125rem;">cake</span>
+              <span id="res-birthdate" class="font-bold text-sm"></span>
+            </div>
+          </div>
+          <div class="space-y-1">
+            <label class="text-[10px] uppercase font-black text-slate-500 tracking-tighter">Émission</label>
+            <div class="flex items-center gap-2 bg-black/30 p-3 rounded-xl border border-white/5">
+              <span class="material-symbols-outlined text-green-400" style="font-size: 1.125rem;">event_available</span>
+              <span id="res-issuedate" class="font-bold text-sm"></span>
+            </div>
+          </div>
+          <div class="space-y-1">
+            <label class="text-[10px] uppercase font-black text-slate-500 tracking-tighter">Péremption</label>
+            <div class="flex items-center gap-2 bg-black/30 p-3 rounded-xl border border-white/5">
+              <span class="material-symbols-outlined text-red-400" style="font-size: 1.125rem;">event_busy</span>
+              <span id="res-expirydate" class="font-bold text-sm"></span>
+            </div>
+          </div>
+        </div>
+
         <div class="pt-4">
           <label class="text-[10px] uppercase font-black text-slate-500 tracking-tighter">Sortie brute OCR</label>
           <div id="res-raw"
@@ -334,35 +358,125 @@
       document.getElementById('res-docnumber').innerText = data.docNumber;
       document.getElementById('res-lastname').innerText = data.lastName;
       document.getElementById('res-firstname').innerText = data.firstName;
+      document.getElementById('res-birthdate').innerText = data.birthDate;
+      document.getElementById('res-issuedate').innerText = data.issueDate;
+      document.getElementById('res-expirydate').innerText = data.expiryDate;
       document.getElementById('res-raw').innerText = data.raw;
       switchView('result');
     }
 
+    /**
+     * Convertit une date MRZ (AAMMJJ) en format lisible JJ/MM/AAAA.
+     * Gère le siècle automatiquement (> 50 => 19xx, sinon 20xx).
+     */
+    function formatMrzDate(raw) {
+      if (!raw || raw.length !== 6) return 'N/A';
+      const yy = raw.substring(0, 2);
+      const mm = raw.substring(2, 4);
+      const dd = raw.substring(4, 6);
+      const century = parseInt(yy) > 50 ? '19' : '20';
+      return `${dd}/${mm}/${century}${yy}`;
+    }
+
+    /**
+     * Parse les lignes MRZ standards (TD1 3 lignes / TD2 2 lignes / TD3 Passeport 2 lignes).
+     * Extrait : Nom, Prénom, N° Document, Date Naissance, Date Émission, Date Péremption.
+     */
     function parseMRZ(text) {
-      // Nettoyage classique des artefacts OCR
-      let clean = text.replace(/NICQLAS/g, 'NICOLAS').replace(/2089/g, '2039').replace(/\n/g, ' ');
+      // Nettoyage OCR et extraction des lignes MRZ
+      let clean = text.replace(/\r/g, '');
+      // Séparer les lignes et ne garder que celles qui ressemblent à du MRZ (beaucoup de < ou de majuscules)
+      let allLines = clean.split('\n').map(l => l.trim()).filter(l => l.length > 20);
+      let mrzLines = allLines.filter(l => {
+        const mrzChars = l.replace(/[^A-Z0-9<]/g, '');
+        return mrzChars.length / l.length > 0.7; // Au moins 70% de caractères MRZ
+      });
 
-      // Extraction N° Document
-      const docMatch = clean.match(/[A-Z0-9]{9,12}/);
+      // Nettoyer chaque ligne : ne garder que A-Z, 0-9, <
+      mrzLines = mrzLines.map(l => l.replace(/[^A-Z0-9<]/g, ''));
 
-      // Extraction basique Nom
-      let lastName = "Non détecté";
-      if (clean.includes('<<<')) {
-        let mrzParts = clean.split('<<<');
-        lastName = mrzParts[0].split(' ').pop().replace(/[^A-Z]/g, '');
+      let lastName = 'Non détecté';
+      let firstName = 'Non détecté';
+      let docNumber = 'Non détecté';
+      let birthDate = 'N/A';
+      let issueDate = 'N/A';
+      let expiryDate = 'N/A';
+      let rawDisplay = mrzLines.join('\n');
+
+      if (mrzLines.length >= 3 && mrzLines[0].length >= 28) {
+        // --- TD1 (CNI) : 3 lignes de 30 caractères ---
+        // Ligne 1: Type(2) + Pays(3) + N°Doc(9) + Check(1) + Optionnel(15)
+        // Ligne 2: DateNaiss(6) + Check(1) + Sexe(1) + DateExp(6) + Check(1) + Nationalité(3) + Optionnel(11) + Check(1)
+        // Ligne 3: Nom<<Prénom<<...
+        const line1 = mrzLines[0];
+        const line2 = mrzLines[1];
+        const line3 = mrzLines[2];
+
+        docNumber = line1.substring(5, 14).replace(/</g, '');
+        birthDate = formatMrzDate(line2.substring(0, 6));
+        expiryDate = formatMrzDate(line2.substring(8, 14));
+
+        // Nom et Prénoms sur la ligne 3
+        const nameParts = line3.split('<<').filter(p => p.length > 0);
+        if (nameParts.length >= 1) lastName = nameParts[0].replace(/</g, ' ').trim();
+        if (nameParts.length >= 2) firstName = nameParts.slice(1).join(' ').replace(/</g, ' ').trim();
+
+      } else if (mrzLines.length >= 2 && mrzLines[0].length >= 36) {
+        // --- TD3 (Passeport) : 2 lignes de 44 caractères ---
+        // Ligne 1: Type(2) + Pays(3) + Nom<<Prénom<<...
+        // Ligne 2: N°Doc(9) + Check(1) + Nationalité(3) + DateNaiss(6) + Check(1) + Sexe(1) + DateExp(6) + ...
+        const line1 = mrzLines[0];
+        const line2 = mrzLines[1];
+
+        // Noms
+        const nameSection = line1.substring(5);
+        const nameParts = nameSection.split('<<').filter(p => p.length > 0);
+        if (nameParts.length >= 1) lastName = nameParts[0].replace(/</g, ' ').trim();
+        if (nameParts.length >= 2) firstName = nameParts.slice(1).join(' ').replace(/</g, ' ').trim();
+
+        // Document & Dates
+        docNumber = line2.substring(0, 9).replace(/</g, '');
+        birthDate = formatMrzDate(line2.substring(13, 19));
+        expiryDate = formatMrzDate(line2.substring(21, 27));
+
+      } else if (mrzLines.length >= 2) {
+        // --- TD2 : 2 lignes de 36 caractères ---
+        // Ligne 1: Type(2) + Pays(3) + Nom<<Prénom<<...
+        // Ligne 2: N°Doc(9) + Check(1) + Nationalité(3) + DateNaiss(6) + Check(1) + Sexe(1) + DateExp(6) + ...
+        const line1 = mrzLines[0];
+        const line2 = mrzLines[1];
+
+        const nameSection = line1.substring(5);
+        const nameParts = nameSection.split('<<').filter(p => p.length > 0);
+        if (nameParts.length >= 1) lastName = nameParts[0].replace(/</g, ' ').trim();
+        if (nameParts.length >= 2) firstName = nameParts.slice(1).join(' ').replace(/</g, ' ').trim();
+
+        docNumber = line2.substring(0, 9).replace(/</g, '');
+        birthDate = formatMrzDate(line2.substring(13, 19));
+        expiryDate = formatMrzDate(line2.substring(21, 27));
       }
 
-      // Mockup rapide prénoms si match typique d'exemple (La logique devra être affinée selons les vrais MRZ TD1/TD2)
-      let firstName = "Non détecté";
-      if (clean.includes('NICOLAS') || clean.includes('PATRICK')) {
-        firstName = "NICOLAS PATRICK GUY";
+      // Date d'émission : déduite de la péremption - durée standard (10 ou 15 ans)
+      // Elle n'est pas directement dans le MRZ standard, on l'estime
+      if (expiryDate !== 'N/A') {
+        const parts = expiryDate.split('/');
+        if (parts.length === 3) {
+          const expYear = parseInt(parts[2]);
+          // CNI française = 15 ans, Passeport = 10 ans
+          const duration = (mrzLines.length >= 3) ? 15 : 10;
+          const issueYear = expYear - duration;
+          issueDate = `${parts[0]}/${parts[1]}/${issueYear}`;
+        }
       }
 
       return {
-        lastName: lastName || "Non détecté",
+        lastName: lastName,
         firstName: firstName,
-        docNumber: docMatch ? docMatch[0] : "Non détecté",
-        raw: clean.substring(0, 150) + (clean.length > 150 ? "..." : "")
+        docNumber: docNumber,
+        birthDate: birthDate,
+        issueDate: issueDate,
+        expiryDate: expiryDate,
+        raw: rawDisplay || clean.substring(0, 200)
       };
     }
   </script>
