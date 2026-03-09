@@ -2,327 +2,291 @@
 <html lang="fr">
 
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Scanner MRZ Local</title>
-  <!-- Tailwind CSS via CDN pour le style rapide -->
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Scanner MRZ — Praxis</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Tesseract.js OCR -->
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <!-- Material Symbols -->
-  <link
-    href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200"
-    rel="stylesheet" />
-
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet" />
   <style>
     body {
-      font-family: system-ui, -apple-system, sans-serif;
-      background-color: #020617;
-      color: white;
+      font-family: 'Inter', system-ui, sans-serif;
+      background: #0a0a0f;
+      color: #fff;
       margin: 0;
-      padding: 0;
       min-height: 100vh;
     }
 
-    .hidden {
-      display: none !important;
+    .view {
+      display: none;
     }
 
-    .view-container {
+    .view.active {
       display: flex;
-      flex-direction: column;
+    }
+
+    #video-stream {
+      transform: scaleX(1);
+    }
+
+    .field-row {
+      display: flex;
       align-items: center;
-      justify-content: center;
-      min-height: 100vh;
-      padding: 1.5rem;
+      gap: 0.75rem;
+      padding: 0.75rem 1rem;
+      background: rgba(255, 255, 255, 0.04);
+      border-radius: 0.75rem;
+      margin-bottom: 0.5rem;
     }
 
-    /* Spinner */
-    .spinner {
-      border: 4px solid rgba(59, 130, 246, 0.2);
-      border-top-color: #3b82f6;
-      border-radius: 50%;
-      width: 6rem;
-      height: 6rem;
-      animation: spin 1s linear infinite;
+    .field-label {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #94a3b8;
+      min-width: 3rem;
     }
 
-    @keyframes spin {
-      0% {
-        transform: rotate(0deg);
-      }
+    .field-value {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #f1f5f9;
+      flex: 1;
+    }
 
-      100% {
-        transform: rotate(360deg);
-      }
+    .valid-badge {
+      background: #22c55e22;
+      color: #22c55e;
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-size: 0.7rem;
+      font-weight: 700;
+    }
+
+    .invalid-badge {
+      background: #ef444422;
+      color: #ef4444;
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-size: 0.7rem;
+      font-weight: 700;
     }
   </style>
 </head>
 
 <body>
 
-  <!-- VUES -->
-  <!-- 1. INITIALISATION -->
-  <div id="view-initialization" class="view-container">
-    <div class="text-center space-y-6 max-w-sm">
-      <div class="relative inline-block">
-        <div class="spinner"></div>
-        <div class="absolute inset-0 flex items-center justify-center">
-          <span id="init-progress" class="text-xs font-bold">0%</span>
-        </div>
-      </div>
-      <h1 class="text-2xl font-bold">Initialisation de l'OCR</h1>
-      <p class="text-slate-400 text-sm">Chargement du moteur Tesseract (WASM local)... Cette opération n'a lieu qu'une
-        seule fois.</p>
+  <!-- 1. CHARGEMENT -->
+  <div id="view-loading"
+    class="view active fixed inset-0 z-50 bg-[#0a0a0f] flex flex-col items-center justify-center px-8">
+    <div class="text-5xl mb-6">🛂</div>
+    <h1 class="text-xl font-bold mb-2">Scanner MRZ</h1>
+    <p class="text-slate-500 text-sm mb-6 text-center">Chargement du moteur OCR OCRB...</p>
+    <div class="w-full max-w-xs bg-slate-800 rounded-full h-2 overflow-hidden">
+      <div id="load-progress" class="bg-blue-500 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
     </div>
+    <p id="load-status" class="text-slate-600 text-xs mt-3 font-mono">Initialisation...</p>
   </div>
 
   <!-- 2. PRÊT -->
-  <div id="view-ready" class="view-container hidden animate-[pulse_1s_ease-in-out]">
-    <div class="text-center space-y-8">
-      <div class="bg-blue-500/10 p-6 rounded-full border border-blue-500/20 inline-block">
-        <span class="material-symbols-outlined text-blue-400" style="font-size: 3rem;">photo_camera</span>
-      </div>
-      <div>
-        <h1 class="text-3xl font-black mb-2">Scanner MRZ Local</h1>
-        <p class="text-slate-400">OCR chargé hors-ligne (100% sécurisé).</p>
-      </div>
-      <button onclick="startCamera()"
-        class="w-full bg-blue-600 hover:bg-blue-500 py-5 rounded-2xl font-bold text-lg shadow-xl shadow-blue-900/20 transition-all active:scale-95">
-        Démarrer le Scanner
-      </button>
+  <div id="view-ready" class="view fixed inset-0 z-50 bg-[#0a0a0f] flex flex-col items-center justify-center px-8">
+    <div class="text-center mb-8">
+      <div class="text-6xl mb-4">🛂</div>
+      <h1 class="text-2xl font-bold mb-2">Scanner MRZ</h1>
+      <p class="text-slate-400 text-sm">Passeport · CNI · Permis · Titre de séjour</p>
+      <p class="text-slate-600 text-xs mt-2">Moteur OCRB + Parser ICAO 9303</p>
     </div>
+    <button onclick="startCamera()"
+      class="w-full max-w-sm bg-blue-600 hover:bg-blue-500 py-4 rounded-xl font-bold text-lg transition-all">
+      📷 Scanner avec la caméra
+    </button>
+    <label
+      class="w-full max-w-sm mt-3 bg-white/10 hover:bg-white/15 py-4 rounded-xl font-bold text-lg transition-all text-center cursor-pointer block">
+      📁 Importer une photo
+      <input type="file" accept="image/*" capture="environment" onchange="handleFileUpload(event)" class="hidden" />
+    </label>
+    <a href="1.html" class="mt-6 text-slate-500 hover:text-slate-300 text-sm flex items-center gap-1 transition-colors">
+      ← Retour
+    </a>
   </div>
 
-  <!-- 3. SCANNER -->
+  <!-- 3. SCANNER CAMÉRA -->
   <div id="view-scanning" class="hidden fixed inset-0 z-50 bg-black flex flex-col">
     <video id="video-stream" class="w-full h-full object-cover" playsinline muted></video>
 
     <div class="absolute inset-0 pointer-events-none flex flex-col items-center justify-center">
       <div
-        class="w-[90%] max-w-[500px] h-[300px] border-2 border-dashed border-blue-400 rounded-2xl shadow-[0_0_0_9999px_rgba(0,0,0,0.7)] relative">
-        <div class="absolute inset-0 bg-blue-400/5 animate-pulse rounded-2xl"></div>
+        class="w-[90%] max-w-[500px] h-[120px] border-2 border-dashed border-blue-400 rounded-xl shadow-[0_0_0_9999px_rgba(0,0,0,0.7)] relative"
+        style="margin-top: 30vh;">
+        <div class="absolute inset-0 bg-blue-400/5 animate-pulse rounded-xl"></div>
         <div
-          class="absolute -top-10 left-0 w-full text-center text-blue-400 font-bold text-xs tracking-widest uppercase">
-          Alignez la zone MRZ dans le rectangle
+          class="absolute -top-8 left-0 w-full text-center text-blue-400 font-bold text-xs tracking-widest uppercase">
+          Cadrez la bande MRZ ici ↓
         </div>
       </div>
     </div>
 
     <div class="absolute bottom-6 left-0 w-full px-6 space-y-3">
-      <!-- Barre de progression multi-pass -->
       <div class="bg-slate-900/90 backdrop-blur-xl p-4 rounded-2xl border border-slate-800">
-        <div class="flex items-center justify-between mb-2">
-          <p id="scan-feedback" class="text-sm font-medium">Démarrage...</p>
-          <span id="scan-pass-count" class="text-xs font-mono text-blue-400">0/8</span>
-        </div>
-        <div class="w-full bg-slate-700 rounded-full h-2 overflow-hidden">
-          <div id="scan-progress-bar" class="bg-blue-500 h-2 rounded-full transition-all duration-300"
-            style="width: 0%"></div>
-        </div>
-        <p id="scan-debug" class="text-[10px] font-mono text-slate-600 mt-2 truncate"></p>
+        <p id="scan-feedback" class="text-sm font-medium text-center">Démarrage...</p>
+        <p id="scan-debug" class="text-[10px] font-mono text-slate-600 mt-1 text-center truncate"></p>
       </div>
-      <div class="flex gap-3">
-        <button onclick="forceFinalize()"
-          class="flex-1 bg-emerald-600/80 backdrop-blur-md py-3.5 rounded-xl font-bold border border-emerald-500/30 text-sm">
-          ✅ Forcer le résultat
-        </button>
-        <button onclick="cancelScan()"
-          class="flex-1 bg-white/10 backdrop-blur-md py-3.5 rounded-xl font-bold border border-white/10 text-sm">
-          Annuler
-        </button>
-      </div>
+      <button onclick="cancelScan()"
+        class="w-full bg-white/10 backdrop-blur-md py-3.5 rounded-xl font-bold border border-white/10 text-sm">
+        Annuler
+      </button>
     </div>
   </div>
 
   <!-- 4. RÉSULTAT -->
-  <div id="view-result" class="view-container hidden">
-    <div class="w-full max-w-md bg-slate-900 p-8 rounded-3xl border border-slate-800 shadow-2xl">
-      <div class="flex items-center gap-3 mb-8 pb-4 border-b border-white/5">
-        <span class="material-symbols-outlined text-emerald-500" style="font-size: 1.75rem;">check_circle</span>
-        <h2 class="text-2xl font-bold">Données Extraites</h2>
+  <div id="view-result" class="view fixed inset-0 z-50 bg-[#0a0a0f] flex flex-col overflow-y-auto">
+    <div class="px-6 py-8 flex-1">
+      <div class="flex items-center justify-between mb-6">
+        <h2 class="text-xl font-bold">Résultat MRZ</h2>
+        <span id="res-valid-badge" class="valid-badge">—</span>
       </div>
 
-      <div class="space-y-5">
-        <!-- 1. Nom -->
-        <div class="space-y-1">
-          <label class="text-[10px] uppercase font-black text-slate-500 tracking-tighter">1. Nom</label>
-          <div class="flex items-center gap-3 bg-black/30 p-3 rounded-xl border border-white/5">
-            <span class="material-symbols-outlined text-slate-400" style="font-size: 1.125rem;">person</span>
-            <span id="res-lastname" class="font-bold"></span>
-          </div>
-        </div>
+      <div id="res-format" class="text-xs text-slate-500 font-mono mb-4">—</div>
 
-        <!-- 2. Prénom -->
-        <div class="space-y-1">
-          <label class="text-[10px] uppercase font-black text-slate-500 tracking-tighter">2. Prénom</label>
-          <div class="flex items-center gap-3 bg-black/30 p-3 rounded-xl border border-white/5">
-            <span class="material-symbols-outlined text-slate-400" style="font-size: 1.125rem;">badge</span>
-            <span id="res-firstname" class="font-bold"></span>
-          </div>
-        </div>
-
-        <!-- 3. Date de naissance -->
-        <div class="space-y-1">
-          <label class="text-[10px] uppercase font-black text-slate-500 tracking-tighter">3. Date de naissance</label>
-          <div class="flex items-center gap-3 bg-black/30 p-3 rounded-xl border border-white/5">
-            <span class="material-symbols-outlined text-amber-400" style="font-size: 1.125rem;">cake</span>
-            <span id="res-birthdate" class="font-bold"></span>
-          </div>
-        </div>
-
-        <!-- 4a. Date d'émission -->
-        <div class="grid grid-cols-2 gap-4">
-          <div class="space-y-1">
-            <label class="text-[10px] uppercase font-black text-slate-500 tracking-tighter">4a. Émission</label>
-            <div class="flex items-center gap-3 bg-black/30 p-3 rounded-xl border border-white/5">
-              <span class="material-symbols-outlined text-green-400" style="font-size: 1.125rem;">event_available</span>
-              <span id="res-issuedate" class="font-bold"></span>
-            </div>
-          </div>
-          <!-- 4b. Date de péremption -->
-          <div class="space-y-1">
-            <label class="text-[10px] uppercase font-black text-slate-500 tracking-tighter">4b. Péremption</label>
-            <div class="flex items-center gap-3 bg-black/30 p-3 rounded-xl border border-white/5">
-              <span class="material-symbols-outlined text-red-400" style="font-size: 1.125rem;">event_busy</span>
-              <span id="res-expirydate" class="font-bold"></span>
-            </div>
-          </div>
-        </div>
-
-        <!-- 5. Numéro de Document -->
-        <div class="space-y-1">
-          <label class="text-[10px] uppercase font-black text-slate-500 tracking-tighter">5. Numéro de document</label>
-          <div class="flex items-center gap-3 bg-black/30 p-3 rounded-xl border border-white/5">
-            <span class="material-symbols-outlined text-blue-400" style="font-size: 1.125rem;">credit_card</span>
-            <span id="res-docnumber" class="font-mono text-lg font-bold"></span>
-          </div>
-        </div>
-
-        <div class="pt-4">
-          <label class="text-[10px] uppercase font-black text-slate-500 tracking-tighter">Sortie brute OCR</label>
-          <div id="res-raw"
-            class="mt-2 bg-black/50 p-4 rounded-xl text-[10px] font-mono text-slate-500 overflow-x-auto break-words">
-          </div>
-        </div>
+      <div id="res-fields" class="space-y-2 mb-6">
+        <!-- Les champs seront générés dynamiquement -->
       </div>
 
-      <button onclick="resetApp()"
-        class="w-full mt-10 bg-blue-600 hover:bg-blue-500 py-4 rounded-xl font-bold flex items-center justify-center gap-2">
-        <span class="material-symbols-outlined" style="font-size: 1.125rem;">refresh</span>
-        Nouveau Scan
+      <details class="bg-slate-900/50 rounded-xl p-4 border border-slate-800">
+        <summary class="text-xs text-slate-500 cursor-pointer">Données MRZ brutes</summary>
+        <pre id="res-raw" class="text-[11px] font-mono text-slate-400 mt-3 whitespace-pre-wrap break-all"></pre>
+      </details>
+    </div>
+    <div class="px-6 pb-8">
+      <button onclick="resetApp()" class="w-full bg-blue-600 py-4 rounded-xl font-bold text-lg">
+        Nouveau scan
       </button>
     </div>
   </div>
 
-  <!-- 5. ERREUR -->
-  <div id="view-error" class="view-container hidden">
-    <div class="text-center space-y-6 max-w-sm">
-      <span class="material-symbols-outlined text-red-500" style="font-size: 4rem;">error</span>
-      <h2 class="text-xl font-bold">Oups !</h2>
-      <p id="error-message" class="text-slate-400 text-sm"></p>
-      <button onclick="window.location.reload()" class="w-full bg-slate-800 py-4 rounded-xl font-bold">
-        Réessayer
-      </button>
-    </div>
-  </div>
+  <canvas id="canvas-mrz" class="hidden"></canvas>
 
-  <!-- CANVAS INTERNE (invisible) -->
-  <canvas id="ocr-canvas" class="hidden"></canvas>
-
-
-  <!-- LOGIQUE JAVASCRIPT -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <script>
-    // --- ÉTAT GLOBAL ---
+    // =========================================================================
+    // MRZ SCANNER v4 — OCRB Engine + mrz parser ICAO 9303
+    // Basé sur uwolfer/mrz-scanner, adapté pour caméra live + vanilla HTML
+    // =========================================================================
+
+    // --- ÉTAT ---
     let ocrWorker = null;
     let inferenceTimeout = null;
     let isRecognizing = false;
-    let scanAttempts = 0;
+    let mrzParser = null; // Le module mrz chargé dynamiquement
 
     // --- ÉLÉMENTS DOM ---
     const views = {
-      initialization: document.getElementById('view-initialization'),
+      loading: document.getElementById('view-loading'),
       ready: document.getElementById('view-ready'),
       scanning: document.getElementById('view-scanning'),
       result: document.getElementById('view-result'),
-      error: document.getElementById('view-error')
     };
     const video = document.getElementById('video-stream');
-    const canvas = document.getElementById('ocr-canvas');
+    const canvas = document.getElementById('canvas-mrz');
     const scanFeedback = document.getElementById('scan-feedback');
+    const loadProgress = document.getElementById('load-progress');
+    const loadStatus = document.getElementById('load-status');
 
-    function switchView(viewName) {
-      Object.values(views).forEach(v => v.classList.add('hidden'));
-      if (views[viewName]) views[viewName].classList.remove('hidden');
+    function switchView(name) {
+      Object.values(views).forEach(v => { v.classList.remove('active'); v.classList.add('hidden'); });
+      views[name].classList.add('active');
+      views[name].classList.remove('hidden');
     }
 
-    function showError(msg) {
-      document.getElementById('error-message').innerText = msg;
-      switchView('error');
-    }
-
-    // --- 1. INITIALISATION OCR ---
-    async function loadModel() {
+    // --- 1. CHARGEMENT : Tesseract OCRB + mrz parser ---
+    async function loadEngine() {
       try {
-        // Tesseract v5 syntax
-        ocrWorker = await Tesseract.createWorker('fra+eng', 1, {
-          logger: m => {
-            if (m.progress) {
-              document.getElementById('init-progress').innerText = Math.round(m.progress * 100) + '%';
+        // Étape 1 : Charger le module mrz parser via esm.sh
+        loadStatus.innerText = 'Chargement du parser MRZ...';
+        loadProgress.style.width = '10%';
+
+        // Charger le parser mrz via import() dynamique depuis esm.sh
+        const mrzModule = await import('https://esm.sh/mrz@4');
+        mrzParser = mrzModule.parse;
+        console.log('✅ mrz parser chargé');
+
+        loadProgress.style.width = '30%';
+        loadStatus.innerText = 'Chargement du moteur OCR (OCRB)...';
+
+        // Étape 2 : Créer le worker Tesseract.js v5 avec les données OCRB
+        // On utilise les données OCRB entraînées sur la police MRZ OCR-B
+        ocrWorker = await Tesseract.createWorker('ocrb', 1, {
+          workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/worker.min.js',
+          corePath: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@5/tesseract-core-simd-lstm.wasm.js',
+          langPath: 'https://raw.githubusercontent.com/Shreeshrii/tessdata_ocrb/main/',
+          logger: (m) => {
+            if (m.progress !== undefined) {
+              const pct = 30 + Math.round(m.progress * 60);
+              loadProgress.style.width = pct + '%';
+              loadStatus.innerText = m.status || 'Chargement...';
             }
           }
         });
 
+        // Configuration uwolfer : désactiver TOUS les dictionnaires,
+        // la MRZ n'est PAS de l'anglais. PSM 6 = bloc uniforme de texte.
         await ocrWorker.setParameters({
-          tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ',
+          tessedit_pageseg_mode: '6',
+          tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<',
+          load_system_dawg: 'F',
+          load_freq_dawg: 'F',
+          load_unambig_dawg: 'F',
+          load_punc_dawg: 'F',
+          load_number_dawg: 'F',
+          load_fixed_length_dawgs: 'F',
+          load_bigram_dawg: 'F',
+          wordrec_enable_assoc: 'F',
         });
 
-        scanAttempts = 0;
+        loadProgress.style.width = '100%';
+        loadStatus.innerText = 'Prêt !';
+        console.log('✅ Tesseract OCRB prêt');
 
-        switchView('ready');
+        setTimeout(() => switchView('ready'), 500);
       } catch (err) {
-        showError("Erreur lors du chargement OCR local: " + err.message);
+        console.error('Erreur chargement:', err);
+        loadStatus.innerText = 'Erreur: ' + err.message;
       }
     }
 
-    // Initialisation automatique au lancement
-    window.addEventListener('DOMContentLoaded', loadModel);
+    window.addEventListener('DOMContentLoaded', loadEngine);
 
     // --- 2. GESTION CAMÉRA ---
     async function startCamera() {
       switchView('scanning');
-      scanFeedback.innerText = "Démarrage caméra...";
+      scanFeedback.innerText = 'Démarrage caméra...';
       isRecognizing = false;
-      resetAccumulator();
 
       const constraints = {
-        video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
       };
 
       try {
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
         video.srcObject = stream;
-        video.onloadedmetadata = () => {
-          video.play();
-          scanFeedback.innerText = "Alignez le MRZ...";
-          inferenceLoop(); // Démarrer la boucle d'analyse
-        };
+        await video.play();
+        scanFeedback.innerText = 'Caméra active — cadrez la bande MRZ';
+        inferenceLoop();
       } catch (err) {
-        showError("Impossible d'accéder à la caméra. Autorisez l'accès.");
+        scanFeedback.innerText = 'Erreur caméra: ' + err.message;
       }
     }
 
     function stopCamera() {
       if (inferenceTimeout) clearTimeout(inferenceTimeout);
+      inferenceTimeout = null;
       if (video.srcObject) {
-        video.srcObject.getTracks().forEach(track => track.stop());
+        video.srcObject.getTracks().forEach(t => t.stop());
         video.srcObject = null;
       }
     }
 
     function cancelScan() {
       stopCamera();
-      resetAccumulator();
       switchView('ready');
     }
 
@@ -330,465 +294,277 @@
       switchView('ready');
     }
 
-    // =========================================================================
-    // PERMIS DE CONDUIRE FR — ENGINE v3
-    // MRZ ligne unique 30 chars (D1FRA...) + OCR plein cadre pour noms/dates
-    // Multi-pass consensus avec vote par caractère
-    // =========================================================================
-
-    const REQUIRED_PASSES = 6;
-    const MIN_PASSES = 3;
-
-    // Accumulateur multi-pass
-    let passAccumulator = [];  // { mrzLine, lastName, firstName, dates[], rawText }
-    let lastOcrText = '';
-
-    function resetAccumulator() {
-      passAccumulator = [];
-      scanAttempts = 0;
-      updateProgressUI(0);
-    }
-
-    function updateProgressUI(count) {
-      const pct = Math.min(100, Math.round((count / REQUIRED_PASSES) * 100));
-      const bar = document.getElementById('scan-progress-bar');
-      const counter = document.getElementById('scan-pass-count');
-      if (bar) bar.style.width = pct + '%';
-      if (counter) counter.innerText = count + '/' + REQUIRED_PASSES;
-      if (bar) {
-        if (pct < 40) bar.className = 'bg-red-500 h-2 rounded-full transition-all duration-300';
-        else if (pct < 75) bar.className = 'bg-amber-500 h-2 rounded-full transition-all duration-300';
-        else bar.className = 'bg-emerald-500 h-2 rounded-full transition-all duration-300';
-      }
-    }
-
-    // ===================== CORRECTION OCR =====================
-
-    const OCR_TO_DIGIT = { 'O': '0', 'Q': '0', 'D': '0', 'I': '1', 'L': '1', 'Z': '2', 'S': '5', 'G': '6', 'B': '8' };
-    function forceDigit(c) { return /[0-9]/.test(c) ? c : (OCR_TO_DIGIT[c] || c); }
-
-    // ICAO checksum
-    const CK_W = [7, 3, 1];
-    function checkDigit(field) {
-      let t = 0;
-      for (let i = 0; i < field.length; i++) {
-        const c = field[i];
-        let v = 0;
-        if (c >= '0' && c <= '9') v = parseInt(c);
-        else if (c >= 'A' && c <= 'Z') v = c.charCodeAt(0) - 55;
-        t += v * CK_W[i % 3];
-      }
-      return (t % 10).toString();
-    }
-    function verifyCheck(field, cd) { return checkDigit(field) === forceDigit(cd); }
-
-    // ===================== DÉTECTION MRZ PERMIS FR =====================
-    // Le permis FR a UNE seule ligne MRZ de 30 chars : D1FRA + 9 doc num + 1 check + 6 expiry + 1 check + padding
-    // Format : D1FRAxxxxxxxxx#yymmdd#<<<<<<<
-
-    function sanitizeMrz(raw) {
-      return raw.toUpperCase().replace(/[\s.,_\-;:|!`'"~^]+/g, '<').replace(/[^A-Z0-9<]/g, '');
-    }
-
-    /**
-     * Détecte la ligne MRZ du permis de conduire français.
-     * Cherche un pattern D1FRA ou D1<FRA ou similaire dans le texte OCR.
-     */
-    function detectPermisLine(rawText) {
-      const lines = rawText.split(/\n/);
-
-      for (const raw of lines) {
-        const clean = sanitizeMrz(raw);
-
-        // Chercher D1FRA ou D1<FRA au début
-        if (clean.length >= 26 && /^D[1I][<]?FRA/.test(clean)) {
-          return clean;
-        }
-      }
-
-      // Fallback: chercher toute ligne de ~30 chars avec FRA dedans
-      for (const raw of lines) {
-        const clean = sanitizeMrz(raw);
-        if (clean.length >= 26 && clean.length <= 34 && clean.includes('FRA')) {
-          return clean;
-        }
-      }
-
-      return null;
-    }
-
-    /**
-     * Parse la ligne MRZ unique du permis de conduire français.
-     * Structure: D1FRA [doc_number:9] [check:1] [expiry_yymmdd:6] [check:1] [optional]
-     */
-    function parsePermisLine(line) {
-      // Normaliser à 30 chars
-      const norm = (line + '<'.repeat(30)).substring(0, 30);
-      const result = { docNumber: 'Non détecté', expiryDate: 'Non détecté', confidence: 0 };
-
-      // Position 0-1 : D1 (type)
-      // Position 2-4 : FRA (pays)
-      // Position 5-13 : Numéro de document (9 chars)
-      const rawDocNum = norm.substring(5, 14);
-      const docCheck = norm[14];
-      result.docNumber = rawDocNum.replace(/</g, '').trim();
-
-      // Position 15-20 : Date d'expiration YYMMDD
-      const rawExpiry = norm.substring(15, 21);
-      const expiryCheck = norm[21];
-
-      // Correction OCR sur les digits de la date
-      let expCorrected = '';
-      for (let i = 0; i < rawExpiry.length; i++) expCorrected += forceDigit(rawExpiry[i]);
-
-      const yy = expCorrected.substring(0, 2);
-      const mm = expCorrected.substring(2, 4);
-      const dd = expCorrected.substring(4, 6);
-      const mmI = parseInt(mm), ddI = parseInt(dd);
-      if (mmI >= 1 && mmI <= 12 && ddI >= 1 && ddI <= 31) {
-        const century = parseInt(yy) > 50 ? '19' : '20';
-        result.expiryDate = dd + '.' + mm + '.' + century + yy;
-      }
-
-      // Scoring via checksums ICAO
-      if (verifyCheck(rawDocNum, docCheck)) result.confidence += 40;
-      if (verifyCheck(rawExpiry, expiryCheck)) result.confidence += 30;
-      if (/^D[1I]/.test(norm)) result.confidence += 15;
-      if (norm.substring(2, 5).replace(/</g, '') === 'FRA') result.confidence += 15;
-
-      return result;
-    }
-
-    // ===================== EXTRACTION DATES DD.MM.YYYY =====================
-
-    /**
-     * Cherche toutes les dates au format DD.MM.YYYY (ou DD/MM/YYYY, DD-MM-YYYY)
-     * dans le texte OCR du document.
-     */
-    function extractVisibleDates(rawText) {
-      const datePattern = /(\d{2})[.\/-](\d{2})[.\/-](\d{4})/g;
-      const dates = [];
-      let match;
-      while ((match = datePattern.exec(rawText)) !== null) {
-        const dd = match[1], mm = match[2], yyyy = match[3];
-        const mmI = parseInt(mm), ddI = parseInt(dd), yyI = parseInt(yyyy);
-        if (mmI >= 1 && mmI <= 12 && ddI >= 1 && ddI <= 31 && yyI >= 1900 && yyI <= 2100) {
-          dates.push({
-            formatted: dd + '.' + mm + '.' + yyyy,
-            raw: match[0],
-            index: match.index,
-            year: yyI
-          });
-        }
-      }
-      return dates;
-    }
-
-    /**
-     * Assigne les dates trouvées aux bons champs en se basant sur leur position
-     * et leur contexte (labels 3., 4a., 4b. et contenu logique).
-     *
-     * Logique :
-     * - Date de naissance (3.) : la plus ancienne (année la plus petite)
-     * - Date d'émission (4a.) : date intermédiaire
-     * - Date de péremption (4b.) : la plus récente (année la plus grande)
-     *
-     * On cherche aussi les labels explicites "3.", "4a.", "4b." avant les dates.
-     */
-    function assignDates(rawText, dates) {
-      const result = { birthDate: 'Non détecté', issueDate: 'Non détecté', expiryDate: 'Non détecté' };
-      if (dates.length === 0) return result;
-
-      // Tentative par label (chercher "3." / "4a." / "4b." devant les dates)
-      for (const d of dates) {
-        // Regarder les 20 chars avant la date dans le texte brut
-        const before = rawText.substring(Math.max(0, d.index - 20), d.index).toUpperCase();
-
-        if (/3[.\s]*$/.test(before) || /NAISSANCE/.test(before) || /BIRTH/.test(before) || /DATE\s*DE\s*N/.test(before)) {
-          result.birthDate = d.formatted;
-        } else if (/4\s*A[.\s]*$/.test(before) || /4A[.\s]*$/.test(before) || /DELIVR/.test(before) || /ISSUE/.test(before)) {
-          result.issueDate = d.formatted;
-        } else if (/4\s*B[.\s]*$/.test(before) || /4B[.\s]*$/.test(before) || /VALID/.test(before) || /EXPIR/.test(before)) {
-          result.expiryDate = d.formatted;
-        }
-      }
-
-      // Fallback par tri chronologique si les labels n'ont pas fonctionné
-      if (result.birthDate === 'Non détecté' || result.issueDate === 'Non détecté' || result.expiryDate === 'Non détecté') {
-        const sorted = [...dates].sort((a, b) => a.year - b.year);
-        if (sorted.length >= 1 && result.birthDate === 'Non détecté') result.birthDate = sorted[0].formatted;
-        if (sorted.length >= 3 && result.expiryDate === 'Non détecté') result.expiryDate = sorted[sorted.length - 1].formatted;
-        if (sorted.length >= 2 && result.issueDate === 'Non détecté') {
-          // Date d'émission = celle entre naissance et péremption
-          result.issueDate = sorted[Math.floor(sorted.length / 2)].formatted;
-        }
-      }
-
-      return result;
-    }
-
-    // ===================== EXTRACTION NOM / PRÉNOM =====================
-
-    /**
-     * Extrait le nom et le prénom depuis le texte visible du document.
-     * Cherche les labels "1." et "2." suivis du texte correspondant.
-     * Sur un permis FR:
-     *   1. NOM (sur la ligne après "1." ou "1")
-     *   2. PRÉNOM (sur la ligne après "2." ou "2")
-     */
-    function extractNameFields(rawText) {
-      const result = { lastName: 'Non détecté', firstName: 'Non détecté' };
-      const lines = rawText.split(/\n/).map(l => l.trim());
-
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].toUpperCase();
-
-        // Chercher "1." ou "1 " suivi d'un nom
-        const matchNom = line.match(/^1[.\s]+([A-Z\s\-']+)/);
-        if (matchNom && matchNom[1].trim().length >= 2) {
-          result.lastName = matchNom[1].trim();
-          continue;
-        }
-        // Si la ligne est juste "1" ou "1.", vérifier la ligne suivante
-        if (/^1[.\s]*$/.test(line) && i + 1 < lines.length) {
-          const next = lines[i + 1].trim().toUpperCase();
-          if (next.length >= 2 && /^[A-Z\s\-']+$/.test(next)) {
-            result.lastName = next;
-          }
-        }
-
-        // Chercher "2." ou "2 " suivi d'un prénom
-        const matchPrenom = line.match(/^2[.\s]+([A-Z\s\-']+)/);
-        if (matchPrenom && matchPrenom[1].trim().length >= 2) {
-          result.firstName = matchPrenom[1].trim();
-          continue;
-        }
-        if (/^2[.\s]*$/.test(line) && i + 1 < lines.length) {
-          const next = lines[i + 1].trim().toUpperCase();
-          if (next.length >= 2 && /^[A-Z\s\-']+$/.test(next)) {
-            result.firstName = next;
-          }
-        }
-      }
-
-      return result;
-    }
-
-    // ===================== VOTE PAR CARACTÈRE (CONSENSUS) =====================
-
-    function voteOnStrings(strings) {
-      if (strings.length === 0) return '';
-      const maxLen = Math.max(...strings.map(s => s.length));
-      const padded = strings.map(s => s.padEnd(maxLen, ' '));
-      let consensus = '';
-      for (let pos = 0; pos < maxLen; pos++) {
-        const votes = {};
-        for (const s of padded) { const c = s[pos]; votes[c] = (votes[c] || 0) + 1; }
-        let best = ' ', bestN = 0;
-        for (const [c, n] of Object.entries(votes)) { if (n > bestN) { best = c; bestN = n; } }
-        consensus += best;
-      }
-      return consensus.trim();
-    }
-
-    function voteDateField(passes, fieldName) {
-      const candidates = passes.map(p => p[fieldName]).filter(d => d && d !== 'Non détecté');
-      if (candidates.length === 0) return 'Non détecté';
-      // Vote par date entière (majorité)
-      const votes = {};
-      for (const d of candidates) votes[d] = (votes[d] || 0) + 1;
-      let best = 'Non détecté', bestN = 0;
-      for (const [d, n] of Object.entries(votes)) { if (n > bestN) { best = d; bestN = n; } }
-      return best;
-    }
-
-    // ===================== CONSENSUS MULTI-PASS =====================
-
-    function buildConsensus() {
-      if (passAccumulator.length < MIN_PASSES) return null;
-
-      // Vote sur la ligne MRZ
-      const mrzVariants = passAccumulator.map(p => p.mrzLine).filter(Boolean);
-      let mrzResult = { docNumber: 'Non détecté', expiryDate: 'Non détecté', confidence: 0 };
-      if (mrzVariants.length >= 2) {
-        const consensusMrz = voteOnStrings(mrzVariants);
-        mrzResult = parsePermisLine(consensusMrz);
-      }
-
-      // Vote sur le nom et prénom
-      const lastNames = passAccumulator.map(p => p.lastName).filter(n => n && n !== 'Non détecté');
-      const firstNames = passAccumulator.map(p => p.firstName).filter(n => n && n !== 'Non détecté');
-      const lastName = lastNames.length > 0 ? voteOnStrings(lastNames) : 'Non détecté';
-      const firstName = firstNames.length > 0 ? voteOnStrings(firstNames) : 'Non détecté';
-
-      // Vote sur les dates
-      const birthDate = voteDateField(passAccumulator, 'birthDate');
-      const issueDate = voteDateField(passAccumulator, 'issueDate');
-      let expiryDate = voteDateField(passAccumulator, 'expiryDate');
-
-      // Cross-référence date d'expiration : préférer celle de la MRZ si elle est validée par checksum
-      if (mrzResult.expiryDate !== 'Non détecté' && mrzResult.confidence >= 30) {
-        expiryDate = mrzResult.expiryDate;
-      }
-
-      const raw = 'MRZ consensus: ' + (mrzVariants.length > 0 ? voteOnStrings(mrzVariants) : 'aucune') +
-        '\nPasses: ' + passAccumulator.length +
-        '\nMRZ confiance ICAO: ' + mrzResult.confidence + '%';
-
-      return {
-        docNumber: mrzResult.docNumber || 'Non détecté',
-        lastName: lastName,
-        firstName: firstName,
-        birthDate: birthDate,
-        issueDate: issueDate,
-        expiryDate: expiryDate,
-        confidence: mrzResult.confidence,
-        raw: raw
-      };
-    }
-
-    // ===================== BOUCLE D'INFÉRENCE =====================
-
+    // --- 3. BOUCLE D'INFÉRENCE CAMÉRA ---
     async function inferenceLoop() {
       if (!video.srcObject || video.paused || video.ended) return;
 
       if (!isRecognizing && ocrWorker) {
         isRecognizing = true;
-        scanAttempts++;
         const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
-        // Capturer le cadre COMPLET (pas juste le centre !) pour lire le document entier
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        ctx.filter = 'contrast(1.6) grayscale(1)';
-        ctx.drawImage(video, 0, 0);
+        // Capturer la zone MRZ (bande inférieure du cadre vidéo)
+        // La MRZ est toujours en bas du document
+        const captureW = video.videoWidth * 0.9;
+        const captureH = video.videoHeight * 0.25; // Bande basse = 25% de la hauteur
+        const startX = (video.videoWidth - captureW) / 2;
+        const startY = video.videoHeight * 0.65; // Commence à 65% de la hauteur
+
+        canvas.width = captureW;
+        canvas.height = captureH;
+
+        // Prétraitement : haut contraste + niveaux de gris + binarisation
+        ctx.filter = 'contrast(2.0) grayscale(1)';
+        ctx.drawImage(video, startX, startY, captureW, captureH, 0, 0, captureW, captureH);
         ctx.filter = 'none';
 
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        // Binarisation Otsu manuelle pour améliorer la lisibilité
+        binarize(ctx, captureW, captureH);
+
+        const dataUrl = canvas.toDataURL('image/png');
 
         try {
-          scanFeedback.innerText = 'Lecture ' + scanAttempts + '...';
-          const { data: { text } } = await ocrWorker.recognize(dataUrl);
-          const rawText = text;
-          lastOcrText = rawText;
+          scanFeedback.innerText = 'Analyse MRZ...';
+          const { data } = await ocrWorker.recognize(dataUrl);
 
-          // Debug
+          // Extraire les lignes MRZ candidates
+          const mrzLines = extractMrzLines(data);
           const debugEl = document.getElementById('scan-debug');
-          if (debugEl) debugEl.innerText = rawText.replace(/\n/g, ' | ').substring(0, 120);
 
-          // 1. Chercher la ligne MRZ
-          const mrzLine = detectPermisLine(rawText);
+          if (mrzLines.length >= 1) {
+            if (debugEl) debugEl.innerText = mrzLines.join(' | ');
 
-          // 2. Extraire les noms visibles
-          const names = extractNameFields(rawText);
+            // Tenter le parsing ICAO via mrz.parse()
+            try {
+              const result = mrzParser(mrzLines);
+              console.log('MRZ parsed:', result);
 
-          // 3. Extraire les dates visibles DD.MM.YYYY
-          const visibleDates = extractVisibleDates(rawText);
-          const datesAssigned = assignDates(rawText, visibleDates);
-
-          // Stocker ce pass
-          const hasUsefulData = (mrzLine !== null) || (names.lastName !== 'Non détecté') || (visibleDates.length > 0);
-
-          if (hasUsefulData) {
-            passAccumulator.push({
-              mrzLine: mrzLine,
-              lastName: names.lastName,
-              firstName: names.firstName,
-              birthDate: datesAssigned.birthDate,
-              issueDate: datesAssigned.issueDate,
-              expiryDate: datesAssigned.expiryDate,
-              rawText: rawText
-            });
-
-            updateProgressUI(passAccumulator.length);
-            scanFeedback.innerText = 'Données détectées ! ' + passAccumulator.length + '/' + REQUIRED_PASSES;
-
-            // Auto-finaliser si assez de passes
-            if (passAccumulator.length >= REQUIRED_PASSES) {
-              const result = buildConsensus();
-              if (result && (result.docNumber !== 'Non détecté' || result.lastName !== 'Non détecté')) {
-                showResult(result);
-                return;
+              if (result) {
+                showMrzResult(result, mrzLines);
+                return; // Arrêter la boucle
               }
+            } catch (parseErr) {
+              // Le parser mrz signale un problème — continuer à scanner
+              if (debugEl) debugEl.innerText = 'Parse: ' + parseErr.message;
             }
           } else {
-            scanFeedback.innerText = 'Pas de données... (' + passAccumulator.length + ' lectures)';
+            if (debugEl) debugEl.innerText = 'Aucune ligne MRZ détectée';
           }
 
         } catch (e) {
-          console.error('OCR Error:', e);
+          console.error('OCR error:', e);
         } finally {
           isRecognizing = false;
         }
       }
 
-      const interval = passAccumulator.length > 0 ? 1000 : 1500;
-      inferenceTimeout = setTimeout(inferenceLoop, interval);
+      inferenceTimeout = setTimeout(inferenceLoop, 1200);
     }
 
-    /** Forcer le résultat avec les passes accumulées */
-    function forceFinalize() {
-      if (passAccumulator.length >= 1) {
-        const result = buildConsensus();
-        if (result) {
-          showResult(result);
-          return;
+    // --- 4. UPLOAD FICHIER ---
+    async function handleFileUpload(event) {
+      const file = event.target.files[0];
+      if (!file || !ocrWorker) return;
+
+      switchView('scanning');
+      scanFeedback.innerText = 'Analyse de l\'image...';
+
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const img = new Image();
+          img.onload = async () => {
+            // Dessiner l'image complète sur le canvas
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext('2d');
+            ctx.filter = 'contrast(1.8) grayscale(1)';
+            ctx.drawImage(img, 0, 0);
+            ctx.filter = 'none';
+            binarize(ctx, img.width, img.height);
+
+            const dataUrl = canvas.toDataURL('image/png');
+            scanFeedback.innerText = 'OCR en cours...';
+
+            const { data } = await ocrWorker.recognize(dataUrl);
+            const mrzLines = extractMrzLines(data);
+
+            if (mrzLines.length >= 1) {
+              try {
+                const result = mrzParser(mrzLines);
+                showMrzResult(result, mrzLines);
+                return;
+              } catch (parseErr) {
+                // Afficher le texte brut en fallback
+                showRawResult(data.text, parseErr.message);
+                return;
+              }
+            }
+
+            showRawResult(data.text, 'Aucune ligne MRZ trouvée');
+          };
+          img.src = e.target.result;
+        } catch (err) {
+          scanFeedback.innerText = 'Erreur: ' + err.message;
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+
+    // --- 5. EXTRACTION LIGNES MRZ ---
+    /**
+     * Extrait les lignes MRZ depuis le résultat Tesseract.
+     * Utilise la méthode uwolfer : filtre par << et longueur 28-44.
+     */
+    function extractMrzLines(data) {
+      // Méthode 1 : Utiliser data.lines de Tesseract (plus fiable)
+      if (data.lines && data.lines.length > 0) {
+        const candidates = data.lines
+          .map(line => line.text.replace(/\s/g, '').toUpperCase())
+          .filter(text => text.length >= 28 && text.length <= 46)
+          .filter(text => /^[A-Z0-9<]+$/.test(text))
+          .filter(text => text.includes('<<') || text.startsWith('P<') || text.startsWith('I<') || text.startsWith('ID') || text.startsWith('D1'));
+
+        if (candidates.length >= 1) return candidates;
+      }
+
+      // Méthode 2 : Fallback sur le texte brut
+      const rawLines = (data.text || '').split('\n');
+      return rawLines
+        .map(l => l.replace(/[\s.,_\-;:|!`'"~^]+/g, '<').replace(/[^A-Z0-9<]/gi, '').toUpperCase())
+        .filter(text => text.length >= 28 && text.length <= 46)
+        .filter(text => text.includes('<<') || text.match(/^[PID][A-Z<]/));
+    }
+
+    // --- 6. BINARISATION (Otsu-like) ---
+    function binarize(ctx, w, h) {
+      const imageData = ctx.getImageData(0, 0, w, h);
+      const d = imageData.data;
+
+      // Calculer le seuil moyen
+      let sum = 0;
+      for (let i = 0; i < d.length; i += 4) {
+        sum += d[i]; // Canal rouge (déjà en niveaux de gris)
+      }
+      const threshold = sum / (d.length / 4) * 0.7; // 70% de la moyenne → plus sombre = texte
+
+      for (let i = 0; i < d.length; i += 4) {
+        const v = d[i] < threshold ? 0 : 255;
+        d[i] = v; d[i + 1] = v; d[i + 2] = v;
+      }
+      ctx.putImageData(imageData, 0, 0);
+    }
+
+    // --- 7. AFFICHAGE RÉSULTAT ---
+
+    // Mappage des champs mrz vers des labels français
+    const FIELD_LABELS = {
+      documentType: { icon: '📄', label: 'Type', field: '—' },
+      documentNumber: { icon: '🔢', label: 'N° Document', field: '5.' },
+      issuingState: { icon: '🏳️', label: 'Pays', field: '—' },
+      lastName: { icon: '👤', label: 'Nom', field: '1.' },
+      firstName: { icon: '👤', label: 'Prénom', field: '2.' },
+      nationality: { icon: '🌍', label: 'Nationalité', field: '—' },
+      birthDate: { icon: '🎂', label: 'Date de naissance', field: '3.' },
+      sex: { icon: '⚧', label: 'Sexe', field: '—' },
+      expirationDate: { icon: '📅', label: 'Date d\'expiration', field: '4b.' },
+      personalNumber: { icon: '🔑', label: 'N° Personnel', field: '—' },
+    };
+
+    function formatDate(dateStr) {
+      if (!dateStr || dateStr.length !== 6) return dateStr || '—';
+      const yy = dateStr.substring(0, 2);
+      const mm = dateStr.substring(2, 4);
+      const dd = dateStr.substring(4, 6);
+      const century = parseInt(yy) > 50 ? '19' : '20';
+      return dd + '.' + mm + '.' + century + yy;
+    }
+
+    function showMrzResult(result, mrzLines) {
+      stopCamera();
+
+      // Badge de validité
+      const badge = document.getElementById('res-valid-badge');
+      if (result.valid) {
+        badge.className = 'valid-badge';
+        badge.innerText = '✅ VALIDE';
+      } else {
+        badge.className = 'invalid-badge';
+        badge.innerText = '⚠️ ERREURS';
+      }
+
+      // Format
+      document.getElementById('res-format').innerText = 'Format: ' + (result.format || '?');
+
+      // Champs
+      const fieldsContainer = document.getElementById('res-fields');
+      fieldsContainer.innerHTML = '';
+
+      if (result.fields) {
+        for (const [key, value] of Object.entries(result.fields)) {
+          const meta = FIELD_LABELS[key] || { icon: '📋', label: key, field: '—' };
+          let displayValue = value || '—';
+
+          // Formater les dates
+          if (key.toLowerCase().includes('date') && displayValue.length === 6) {
+            displayValue = formatDate(displayValue);
+          }
+
+          const row = document.createElement('div');
+          row.className = 'field-row';
+          row.innerHTML = `
+            <span class="text-lg">${meta.icon}</span>
+            <span class="field-label">${meta.field !== '—' ? meta.field + ' ' : ''}${meta.label}</span>
+            <span class="field-value">${displayValue}</span>
+          `;
+          fieldsContainer.appendChild(row);
         }
       }
-      // Fallback capture manuelle
-      manualCapture();
-    }
 
-    /** Capture manuelle plein cadre */
-    async function manualCapture() {
-      if (!ocrWorker) return;
-      const ctx = canvas.getContext('2d', { willReadFrequently: true });
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      ctx.filter = 'contrast(1.6) grayscale(1)';
-      ctx.drawImage(video, 0, 0);
-      ctx.filter = 'none';
-
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
-      scanFeedback.innerText = 'Capture complète...';
-
-      try {
-        const { data: { text } } = await ocrWorker.recognize(dataUrl);
-        const rawText = text;
-
-        // Extraction directe
-        const mrzLine = detectPermisLine(rawText);
-        const mrzResult = mrzLine ? parsePermisLine(mrzLine) : { docNumber: 'Non détecté', expiryDate: 'Non détecté', confidence: 0 };
-        const names = extractNameFields(rawText);
-        const dates = extractVisibleDates(rawText);
-        const datesAssigned = assignDates(rawText, dates);
-
-        stopCamera();
-        document.getElementById('res-docnumber').innerText = mrzResult.docNumber;
-        document.getElementById('res-lastname').innerText = names.lastName;
-        document.getElementById('res-firstname').innerText = names.firstName;
-        document.getElementById('res-birthdate').innerText = datesAssigned.birthDate;
-        document.getElementById('res-issuedate').innerText = datesAssigned.issueDate;
-        document.getElementById('res-expirydate').innerText = datesAssigned.expiryDate || mrzResult.expiryDate;
-        document.getElementById('res-raw').innerText = rawText;
-        switchView('result');
-      } catch (e) {
-        scanFeedback.innerText = 'Erreur: ' + e.message;
+      // Afficher le N° document composite si disponible
+      if (result.documentNumber) {
+        const row = document.createElement('div');
+        row.className = 'field-row';
+        row.style.background = 'rgba(59, 130, 246, 0.1)';
+        row.style.border = '1px solid rgba(59, 130, 246, 0.2)';
+        row.innerHTML = `
+          <span class="text-lg">🆔</span>
+          <span class="field-label">N° Complet</span>
+          <span class="field-value" style="color: #60a5fa; font-family: monospace;">${result.documentNumber}</span>
+        `;
+        fieldsContainer.prepend(row);
       }
-    }
 
-    // --- AFFICHAGE ---
-    function showResult(data) {
-      stopCamera();
-      document.getElementById('res-docnumber').innerText = data.docNumber;
-      document.getElementById('res-lastname').innerText = data.lastName;
-      document.getElementById('res-firstname').innerText = data.firstName;
-      document.getElementById('res-birthdate').innerText = data.birthDate;
-      document.getElementById('res-issuedate').innerText = data.issueDate;
-      document.getElementById('res-expirydate').innerText = data.expiryDate;
-      document.getElementById('res-raw').innerText = data.raw;
+      // Détails de validation
+      if (result.details && result.details.length > 0) {
+        const invalidDetails = result.details.filter(d => !d.valid && d.error);
+        if (invalidDetails.length > 0) {
+          const errDiv = document.createElement('div');
+          errDiv.className = 'mt-3 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-xs text-red-400';
+          errDiv.innerHTML = '<strong>Erreurs de validation :</strong><br>' +
+            invalidDetails.map(d => '• ' + (d.label || d.field) + ': ' + d.error).join('<br>');
+          fieldsContainer.appendChild(errDiv);
+        }
+      }
+
+      // Données brutes
+      document.getElementById('res-raw').innerText = mrzLines.join('\n');
+
       switchView('result');
     }
+
+    function showRawResult(rawText, errorMessage) {
+      stopCamera();
+      document.getElementById('res-valid-badge').className = 'invalid-badge';
+      document.getElementById('res-valid-badge').innerText = '❌ NON DÉTECTÉ';
+      document.getElementById('res-format').innerText = errorMessage;
+
+      const fieldsContainer = document.getElementById('res-fields');
+      fieldsContainer.innerHTML = '<div class="field-row"><span class="field-value text-slate-500">Aucun MRZ détecté dans l\'image</span></div>';
+
+      document.getElementById('res-raw').innerText = rawText;
+      switchView('result');
+    }
+
   </script>
 </body>
 
