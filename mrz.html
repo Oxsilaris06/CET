@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Scanner MRZ </title>
+  <title>Scanner MRZ — Praxis</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     body {
@@ -489,27 +489,35 @@
     }
 
     /**
-     * Nettoie les caractères de logo/nuisances (souvent devant les noms sur permis FR).
-     * Si le nom commence par un 'A' ou 'S' isolé ou incohérent, on le retire.
+     * Nettoie les caractères de logo/nuisances (souvent devant ou derrière les noms sur permis FR).
+     * Si le nom contient un 'A' ou 'S' isolé ou doublé au début/fin à cause du logo, on le retire.
      */
     function stripLogoNoise(name, mrzName) {
-      if (!name || name.length < 2) return name;
-      const clean = name.trim().toUpperCase();
+      if (!name || name.length < 1) return name;
+      let res = name.trim().toUpperCase();
+      const m = mrzName ? mrzName.replace(/</g, '').trim().toUpperCase() : null;
 
-      // Cas 1 : "S DUPONT" -> "DUPONT" (espace après le caractère parasite)
-      if (/^[AS][\s.]+/.test(clean)) {
-        return clean.replace(/^[AS][\s.]+/, '').trim();
+      // --- DÉBUT : logo + première lettre du nom ---
+      // Si "AA" au début -> "A" (logo A + nom commençant par A)
+      if (res.startsWith('AA')) res = res.substring(1);
+      else if (res.startsWith('SS')) res = res.substring(1);
+      else if (res.startsWith('A') || res.startsWith('S')) {
+        // Si on a un MRZ et que le nom MRZ ne commence pas par cette lettre -> logo parasite
+        if (m) { if (!m.startsWith(res[0])) res = res.substring(1); }
+        // Sinon si c'est suivi d'un séparateur -> logo parasite
+        else if (/^[AS][\s.]+/.test(res)) res = res.replace(/^[AS][\s.]+/, '').trim();
       }
 
-      // Cas 2 : Comparaison avec MRZ (si disponible lors de la cross-validation)
-      if (mrzName) {
-        const m = mrzName.replace(/</g, '').trim().toUpperCase();
-        if (clean.length === m.length + 1 && (clean.startsWith('A') || clean.startsWith('S')) && clean.endsWith(m)) {
-          return m;
-        }
+      // --- FIN : logo + dernière lettre du nom ---
+      if (res.endsWith('AA')) res = res.slice(0, -1);
+      else if (res.endsWith('SS')) res = res.slice(0, -1);
+      else if (res.endsWith('A') || res.endsWith('S')) {
+        const last = res[res.length - 1];
+        if (m) { if (!m.endsWith(last)) res = res.slice(0, -1); }
+        else if (/[\s.]+[AS]$/.test(res)) res = res.replace(/[\s.]+[AS]$/, '').trim();
       }
 
-      return clean;
+      return res.trim();
     }
 
     /**
