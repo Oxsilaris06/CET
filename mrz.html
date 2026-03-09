@@ -469,15 +469,18 @@
 
     /**
      * Tente de parser les lignes MRZ avec TOUTES les stratégies possibles.
-     * Retourne le meilleur résultat ou null.
+     * fullText = texte OCR plein cadre (pour extraction champs visibles)
+     * Retourne le meilleur résultat enrichi ou null.
      */
-    function tryAllParsingStrategies(rawText) {
+    function tryAllParsingStrategies(rawText, fullText) {
       const candidates = extractCandidateLines(rawText);
       console.log('[MRZ] Lignes candidates:', candidates.map(c => c.line + ' (score:' + c.score + ')'));
 
-      if (candidates.length === 0) return null;
+      // Extraire les champs visibles du plein cadre
+      const visible = fullText ? extractVisibleFields(fullText) : null;
+      console.log('[MRZ] Champs visibles:', visible);
 
-      const groups = groupByFormat(candidates);
+      const groups = candidates.length > 0 ? groupByFormat(candidates) : [];
       console.log('[MRZ] Groupes format:', groups.map(g => g.format + ' (' + g.lines.length + ' lignes, score:' + g.score + ')'));
 
       const results = [];
@@ -489,7 +492,7 @@
           if (parsed) {
             parsed._strategy = 'mrz.parse() direct';
             parsed._score = group.score;
-            results.push(parsed);
+            results.push(mergeWithVisibleFields(parsed, visible));
           }
 
           // Stratégie 2 : Correction OCR puis re-parse
@@ -499,27 +502,51 @@
             if (parsed2) {
               parsed2._strategy = 'mrz.parse() + OCR correction';
               parsed2._score = group.score + 5;
-              results.push(parsed2);
+              results.push(mergeWithVisibleFields(parsed2, visible));
             }
           }
         }
 
-        // Stratégie 3 : Parsing manuel (fallback si mrz parser échoue)
+        // Stratégie 3 : Parsing manuel permis FR
         if (group.format === 'PERMIS_FR') {
           const manual = parsePermisFrManual(group.lines[0]);
           if (manual) {
             manual._strategy = 'Manual permis FR';
             manual._score = group.score;
-            results.push(manual);
+            results.push(mergeWithVisibleFields(manual, visible));
           }
         }
       }
 
+      // Stratégie 4 : Si aucune MRZ mais des champs visibles → résultat partiel
+      if (results.length === 0 && visible && (visible.lastName || visible.datesFound >= 2)) {
+        const visibleResult = {
+          valid: false,
+          format: visible.docType || 'UNKNOWN',
+          documentNumber: null,
+          fields: {
+            lastName: visible.lastName,
+            firstName: visible.firstName,
+            birthDate: visible.birthDate,
+            issueDate: visible.issueDate,
+            expirationDate: visible.expiryDate,
+          },
+          details: [],
+          _strategy: 'Champs visibles uniquement (pas de MRZ)',
+          _score: 10,
+        };
+        results.push(visibleResult);
+      }
+
       if (results.length === 0) return null;
 
-      // Prendre le meilleur : priorité au valid=true, puis au score
+      // Prendre le meilleur : priorité valid=true, puis nombre de champs remplis, puis score
       results.sort((a, b) => {
         if (a.valid !== b.valid) return a.valid ? -1 : 1;
+        // Compter les champs remplis
+        const countFields = (r) => Object.values(r.fields || {}).filter(v => v && v !== '').length;
+        const diff = countFields(b) - countFields(a);
+        if (diff !== 0) return diff;
         return (b._score || 0) - (a._score || 0);
       });
 
@@ -572,7 +599,6 @@
       if (line.length < 26) return null;
 
       const norm = normalizeTo(line, 30);
-      // Corriger D1 → forcer les 2 premiers chars
       const prefix = norm.substring(0, 2).replace('DI', 'D1').replace('D|', 'D1');
       const country = norm.substring(2, 5).replace(/</g, '');
 
@@ -596,6 +622,179 @@
         details: [],
         _manual: true,
       };
+    }
+
+    // =====================================================================
+    // 4b. EXTRACTION DES CHAMPS VISIBLES (plein cadre OCR)
+    // Pour le permis FR : nom, prénom, dates DD.MM.YYYY
+    // Complète aussi les autres formats si des champs manquent
+    // =====================================================================
+
+    /**
+     * Extrait les dates DD.MM.YYYY ou DD/MM/YYYY du texte OCR.
+     */
+    function extractVisibleDates(text) {
+      const pattern = /(\d{2})[.\/\-](\d{2})[.\/\-](\d{4})/g;
+      const dates = [];
+      let m;
+      while ((m = pattern.exec(text)) !== null) {
+        const dd = m[1], mm = m[2], yyyy = m[3];
+        const dI = parseInt(dd), mI = parseInt(mm), yI = parseInt(yyyy);
+        if (mI >= 1 && mI <= 12 && dI >= 1 && dI <= 31 && yI >= 1900 && yI <= 2100) {
+          dates.push({ formatted: dd + '.' + mm + '.' + yyyy, index: m.index, year: yI, raw: m[0] });
+        }
+      }
+      return dates;
+    }
+
+    /**
+     * Assigne les dates aux champs 3. (naissance), 4a. (émission), 4b. (péremption)
+     * en cherchant les labels avant la date, puis en fallback par tri chronologique.
+     */
+    function assignDates(text, dates) {
+      const result = { birthDate: null, issueDate: null, expiryDate: null };
+      if (dates.length === 0) return result;
+
+      // Passe 1 : chercher les labels explicites avant chaque date
+      for (const d of dates) {
+        const before = text.substring(Math.max(0, d.index - 30), d.index).toUpperCase();
+        if (/(?:^|\s)3\.?\s*$/.test(before) || /NAISSANCE/.test(before) || /BIRTH/.test(before) || /DATE\s*DE\s*N/i.test(before)) {
+          result.birthDate = d.formatted;
+        } else if (/4\s*[Aa][.\s]*$/.test(before) || /DELIVR/i.test(before) || /ISSUE/i.test(before) || /EMISSION/i.test(before)) {
+          result.issueDate = d.formatted;
+        } else if (/4\s*[Bb][.\s]*$/.test(before) || /VALID/i.test(before) || /EXPIR/i.test(before) || /PEREMPTION/i.test(before)) {
+          result.expiryDate = d.formatted;
+        } else if (/(?:^|\s)5\.?\s*$/.test(before)) {
+          // Champ 5 = numéro sur certains permis, ignorer si c'est une date
+        }
+      }
+
+      // Passe 2 : fallback chronologique si des champs manquent
+      if (!result.birthDate || !result.issueDate || !result.expiryDate) {
+        const sorted = [...dates].sort((a, b) => a.year - b.year);
+        if (sorted.length >= 1 && !result.birthDate) result.birthDate = sorted[0].formatted;
+        if (sorted.length >= 3 && !result.expiryDate) result.expiryDate = sorted[sorted.length - 1].formatted;
+        if (sorted.length >= 2 && !result.issueDate) {
+          // Date d'émission = celle entre naissance et péremption
+          const middle = sorted.length === 2 ? sorted[1] : sorted[Math.floor(sorted.length / 2)];
+          result.issueDate = middle.formatted;
+        }
+        // Si seulement 2 dates : plus ancienne = naissance, plus récente = expiration
+        if (sorted.length === 2) {
+          if (!result.birthDate) result.birthDate = sorted[0].formatted;
+          if (!result.expiryDate) result.expiryDate = sorted[1].formatted;
+        }
+      }
+
+      return result;
+    }
+
+    /**
+     * Extrait nom et prénom depuis le texte visible du document.
+     * Cherche les labels numérotés (1. NOM, 2. PRENOM) typiques du permis FR
+     * et aussi les labels textuels (NOM:, PRENOM:, Surname, Given names)
+     */
+    function extractNameFields(text) {
+      const result = { lastName: null, firstName: null };
+      const lines = text.split(/\n/).map(l => l.trim());
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const upper = line.toUpperCase();
+
+        // --- NOM ---
+        // Pattern "1. NOM" ou "1.NOM" ou "1 NOM"
+        let match = upper.match(/^1[.\s:]+([A-ZÀÂÄÉÈÊËÏÎÔÙÛÜŸ\s\-']+)/);
+        if (match && match[1].trim().length >= 2) {
+          result.lastName = match[1].trim();
+          continue;
+        }
+        // Si la ligne est juste "1" ou "1.", le nom est sur la ligne suivante
+        if (/^1[.\s]*$/.test(upper) && i + 1 < lines.length) {
+          const next = lines[i + 1].trim();
+          if (next.length >= 2 && /^[A-ZÀÂÄÉÈÊËÏÎÔÙÛÜŸ\s\-']+$/i.test(next)) {
+            result.lastName = next.toUpperCase();
+          }
+        }
+        // Pattern "NOM :" ou "Surname:"
+        match = upper.match(/(?:NOM|SURNAME|NOM\s*DE\s*FAMILLE)[\s:]+([A-ZÀÂÄÉÈÊËÏÎÔÙÛÜŸ\s\-']+)/);
+        if (match && match[1].trim().length >= 2 && !result.lastName) {
+          result.lastName = match[1].trim();
+        }
+
+        // --- PRÉNOM ---
+        match = upper.match(/^2[.\s:]+([A-ZÀÂÄÉÈÊËÏÎÔÙÛÜŸ\s\-']+)/);
+        if (match && match[1].trim().length >= 2) {
+          result.firstName = match[1].trim();
+          continue;
+        }
+        if (/^2[.\s]*$/.test(upper) && i + 1 < lines.length) {
+          const next = lines[i + 1].trim();
+          if (next.length >= 2 && /^[A-ZÀÂÄÉÈÊËÏÎÔÙÛÜŸ\s\-']+$/i.test(next)) {
+            result.firstName = next.toUpperCase();
+          }
+        }
+        match = upper.match(/(?:PRENOM|PR[ÉE]NOM|GIVEN|FIRST\s*NAME)[\s:]+([A-ZÀÂÄÉÈÊËÏÎÔÙÛÜŸ\s\-']+)/);
+        if (match && match[1].trim().length >= 2 && !result.firstName) {
+          result.firstName = match[1].trim();
+        }
+      }
+
+      return result;
+    }
+
+    /**
+     * Extrait TOUS les champs visibles d'un document (plein cadre).
+     * Retourne un objet avec les champs trouvés.
+     */
+    function extractVisibleFields(fullText) {
+      const dates = extractVisibleDates(fullText);
+      const assignedDates = assignDates(fullText, dates);
+      const names = extractNameFields(fullText);
+
+      // Détecter le type de document
+      const upper = fullText.toUpperCase();
+      let docType = null;
+      if (upper.includes('PERMIS') && upper.includes('CONDUIRE')) docType = 'PERMIS_FR';
+      else if (upper.includes('PASSEPORT') || upper.includes('PASSPORT')) docType = 'PASSEPORT';
+      else if (upper.includes('CARTE') && upper.includes('IDENTIT')) docType = 'CNI';
+      else if (upper.includes('TITRE') && upper.includes('SEJOUR')) docType = 'TITRE_SEJOUR';
+
+      return {
+        docType: docType,
+        lastName: names.lastName,
+        firstName: names.firstName,
+        birthDate: assignedDates.birthDate,
+        issueDate: assignedDates.issueDate,
+        expiryDate: assignedDates.expiryDate,
+        datesFound: dates.length,
+      };
+    }
+
+    /**
+     * Fusionne un résultat MRZ avec les champs visibles.
+     * Les données MRZ ont la priorité (checksums), les champs visibles comblent les trous.
+     */
+    function mergeWithVisibleFields(mrzResult, visible) {
+      if (!mrzResult || !visible) return mrzResult;
+      const r = { ...mrzResult };
+      if (!r.fields) r.fields = {};
+
+      // Nom et prénom : MRZ prioritaire, sinon visible
+      if (!r.fields.lastName && visible.lastName) r.fields.lastName = visible.lastName;
+      if (!r.fields.firstName && visible.firstName) r.fields.firstName = visible.firstName;
+
+      // Dates : MRZ prioritaire (format YYMMDD), visible en fallback (format DD.MM.YYYY)
+      if (!r.fields.birthDate && visible.birthDate) r.fields.birthDate = visible.birthDate;
+      if (!r.fields.expirationDate && visible.expiryDate) r.fields.expirationDate = visible.expiryDate;
+
+      // Date d'émission : jamais dans MRZ standard, toujours depuis visible
+      if (!r.fields.issueDate && visible.issueDate) r.fields.issueDate = visible.issueDate;
+
+      // Ajouter les infos visibles comme champs supplémentaires
+      if (visible.docType) r._docType = visible.docType;
+
+      return r;
     }
 
     // =====================================================================
@@ -632,76 +831,89 @@
       if (!isRecognizing && ocrWorker) {
         isRecognizing = true;
         try {
-          await processFrame(false);
+          await dualPassScan();
         } finally {
           isRecognizing = false;
         }
       }
-      inferenceTimeout = setTimeout(inferenceLoop, 1500);
+      inferenceTimeout = setTimeout(inferenceLoop, 2000);
     }
 
     /**
-     * Capture et analyse un frame vidéo.
-     * fullFrame=true → document entier, false → bande MRZ basse seulement
+     * Double scan : bande MRZ (haute résolution) + plein cadre (noms/dates)
+     * Les deux résultats sont fusionnés pour un maximum de données.
      */
-    async function processFrame(fullFrame) {
+    async function dualPassScan() {
       const ctx = canvas.getContext('2d', { willReadFrequently: true });
       const srcW = video.videoWidth;
       const srcH = video.videoHeight;
 
-      let cropY, cropH;
-      if (fullFrame) {
-        cropY = 0; cropH = srcH;
-      } else {
-        // Bande basse : 35% inférieur (couvre la MRZ de tous les documents)
-        cropH = Math.round(srcH * 0.35);
-        cropY = srcH - cropH;
-      }
+      // === PASS 1 : Plein cadre (noms, dates, titre du document) ===
+      canvas.width = srcW;
+      canvas.height = srcH;
+      ctx.filter = 'contrast(1.8) grayscale(1)';
+      ctx.drawImage(video, 0, 0);
+      ctx.filter = 'none';
 
+      scanFeedback.innerText = 'Lecture document...';
+      const fullDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+
+      // Changer temporairement les params pour lire le texte visible (pas juste MRZ)
+      await ocrWorker.setParameters({
+        tessedit_char_whitelist: '',  // Toutes les chars
+        tessedit_pageseg_mode: '3',  // Mode page automatique
+      });
+      const { data: fullData } = await ocrWorker.recognize(fullDataUrl);
+      const fullText = fullData.text;
+      console.log('[MRZ] Plein cadre:', fullText.substring(0, 200));
+
+      // === PASS 2 : Bande MRZ basse (35% inférieur, optimisé MRZ) ===
+      const cropH = Math.round(srcH * 0.35);
+      const cropY = srcH - cropH;
       canvas.width = srcW;
       canvas.height = cropH;
-
-      // Prétraitement agressif
       ctx.filter = 'contrast(2.5) grayscale(1)';
       ctx.drawImage(video, 0, cropY, srcW, cropH, 0, 0, srcW, cropH);
       ctx.filter = 'none';
       binarize(ctx, srcW, cropH);
 
-      const dataUrl = canvas.toDataURL('image/png');
-      scanFeedback.innerText = fullFrame ? 'Analyse document entier...' : 'Analyse bande MRZ...';
+      // Remettre les params MRZ
+      await ocrWorker.setParameters({
+        tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<',
+        tessedit_pageseg_mode: '6',
+      });
 
-      const { data } = await ocrWorker.recognize(dataUrl);
+      scanFeedback.innerText = 'Analyse MRZ...';
+      const mrzDataUrl = canvas.toDataURL('image/png');
+      const { data: mrzData } = await ocrWorker.recognize(mrzDataUrl);
+
       const debugEl = document.getElementById('scan-debug');
-      if (debugEl) debugEl.innerText = data.text.replace(/\n/g, '|').substring(0, 120);
+      if (debugEl) debugEl.innerText = mrzData.text.replace(/\n/g, '|').substring(0, 120);
 
-      const result = tryAllParsingStrategies(data.text);
+      // === FUSION ===
+      // On passe le texte MRZ pour le parsing + le texte plein cadre pour les champs visibles
+      const result = tryAllParsingStrategies(mrzData.text, fullText);
       if (result) {
-        showMrzResult(result, data.text);
+        showMrzResult(result, fullText + '\n---MRZ---\n' + mrzData.text);
         return true;
       }
 
-      scanFeedback.innerText = 'Bande MRZ non détectée...';
+      scanFeedback.innerText = 'Pas de données... Réessayez.';
       return false;
     }
 
     /**
-     * Capture manuelle : essaie d'abord la bande basse, puis le document entier
+     * Capture manuelle : double pass immédiat
      */
     async function manualCapture() {
       if (!ocrWorker || !video.srcObject) return;
       isRecognizing = true;
 
       try {
-        // Essai 1 : bande MRZ
-        let found = await processFrame(false);
+        scanFeedback.innerText = 'Capture en cours...';
+        const found = await dualPassScan();
         if (found) return;
-
-        // Essai 2 : document entier
-        scanFeedback.innerText = 'Scanning document entier...';
-        found = await processFrame(true);
-        if (found) return;
-
-        scanFeedback.innerText = 'Aucune MRZ détectée. Réessayez.';
+        scanFeedback.innerText = 'Aucune donnée détectée. Réessayez.';
       } finally {
         isRecognizing = false;
       }
@@ -724,10 +936,22 @@
         const img = new Image();
         img.onload = async () => {
           try {
-            procStatus.innerText = 'OCR en cours...';
             const ctx = canvas.getContext('2d');
 
-            // D'abord essayer la bande basse (MRZ)
+            // PASS 1 : Plein cadre (texte visible)
+            procStatus.innerText = 'Lecture texte visible...';
+            canvas.width = img.width;
+            canvas.height = img.height;
+            ctx.filter = 'contrast(1.8) grayscale(1)';
+            ctx.drawImage(img, 0, 0);
+            ctx.filter = 'none';
+
+            await ocrWorker.setParameters({ tessedit_char_whitelist: '', tessedit_pageseg_mode: '3' });
+            const { data: fullData } = await ocrWorker.recognize(canvas.toDataURL('image/jpeg', 0.85));
+            const fullText = fullData.text;
+
+            // PASS 2 : Bande MRZ basse
+            procStatus.innerText = 'Analyse MRZ...';
             const cropH = Math.round(img.height * 0.35);
             const cropY = img.height - cropH;
             canvas.width = img.width;
@@ -737,29 +961,36 @@
             ctx.filter = 'none';
             binarize(ctx, img.width, cropH);
 
-            let dataUrl = canvas.toDataURL('image/png');
-            let { data } = await ocrWorker.recognize(dataUrl);
-            let result = tryAllParsingStrategies(data.text);
+            await ocrWorker.setParameters({
+              tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<',
+              tessedit_pageseg_mode: '6',
+            });
+            const { data: mrzData } = await ocrWorker.recognize(canvas.toDataURL('image/png'));
+
+            // FUSION
+            let result = tryAllParsingStrategies(mrzData.text, fullText);
 
             if (!result) {
-              // Essayer le document entier
-              procStatus.innerText = 'Analyse complète...';
+              // Fallback : essayer le texte plein cadre comme MRZ aussi
+              await ocrWorker.setParameters({
+                tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<',
+                tessedit_pageseg_mode: '6',
+              });
               canvas.width = img.width;
               canvas.height = img.height;
-              ctx.filter = 'contrast(2.0) grayscale(1)';
+              ctx.filter = 'contrast(2.5) grayscale(1)';
               ctx.drawImage(img, 0, 0);
               ctx.filter = 'none';
               binarize(ctx, img.width, img.height);
-              dataUrl = canvas.toDataURL('image/png');
-              const res2 = await ocrWorker.recognize(dataUrl);
-              data = res2.data;
-              result = tryAllParsingStrategies(data.text);
+              const fallbackDataUrl = canvas.toDataURL('image/png');
+              const { data: fallbackData } = await ocrWorker.recognize(fallbackDataUrl);
+              result = tryAllParsingStrategies(fallbackData.text, fullText);
             }
 
             if (result) {
-              showMrzResult(result, data.text);
+              showMrzResult(result, fullText);
             } else {
-              showRawResult(data.text, 'Aucune MRZ détectée');
+              showRawResult(fullText, 'Aucune MRZ détectée');
             }
           } catch (err) {
             console.error(err);
@@ -805,6 +1036,7 @@
       personalNumber: ['🔑', 'N° Personnel'],
       optional1: ['📋', 'Optionnel 1'],
       optional2: ['📋', 'Optionnel 2'],
+      issueDate: ['📅', 'Date d\'émission'],
     };
 
     function fmtDate(d) {
