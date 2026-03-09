@@ -368,20 +368,18 @@
       let s = 0;
       const len = line.length;
       if (len >= 40 && len <= 48) {
-        s += 10;
-        if (/^[P0OD][<0O]/.test(line)) s += 15;
+        s += 30; // Priorité Passeport
+        if (/^[P0OD][<0O]/.test(line)) s += 20;
       }
       if (len >= 28 && len <= 32) {
         s += 10;
         if (/^[AID][<0O]/.test(line)) s += 15;
       }
+      const ch = (line.match(/</g) || []).length;
+      if (ch >= 2) s += 10; if (ch >= 5) s += 10;
       if (line.includes('<<')) s += 20;
-      if (/^[P0OD][<0O]/.test(line)) s += 15;
-      if (/^I[D0][A-Z<]/.test(line)) s += 15;
-      if (/^D[1I][<]?F/.test(line)) s += 15;
-      if (/^V[<A-Z]/.test(line)) s += 10;
       if (line.substring(2, 5).replace(/</g, '') === 'FRA') s += 10;
-      if (ch > line.length * 0.8) s -= 20;
+      if (ch > line.length * 0.85) s -= 20;
       return Math.max(0, s);
     }
 
@@ -397,17 +395,18 @@
     function groupByFormat(candidates) {
       const groups = [];
       // TD3 (Passeport) - 2 lignes de 44
-      const td3 = candidates.filter(c => c.len >= 40 && c.len <= 48);
+      // Beaucoup plus souple : cherche 2 lignes longues qui "se ressemblent"
+      const td3 = candidates.filter(c => c.len >= 38 && c.len <= 50);
       if (td3.length >= 1) {
-        const l1c = td3.filter(c => /^[P0OD][<0O]/.test(c.line) || c.line.includes('<<'));
+        // Ligne 1 : Cherche P< ou beaucoup de <<
+        const l1c = td3.filter(c => /^[P0OD][<0O]/.test(c.line) || (c.line.match(/<{2,}/g) || []).length >= 2);
         if (l1c.length >= 1) {
           const l1 = l1c[0].line;
-          const others = td3.filter(c => c.line !== l1);
+          const others = td3.filter(c => c.line !== l1).sort((a, b) => b.score - a.score);
           if (others.length >= 1) {
-            groups.push({ format: 'TD3', lines: [normalizeTo(l1, 44), normalizeTo(others[0].line, 44)], score: l1c[0].score + (others[0]?.score || 0) + 10 });
-          } else if (l1.includes('<<<<<')) {
-            // Tentative désespérée : si on n'a qu'une ligne mais qu'elle ressemble fort à un passeport
-            groups.push({ format: 'TD3', lines: [normalizeTo(l1, 44), '<'.repeat(44)], score: l1c[0].score - 10 });
+            groups.push({ format: 'TD3', lines: [normalizeTo(l1, 44), normalizeTo(others[0].line, 44)], score: l1c[0].score + others[0].score + 20 });
+          } else if (l1.includes('<<<<')) {
+            groups.push({ format: 'TD3', lines: [normalizeTo(l1, 44), '<'.repeat(44)], score: l1c[0].score });
           }
         }
       }
@@ -546,27 +545,29 @@
         const upper = line.toUpperCase();
 
         // --- NOM ---
-        let m = upper.match(/^1[.\s:]+([A-ZÀÂÄÉÈÊËÏÎÔÙÛÜŸ\s\-']{2,})/);
+        let m = upper.match(/^[1I][.\s:]+([A-ZÀÂÄÉÈÊËÏÎÔÙÛÜŸ\s\-']{2,})/);
         if (m) { r.lastName = stripLogoNoise(m[1].trim()); continue; }
-        if (/^1[.\s]*$/.test(upper) && i + 1 < lines.length) {
+        if (/^[1I][.\s]*$/.test(upper) && i + 1 < lines.length) {
           const next = lines[i + 1].trim();
           if (next.length >= 2 && /^[A-ZÀÂÄÉÈÊËÏÎÔÙÛÜŸ\s\-']+$/i.test(next)) {
             r.lastName = stripLogoNoise(next.toUpperCase());
           }
         }
-        m = upper.match(/(?:NOM|SURNAME|NOM\s*DE\s*FAMILLE)[\s:]+([A-ZÀÂÄÉÈÊËÏÎÔÙÛÜŸ\s\-']{2,})/);
+        // Labels Passeport : "Nom / Surname", "Surname"
+        m = upper.match(/(?:NOM|SURNAME|NOM\s+DE\s+FAMILLE|NOM\s*[\/]\s*SURNAME)[\s:]+([A-ZÀÂÄÉÈÊËÏÎÔÙÛÜŸ\s\-']{2,})/);
         if (m && !r.lastName) r.lastName = stripLogoNoise(m[1].trim());
 
         // --- PRÉNOM ---
-        m = upper.match(/^2[.\s:]+([A-ZÀÂÄÉÈÊËÏÎÔÙÛÜŸ\s\-']{2,})/);
+        m = upper.match(/^[2I][.\s:]+([A-ZÀÂÄÉÈÊËÏÎÔÙÛÜŸ\s\-']{2,})/);
         if (m) { r.firstName = stripLogoNoise(m[1].trim()); continue; }
-        if (/^2[.\s]*$/.test(upper) && i + 1 < lines.length) {
+        if (/^[2I][.\s]*$/.test(upper) && i + 1 < lines.length) {
           const next = lines[i + 1].trim();
           if (next.length >= 2 && /^[A-ZÀÂÄÉÈÊËÏÎÔÙÛÜŸ\s\-']+$/i.test(next)) {
             r.firstName = stripLogoNoise(next.toUpperCase());
           }
         }
-        m = upper.match(/(?:PRENOM|PR[ÉE]NOM|GIVEN|FIRST\s*NAME)[\s:]+([A-ZÀÂÄÉÈÊËÏÎÔÙÛÜŸ\s\-']{2,})/);
+        // Labels Passeport : "Prénoms / Given names", "Given names"
+        m = upper.match(/(?:PRENOM|PR[ÉE]NOM|GIVEN|FIRST\s*NAME|PR[ÉE]NOMS\s*[\/]\s*GIVEN\s*NAMES)[\s:]+([A-ZÀÂÄÉÈÊËÏÎÔÙÛÜŸ\s\-']{2,})/);
         if (m && !r.firstName) r.firstName = stripLogoNoise(m[1].trim());
       }
       return r;
@@ -717,8 +718,8 @@
         const { data: fd } = await ocrWorker.recognize(canvas.toDataURL('image/jpeg', 0.85));
         const fullText = fd.text;
 
-        // PASS 2 : Bande MRZ
-        const cropH = Math.round(srcH * 0.35);
+        // PASS 2 : Bande MRZ (Augmentée pour Passeport)
+        const cropH = Math.round(srcH * 0.45);
         const cropY = srcH - cropH;
         canvas.width = srcW; canvas.height = cropH;
         ctx.filter = `contrast(${contrast + 0.5}) brightness(${brightness}) grayscale(1)`;
@@ -727,14 +728,24 @@
         ctx.filter = 'none';
         binarize(ctx, srcW, cropH, binarizeFactor);
 
-        await ocrWorker.setParameters({ tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<', tessedit_pageseg_mode: '6' });
-        const { data: md } = await ocrWorker.recognize(canvas.toDataURL('image/png'));
-        const mrzText = md.text;
+        const tryMrz = async (psm) => {
+          await ocrWorker.setParameters({ tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<', tessedit_pageseg_mode: psm });
+          const { data: md } = await ocrWorker.recognize(canvas.toDataURL('image/png'));
+          return md.text;
+        };
 
-        const mrzResult = parseMrzFromText(mrzText);
+        let mrzText = await tryMrz('6');
+        let mrzResult = parseMrzFromText(mrzText);
+
+        // Si PSM 6 échoue sur une bande large (Passeport), tenter PSM 3
+        if (!mrzResult) {
+          mrzText = await tryMrz('3');
+          mrzResult = parseMrzFromText(mrzText);
+        }
+
         const visible = extractVisibleFields(fullText);
 
-        if (mrzResult || visible.lastName) {
+        if (mrzResult || (visible.lastName && visible.firstName)) {
           return { mrzResult, visible, fullText, mrzText };
         }
         return null;
@@ -939,21 +950,41 @@
     // =====================================================================
     // 10. BINARISATION
     // =====================================================================
-    function binarize(ctx, w, h, factor = 0.65) {
+    /**
+     * Binarisation adaptative (Seuillage local par blocs)
+     * Crucial pour les documents brillants/réfléchissants.
+     */
+    function binarize(ctx, w, h, factor = 0.5) {
       const imgData = ctx.getImageData(0, 0, w, h);
       const d = imgData.data;
-      let sum = 0;
-      for (let i = 0; i < d.length; i += 4) {
-        // Luminance pondérée pour mieux séparer le texte du fond brillant
-        const gray = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114);
-        d[i] = d[i + 1] = d[i + 2] = gray;
-        sum += gray;
+      const size = 16;
+      const output = new Uint8ClampedArray(d.length);
+
+      for (let y = 0; y < h; y += size) {
+        for (let x = 0; x < w; x += size) {
+          let sum = 0, count = 0;
+          for (let sy = y; sy < y + size && sy < h; sy++) {
+            for (let sx = x; sx < x + size && sx < w; sx++) {
+              const idx = (sy * w + sx) * 4;
+              const gray = (d[idx] * 0.299 + d[idx + 1] * 0.587 + d[idx + 2] * 0.114);
+              d[idx] = d[idx + 1] = d[idx + 2] = gray;
+              sum += gray;
+              count++;
+            }
+          }
+          const avg = (sum / count) * factor;
+
+          for (let sy = y; sy < y + size && sy < h; sy++) {
+            for (let sx = x; sx < x + size && sx < w; sx++) {
+              const idx = (sy * w + sx) * 4;
+              const val = d[idx] < avg ? 0 : 255;
+              output[idx] = output[idx + 1] = output[idx + 2] = val;
+              output[idx + 3] = 255;
+            }
+          }
+        }
       }
-      const threshold = (sum / (d.length / 4)) * factor;
-      for (let i = 0; i < d.length; i += 4) {
-        const v = d[i] < threshold ? 0 : 255;
-        d[i] = d[i + 1] = d[i + 2] = v;
-      }
+      imgData.data.set(output);
       ctx.putImageData(imgData, 0, 0);
     }
 
