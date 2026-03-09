@@ -447,7 +447,8 @@
       }
       if (len >= 28 && len <= 32) {
         s += 10;
-        if (/^[AID][<0O]/.test(line)) s += 15;
+        // [A, I, D, R] -> R pour Resident/Titre de séjour
+        if (/^[AIDR][<0O]/.test(line)) s += 15;
       }
       const ch = (line.match(/</g) || []).length;
       if (ch >= 2) s += 10; if (ch >= 5) s += 10;
@@ -518,7 +519,15 @@
     // =====================================================================
     function tryMrzParse(lines) {
       if (!mrzParse) return null;
-      try { return mrzParse(lines); } catch (e) { return null; }
+      try {
+        // Patch pour les titres de séjour français (Type IR non standard ICAO mais commun en FR)
+        // On mappe IR -> ID pour que le parser ICAO accepte la ligne.
+        let patched = [...lines];
+        if (patched.length === 3 && patched[0].startsWith('IR')) {
+          patched[0] = 'ID' + patched[0].substring(2);
+        }
+        return mrzParse(patched);
+      } catch (e) { return null; }
     }
 
     function parsePermisFrManual(line) {
@@ -586,10 +595,11 @@
       const r = { birthDate: null, issueDate: null, expiryDate: null };
       if (!dates.length) return r;
       for (const d of dates) {
-        const before = text.substring(Math.max(0, d.index - 30), d.index).toUpperCase();
+        // Range augmenté à 60 pour les titres de séjour (données souvent loin sous le label)
+        const before = text.substring(Math.max(0, d.index - 60), d.index).toUpperCase();
         if (/(?:^|\s)3\.?\s*$/.test(before) || /NAISSANCE/.test(before) || /DATE\s*DE\s*N/i.test(before)) r.birthDate = d.formatted;
         else if (/4\s*[Aa][.\s]*$/.test(before) || /DELIVR/i.test(before) || /EMISSION/i.test(before)) r.issueDate = d.formatted;
-        else if (/4\s*[Bb][.\s]*$/.test(before) || /VALID/i.test(before) || /EXPIR/i.test(before) || /PEREMPTION/i.test(before)) r.expiryDate = d.formatted;
+        else if (/4\s*[Bb][.\s]*$/.test(before) || /VALID/i.test(before) || /EXPIR/i.test(before) || /PEREMPTION/i.test(before) || /JUSQU/i.test(before)) r.expiryDate = d.formatted;
       }
       // Fallback chronologique
       if (!r.birthDate || !r.issueDate || !r.expiryDate) {
@@ -659,6 +669,16 @@
       for (let i = 0; i < lines.length; i++) {
         const upper = lines[i].toUpperCase();
 
+        // Pattern spécifique Titre de Séjour (Labels empilés) :
+        // NOMS Prénoms / SURNAMES Forenames
+        // [NOM]
+        // [PRENOM]
+        if (upper.includes('NOMS') && (upper.includes('PRÉNOMS') || upper.includes('PRINOMS') || upper.includes('FORENAMES'))) {
+          if (!r.lastName && i + 1 < lines.length) r.lastName = stripLogoNoise(lines[i + 1].toUpperCase());
+          if (!r.firstName && i + 2 < lines.length) r.firstName = stripLogoNoise(lines[i + 2].toUpperCase());
+          if (r.lastName && r.firstName) return r;
+        }
+
         // --- NOM ---
         if (!r.lastName) {
           if (/(?:^|\s)1[.\s:]+/.test(upper)) r.lastName = findVal(i, /(?:^|\s)1[.\s:]+([A-ZÀÂÄÉÈÊËÏÎÔÙÛÜŸ\s\-']{2,})/);
@@ -700,7 +720,7 @@
       const lines = upper.split('\n');
       for (const line of lines) {
         // Pattern 1 : Top right ou esseulé (9-10 chars alphanum)
-        const m = line.match(/(?:N[°O][\s.]*|TITRE[\s:]+|TITRE\s*N[°O]|DOCUMENT\s*N[°O])\s*([A-Z0-9\s]{8,12})/);
+        const m = line.match(/(?:N[°O][\s.]*|TITRE[\s:]+|TITRE\s*N[°O]|DOCUMENT\s*N[°O]|NUMÉRO\s+PERSONNEL|PERSONAL\s+NUMBER)\s*([A-Z0-9\s]{8,12})/);
         if (m) {
           const pot = m[1].replace(/[\s.]/g, '');
           if (pot.length >= 8 && pot.length <= 12) { documentNumber = pot; break; }
