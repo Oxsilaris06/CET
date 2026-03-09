@@ -467,7 +467,7 @@
     }
 
     function extractCandidateLines(rawText) {
-      if (!rawText) return [];
+      if (!rawText || typeof rawText !== 'string') return [];
       return rawText.split(/\n/).map(r => {
         const clean = sanitizeLine(r);
         if (clean.length < 25) return null;
@@ -526,7 +526,7 @@
     // 4. PARSING
     // =====================================================================
     function tryMrzParse(lines) {
-      if (!mrzParse) return null;
+      if (!mrzParse || !Array.isArray(lines)) return null;
       try {
         // Patch pour les titres de séjour français (Type IR non standard ICAO mais commun en FR)
         // On mappe IR -> ID pour que le parser ICAO accepte la ligne.
@@ -578,9 +578,11 @@
     // 5. EXTRACTION CHAMPS VISIBLES
     // =====================================================================
     function extractVisibleDates(text) {
+      const dates = [];
+      if (!text || typeof text !== 'string') return dates;
+
       // Autorise XX/XX/XXXX pour les spécimens
       const pattern = /(\d{2}|XX)[.\/\-](\d{2}|XX)[.\/\-](\d{4}|XXXX)/gi;
-      const dates = [];
       let m;
       while ((m = pattern.exec(text)) !== null) {
         const dd = m[1], mm = m[2], yyyy = m[3];
@@ -601,7 +603,7 @@
 
     function assignDates(text, dates) {
       const r = { birthDate: null, issueDate: null, expiryDate: null };
-      if (!dates.length) return r;
+      if (!text || typeof text !== 'string' || !dates || !dates.length) return r;
       for (const d of dates) {
         // Range augmenté à 60 pour les titres de séjour (données souvent loin sous le label)
         const before = text.substring(Math.max(0, d.index - 60), d.index).toUpperCase();
@@ -658,6 +660,8 @@
      */
     function extractNameFields(text) {
       const r = { lastName: null, firstName: null };
+      if (!text || typeof text !== 'string') return r;
+
       const lines = text.split(/\n/).map(l => l.trim()).filter(l => l.length > 0);
 
       const findVal = (idx, regex) => {
@@ -720,7 +724,7 @@
       const dates = extractVisibleDates(fullText);
       const assigned = assignDates(fullText, dates);
       const names = extractNameFields(fullText);
-      const upper = fullText.toUpperCase();
+      const upper = (fullText && typeof fullText === 'string') ? fullText.toUpperCase() : '';
       let docType = null;
       let documentNumber = null;
 
@@ -802,12 +806,11 @@
     }
 
     /**
-     * Synthèse logique de 2 cycles de lecture.
-     * Pour chaque champ : comparer les 2 lectures, prendre le plus fiable.
+     * Synthèse logique de cycles de lecture via vote probabiliste.
      */
     function synthesizeCycles(cycles) {
-      if (cycles.length === 0) return null;
-      if (cycles.length === 1) return cycles[0];
+      if (!cycles || !Array.isArray(cycles) || cycles.length === 0) return null;
+      if (cycles.length === 1 && cycles[0]) return cycles[0];
 
       // Pro V7 : Vote probabiliste GLOBAL
       const fieldVotes = {};
@@ -985,6 +988,7 @@
     // 8. CAMÉRA + BOUCLE
     // =====================================================================
     async function startCamera() {
+      stopCamera(); // Prevents memory leaks if clicked multiple times
       switchView('scanning');
       scanFeedback.innerText = 'Démarrage caméra...';
       isRecognizing = false;
@@ -1098,7 +1102,7 @@
     // =====================================================================
     function handleFileUpload(event) {
       const file = event.target.files[0];
-      if (!file || !ocrWorker) return;
+      if (!file || ocrWorkers.length === 0) return;
       event.target.value = '';
       switchView('processing');
       resetAccumulator();
