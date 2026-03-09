@@ -112,11 +112,18 @@
     <div class="absolute bottom-10 left-0 w-full px-8 space-y-4">
       <div class="bg-slate-900/90 backdrop-blur-xl p-4 rounded-2xl border border-slate-800 text-center">
         <p id="scan-feedback" class="text-sm font-medium animate-pulse">Démarrage du flux vidéo...</p>
+        <p id="scan-debug" class="text-[10px] font-mono text-slate-600 mt-1"></p>
       </div>
-      <button onclick="cancelScan()"
-        class="w-full bg-white/10 backdrop-blur-md py-4 rounded-xl font-bold border border-white/10">
-        Annuler
-      </button>
+      <div class="flex gap-3">
+        <button onclick="manualCapture()"
+          class="flex-1 bg-blue-600/80 backdrop-blur-md py-4 rounded-xl font-bold border border-blue-500/30">
+          📸 Capturer manuellement
+        </button>
+        <button onclick="cancelScan()"
+          class="flex-1 bg-white/10 backdrop-blur-md py-4 rounded-xl font-bold border border-white/10">
+          Annuler
+        </button>
+      </div>
     </div>
   </div>
 
@@ -222,6 +229,7 @@
     let ocrWorker = null;
     let inferenceTimeout = null;
     let isRecognizing = false;
+    let scanAttempts = 0;
 
     // --- ÉLÉMENTS DOM ---
     const views = {
@@ -258,8 +266,10 @@
         });
 
         await ocrWorker.setParameters({
-          tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789< ',
+          tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ',
         });
+
+        scanAttempts = 0;
 
         switchView('ready');
       } catch (err) {
@@ -365,7 +375,11 @@
     function sanitizeLine(rawLine) {
       return rawLine
         .toUpperCase()
-        .replace(/[^A-Z0-9<]/g, '')  // Ne garder que les chars MRZ valides
+        // Tesseract lit souvent les chevrons < comme des espaces, points, virgules, tirets, underscores
+        // On les convertit TOUS en < pour reconstituer la structure MRZ
+        .replace(/[\s.,_\-;:|!`'"~^]+/g, '<')
+        // Supprimer tout ce qui n'est pas MRZ
+        .replace(/[^A-Z0-9<]/g, '')
         .trim();
     }
 
@@ -660,11 +674,14 @@
     }
 
     // --- 3. BOUCLE D'INFÉRENCE OCR ---
+    let lastOcrText = ''; // Pour debug
+
     async function inferenceLoop() {
       if (!video.srcObject || video.paused || video.ended) return;
 
       if (!isRecognizing && ocrWorker) {
         isRecognizing = true;
+        scanAttempts++;
         const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
         // Cadrage central de capture
@@ -677,21 +694,28 @@
         canvas.height = captureH;
 
         // Amélioration contraste de l'image
-        ctx.filter = 'contrast(1.5) grayscale(1)';
+        ctx.filter = 'contrast(1.8) grayscale(1)';
         ctx.drawImage(video, startX, startY, captureW, captureH, 0, 0, captureW, captureH);
         ctx.filter = 'none';
 
         const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
 
         try {
-          scanFeedback.innerText = "Analyse en cours...";
+          scanFeedback.innerText = "Analyse en cours... (" + scanAttempts + ")";
           const { data: { text } } = await ocrWorker.recognize(dataUrl);
           const rawText = text.toUpperCase();
+          lastOcrText = rawText;
+
+          // Afficher les 80 premiers chars du texte brut OCR pour débug
+          const debugEl = document.getElementById('scan-debug');
+          if (debugEl) {
+            debugEl.innerText = 'OCR: ' + rawText.replace(/\n/g, ' | ').substring(0, 100);
+          }
 
           // Toujours tenter le parsing (le moteur gère le scoring lui-même)
           const parsed = parseMRZ(rawText);
-          // Accepter uniquement si un score de confiance ≥ 30 et un doc number valide
-          if (parsed && parsed.docNumber !== 'Non détecté' && (parsed.confidence || 0) >= 30) {
+          // Accepter si un doc number valide ET confiance ≥ 20 (abaissé pour tolérer les erreurs OCR)
+          if (parsed && parsed.docNumber !== 'Non détecté' && (parsed.confidence || 0) >= 20) {
             showResult(parsed);
             return;
           }
@@ -699,11 +723,50 @@
           console.error("Erreur OCR:", e);
         } finally {
           isRecognizing = false;
-          scanFeedback.innerText = "Alignez le MRZ...";
+          scanFeedback.innerText = "Alignez le MRZ... (" + scanAttempts + " scans)";
         }
       }
 
       inferenceTimeout = setTimeout(inferenceLoop, 1500);
+    }
+
+    /** Capture manuelle : force un parsing sur la frame actuelle et affiche le résultat brut. */
+    async function manualCapture() {
+      if (!ocrWorker) return;
+
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.filter = 'contrast(1.8) grayscale(1)';
+      ctx.drawImage(video, 0, 0);
+      ctx.filter = 'none';
+
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+      scanFeedback.innerText = "Capture manuelle...";
+
+      try {
+        const { data: { text } } = await ocrWorker.recognize(dataUrl);
+        const rawText = text.toUpperCase();
+        const parsed = parseMRZ(rawText);
+
+        // Forcer l'affichage même si la confiance est basse
+        if (parsed.docNumber !== 'Non détecté') {
+          showResult(parsed);
+        } else {
+          // Afficher le texte brut sur l'écran résultat pour diagnostic
+          stopCamera();
+          document.getElementById('res-docnumber').innerText = 'Aucun MRZ détecté';
+          document.getElementById('res-lastname').innerText = '-';
+          document.getElementById('res-firstname').innerText = '-';
+          document.getElementById('res-birthdate').innerText = '-';
+          document.getElementById('res-issuedate').innerText = '-';
+          document.getElementById('res-expirydate').innerText = '-';
+          document.getElementById('res-raw').innerText = rawText;
+          switchView('result');
+        }
+      } catch (e) {
+        scanFeedback.innerText = "Erreur capture: " + e.message;
+      }
     }
 
     // --- 4. AFFICHAGE ---
