@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Scanner MRZ — Praxis</title>
+  <title>Scanner MRZ </title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     body {
@@ -488,26 +488,65 @@
       return r;
     }
 
+    /**
+     * Nettoie les caractères de logo/nuisances (souvent devant les noms sur permis FR).
+     * Si le nom commence par un 'A' ou 'S' isolé ou incohérent, on le retire.
+     */
+    function stripLogoNoise(name, mrzName) {
+      if (!name || name.length < 2) return name;
+      const clean = name.trim().toUpperCase();
+
+      // Cas 1 : "S DUPONT" -> "DUPONT" (espace après le caractère parasite)
+      if (/^[AS][\s.]+/.test(clean)) {
+        return clean.replace(/^[AS][\s.]+/, '').trim();
+      }
+
+      // Cas 2 : Comparaison avec MRZ (si disponible lors de la cross-validation)
+      if (mrzName) {
+        const m = mrzName.replace(/</g, '').trim().toUpperCase();
+        if (clean.length === m.length + 1 && (clean.startsWith('A') || clean.startsWith('S')) && clean.endsWith(m)) {
+          return m;
+        }
+      }
+
+      return clean;
+    }
+
+    /**
+     * Extrait nom et prénom depuis le texte visible du document.
+     * Cherche les labels numérotés (1. NOM, 2. PRENOM) typiques du permis FR
+     * et aussi les labels textuels (NOM:, PRENOM:, Surname, Given names)
+     */
     function extractNameFields(text) {
       const r = { lastName: null, firstName: null };
       const lines = text.split(/\n/).map(l => l.trim());
       for (let i = 0; i < lines.length; i++) {
-        const upper = lines[i].toUpperCase();
+        const line = lines[i];
+        const upper = line.toUpperCase();
+
+        // --- NOM ---
         let m = upper.match(/^1[.\s:]+([A-ZÀÂÄÉÈÊËÏÎÔÙÛÜŸ\s\-']{2,})/);
-        if (m) { r.lastName = m[1].trim(); continue; }
-        if (/^1[.\s]*$/.test(upper) && i + 1 < lines.length && /^[A-ZÀÂÄÉÈÊËÏÎÔÙÛÜŸ\s\-']{2,}$/i.test(lines[i + 1].trim())) {
-          r.lastName = lines[i + 1].trim().toUpperCase();
+        if (m) { r.lastName = stripLogoNoise(m[1].trim()); continue; }
+        if (/^1[.\s]*$/.test(upper) && i + 1 < lines.length) {
+          const next = lines[i + 1].trim();
+          if (next.length >= 2 && /^[A-ZÀÂÄÉÈÊËÏÎÔÙÛÜŸ\s\-']+$/i.test(next)) {
+            r.lastName = stripLogoNoise(next.toUpperCase());
+          }
         }
         m = upper.match(/(?:NOM|SURNAME|NOM\s*DE\s*FAMILLE)[\s:]+([A-ZÀÂÄÉÈÊËÏÎÔÙÛÜŸ\s\-']{2,})/);
-        if (m && !r.lastName) r.lastName = m[1].trim();
+        if (m && !r.lastName) r.lastName = stripLogoNoise(m[1].trim());
 
+        // --- PRÉNOM ---
         m = upper.match(/^2[.\s:]+([A-ZÀÂÄÉÈÊËÏÎÔÙÛÜŸ\s\-']{2,})/);
-        if (m) { r.firstName = m[1].trim(); continue; }
-        if (/^2[.\s]*$/.test(upper) && i + 1 < lines.length && /^[A-ZÀÂÄÉÈÊËÏÎÔÙÛÜŸ\s\-']{2,}$/i.test(lines[i + 1].trim())) {
-          r.firstName = lines[i + 1].trim().toUpperCase();
+        if (m) { r.firstName = stripLogoNoise(m[1].trim()); continue; }
+        if (/^2[.\s]*$/.test(upper) && i + 1 < lines.length) {
+          const next = lines[i + 1].trim();
+          if (next.length >= 2 && /^[A-ZÀÂÄÉÈÊËÏÎÔÙÛÜŸ\s\-']+$/i.test(next)) {
+            r.firstName = stripLogoNoise(next.toUpperCase());
+          }
         }
         m = upper.match(/(?:PRENOM|PR[ÉE]NOM|GIVEN|FIRST\s*NAME)[\s:]+([A-ZÀÂÄÉÈÊËÏÎÔÙÛÜŸ\s\-']{2,})/);
-        if (m && !r.firstName) r.firstName = m[1].trim();
+        if (m && !r.firstName) r.firstName = stripLogoNoise(m[1].trim());
       }
       return r;
     }
@@ -537,17 +576,14 @@
     function crossValidateName(mrzName, visibleName) {
       if (!mrzName || !visibleName) return visibleName || mrzName;
       const mrz = mrzName.replace(/</g, ' ').trim().toUpperCase();
-      const vis = visibleName.toUpperCase().trim();
+      const vis = stripLogoNoise(visibleName, mrz);
 
       // Si identiques → parfait
       if (mrz === vis) return vis;
 
-      // Si le MRZ est contenu dans le visible → le visible est probablement correct
-      // mais seulement si la différence n'est pas trop grande
+      // Si le MRZ est contenu dans le visible
       if (vis.includes(mrz)) {
-        // Si le visible a au max 2 chars de plus (espaces, accents) → ok
-        if (vis.length <= mrz.length + 3) return vis;
-        // Sinon le visible a trop de bruit → garder le MRZ
+        if (vis.length <= mrz.length + 2) return vis;
         return mrz;
       }
 
