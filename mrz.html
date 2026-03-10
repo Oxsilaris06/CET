@@ -12,27 +12,22 @@
     .view { display: none; }
     .view.active { display: flex; }
     
-    /* Composants UI */
     .field-row { display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1rem; background: rgba(255, 255, 255, 0.04); border-radius: 0.75rem; margin-bottom: 0.5rem; cursor: pointer; transition: background 0.2s; }
     .field-row:active { background: rgba(255, 255, 255, 0.1); }
     .field-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: #94a3b8; min-width: 5.5rem; }
     .field-value { font-size: 1rem; font-weight: 600; color: #f1f5f9; flex: 1; word-break: break-all; }
     
-    /* Badges */
     .valid-badge { background: #22c55e22; color: #22c55e; padding: 2px 8px; border-radius: 6px; font-size: 0.7rem; font-weight: 700; }
     .invalid-badge { background: #ef444422; color: #ef4444; padding: 2px 8px; border-radius: 6px; font-size: 0.7rem; font-weight: 700; }
     .warn-badge { background: #f59e0b22; color: #f59e0b; padding: 2px 8px; border-radius: 6px; font-size: 0.7rem; font-weight: 700; }
     
-    /* Toast */
     .copy-toast { position: fixed; bottom: 5rem; left: 50%; transform: translateX(-50%); background: #22c55e; color: #000; padding: 0.5rem 1.5rem; border-radius: 2rem; font-weight: 700; font-size: 0.8rem; z-index: 100; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
     .copy-toast.show { opacity: 1; }
     
-    /* Sélecteur de types */
     .doc-selector { display: flex; gap: 0.5rem; width: 100%; max-width: 24rem; margin-top: 1.5rem; overflow-x: auto; padding-bottom: 0.5rem; }
     .doc-btn { flex: 1; min-width: 80px; padding: 0.6rem; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 0.75rem; font-size: 0.65rem; font-weight: 600; color: #94a3b8; text-align: center; transition: all 0.2s; white-space: nowrap; }
     .doc-btn.active { background: #3b82f6; color: #fff; border-color: #3b82f6; box-shadow: 0 4px 12px rgba(59, 131, 246, 0.3); }
 
-    /* Moteur Info */
     .engine-badge { position: absolute; top: 1rem; right: 1rem; background: rgba(255,255,255,0.1); padding: 4px 10px; border-radius: 20px; font-size: 0.7rem; font-weight: bold; backdrop-filter: blur(4px); }
     .engine-native { color: #4ade80; border: 1px solid #4ade8055; }
     .engine-wasm { color: #facc15; border: 1px solid #facc1555; }
@@ -40,7 +35,6 @@
 </head>
 
 <body>
-  <!-- TOAST COPIE -->
   <div id="copy-toast" class="copy-toast">✅ Copié !</div>
 
   <!-- 1. CHARGEMENT -->
@@ -62,7 +56,6 @@
       <p class="text-slate-400 text-sm">Extraction structurée temps réel</p>
     </div>
 
-    <!-- Sélecteur de type document -->
     <div class="doc-selector mb-6" id="ready-selector">
       <button class="doc-btn active" data-type="AUTO">AUTO</button>
       <button class="doc-btn" data-type="PASSEPORT">🛂 PASS</button>
@@ -87,7 +80,7 @@
     <div class="absolute inset-0 pointer-events-none flex flex-col items-center justify-center">
       <div class="w-[90%] max-w-[400px] aspect-[1.58/1] border-2 border-blue-500/50 rounded-xl relative overflow-hidden">
         <div class="absolute bottom-0 left-0 w-full h-[30%] bg-blue-500/20 border-t border-blue-500/50 flex items-center justify-center">
-          <span class="text-blue-300/70 text-[10px] font-bold tracking-widest uppercase">Zone MRZ (Lignes du bas)</span>
+          <span class="text-blue-300/70 text-[10px] font-bold tracking-widest uppercase">Zone MRZ</span>
         </div>
       </div>
     </div>
@@ -95,8 +88,12 @@
     <div class="absolute bottom-8 left-0 w-full px-6">
       <div class="bg-black/80 backdrop-blur-md p-4 rounded-2xl border border-slate-800 text-center">
         <p id="scan-feedback" class="text-sm font-medium text-blue-400 mb-2 animate-pulse">Recherche de texte...</p>
-        <p id="scan-debug" class="text-[10px] font-mono text-slate-500 truncate"></p>
-        <button onclick="cancelScan()" class="mt-4 w-full bg-white/10 py-2 rounded-lg font-bold text-sm">Annuler</button>
+        <p id="scan-debug" class="text-[10px] font-mono text-slate-500 truncate mb-4"></p>
+        
+        <div class="flex gap-2">
+          <button onclick="cancelScan()" class="flex-1 bg-white/10 py-3 rounded-lg font-bold text-sm">Annuler</button>
+          <button onclick="forceCapture()" class="flex-1 bg-blue-600 py-3 rounded-lg font-bold text-sm shadow-lg shadow-blue-600/30">📸 Capturer</button>
+        </div>
       </div>
     </div>
   </div>
@@ -129,7 +126,7 @@
 
   <script>
     // =====================================================================
-    // VARIABLES GLOBALES & ÉTATS
+    // VARIABLES GLOBALES
     // =====================================================================
     const views = {};
     let video, canvas, ctx;
@@ -138,27 +135,21 @@
     let ocrEngine = 'NONE'; 
     let tesseractWorker = null;
     let isScanning = false;
+    let lastRawText = "";
 
     let selectedDocType = 'AUTO';
-    let finalFields = {}; // Stockage des champs pour la copie
+    let finalFields = {};
 
     const LABELS = {
-      documentType: ['📄', 'Type de Document'],
-      documentNumber: ['🆔', 'N° Document'],
-      issuingState: ['🏳️', 'Pays'],
-      lastName: ['👤', 'Nom'],
-      firstName: ['👤', 'Prénom'],
-      nationality: ['🌍', 'Nationalité'],
-      birthDate: ['🎂', 'Date de Naissance'],
-      sex: ['⚧', 'Sexe'],
-      expirationDate: ['📅', 'Date d\'Expiration'],
-      issueDate: ['📅', 'Date d\'Émission']
+      documentType: ['📄', 'Type de Document'], documentNumber: ['🆔', 'N° Document'],
+      issuingState: ['🏳️', 'Pays'], lastName: ['👤', 'Nom'], firstName: ['👤', 'Prénom'],
+      nationality: ['🌍', 'Nationalité'], birthDate: ['🎂', 'Date de Naissance'],
+      sex: ['⚧', 'Sexe'], expirationDate: ['📅', 'Date d\'Expiration']
     };
+    const FIELD_ORDER = ['documentType', 'documentNumber', 'lastName', 'firstName', 'birthDate', 'sex', 'nationality', 'expirationDate', 'issuingState'];
 
-    const FIELD_ORDER = [
-      'documentType', 'documentNumber', 'lastName', 'firstName', 
-      'birthDate', 'sex', 'nationality', 'issueDate', 'expirationDate', 'issuingState'
-    ];
+    const L2D = { 'O': '0', 'Q': '0', 'D': '0', 'U': '0', 'I': '1', 'L': '1', 'J': '1', 'Z': '2', 'A': '4', 'S': '5', 'G': '6', 'C': '6', 'T': '7', 'B': '8', 'P': '9' };
+    const D2L = { '0': 'O', '1': 'I', '2': 'Z', '4': 'A', '5': 'S', '6': 'G', '8': 'B', '9': 'P' };
 
     // =====================================================================
     // INITIALISATION
@@ -170,7 +161,6 @@
       ctx = canvas.getContext('2d', { willReadFrequently: true });
       document.getElementById('fileUpload').addEventListener('change', handleFileUpload);
 
-      // Sélecteur de types
       document.querySelectorAll('.doc-btn').forEach(btn => {
         btn.addEventListener('click', () => {
           selectedDocType = btn.getAttribute('data-type');
@@ -190,9 +180,6 @@
       views[name].classList.remove('hidden');
     }
 
-    // =====================================================================
-    // CHARGEMENT DES MOTEURS
-    // =====================================================================
     async function loadEngines() {
       const status = document.getElementById('load-status');
       const bar = document.getElementById('load-progress');
@@ -212,11 +199,11 @@
         } else {
           ocrEngine = 'TESSERACT';
           status.innerText = "Chargement Tesseract WASM...";
-          document.getElementById('engine-indicator').innerText = "🐢 Moteur Web (WASM)";
+          document.getElementById('engine-indicator').innerText = "🐢 Moteur Web";
           document.getElementById('engine-indicator').className = "engine-badge engine-wasm";
           bar.style.width = '60%';
           
-          tesseractWorker = await Tesseract.createWorker('eng', 1);
+          tesseractWorker = await Tesseract.createWorker('eng');
           await tesseractWorker.setParameters({ tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<', });
           bar.style.width = '100%';
         }
@@ -227,7 +214,148 @@
     }
 
     // =====================================================================
-    // EXTRACTION DU TEXTE BRUT
+    // ALGORITHMES MRZ (Restaurés depuis ton code original)
+    // =====================================================================
+    function sanitizeLine(raw) {
+      return raw.toUpperCase().replace(/[\s]+/g, '<').replace(/[.,;:_\-|!`'"~^°\[\](){}]+/g, '<').replace(/[^A-Z0-9<]/g, '').replace(/^<+/, '').trim();
+    }
+
+    function normalizeTo(line, len) {
+      if (line.length === len) return line;
+      if (line.length > len) return line.substring(0, len);
+      return line + '<'.repeat(len - line.length);
+    }
+
+    function correctByMask(line, mask) {
+      let out = '';
+      for (let i = 0; i < line.length && i < mask.length; i++) {
+        const c = line[i], m = mask[i];
+        if (m === 'D') out += /[0-9]/.test(c) ? c : (L2D[c] || c);
+        else if (m === 'A') out += /[A-Z<]/.test(c) ? c : (D2L[c] || c);
+        else out += c;
+      }
+      return out;
+    }
+
+    function extractCandidateLines(rawText) {
+      if (!rawText) return [];
+      return rawText.split(/\n/).map(r => {
+        const clean = sanitizeLine(r);
+        if (clean.length < 25) return null;
+        let score = clean.length; 
+        if (clean.includes('<<')) score += 10;
+        return { line: clean, score, len: clean.length };
+      }).filter(Boolean).sort((a, b) => b.score - a.score);
+    }
+
+    function tryMrzParse(lines) {
+      if (!mrzParse || lines.length === 0) return null;
+      try {
+        let patched = [...lines];
+        if (patched.length === 3 && patched[0].startsWith('IR')) patched[0] = 'ID' + patched[0].substring(2); // Patch Séjour FR
+        return mrzParse(patched);
+      } catch (e) { return null; }
+    }
+
+    function parsePermisFrManual(line) {
+      const norm = normalizeTo(line, 30);
+      const prefix = norm.substring(0, 2).replace('DI', 'D1');
+      if (prefix !== 'D1') return null;
+      const docNum = norm.substring(5, 14).replace(/</g, '');
+      const rawExp = norm.substring(15, 21);
+      let expiry = '';
+      for (let i = 0; i < 6; i++) expiry += /[0-9]/.test(rawExp[i]) ? rawExp[i] : (L2D[rawExp[i]] || '0');
+      return {
+        valid: docNum.length >= 5, format: 'PERMIS_FR', documentNumber: docNum,
+        fields: { documentType: 'PERMIS DE CONDUIRE', issuingState: 'FRA', documentNumber: docNum, expirationDate: expiry }
+      };
+    }
+
+    function parseMrzAdvanced(rawText) {
+      const candidates = extractCandidateLines(rawText);
+      if (candidates.length === 0) return null;
+
+      // 1. Essayer de parser directement les meilleures lignes
+      let topLines = candidates.slice(0, 3).map(c => c.line);
+      let res = tryMrzParse(topLines);
+      if (res) return res;
+
+      // 2. Correction par masque
+      const MASK_TD1_L1 = 'AAAAAXXXXXXXXDXXXXXXXXXXXXXXXX';
+      const MASK_TD1_L2 = 'DDDDDDDXDDDDDDDAAAXXXXXXXXXXX';
+      const MASK_TD3_L2 = 'XXXXXXXXXDAAADDDDDDDXDDDDDDXXXXXXXXXXXXXXXDD';
+      
+      const td3Lines = candidates.filter(c => c.len >= 38).slice(0,2).map(c => normalizeTo(c.line, 44));
+      if (td3Lines.length === 2) {
+        td3Lines[1] = correctByMask(td3Lines[1], MASK_TD3_L2);
+        res = tryMrzParse(td3Lines);
+        if (res) return res;
+      }
+
+      const td1Lines = candidates.filter(c => c.len >= 28 && c.len <= 34).slice(0,3).map(c => normalizeTo(c.line, 30));
+      if (td1Lines.length >= 2) {
+        td1Lines[0] = correctByMask(td1Lines[0], MASK_TD1_L1);
+        td1Lines[1] = correctByMask(td1Lines[1], MASK_TD1_L2);
+        if(td1Lines.length === 2) td1Lines.push('<'.repeat(30));
+        res = tryMrzParse(td1Lines);
+        if (res) return res;
+      }
+
+      // 3. Permis de conduire (Non ICAO)
+      const permisLine = candidates.find(c => /^[D0][1I]/.test(c.line));
+      if (permisLine) return parsePermisFrManual(permisLine.line);
+
+      return null;
+    }
+
+    // Extraction des champs visibles (si MRZ incomplet)
+    function extractVisibleFields(text) {
+      const r = { lastName: null, firstName: null, docType: null };
+      if (!text) return r;
+      const upper = text.toUpperCase();
+      
+      if (upper.includes('PERMIS') && upper.includes('CONDUIRE')) r.docType = 'PERMIS_FR';
+      else if (upper.includes('PASSEPORT') || upper.includes('PASSPORT')) r.docType = 'PASSEPORT';
+      else if (upper.includes('IDENTIT')) r.docType = 'CNI';
+      else if (upper.includes('SEJOUR')) r.docType = 'TITRE_SEJOUR';
+
+      const lines = text.split(/\n/).map(l => l.trim()).filter(l => l.length > 0);
+      for (let i = 0; i < lines.length; i++) {
+        if (!r.lastName) {
+          const m = lines[i].match(/(?:NOM|SURNAME|1[.\s:]+)[\s:]+([A-ZÀÂÄÉÈÊËÏÎÔÙÛÜŸ\s\-']{2,})/i);
+          if (m) r.lastName = m[1].trim();
+        }
+        if (!r.firstName) {
+          const m = lines[i].match(/(?:PRENOM|PRÉNOM|GIVEN|2[.\s:]+)[\s:]+([A-ZÀÂÄÉÈÊËÏÎÔÙÛÜŸ\s\-']{2,})/i);
+          if (m) r.firstName = m[1].trim();
+        }
+      }
+      return r;
+    }
+
+    function processExtractedText(rawText) {
+      if (!rawText) return null;
+      let mrzResult = parseMrzAdvanced(rawText);
+      const visible = extractVisibleFields(rawText);
+      
+      const merged = {
+        valid: mrzResult ? mrzResult.valid : false,
+        format: mrzResult ? mrzResult.format : (visible.docType || 'INCONNU'),
+        documentNumber: mrzResult ? mrzResult.documentNumber : null,
+        fields: mrzResult && mrzResult.fields ? { ...mrzResult.fields } : {},
+        _raw: rawText
+      };
+
+      if (selectedDocType !== 'AUTO' && merged.format === 'INCONNU') merged.format = selectedDocType;
+      if (visible.lastName && !merged.fields.lastName) merged.fields.lastName = visible.lastName;
+      if (visible.firstName && !merged.fields.firstName) merged.fields.firstName = visible.firstName;
+      if (visible.docType && !merged.fields.documentType) merged.fields.documentType = visible.docType;
+
+      return merged;
+    }
+
+    // =====================================================================
+    // LECTURE & VIDÉO
     // =====================================================================
     async function extractTextFromImage(imageSource) {
       let srcW = imageSource === 'camera' ? video.videoWidth : imageSource.width;
@@ -252,119 +380,11 @@
       }
     }
 
-    // =====================================================================
-    // LOGIQUE DE PARSING MÉTIER (STRUCTURATION)
-    // =====================================================================
-    const L2D = { 'O': '0', 'Q': '0', 'D': '0', 'U': '0', 'I': '1', 'L': '1', 'J': '1', 'Z': '2', 'A': '4', 'S': '5', 'G': '6', 'C': '6', 'T': '7', 'B': '8', 'P': '9' };
-    
-    function sanitizeLine(raw) {
-      return raw.toUpperCase().replace(/[\s]+/g, '<').replace(/[.,;:_\-|!`'"~^°\[\](){}]+/g, '<').replace(/[^A-Z0-9<]/g, '').replace(/^<+/, '').trim();
-    }
-
-    function parsePermisFrManual(line) {
-      if (line.length < 26) return null;
-      let norm = line;
-      if (norm.length < 30) norm = norm + '<'.repeat(30 - norm.length);
-      else if (norm.length > 30) norm = norm.substring(0, 30);
-      
-      const prefix = norm.substring(0, 2).replace('DI', 'D1');
-      const country = norm.substring(2, 5).replace(/</g, '');
-      if (prefix !== 'D1' || country !== 'FRA') return null;
-      
-      const docNum = norm.substring(5, 14).replace(/</g, '');
-      const rawExp = norm.substring(15, 21);
-      let expiry = '';
-      for (let i = 0; i < 6; i++) expiry += /[0-9]/.test(rawExp[i]) ? rawExp[i] : (L2D[rawExp[i]] || '0');
-      
-      return {
-        valid: docNum.length >= 5, format: 'PERMIS_FR', documentNumber: docNum,
-        fields: { documentType: 'PERMIS DE CONDUIRE', issuingState: 'FRA', documentNumber: docNum, expirationDate: expiry }
-      };
-    }
-
-    // Extraction des champs visibles si le MRZ ne suffit pas
-    function extractVisibleFields(text) {
-      const r = { lastName: null, firstName: null, docType: null };
-      if (!text) return r;
-      const upper = text.toUpperCase();
-      
-      if (upper.includes('PERMIS') && upper.includes('CONDUIRE')) r.docType = 'PERMIS_FR';
-      else if (upper.includes('PASSEPORT') || upper.includes('PASSPORT')) r.docType = 'PASSEPORT';
-      else if (upper.includes('IDENTIT')) r.docType = 'CNI';
-      else if (upper.includes('TITRE') && upper.includes('SEJOUR')) r.docType = 'TITRE_SEJOUR';
-
-      const lines = text.split(/\n/).map(l => l.trim()).filter(l => l.length > 0);
-      for (let i = 0; i < lines.length; i++) {
-        if (!r.lastName) {
-          const m = lines[i].match(/(?:NOM|SURNAME|1[.\s:]+)[\s:]+([A-ZÀÂÄÉÈÊËÏÎÔÙÛÜŸ\s\-']{2,})/i);
-          if (m) r.lastName = m[1].trim();
-        }
-        if (!r.firstName) {
-          const m = lines[i].match(/(?:PRENOM|PRÉNOM|GIVEN|2[.\s:]+)[\s:]+([A-ZÀÂÄÉÈÊËÏÎÔÙÛÜŸ\s\-']{2,})/i);
-          if (m) r.firstName = m[1].trim();
-        }
-      }
-      return r;
-    }
-
-    function processExtractedText(rawText) {
-      if (!rawText) return null;
-      
-      const lines = rawText.split('\n').map(sanitizeLine).filter(l => l.length >= 25);
-      let mrzResult = null;
-      
-      // 1. Tenter le MRZ officiel ICAO
-      if (lines.length >= 2) {
-        // Tenter de patcher les Titres de Séjour FR (IR -> ID)
-        let patchedLines = [...lines];
-        if (patchedLines[0].startsWith('IR')) patchedLines[0] = 'ID' + patchedLines[0].substring(2);
-        
-        try { mrzResult = mrzParse(patchedLines); } catch (e) {}
-      }
-
-      // 2. Tenter le Permis FR (Non ICAO)
-      if (!mrzResult || !mrzResult.valid) {
-        const permisLines = lines.filter(l => /^[D0][1I]/.test(l));
-        if (permisLines.length > 0) {
-          const pRes = parsePermisFrManual(permisLines[0]);
-          if (pRes) mrzResult = pRes;
-        }
-      }
-
-      // 3. Extraction de l'identité visible (fusion)
-      const visible = extractVisibleFields(rawText);
-      
-      const merged = {
-        valid: mrzResult ? mrzResult.valid : false,
-        format: mrzResult ? mrzResult.format : (visible.docType || 'INCONNU'),
-        documentNumber: mrzResult ? mrzResult.documentNumber : null,
-        fields: mrzResult && mrzResult.fields ? { ...mrzResult.fields } : {},
-        _raw: rawText
-      };
-
-      // Si le type a été forcé par le bouton
-      if (selectedDocType !== 'AUTO' && merged.format === 'INCONNU') {
-        merged.format = selectedDocType;
-      }
-
-      // Compléter avec les données visibles si le MRZ est muet ou partiel
-      if (visible.lastName && !merged.fields.lastName) merged.fields.lastName = visible.lastName;
-      if (visible.firstName && !merged.fields.firstName) merged.fields.firstName = visible.firstName;
-      if (visible.docType && !merged.fields.documentType) merged.fields.documentType = visible.docType;
-
-      // On considère "valable" si on a au moins le numéro ou un nom
-      const hasData = merged.documentNumber || merged.fields.lastName;
-      
-      return hasData ? merged : null;
-    }
-
-    // =====================================================================
-    // BOUCLE DE LA CAMÉRA
-    // =====================================================================
     async function startCamera() {
       switchView('scanning');
       isScanning = true;
-      document.getElementById('scan-feedback').innerText = "Cadrez la zone MRZ...";
+      document.getElementById('scan-feedback').innerText = "Recherche de la zone MRZ...";
+      document.getElementById('scan-debug').innerText = "";
       
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
@@ -374,7 +394,7 @@
         await video.play();
         scanLoop();
       } catch (err) {
-        document.getElementById('scan-feedback').innerText = "Erreur Caméra";
+        document.getElementById('scan-feedback').innerText = "Erreur Caméra. Veuillez autoriser l'accès.";
       }
     }
 
@@ -385,24 +405,42 @@
       switchView('ready');
     }
 
+    // Bouton de capture manuelle (si l'auto-focus est capricieux)
+    async function forceCapture() {
+      if (!isScanning) return;
+      isScanning = false; // Stop la boucle
+      if (scanTimeout) clearTimeout(scanTimeout);
+      
+      document.getElementById('scan-feedback').innerText = "Analyse forcée en cours...";
+      const rawText = await extractTextFromImage('camera');
+      const result = processExtractedText(rawText) || { valid: false, fields: {}, _raw: rawText };
+      
+      if (video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
+      showResult(result);
+    }
+
     async function scanLoop() {
       if (!isScanning || !video.srcObject || video.paused) return;
 
       try {
-        const rawText = await extractTextFromImage('camera');
-        document.getElementById('scan-debug').innerText = rawText.replace(/\n/g, ' / ').substring(0, 50);
+        lastRawText = await extractTextFromImage('camera');
+        
+        // Debug UI (affiche les lignes qui ressemblent à du MRZ)
+        const lines = lastRawText.split('\n').filter(l => l.includes('<') && l.length > 10);
+        if(lines.length > 0) document.getElementById('scan-debug').innerText = lines[0].substring(0, 40) + "...";
 
-        const result = processExtractedText(rawText);
+        const result = processExtractedText(lastRawText);
 
-        if (result && result.valid) {
+        // CONDITION DE SUCCÈS ASSOUPLIE :
+        // Soit le checksum est parfait (valid: true)
+        // Soit on a trouvé au moins le numéro du doc ET le nom de famille (suffisant pour le résultat)
+        if (result && (result.valid || (result.documentNumber && result.fields.lastName))) {
           isScanning = false;
           if (video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
           showResult(result);
           return;
         }
-      } catch (e) {
-        console.error("Erreur de scan", e);
-      }
+      } catch (e) { console.error(e); }
 
       const delay = ocrEngine === 'NATIVE' ? 150 : 800;
       scanTimeout = setTimeout(scanLoop, delay);
@@ -420,15 +458,19 @@
       
       const img = new Image();
       img.onload = async () => {
-        const rawText = await extractTextFromImage(img);
-        const result = processExtractedText(rawText);
-        showResult(result || { valid: false, _raw: rawText, format: 'ÉCHEC' });
+        try {
+          const rawText = await extractTextFromImage(img);
+          const result = processExtractedText(rawText);
+          showResult(result || { valid: false, fields: {}, _raw: rawText, format: 'INCONNU' });
+        } catch (e) {
+          showResult({ valid: false, fields: {}, _raw: "Erreur de lecture", format: 'INCONNU' });
+        }
       };
       img.src = URL.createObjectURL(file);
     }
 
     // =====================================================================
-    // AFFICHAGE DES RÉSULTATS & COPIE
+    // RÉSULTATS & COPIE
     // =====================================================================
     function resetApp() { switchView('ready'); }
 
@@ -442,7 +484,7 @@
 
     function mapFormatName(fmt) {
       if(fmt === 'TD3') return 'Passeport';
-      if(fmt === 'TD1') return 'Carte d\'Identité (CNI) / Titre de Séjour';
+      if(fmt === 'TD1') return 'Carte d\'Identité / Titre de Séjour';
       if(fmt === 'PERMIS_FR') return 'Permis de Conduire';
       return fmt;
     }
@@ -452,16 +494,9 @@
       row.className = 'field-row';
       const [icon, label] = labelIconPair;
       
-      row.innerHTML = `
-        <span class="text-lg">${icon}</span>
-        <span class="field-label">${label}</span>
-        <span class="field-value">${value}</span>
-      `;
-      
-      // Ajout au dictionnaire pour copie globale
+      row.innerHTML = `<span class="text-lg">${icon}</span><span class="field-label">${label}</span><span class="field-value">${value}</span>`;
       finalFields[label] = value;
 
-      // Copie individuelle au clic
       row.addEventListener('click', () => {
         navigator.clipboard.writeText(value).then(() => showToast(`✅ ${label} copié !`)).catch(()=>{});
       });
@@ -470,7 +505,7 @@
 
     function showResult(result) {
       switchView('result');
-      finalFields = {}; // Reset global
+      finalFields = {}; 
       
       const badge = document.getElementById('res-valid-badge');
       if (result.valid) {
@@ -481,21 +516,19 @@
         badge.className = 'invalid-badge'; badge.innerText = '❌ ÉCHEC';
       }
 
-      document.getElementById('res-format').innerText = "Format détecté : " + mapFormatName(result.format || "Inconnu");
+      document.getElementById('res-format').innerText = "Format : " + mapFormatName(result.format || "Inconnu");
       document.getElementById('res-raw').innerText = result._raw || "Aucun texte détecté";
 
       const container = document.getElementById('res-fields');
       container.innerHTML = '';
 
       if (result.fields && Object.keys(result.fields).length > 0) {
-        // Afficher d'abord les champs dans l'ordre défini
         for (const key of FIELD_ORDER) {
           const rawVal = result.fields[key] || (key === 'documentNumber' ? result.documentNumber : null);
           const val = formatField(key, rawVal);
           if (val) addFieldUI(container, key, val, LABELS[key] || ['📋', key]);
         }
         
-        // Afficher les autres champs s'il y en a
         for (const [key, rawVal] of Object.entries(result.fields)) {
           if (!FIELD_ORDER.includes(key) && rawVal) {
             const val = formatField(key, rawVal);
@@ -503,21 +536,15 @@
           }
         }
       } else {
-        container.innerHTML = `<p class="text-sm text-slate-400 text-center py-4">Impossible d'extraire des champs. Assurez-vous que le document est bien éclairé.</p>`;
+        container.innerHTML = `<p class="text-sm text-slate-400 text-center py-4">Impossible d'extraire les champs. Utilisez le bouton "📸 Capturer" ou importez une photo plus nette.</p>`;
       }
     }
 
     function copyAllFields() {
       if (Object.keys(finalFields).length === 0) return;
-      const lines = [];
-      for (const [label, value] of Object.entries(finalFields)) {
-        lines.push(`${label} : ${value}`);
-      }
-      const text = lines.join('\n');
+      const text = Object.entries(finalFields).map(([label, value]) => `${label} : ${value}`).join('\n');
       
-      navigator.clipboard.writeText(text).then(() => {
-        showToast('✅ Tous les champs copiés !');
-      }).catch(() => {
+      navigator.clipboard.writeText(text).then(() => showToast('✅ Tous les champs copiés !')).catch(() => {
         const ta = document.createElement('textarea');
         ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
         showToast('✅ Tous les champs copiés !');
@@ -533,3 +560,5 @@
   </script>
 </body>
 </html>
+
+
