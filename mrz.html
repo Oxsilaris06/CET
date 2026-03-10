@@ -143,16 +143,19 @@
     let selectedDocType = 'AUTO';
     let finalFields = {};
 
-    // Système "2 Temps" (Best Effort tracking)
     let bestScanResult = null;
     let bestScanScore = 0;
     let scanStartTime = 0;
-    const MAX_SCAN_DURATION_MS = 8000; // 8 secondes avant le fallback automatique
+    const MAX_SCAN_DURATION_MS = 8000;
 
+    // Mots Absolument Interdits dans les Champs de données (Demande Utilisateur)
     const FORBIDDEN_WORDS = [
       'TITRE DE SEJOUR', 'CARTE NATIONALE', 'IDENTITE', 'PASSEPORT', 'PASSPORT',
-      'PERMIS', 'CONDUIRE', 'REPUBLIQUE', 'FRANCAISE', 'FRANCE', 'DOCUMENT', 'DRIVING', 'LICENSE', 'MINISTERE', 'INTERIEUR'
+      'PERMIS', 'CONDUIRE', 'DRIVING', 'LICENSE', 'REPUBLIQUE', 'FRANCAISE'
     ];
+
+    // Mots parasites d'OCR à nettoyer dans les Noms
+    const OCR_NOISE = /\b(ULOME|SURNAME|GIVEN|NAMES|SCE|NOM|PRENOM)\b/gi;
 
     const ALLOWED_DOC_TYPES = {
       'PASSEPORT': 'Passeport',
@@ -164,30 +167,28 @@
     const FIELD_ORDER = ['Type de document', 'N° de titre', 'Nom', 'Prénom', 'Date de naissance', 'Sexe', 'Nationalité', 'Date d\'émission', 'Date de péremption'];
     
     // =====================================================================
-    // FILTRES ET NETTOYEURS (Le cœur de l'intelligence)
+    // FILTRES ET NETTOYEURS
     // =====================================================================
     
-    // Vérifie si la chaine contient un mot interdit complet
     function containsForbiddenWord(text) {
       if (!text) return false;
       const upper = text.toUpperCase().replace(/[^A-Z]/g, '');
       return FORBIDDEN_WORDS.some(word => upper.includes(word.replace(/[^A-Z]/g, '')));
     }
 
-    /**
-     * Nettoyeur hyper-spécifique pour les Permis et CNI.
-     * Enlève les "1.", "2.", "A", "S" devant les noms.
-     */
     function cleanName(name) {
       if (!name) return null;
       let clean = name.toUpperCase();
       
-      // 1. Enlever les puces type "1.", "2.", "1 :", etc.
-      clean = clean.replace(/^[0-9]+[.\-:]?\s*/g, '');
-      // 2. Enlever les lettres isolées au début typiques des reflets/logos (ex: "A DUPONT", "S JEAN")
-      clean = clean.replace(/^[A-Z][.\-:]?\s+/g, '');
-      // 3. Ne garder que les lettres, espaces, tirets et apostrophes
-      clean = clean.replace(/[^\w\s\-À-Ÿ']/g, '').trim();
+      // Suppression des labels OCR corrompus
+      clean = clean.replace(OCR_NOISE, '');
+      
+      // Enlever les puces type "1.", "2.", ou les lettres isolées au début "A DUPONT"
+      clean = clean.replace(/^[0-9A-Z]+[.\-:]?\s+/g, '');
+      
+      // Ne garder que lettres, espaces, tirets et VIRGULES
+      clean = clean.replace(/[^\w\s\-À-Ÿ,]/g, '').trim();
+      clean = clean.replace(/^,+|,+$/g, '').trim(); // Enlever virgules début/fin
 
       if (clean.length < 2) return null;
       if (containsForbiddenWord(clean)) return null;
@@ -195,24 +196,28 @@
       return clean;
     }
 
-    // Convertit et valide strictement une date au format JJ.MM.AAAA
+    // Accepte désormais "15 05 1997" avec des espaces
     function strictDateFormatter(rawDate) {
       if (!rawDate) return null;
       let dd, mm, yyyy;
 
+      // Format MRZ AAMMJJ (ex: "900512")
       if (/^\d{6}$/.test(rawDate)) {
         let yy = parseInt(rawDate.substring(0,2));
         mm = rawDate.substring(2,4);
         dd = rawDate.substring(4,6);
         yyyy = (yy > 50 ? '19' : '20') + rawDate.substring(0,2);
       } 
-      else if (/^\d{2}[./-]\d{2}[./-]\d{4}$/.test(rawDate)) {
-        dd = rawDate.substring(0,2);
-        mm = rawDate.substring(3,5);
-        yyyy = rawDate.substring(6,10);
-      }
       else {
-        return null;
+        // Regex robuste tolérant les espaces ou caractères de séparation
+        const match = rawDate.match(/^(\d{2})[./\-\s]+(\d{2})[./\-\s]+(\d{4})$/);
+        if (match) {
+            dd = match[1];
+            mm = match[2];
+            yyyy = match[3];
+        } else {
+            return null;
+        }
       }
 
       if (parseInt(mm) < 1 || parseInt(mm) > 12) return null;
@@ -224,30 +229,22 @@
 
     function getStrictDocType(format, rawText) {
       if (selectedDocType !== 'AUTO') return selectedDocType;
-
       if (format === 'TD3') return ALLOWED_DOC_TYPES.PASSEPORT;
       if (format === 'PERMIS_FR') return ALLOWED_DOC_TYPES.PERMIS_FR;
       
       const upperText = (rawText || '').toUpperCase();
-      
       if (format === 'TD1') {
-        if (upperText.includes('IRFRA') || upperText.includes('SEJOUR') || upperText.includes('RESIDENT')) {
-          return ALLOWED_DOC_TYPES.TITRE_SEJOUR;
-        }
+        if (upperText.includes('IRFRA') || upperText.includes('SEJOUR') || upperText.includes('RESIDENT')) return ALLOWED_DOC_TYPES.TITRE_SEJOUR;
         return ALLOWED_DOC_TYPES.CNI;
       }
-
       if (upperText.includes('PERMIS') && upperText.includes('CONDUIRE')) return ALLOWED_DOC_TYPES.PERMIS_FR;
-      if (upperText.includes('PASSEPORT')) return ALLOWED_DOC_TYPES.PASSEPORT;
+      if (upperText.includes('PASSEPORT') || upperText.includes('RASSPORT')) return ALLOWED_DOC_TYPES.PASSEPORT;
       if (upperText.includes('SEJOUR')) return ALLOWED_DOC_TYPES.TITRE_SEJOUR;
       if (upperText.includes('IDENTIT')) return ALLOWED_DOC_TYPES.CNI;
 
       return null;
     }
 
-    // =====================================================================
-    // APPLICATION DES RÈGLES ET SCORING
-    // =====================================================================
     function applyStrictRules(extractedData, rawText) {
       const strictResult = {
         'Type de document': getStrictDocType(extractedData.format, rawText),
@@ -261,13 +258,11 @@
         'Nationalité': extractedData.fields?.nationality
       };
 
-      // Validation Numéro
       const docNum = extractedData.documentNumber;
       if (docNum && docNum.length >= 5 && !containsForbiddenWord(docNum)) {
         strictResult['N° de titre'] = docNum.toUpperCase().replace(/[^A-Z0-9]/g, '');
       }
 
-      // Condition 1er temps (Optimal)
       const isOptimal = (
         strictResult['Type de document'] !== null &&
         strictResult['N° de titre'] !== null &&
@@ -275,15 +270,10 @@
         strictResult['Date de naissance'] !== null
       );
 
-      // Calcul du score pour le 2ème temps (Fallback partiel)
       let score = 0;
       Object.values(strictResult).forEach(val => { if (val !== null) score++; });
 
-      return {
-        isOptimal: isOptimal,
-        score: score,
-        strictFields: strictResult
-      };
+      return { isOptimal, score, strictFields: strictResult };
     }
 
     // =====================================================================
@@ -343,7 +333,7 @@
     }
 
     // =====================================================================
-    // LECTURE & VIDÉO (Scanner 2 Temps)
+    // EXTRACTION DU TEXTE & RECHERCHE AVANCÉE (Lignes Multiples)
     // =====================================================================
     async function extractTextFromImage(imageSource) {
       let srcW = imageSource === 'camera' ? video.videoWidth : imageSource.width;
@@ -370,11 +360,12 @@
 
     function parseRawText(rawText) {
       if (!rawText) return {};
-      const lines = rawText.toUpperCase().split('\n').map(l => l.replace(/[\s]+/g, '<').replace(/[^A-Z0-9<]/g, '').trim()).filter(l => l.length >= 25);
       let format = null, documentNumber = null, fields = {};
-      
-      if (lines.length >= 2) {
-        let patched = [...lines];
+
+      // 1. TENTATIVE MRZ
+      const mrzLines = rawText.toUpperCase().split('\n').map(l => l.replace(/[\s]+/g, '<').replace(/[^A-Z0-9<]/g, '').trim()).filter(l => l.length >= 25);
+      if (mrzLines.length >= 2) {
+        let patched = [...mrzLines];
         if (patched[0].startsWith('IR')) patched[0] = 'ID' + patched[0].substring(2);
         try { 
           const mrz = mrzParse(patched); 
@@ -382,29 +373,74 @@
         } catch (e) {}
       }
 
-      const permisLine = lines.find(l => /^[D0][1I]/.test(l));
-      if (permisLine) {
+      // Permis Manuel
+      const permisLine = mrzLines.find(l => /^[D0][1I]/.test(l));
+      if (permisLine && !format) {
         const docNum = permisLine.substring(5, 14).replace(/</g, '');
-        const rawExp = permisLine.substring(15, 21);
-        if (docNum.length >= 5) {
-          format = 'PERMIS_FR'; documentNumber = docNum; fields = { expirationDate: rawExp };
-        }
+        if (docNum.length >= 5) { format = 'PERMIS_FR'; documentNumber = docNum; fields.expirationDate = permisLine.substring(15, 21); }
       }
 
-      // Noms visibles en fallback (Très utile pour les permis)
-      if (!fields.lastName || !fields.firstName) {
-        const visLines = rawText.toUpperCase().split(/\n/).map(l => l.trim());
-        visLines.forEach(l => {
-          const mL = l.match(/(?:NOM|SURNAME|1[.\s:]+)[\s:]*([A-ZÀ-Ÿ\s\-']{2,})/i);
-          if (mL && !fields.lastName) fields.lastName = mL[1].trim();
-          const mF = l.match(/(?:PRENOM|PRÉNOM|GIVEN|2[.\s:]+)[\s:]*([A-ZÀ-Ÿ\s\-']{2,})/i);
-          if (mF && !fields.firstName) fields.firstName = mF[1].trim();
-        });
+      // 2. EXTRACTION VISUELLE MULTI-LIGNES (Le correctif du Passeport Français)
+      const visLines = rawText.toUpperCase().split('\n').map(l => l.trim()).filter(l => l.length > 0);
+      
+      const getValFromLineOrNext = (idx, labelRegex) => {
+          let val = visLines[idx].replace(labelRegex, '').trim();
+          val = val.replace(OCR_NOISE, '').replace(/^[.:-]+\s*/, '').trim();
+          
+          if (val.length >= 2) return val;
+          
+          // Si vide, on regarde la ligne en dessous
+          if (idx + 1 < visLines.length) {
+              let nextLine = visLines[idx + 1].trim();
+              // On vérifie que la ligne du dessous n'est pas un autre titre (ex: Date de naissance)
+              if (!/(NOM|PRENOM|DATE|SEXE|NATIONALITE|PASSEPORT|CARTE|TITRE)/.test(nextLine)) {
+                  return nextLine.replace(/^[.:-]+\s*/, '').trim();
+              }
+          }
+          return null;
+      };
+
+      for (let i = 0; i < visLines.length; i++) {
+          let l = visLines[i];
+          
+          if (!fields.lastName && /(NOM|SURNAME)/i.test(l)) {
+              let res = getValFromLineOrNext(i, /(NOM|SURNAME)S?/gi);
+              if (res) fields.lastName = res;
+          }
+          
+          if (!fields.firstName && /(PRENOM|GIVEN|PRÉNOM)/i.test(l)) {
+              let res = getValFromLineOrNext(i, /(PRENOM|GIVEN|PRÉNOM)S?/gi);
+              if (res) fields.firstName = res;
+          }
+
+          if (!documentNumber && /(PASSEPORT|CARTE|TITRE|DOCUMENT|RASSPORT)\s*N/i.test(l)) {
+              let res = getValFromLineOrNext(i, /(PASSEPORT|CARTE|TITRE|DOCUMENT|RASSPORT)\s*N[°0O]?/gi);
+              if (res) {
+                  res = res.replace(/[^A-Z0-9]/g, '');
+                  if (res.length >= 5) documentNumber = res;
+              }
+          }
+      }
+
+      // 3. EXTRACTION DATES GLOBALES (Gère les espaces "15 05 1997")
+      const dateRegex = /\b(\d{2})[./\-\s]+(\d{2})[./\-\s]+(\d{4})\b/g;
+      let match;
+      while ((match = dateRegex.exec(rawText)) !== null) {
+          let dString = `${match[1]}.${match[2]}.${match[3]}`;
+          let index = match.index;
+          let context = rawText.substring(Math.max(0, index - 30), index).toUpperCase();
+
+          if (context.includes('NAISSANCE') && !fields.birthDate) fields.birthDate = dString;
+          else if ((context.includes('DELIVR') || context.includes('EMISSION')) && !fields.issueDate) fields.issueDate = dString;
+          else if ((context.includes('EXPIR') || context.includes('PEREMP') || context.includes('JUSQU')) && !fields.expirationDate) fields.expirationDate = dString;
       }
 
       return { format, documentNumber, fields };
     }
 
+    // =====================================================================
+    // CAMERA ET BOUCLE
+    // =====================================================================
     async function startCamera() {
       switchView('scanning');
       isScanning = true;
@@ -414,7 +450,7 @@
       
       document.getElementById('scan-feedback').innerText = "Temps 1: Recherche d'une lecture parfaite...";
       document.getElementById('timeout-progress').style.width = '0%';
-      document.getElementById('btn-force').classList.add('hidden'); // Caché au début
+      document.getElementById('btn-force').classList.add('hidden');
       
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
@@ -434,21 +470,13 @@
       if (video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
     }
 
-    function cancelScan() {
-      stopVideo();
-      switchView('ready');
-    }
+    function cancelScan() { stopVideo(); switchView('ready'); }
 
-    // Le clic sur "Récupérer" (Temps 2 manuel)
     function forceCapture() {
       if (!isScanning) return;
       stopVideo();
-      if (bestScanResult) {
-        showResult(bestScanResult.data, bestScanResult.raw, true);
-      } else {
-        // Vraiment rien trouvé, on affiche vide
-        showResult({ isOptimal: false, strictFields: {} }, "Aucune donnée lisible", true);
-      }
+      if (bestScanResult) showResult(bestScanResult.data, bestScanResult.raw, true);
+      else showResult({ isOptimal: false, strictFields: {} }, "Aucune donnée lisible", true);
     }
 
     async function scanLoop() {
@@ -459,42 +487,33 @@
         const rawData = parseRawText(rawText);
         const validatedData = applyStrictRules(rawData, rawText);
 
-        // Mémorisation du meilleur résultat (Temps 2)
         if (validatedData.score > bestScanScore) {
           bestScanScore = validatedData.score;
           bestScanResult = { data: validatedData, raw: rawText };
         }
 
-        // Temps 1 : Succès immédiat (Optimal)
         if (validatedData.isOptimal) {
           stopVideo();
           showResult(validatedData, rawText, false);
           return;
         } 
         
-        // Gestion du chronomètre pour le 2ème temps
         const elapsed = Date.now() - scanStartTime;
         const progress = Math.min(100, (elapsed / MAX_SCAN_DURATION_MS) * 100);
         document.getElementById('timeout-progress').style.width = `${progress}%`;
 
-        // Si on a trouvé un peu de données, on affiche le bouton pour abréger
-        if (bestScanScore >= 2) {
-          document.getElementById('btn-force').classList.remove('hidden');
-        }
+        if (bestScanScore >= 2) document.getElementById('btn-force').classList.remove('hidden');
 
-        // Temps 2 : Fallback automatique après X secondes
         if (elapsed > MAX_SCAN_DURATION_MS) {
           if (bestScanResult && bestScanScore >= 1) {
-             document.getElementById('scan-feedback').innerText = "Temps 2: Récupération des données partielles...";
+             document.getElementById('scan-feedback').innerText = "Temps 2: Récupération des données...";
              stopVideo();
              showResult(bestScanResult.data, bestScanResult.raw, true);
              return;
           } else {
-             // Si on n'a vraiment rien trouvé, on relance le chrono
-             scanStartTime = Date.now();
+             scanStartTime = Date.now(); // Relance si vraiment rien
           }
         }
-
       } catch (e) { console.error(e); }
 
       const delay = ocrEngine === 'NATIVE' ? 150 : 800;
@@ -507,38 +526,31 @@
     function handleFileUpload(event) {
       const file = event.target.files[0];
       if (!file) return;
-      
       switchView('loading');
-      document.getElementById('load-status').innerText = "Filtrage et analyse en cours...";
+      document.getElementById('load-status').innerText = "Filtrage intelligent...";
       
       const img = new Image();
       img.onload = async () => {
         const rawText = await extractTextFromImage(img);
         const rawData = parseRawText(rawText);
         const validatedData = applyStrictRules(rawData, rawText);
-        // Sur une photo, c'est direct le meilleur effort
         showResult(validatedData, rawText, !validatedData.isOptimal);
       };
       img.src = URL.createObjectURL(file);
     }
 
     // =====================================================================
-    // AFFICHAGE & COPIER/COLLER EXACT
+    // AFFICHAGE
     // =====================================================================
     function resetApp() { switchView('ready'); }
 
     function addFieldUI(container, label, value) {
       const row = document.createElement('div');
       row.className = 'field-row';
-      const icon = label.includes('Date') ? '📅' : (label === 'Nom' || label === 'Prénom' ? '👤' : (label.includes('N°') ? '🆔' : '📋'));
-      
+      const icon = label.includes('Date') ? '📅' : (label === 'Nom' || label === 'Prénom' ? '👤' : (label.includes('N°') ? '🆔' : '🏳️'));
       row.innerHTML = `<span class="text-lg">${icon}</span><span class="field-label">${label}</span><span class="field-value">${value}</span>`;
-      
       finalFields[label] = value;
-
-      row.addEventListener('click', () => {
-        navigator.clipboard.writeText(value).then(() => showToast(`✅ ${label} copié !`)).catch(()=>{});
-      });
+      row.addEventListener('click', () => { navigator.clipboard.writeText(value).then(() => showToast(`✅ ${label} copié !`)).catch(()=>{}); });
       container.appendChild(row);
     }
 
@@ -547,21 +559,15 @@
       finalFields = {}; 
       
       const badge = document.getElementById('res-valid-badge');
-      if (validatedData.isOptimal) {
-        badge.className = 'valid-badge'; badge.innerText = '✅ DONNÉES COMPLÈTES';
-      } else if (isPartialFallback && validatedData.score > 0) {
-        badge.className = 'partial-badge'; badge.innerText = '⚠️ DONNÉES PARTIELLES';
-      } else {
-        badge.className = 'invalid-badge'; badge.innerText = '❌ ÉCHEC';
-      }
+      if (validatedData.isOptimal) { badge.className = 'valid-badge'; badge.innerText = '✅ DONNÉES COMPLÈTES'; } 
+      else if (isPartialFallback && validatedData.score > 0) { badge.className = 'partial-badge'; badge.innerText = '⚠️ DONNÉES PARTIELLES'; } 
+      else { badge.className = 'invalid-badge'; badge.innerText = '❌ ÉCHEC'; }
 
       document.getElementById('res-raw').innerText = rawText || "Aucun texte détecté";
       const container = document.getElementById('res-fields');
       container.innerHTML = '';
 
       let hasDisplayedData = false;
-
-      // Affichage des champs non nuls
       if (validatedData.strictFields) {
         FIELD_ORDER.forEach(label => {
           const value = validatedData.strictFields[label];
@@ -572,19 +578,16 @@
         });
       }
 
-      if (!hasDisplayedData) {
-        container.innerHTML = `<p class="text-sm text-red-400 text-center py-4 font-bold">Aucune donnée n'a passé les critères de validation stricte.</p>`;
-      }
+      if (!hasDisplayedData) container.innerHTML = `<p class="text-sm text-red-400 text-center py-4 font-bold">Aucune donnée valide trouvée.</p>`;
     }
 
     function copyAllFields() {
       if (Object.keys(finalFields).length === 0) return;
       const text = Object.entries(finalFields).map(([label, value]) => `${label} : ${value}`).join('\n');
-      
-      navigator.clipboard.writeText(text).then(() => showToast('✅ Copie intégrale réussie !')).catch(() => {
+      navigator.clipboard.writeText(text).then(() => showToast('✅ Copie réussie !')).catch(() => {
         const ta = document.createElement('textarea');
         ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
-        showToast('✅ Copie intégrale réussie !');
+        showToast('✅ Copie réussie !');
       });
     }
 
