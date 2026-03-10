@@ -4,19 +4,35 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Scanner MRZ — Temps Réel</title>
+  <title>Scanner Identité Pro</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <style>
     body { font-family: 'Inter', system-ui, sans-serif; background: #0a0a0f; color: #fff; margin: 0; min-height: 100vh; }
     .view { display: none; }
     .view.active { display: flex; }
-    .field-row { display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1rem; background: rgba(255, 255, 255, 0.04); border-radius: 0.75rem; margin-bottom: 0.5rem; }
+    
+    /* Composants UI */
+    .field-row { display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1rem; background: rgba(255, 255, 255, 0.04); border-radius: 0.75rem; margin-bottom: 0.5rem; cursor: pointer; transition: background 0.2s; }
+    .field-row:active { background: rgba(255, 255, 255, 0.1); }
     .field-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: #94a3b8; min-width: 5.5rem; }
     .field-value { font-size: 1rem; font-weight: 600; color: #f1f5f9; flex: 1; word-break: break-all; }
+    
+    /* Badges */
     .valid-badge { background: #22c55e22; color: #22c55e; padding: 2px 8px; border-radius: 6px; font-size: 0.7rem; font-weight: 700; }
     .invalid-badge { background: #ef444422; color: #ef4444; padding: 2px 8px; border-radius: 6px; font-size: 0.7rem; font-weight: 700; }
     .warn-badge { background: #f59e0b22; color: #f59e0b; padding: 2px 8px; border-radius: 6px; font-size: 0.7rem; font-weight: 700; }
+    
+    /* Toast */
+    .copy-toast { position: fixed; bottom: 5rem; left: 50%; transform: translateX(-50%); background: #22c55e; color: #000; padding: 0.5rem 1.5rem; border-radius: 2rem; font-weight: 700; font-size: 0.8rem; z-index: 100; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+    .copy-toast.show { opacity: 1; }
+    
+    /* Sélecteur de types */
+    .doc-selector { display: flex; gap: 0.5rem; width: 100%; max-width: 24rem; margin-top: 1.5rem; overflow-x: auto; padding-bottom: 0.5rem; }
+    .doc-btn { flex: 1; min-width: 80px; padding: 0.6rem; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 0.75rem; font-size: 0.65rem; font-weight: 600; color: #94a3b8; text-align: center; transition: all 0.2s; white-space: nowrap; }
+    .doc-btn.active { background: #3b82f6; color: #fff; border-color: #3b82f6; box-shadow: 0 4px 12px rgba(59, 131, 246, 0.3); }
+
+    /* Moteur Info */
     .engine-badge { position: absolute; top: 1rem; right: 1rem; background: rgba(255,255,255,0.1); padding: 4px 10px; border-radius: 20px; font-size: 0.7rem; font-weight: bold; backdrop-filter: blur(4px); }
     .engine-native { color: #4ade80; border: 1px solid #4ade8055; }
     .engine-wasm { color: #facc15; border: 1px solid #facc1555; }
@@ -24,14 +40,17 @@
 </head>
 
 <body>
+  <!-- TOAST COPIE -->
+  <div id="copy-toast" class="copy-toast">✅ Copié !</div>
+
   <!-- 1. CHARGEMENT -->
   <div id="view-loading" class="view active fixed inset-0 z-50 bg-[#0a0a0f] flex flex-col items-center justify-center px-8">
     <div class="text-5xl mb-6 animate-pulse">🛂</div>
-    <h1 class="text-xl font-bold mb-2">Initialisation du Scanner</h1>
+    <h1 class="text-xl font-bold mb-2">Initialisation OCR</h1>
     <div class="w-full max-w-xs bg-slate-800 rounded-full h-2 mt-4 overflow-hidden">
       <div id="load-progress" class="bg-blue-500 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
     </div>
-    <p id="load-status" class="text-slate-500 text-xs mt-3 font-mono">Détection du moteur OCR...</p>
+    <p id="load-status" class="text-slate-500 text-xs mt-3 font-mono">Chargement...</p>
   </div>
 
   <!-- 2. PRÊT -->
@@ -40,7 +59,16 @@
     <div class="text-center mb-8">
       <div class="text-6xl mb-4">📷</div>
       <h1 class="text-2xl font-bold mb-2">Scanner Identité</h1>
-      <p class="text-slate-400 text-sm">Passeport · CNI · Permis</p>
+      <p class="text-slate-400 text-sm">Extraction structurée temps réel</p>
+    </div>
+
+    <!-- Sélecteur de type document -->
+    <div class="doc-selector mb-6" id="ready-selector">
+      <button class="doc-btn active" data-type="AUTO">AUTO</button>
+      <button class="doc-btn" data-type="PASSEPORT">🛂 PASS</button>
+      <button class="doc-btn" data-type="PERMIS_FR">🚗 PERMIS</button>
+      <button class="doc-btn" data-type="TITRE_SEJOUR">📜 SÉJOUR</button>
+      <button class="doc-btn" data-type="CNI">🆔 CNI</button>
     </div>
 
     <button onclick="startCamera()" class="w-full max-w-sm bg-blue-600 hover:bg-blue-500 py-4 rounded-xl font-bold text-lg transition-all shadow-lg shadow-blue-600/20">
@@ -57,7 +85,6 @@
     <video id="video-stream" class="w-full h-full object-cover" playsinline muted></video>
     
     <div class="absolute inset-0 pointer-events-none flex flex-col items-center justify-center">
-      <!-- Zone de guidage -->
       <div class="w-[90%] max-w-[400px] aspect-[1.58/1] border-2 border-blue-500/50 rounded-xl relative overflow-hidden">
         <div class="absolute bottom-0 left-0 w-full h-[30%] bg-blue-500/20 border-t border-blue-500/50 flex items-center justify-center">
           <span class="text-blue-300/70 text-[10px] font-bold tracking-widest uppercase">Zone MRZ (Lignes du bas)</span>
@@ -84,6 +111,10 @@
       <div id="res-format" class="text-xs text-slate-500 font-mono mb-4">—</div>
       <div id="res-fields" class="space-y-2 mb-6"></div>
 
+      <button onclick="copyAllFields()" class="w-full bg-emerald-600 hover:bg-emerald-500 py-3 rounded-xl font-bold text-sm mb-4 transition-all">
+        📋 Copier tous les champs
+      </button>
+
       <details class="bg-slate-900/50 rounded-xl p-4 border border-slate-800">
         <summary class="text-xs text-slate-500 cursor-pointer">Données brutes OCR</summary>
         <pre id="res-raw" class="text-[10px] font-mono text-slate-500 mt-3 whitespace-pre-wrap break-all"></pre>
@@ -97,22 +128,58 @@
   <canvas id="canvas-mrz" class="hidden"></canvas>
 
   <script>
-    // Variables globales
+    // =====================================================================
+    // VARIABLES GLOBALES & ÉTATS
+    // =====================================================================
     const views = {};
     let video, canvas, ctx;
     let mrzParse = null;
     let scanTimeout = null;
-    let ocrEngine = 'NONE'; // 'NATIVE' ou 'TESSERACT'
+    let ocrEngine = 'NONE'; 
     let tesseractWorker = null;
     let isScanning = false;
 
-    // Initialisation au chargement de la page
+    let selectedDocType = 'AUTO';
+    let finalFields = {}; // Stockage des champs pour la copie
+
+    const LABELS = {
+      documentType: ['📄', 'Type de Document'],
+      documentNumber: ['🆔', 'N° Document'],
+      issuingState: ['🏳️', 'Pays'],
+      lastName: ['👤', 'Nom'],
+      firstName: ['👤', 'Prénom'],
+      nationality: ['🌍', 'Nationalité'],
+      birthDate: ['🎂', 'Date de Naissance'],
+      sex: ['⚧', 'Sexe'],
+      expirationDate: ['📅', 'Date d\'Expiration'],
+      issueDate: ['📅', 'Date d\'Émission']
+    };
+
+    const FIELD_ORDER = [
+      'documentType', 'documentNumber', 'lastName', 'firstName', 
+      'birthDate', 'sex', 'nationality', 'issueDate', 'expirationDate', 'issuingState'
+    ];
+
+    // =====================================================================
+    // INITIALISATION
+    // =====================================================================
     window.addEventListener('DOMContentLoaded', async () => {
       ['loading', 'ready', 'scanning', 'result'].forEach(n => views[n] = document.getElementById('view-' + n));
       video = document.getElementById('video-stream');
       canvas = document.getElementById('canvas-mrz');
       ctx = canvas.getContext('2d', { willReadFrequently: true });
       document.getElementById('fileUpload').addEventListener('change', handleFileUpload);
+
+      // Sélecteur de types
+      document.querySelectorAll('.doc-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          selectedDocType = btn.getAttribute('data-type');
+          document.querySelectorAll('.doc-btn').forEach(b => {
+            if (b.getAttribute('data-type') === selectedDocType) b.classList.add('active');
+            else b.classList.remove('active');
+          });
+        });
+      });
 
       await loadEngines();
     });
@@ -124,124 +191,175 @@
     }
 
     // =====================================================================
-    // 1. CHARGEMENT DES MOTEURS (Hybride)
+    // CHARGEMENT DES MOTEURS
     // =====================================================================
     async function loadEngines() {
       const status = document.getElementById('load-status');
       const bar = document.getElementById('load-progress');
       
       try {
-        // Chargement du parser ICAO (MRZ)
         status.innerText = "Chargement des règles ICAO...";
         bar.style.width = '30%';
         const mod = await import('https://esm.sh/mrz@5');
         mrzParse = mod.parse;
 
-        // Détection de l'API Native (Chrome / Android)
         if ('TextDetector' in window) {
           ocrEngine = 'NATIVE';
-          status.innerText = "Moteur Natif activé (ML Kit/Vision) 🚀";
+          status.innerText = "Moteur Natif activé 🚀";
           document.getElementById('engine-indicator').innerText = "⚡ Moteur Natif";
           document.getElementById('engine-indicator').className = "engine-badge engine-native";
           bar.style.width = '100%';
         } else {
-          // Fallback sur Tesseract.js (1 seul worker pour la vitesse)
           ocrEngine = 'TESSERACT';
-          status.innerText = "Chargement Tesseract WASM (Fallback)...";
+          status.innerText = "Chargement Tesseract WASM...";
           document.getElementById('engine-indicator').innerText = "🐢 Moteur Web (WASM)";
           document.getElementById('engine-indicator').className = "engine-badge engine-wasm";
           bar.style.width = '60%';
           
           tesseractWorker = await Tesseract.createWorker('eng', 1);
-          await tesseractWorker.setParameters({
-            tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<',
-          });
+          await tesseractWorker.setParameters({ tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<', });
           bar.style.width = '100%';
         }
-
         setTimeout(() => switchView('ready'), 500);
       } catch (err) {
         status.innerText = "Erreur: " + err.message;
-        console.error(err);
       }
     }
 
     // =====================================================================
-    // 2. EXTRACTION DU TEXTE (L'appel à l'OCR)
+    // EXTRACTION DU TEXTE BRUT
     // =====================================================================
     async function extractTextFromImage(imageSource) {
       let srcW = imageSource === 'camera' ? video.videoWidth : imageSource.width;
       let srcH = imageSource === 'camera' ? video.videoHeight : imageSource.height;
       
-      canvas.width = srcW;
-      canvas.height = srcH;
-      if (imageSource === 'camera') {
-        ctx.drawImage(video, 0, 0, srcW, srcH);
-      } else {
-        ctx.drawImage(imageSource, 0, 0, srcW, srcH);
-      }
-
-      let text = "";
+      canvas.width = srcW; canvas.height = srcH;
+      if (imageSource === 'camera') ctx.drawImage(video, 0, 0, srcW, srcH);
+      else ctx.drawImage(imageSource, 0, 0, srcW, srcH);
 
       if (ocrEngine === 'NATIVE') {
-        // Utilisation de la puce matérielle (Instantané)
         try {
           const detector = new TextDetector();
           const detectedTexts = await detector.detect(canvas);
-          // On rassemble tous les blocs détectés
-          text = detectedTexts.map(t => t.rawValue).join('\n');
-        } catch (e) {
-          console.warn("Erreur TextDetector", e);
-        }
-      } else if (ocrEngine === 'TESSERACT') {
-        // Binarisation rapide pour aider Tesseract
+          return detectedTexts.map(t => t.rawValue).join('\n');
+        } catch (e) { return ""; }
+      } else {
         ctx.filter = 'contrast(1.5) grayscale(1)';
         ctx.drawImage(canvas, 0, 0);
         ctx.filter = 'none';
         const { data } = await tesseractWorker.recognize(canvas);
-        text = data.text;
+        return data.text;
       }
-
-      return text;
     }
 
     // =====================================================================
-    // 3. PARSING DU MRZ (Logique de nettoyage)
+    // LOGIQUE DE PARSING MÉTIER (STRUCTURATION)
     // =====================================================================
+    const L2D = { 'O': '0', 'Q': '0', 'D': '0', 'U': '0', 'I': '1', 'L': '1', 'J': '1', 'Z': '2', 'A': '4', 'S': '5', 'G': '6', 'C': '6', 'T': '7', 'B': '8', 'P': '9' };
+    
     function sanitizeLine(raw) {
-      return raw.toUpperCase().replace(/[\s]+/g, '<').replace(/[^A-Z0-9<]/g, '').replace(/^<+/, '').trim();
+      return raw.toUpperCase().replace(/[\s]+/g, '<').replace(/[.,;:_\-|!`'"~^°\[\](){}]+/g, '<').replace(/[^A-Z0-9<]/g, '').replace(/^<+/, '').trim();
     }
 
-    function parseText(rawText) {
+    function parsePermisFrManual(line) {
+      if (line.length < 26) return null;
+      let norm = line;
+      if (norm.length < 30) norm = norm + '<'.repeat(30 - norm.length);
+      else if (norm.length > 30) norm = norm.substring(0, 30);
+      
+      const prefix = norm.substring(0, 2).replace('DI', 'D1');
+      const country = norm.substring(2, 5).replace(/</g, '');
+      if (prefix !== 'D1' || country !== 'FRA') return null;
+      
+      const docNum = norm.substring(5, 14).replace(/</g, '');
+      const rawExp = norm.substring(15, 21);
+      let expiry = '';
+      for (let i = 0; i < 6; i++) expiry += /[0-9]/.test(rawExp[i]) ? rawExp[i] : (L2D[rawExp[i]] || '0');
+      
+      return {
+        valid: docNum.length >= 5, format: 'PERMIS_FR', documentNumber: docNum,
+        fields: { documentType: 'PERMIS DE CONDUIRE', issuingState: 'FRA', documentNumber: docNum, expirationDate: expiry }
+      };
+    }
+
+    // Extraction des champs visibles si le MRZ ne suffit pas
+    function extractVisibleFields(text) {
+      const r = { lastName: null, firstName: null, docType: null };
+      if (!text) return r;
+      const upper = text.toUpperCase();
+      
+      if (upper.includes('PERMIS') && upper.includes('CONDUIRE')) r.docType = 'PERMIS_FR';
+      else if (upper.includes('PASSEPORT') || upper.includes('PASSPORT')) r.docType = 'PASSEPORT';
+      else if (upper.includes('IDENTIT')) r.docType = 'CNI';
+      else if (upper.includes('TITRE') && upper.includes('SEJOUR')) r.docType = 'TITRE_SEJOUR';
+
+      const lines = text.split(/\n/).map(l => l.trim()).filter(l => l.length > 0);
+      for (let i = 0; i < lines.length; i++) {
+        if (!r.lastName) {
+          const m = lines[i].match(/(?:NOM|SURNAME|1[.\s:]+)[\s:]+([A-ZÀÂÄÉÈÊËÏÎÔÙÛÜŸ\s\-']{2,})/i);
+          if (m) r.lastName = m[1].trim();
+        }
+        if (!r.firstName) {
+          const m = lines[i].match(/(?:PRENOM|PRÉNOM|GIVEN|2[.\s:]+)[\s:]+([A-ZÀÂÄÉÈÊËÏÎÔÙÛÜŸ\s\-']{2,})/i);
+          if (m) r.firstName = m[1].trim();
+        }
+      }
+      return r;
+    }
+
+    function processExtractedText(rawText) {
       if (!rawText) return null;
       
-      // On extrait les lignes qui ressemblent à du MRZ (longues avec des <)
-      const lines = rawText.split('\n')
-        .map(sanitizeLine)
-        .filter(l => l.length >= 25 && l.includes('<'))
-        .sort((a, b) => b.length - a.length); // On prend les plus longues
-
-      if (lines.length === 0) return null;
-
-      // On tente d'envoyer les 2 ou 3 meilleures lignes au parser officiel
-      const topLines = lines.slice(0, 3);
+      const lines = rawText.split('\n').map(sanitizeLine).filter(l => l.length >= 25);
+      let mrzResult = null;
       
-      try {
-        const result = mrzParse(topLines);
-        if (result && result.valid) {
-          result._raw = rawText;
-          return result;
-        }
-      } catch (e) {
-        // Le parser ICAO a échoué (souvent à cause d'un caractère mal lu)
+      // 1. Tenter le MRZ officiel ICAO
+      if (lines.length >= 2) {
+        // Tenter de patcher les Titres de Séjour FR (IR -> ID)
+        let patchedLines = [...lines];
+        if (patchedLines[0].startsWith('IR')) patchedLines[0] = 'ID' + patchedLines[0].substring(2);
+        
+        try { mrzResult = mrzParse(patchedLines); } catch (e) {}
       }
+
+      // 2. Tenter le Permis FR (Non ICAO)
+      if (!mrzResult || !mrzResult.valid) {
+        const permisLines = lines.filter(l => /^[D0][1I]/.test(l));
+        if (permisLines.length > 0) {
+          const pRes = parsePermisFrManual(permisLines[0]);
+          if (pRes) mrzResult = pRes;
+        }
+      }
+
+      // 3. Extraction de l'identité visible (fusion)
+      const visible = extractVisibleFields(rawText);
       
-      // Si non valide, on renvoie quand même les données trouvées pour analyse
-      return { valid: false, _raw: rawText, linesFound: topLines };
+      const merged = {
+        valid: mrzResult ? mrzResult.valid : false,
+        format: mrzResult ? mrzResult.format : (visible.docType || 'INCONNU'),
+        documentNumber: mrzResult ? mrzResult.documentNumber : null,
+        fields: mrzResult && mrzResult.fields ? { ...mrzResult.fields } : {},
+        _raw: rawText
+      };
+
+      // Si le type a été forcé par le bouton
+      if (selectedDocType !== 'AUTO' && merged.format === 'INCONNU') {
+        merged.format = selectedDocType;
+      }
+
+      // Compléter avec les données visibles si le MRZ est muet ou partiel
+      if (visible.lastName && !merged.fields.lastName) merged.fields.lastName = visible.lastName;
+      if (visible.firstName && !merged.fields.firstName) merged.fields.firstName = visible.firstName;
+      if (visible.docType && !merged.fields.documentType) merged.fields.documentType = visible.docType;
+
+      // On considère "valable" si on a au moins le numéro ou un nom
+      const hasData = merged.documentNumber || merged.fields.lastName;
+      
+      return hasData ? merged : null;
     }
 
     // =====================================================================
-    // 4. BOUCLE DE LA CAMÉRA
+    // BOUCLE DE LA CAMÉRA
     // =====================================================================
     async function startCamera() {
       switchView('scanning');
@@ -250,7 +368,7 @@
       
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'environment', width: { ideal: 1280 } } // Résolution HD suffit
+          video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }
         });
         video.srcObject = stream;
         await video.play();
@@ -274,10 +392,9 @@
         const rawText = await extractTextFromImage('camera');
         document.getElementById('scan-debug').innerText = rawText.replace(/\n/g, ' / ').substring(0, 50);
 
-        const result = parseText(rawText);
+        const result = processExtractedText(rawText);
 
         if (result && result.valid) {
-          // Document trouvé et valide !
           isScanning = false;
           if (video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
           showResult(result);
@@ -287,13 +404,12 @@
         console.error("Erreur de scan", e);
       }
 
-      // Si Native, on boucle très vite (100ms). Si Tesseract, on laisse respirer le CPU (800ms).
-      const delay = ocrEngine === 'NATIVE' ? 100 : 800;
+      const delay = ocrEngine === 'NATIVE' ? 150 : 800;
       scanTimeout = setTimeout(scanLoop, delay);
     }
 
     // =====================================================================
-    // 5. IMPORTATION PHOTO
+    // IMPORTATION PHOTO
     // =====================================================================
     function handleFileUpload(event) {
       const file = event.target.files[0];
@@ -305,65 +421,115 @@
       const img = new Image();
       img.onload = async () => {
         const rawText = await extractTextFromImage(img);
-        const result = parseText(rawText);
-        showResult(result || { valid: false, _raw: rawText });
+        const result = processExtractedText(rawText);
+        showResult(result || { valid: false, _raw: rawText, format: 'ÉCHEC' });
       };
       img.src = URL.createObjectURL(file);
     }
 
     // =====================================================================
-    // 6. AFFICHAGE DES RÉSULTATS
+    // AFFICHAGE DES RÉSULTATS & COPIE
     // =====================================================================
-    function resetApp() {
-      switchView('ready');
-    }
+    function resetApp() { switchView('ready'); }
 
     function formatField(key, val) {
-      if (!val) return '—';
+      if (!val) return null;
       if (key.toLowerCase().includes('date') && val.length === 6) {
-        return val.substring(4,6) + '.' + val.substring(2,4) + '.20' + val.substring(0,2);
+        return val.substring(4,6) + '.' + val.substring(2,4) + '.' + (parseInt(val.substring(0,2)) > 50 ? '19' : '20') + val.substring(0,2);
       }
       return val;
     }
 
+    function mapFormatName(fmt) {
+      if(fmt === 'TD3') return 'Passeport';
+      if(fmt === 'TD1') return 'Carte d\'Identité (CNI) / Titre de Séjour';
+      if(fmt === 'PERMIS_FR') return 'Permis de Conduire';
+      return fmt;
+    }
+
+    function addFieldUI(container, key, value, labelIconPair) {
+      const row = document.createElement('div');
+      row.className = 'field-row';
+      const [icon, label] = labelIconPair;
+      
+      row.innerHTML = `
+        <span class="text-lg">${icon}</span>
+        <span class="field-label">${label}</span>
+        <span class="field-value">${value}</span>
+      `;
+      
+      // Ajout au dictionnaire pour copie globale
+      finalFields[label] = value;
+
+      // Copie individuelle au clic
+      row.addEventListener('click', () => {
+        navigator.clipboard.writeText(value).then(() => showToast(`✅ ${label} copié !`)).catch(()=>{});
+      });
+      container.appendChild(row);
+    }
+
     function showResult(result) {
       switchView('result');
+      finalFields = {}; // Reset global
       
       const badge = document.getElementById('res-valid-badge');
       if (result.valid) {
         badge.className = 'valid-badge'; badge.innerText = '✅ VALIDE';
+      } else if (result.fields && Object.keys(result.fields).length > 0) {
+        badge.className = 'warn-badge'; badge.innerText = '⚠️ PARTIEL';
       } else {
-        badge.className = 'invalid-badge'; badge.innerText = '❌ ÉCHEC LECTURE';
+        badge.className = 'invalid-badge'; badge.innerText = '❌ ÉCHEC';
       }
 
-      document.getElementById('res-format').innerText = "Format: " + (result.format || "Inconnu");
+      document.getElementById('res-format').innerText = "Format détecté : " + mapFormatName(result.format || "Inconnu");
       document.getElementById('res-raw').innerText = result._raw || "Aucun texte détecté";
 
       const container = document.getElementById('res-fields');
       container.innerHTML = '';
 
-      if (result.fields) {
-        const order = ['documentNumber', 'lastName', 'firstName', 'birthDate', 'expirationDate', 'nationality'];
-        const labels = {
-          documentNumber: ['🆔', 'N° Document'], lastName: ['👤', 'Nom'], firstName: ['👤', 'Prénom'],
-          birthDate: ['🎂', 'Naissance'], expirationDate: ['📅', 'Expiration'], nationality: ['🌍', 'Nationalité']
-        };
-
-        for (const key of order) {
-          if (result.fields[key]) {
-            const row = document.createElement('div');
-            row.className = 'field-row';
-            row.innerHTML = `<span class="text-lg">${labels[key][0]}</span>
-                             <span class="field-label">${labels[key][1]}</span>
-                             <span class="field-value">${formatField(key, result.fields[key])}</span>`;
-            container.appendChild(row);
+      if (result.fields && Object.keys(result.fields).length > 0) {
+        // Afficher d'abord les champs dans l'ordre défini
+        for (const key of FIELD_ORDER) {
+          const rawVal = result.fields[key] || (key === 'documentNumber' ? result.documentNumber : null);
+          const val = formatField(key, rawVal);
+          if (val) addFieldUI(container, key, val, LABELS[key] || ['📋', key]);
+        }
+        
+        // Afficher les autres champs s'il y en a
+        for (const [key, rawVal] of Object.entries(result.fields)) {
+          if (!FIELD_ORDER.includes(key) && rawVal) {
+            const val = formatField(key, rawVal);
+            if (val) addFieldUI(container, key, val, LABELS[key] || ['📋', key]);
           }
         }
       } else {
-        container.innerHTML = `<p class="text-sm text-slate-400 text-center py-4">Impossible de lire les données. Assurez-vous que la bande du bas est bien visible et sans reflet.</p>`;
+        container.innerHTML = `<p class="text-sm text-slate-400 text-center py-4">Impossible d'extraire des champs. Assurez-vous que le document est bien éclairé.</p>`;
       }
+    }
+
+    function copyAllFields() {
+      if (Object.keys(finalFields).length === 0) return;
+      const lines = [];
+      for (const [label, value] of Object.entries(finalFields)) {
+        lines.push(`${label} : ${value}`);
+      }
+      const text = lines.join('\n');
+      
+      navigator.clipboard.writeText(text).then(() => {
+        showToast('✅ Tous les champs copiés !');
+      }).catch(() => {
+        const ta = document.createElement('textarea');
+        ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+        showToast('✅ Tous les champs copiés !');
+      });
+    }
+
+    function showToast(msg) {
+      const toast = document.getElementById('copy-toast');
+      toast.innerText = msg;
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 1500);
     }
   </script>
 </body>
 </html>
-
