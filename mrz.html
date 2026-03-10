@@ -4,110 +4,88 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Scanner MRZ — Praxis (MediaPipe Edition)</title>
+  <title>Scanner MRZ — Temps Réel</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <style>
     body { font-family: 'Inter', system-ui, sans-serif; background: #0a0a0f; color: #fff; margin: 0; min-height: 100vh; }
     .view { display: none; }
     .view.active { display: flex; }
-    .field-row { display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1rem; background: rgba(255, 255, 255, 0.04); border-radius: 0.75rem; margin-bottom: 0.5rem; cursor: pointer; transition: background 0.2s; }
-    .field-row:active { background: rgba(255, 255, 255, 0.1); }
+    .field-row { display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1rem; background: rgba(255, 255, 255, 0.04); border-radius: 0.75rem; margin-bottom: 0.5rem; }
     .field-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: #94a3b8; min-width: 5.5rem; }
     .field-value { font-size: 1rem; font-weight: 600; color: #f1f5f9; flex: 1; word-break: break-all; }
     .valid-badge { background: #22c55e22; color: #22c55e; padding: 2px 8px; border-radius: 6px; font-size: 0.7rem; font-weight: 700; }
     .invalid-badge { background: #ef444422; color: #ef4444; padding: 2px 8px; border-radius: 6px; font-size: 0.7rem; font-weight: 700; }
     .warn-badge { background: #f59e0b22; color: #f59e0b; padding: 2px 8px; border-radius: 6px; font-size: 0.7rem; font-weight: 700; }
-    .copy-toast { position: fixed; bottom: 5rem; left: 50%; transform: translateX(-50%); background: #22c55e; color: #000; padding: 0.5rem 1.5rem; border-radius: 2rem; font-weight: 700; font-size: 0.8rem; z-index: 100; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
-    .copy-toast.show { opacity: 1; }
-    .doc-selector { display: flex; gap: 0.5rem; width: 100%; max-width: 24rem; margin-top: 1.5rem; overflow-x: auto; padding-bottom: 0.5rem; }
-    .doc-btn { flex: 1; min-width: 80px; padding: 0.6rem; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 0.75rem; font-size: 0.65rem; font-weight: 600; color: #94a3b8; text-align: center; transition: all 0.2s; white-space: nowrap; }
-    .doc-btn.active { background: #3b82f6; color: #fff; border-color: #3b82f6; box-shadow: 0 4px 12px rgba(59, 131, 246, 0.3); }
+    .engine-badge { position: absolute; top: 1rem; right: 1rem; background: rgba(255,255,255,0.1); padding: 4px 10px; border-radius: 20px; font-size: 0.7rem; font-weight: bold; backdrop-filter: blur(4px); }
+    .engine-native { color: #4ade80; border: 1px solid #4ade8055; }
+    .engine-wasm { color: #facc15; border: 1px solid #facc1555; }
   </style>
 </head>
 
 <body>
-  <div id="copy-toast" class="copy-toast">✅ Copié !</div>
-
+  <!-- 1. CHARGEMENT -->
   <div id="view-loading" class="view active fixed inset-0 z-50 bg-[#0a0a0f] flex flex-col items-center justify-center px-8">
-    <div class="text-5xl mb-6">🛂</div>
-    <h1 class="text-xl font-bold mb-2">Scanner MRZ</h1>
-    <p class="text-slate-500 text-sm mb-6 text-center">Chargement de Google MediaPipe...</p>
-    <div class="w-full max-w-xs bg-slate-800 rounded-full h-2 overflow-hidden">
+    <div class="text-5xl mb-6 animate-pulse">🛂</div>
+    <h1 class="text-xl font-bold mb-2">Initialisation du Scanner</h1>
+    <div class="w-full max-w-xs bg-slate-800 rounded-full h-2 mt-4 overflow-hidden">
       <div id="load-progress" class="bg-blue-500 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
     </div>
-    <p id="load-status" class="text-slate-600 text-xs mt-3 font-mono">Initialisation...</p>
+    <p id="load-status" class="text-slate-500 text-xs mt-3 font-mono">Détection du moteur OCR...</p>
   </div>
 
+  <!-- 2. PRÊT -->
   <div id="view-ready" class="view fixed inset-0 z-50 bg-[#0a0a0f] flex flex-col items-center justify-center px-8">
+    <div id="engine-indicator" class="engine-badge engine-wasm">Moteur: Détection...</div>
     <div class="text-center mb-8">
-      <div class="text-6xl mb-4">⚡</div>
-      <h1 class="text-2xl font-bold mb-2">Scanner MRZ Pro</h1>
-      <p class="text-slate-400 text-sm">Propulsé par MediaPipe Vision</p>
-    </div>
-    <div class="doc-selector mb-2" id="ready-selector">
-      <button class="doc-btn active" data-type="AUTO">AUTO</button>
-      <button class="doc-btn" data-type="PASSEPORT">🛂 PASSPORT</button>
-      <button class="doc-btn" data-type="PERMIS_FR">🚗 PERMIS</button>
-      <button class="doc-btn" data-type="TITRE_SEJOUR">📜 SÉJOUR</button>
-      <button class="doc-btn" data-type="CNI">🆔 CNI</button>
+      <div class="text-6xl mb-4">📷</div>
+      <h1 class="text-2xl font-bold mb-2">Scanner Identité</h1>
+      <p class="text-slate-400 text-sm">Passeport · CNI · Permis</p>
     </div>
 
-    <button onclick="startCamera()" class="w-full max-w-sm bg-blue-600 hover:bg-blue-500 py-4 rounded-xl font-bold text-lg transition-all">
-      📷 Scanner (Temps Réel)
+    <button onclick="startCamera()" class="w-full max-w-sm bg-blue-600 hover:bg-blue-500 py-4 rounded-xl font-bold text-lg transition-all shadow-lg shadow-blue-600/20">
+      Scanner un document
     </button>
-    <label class="w-full max-w-sm mt-3 bg-white/10 hover:bg-white/15 py-4 rounded-xl font-bold text-lg transition-all text-center cursor-pointer block">
-      📁 Importer une photo
+    <label class="w-full max-w-sm mt-4 bg-white/5 hover:bg-white/10 py-4 rounded-xl font-bold text-lg transition-all text-center cursor-pointer block border border-white/10">
+      Importer une photo
       <input type="file" id="fileUpload" accept="image/*" class="hidden" />
     </label>
   </div>
 
+  <!-- 3. SCANNER CAMÉRA -->
   <div id="view-scanning" class="view fixed inset-0 z-50 bg-black flex flex-col">
     <video id="video-stream" class="w-full h-full object-cover" playsinline muted></video>
-    <div class="absolute inset-0 pointer-events-none flex flex-col items-center justify-end pb-44">
-      <div class="w-[92%] max-w-[520px] h-[90px] border-2 border-dashed border-blue-400 rounded-lg relative">
-        <div class="absolute inset-0 bg-blue-400/5 animate-pulse rounded-lg"></div>
-        <div class="absolute -top-7 left-0 w-full text-center text-blue-400 font-bold text-[10px] tracking-widest uppercase">Bande MRZ</div>
+    
+    <div class="absolute inset-0 pointer-events-none flex flex-col items-center justify-center">
+      <!-- Zone de guidage -->
+      <div class="w-[90%] max-w-[400px] aspect-[1.58/1] border-2 border-blue-500/50 rounded-xl relative overflow-hidden">
+        <div class="absolute bottom-0 left-0 w-full h-[30%] bg-blue-500/20 border-t border-blue-500/50 flex items-center justify-center">
+          <span class="text-blue-300/70 text-[10px] font-bold tracking-widest uppercase">Zone MRZ (Lignes du bas)</span>
+        </div>
       </div>
     </div>
 
-    <div class="absolute bottom-0 left-0 w-full px-4 pb-4 space-y-2">
-      <div class="bg-black/85 backdrop-blur-xl p-3 rounded-2xl border border-slate-800">
-        <div class="flex items-center gap-3 mb-2">
-          <div class="flex gap-1" id="scan-dots">
-            <span class="w-3 h-3 rounded-full bg-slate-700" id="dot-1"></span>
-            <span class="w-3 h-3 rounded-full bg-slate-700" id="dot-2"></span>
-          </div>
-          <p id="scan-feedback" class="text-xs font-medium text-slate-300 flex-1">Démarrage...</p>
-        </div>
-
-        <p id="scan-debug" class="text-[9px] font-mono text-slate-700 truncate"></p>
-        <div class="flex gap-2 mt-2">
-          <button onclick="cancelScan()" class="flex-1 bg-white/10 py-2.5 rounded-xl font-bold border border-white/10 text-xs">Annuler</button>
-        </div>
+    <div class="absolute bottom-8 left-0 w-full px-6">
+      <div class="bg-black/80 backdrop-blur-md p-4 rounded-2xl border border-slate-800 text-center">
+        <p id="scan-feedback" class="text-sm font-medium text-blue-400 mb-2 animate-pulse">Recherche de texte...</p>
+        <p id="scan-debug" class="text-[10px] font-mono text-slate-500 truncate"></p>
+        <button onclick="cancelScan()" class="mt-4 w-full bg-white/10 py-2 rounded-lg font-bold text-sm">Annuler</button>
       </div>
     </div>
   </div>
 
-  <div id="view-processing" class="view fixed inset-0 z-50 bg-[#0a0a0f] flex flex-col items-center justify-center px-8">
-    <div class="text-5xl mb-4 animate-spin">⏳</div>
-    <p id="proc-status" class="text-slate-400 text-sm">Analyse MediaPipe en cours...</p>
-  </div>
-
+  <!-- 4. RÉSULTAT -->
   <div id="view-result" class="view fixed inset-0 z-50 bg-[#0a0a0f] flex flex-col overflow-y-auto">
     <div class="px-6 py-6 flex-1">
       <div class="flex items-center justify-between mb-4">
         <h2 class="text-xl font-bold">Résultat</h2>
         <span id="res-valid-badge" class="valid-badge">—</span>
       </div>
-      <div id="res-format" class="text-xs text-slate-500 font-mono mb-3">—</div>
-      <div id="res-fields" class="space-y-2 mb-4"></div>
-
-      <button onclick="copyAllFields()" class="w-full bg-emerald-600 hover:bg-emerald-500 py-3 rounded-xl font-bold text-sm mb-4 transition-all">
-        📋 Copier tous les champs
-      </button>
+      <div id="res-format" class="text-xs text-slate-500 font-mono mb-4">—</div>
+      <div id="res-fields" class="space-y-2 mb-6"></div>
 
       <details class="bg-slate-900/50 rounded-xl p-4 border border-slate-800">
-        <summary class="text-xs text-slate-500 cursor-pointer">Données brutes OCR + debug</summary>
+        <summary class="text-xs text-slate-500 cursor-pointer">Données brutes OCR</summary>
         <pre id="res-raw" class="text-[10px] font-mono text-slate-500 mt-3 whitespace-pre-wrap break-all"></pre>
       </details>
     </div>
@@ -119,47 +97,25 @@
   <canvas id="canvas-mrz" class="hidden"></canvas>
 
   <script>
-    // =========================================================================
-    // MRZ SCANNER MEDIAPIPE EDITION
-    // =========================================================================
-
-    let textRecognizer = null;
-    let mrzParse = null;
-    let inferenceTimeout = null;
-    let isRecognizing = false;
-
-    let scanCycles = [];
-    let currentCycle = 0;
-    const TOTAL_CYCLES = 2; // On garde 2 lectures pour la cross-validation
-
-    let finalFields = {};
-    let selectedDocType = 'AUTO';
-
+    // Variables globales
     const views = {};
-    let video, canvas, scanFeedback;
+    let video, canvas, ctx;
+    let mrzParse = null;
+    let scanTimeout = null;
+    let ocrEngine = 'NONE'; // 'NATIVE' ou 'TESSERACT'
+    let tesseractWorker = null;
+    let isScanning = false;
 
-    function init() {
-      ['loading', 'ready', 'scanning', 'processing', 'result'].forEach(n => {
-        views[n] = document.getElementById('view-' + n);
-      });
+    // Initialisation au chargement de la page
+    window.addEventListener('DOMContentLoaded', async () => {
+      ['loading', 'ready', 'scanning', 'result'].forEach(n => views[n] = document.getElementById('view-' + n));
       video = document.getElementById('video-stream');
       canvas = document.getElementById('canvas-mrz');
-      scanFeedback = document.getElementById('scan-feedback');
+      ctx = canvas.getContext('2d', { willReadFrequently: true });
       document.getElementById('fileUpload').addEventListener('change', handleFileUpload);
 
-      document.querySelectorAll('.doc-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const type = btn.getAttribute('data-type');
-          selectedDocType = type;
-          document.querySelectorAll('.doc-btn').forEach(b => {
-            if (b.getAttribute('data-type') === type) b.classList.add('active');
-            else b.classList.remove('active');
-          });
-        });
-      });
-
-      loadEngine();
-    }
+      await loadEngines();
+    });
 
     function switchView(name) {
       Object.values(views).forEach(v => { v.classList.remove('active'); v.classList.add('hidden'); });
@@ -167,474 +123,247 @@
       views[name].classList.remove('hidden');
     }
 
-    function resetAccumulator() {
-      scanCycles = [];
-      currentCycle = 0;
-      finalFields = {};
-      for (let i = 1; i <= 2; i++) {
-        const dot = document.getElementById('dot-' + i);
-        if (dot) dot.className = 'w-3 h-3 rounded-full bg-slate-700';
-      }
-    }
-
-    function updateDot(index, color) {
-      const dot = document.getElementById('dot-' + index);
-      if (dot) dot.className = 'w-3 h-3 rounded-full ' + color;
-    }
-
     // =====================================================================
-    // 1. CHARGEMENT MOTEURS (MediaPipe + mrz@5)
+    // 1. CHARGEMENT DES MOTEURS (Hybride)
     // =====================================================================
-    async function loadEngine() {
+    async function loadEngines() {
       const status = document.getElementById('load-status');
       const bar = document.getElementById('load-progress');
-      const log = (t) => { status.innerText = t; console.log('[MediaPipe]', t); };
-
+      
       try {
-        log('Chargement parser ICAO...');
-        bar.style.width = '20%';
+        // Chargement du parser ICAO (MRZ)
+        status.innerText = "Chargement des règles ICAO...";
+        bar.style.width = '30%';
         const mod = await import('https://esm.sh/mrz@5');
         mrzParse = mod.parse;
 
-        log('Téléchargement des modèles MediaPipe...');
-        bar.style.width = '50%';
-        
-        // Import dynamique du module MediaPipe
-        const visionModule = await import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.12/+esm');
-        const { FilesetResolver, TextRecognizer } = visionModule;
+        // Détection de l'API Native (Chrome / Android)
+        if ('TextDetector' in window) {
+          ocrEngine = 'NATIVE';
+          status.innerText = "Moteur Natif activé (ML Kit/Vision) 🚀";
+          document.getElementById('engine-indicator').innerText = "⚡ Moteur Natif";
+          document.getElementById('engine-indicator').className = "engine-badge engine-native";
+          bar.style.width = '100%';
+        } else {
+          // Fallback sur Tesseract.js (1 seul worker pour la vitesse)
+          ocrEngine = 'TESSERACT';
+          status.innerText = "Chargement Tesseract WASM (Fallback)...";
+          document.getElementById('engine-indicator').innerText = "🐢 Moteur Web (WASM)";
+          document.getElementById('engine-indicator').className = "engine-badge engine-wasm";
+          bar.style.width = '60%';
+          
+          tesseractWorker = await Tesseract.createWorker('eng', 1);
+          await tesseractWorker.setParameters({
+            tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<',
+          });
+          bar.style.width = '100%';
+        }
 
-        const visionPath = await FilesetResolver.forVisionTasks(
-          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.12/wasm"
-        );
-
-        bar.style.width = '80%';
-        log('Compilation du réseau neuronal...');
-
-        textRecognizer = await TextRecognizer.createFromOptions(visionPath, {
-          baseOptions: {
-            modelAssetPath: "https://storage.googleapis.com/mediapipe-models/text_recognizer/universal_text_recognizer/float32/1/universal_text_recognizer.task",
-            delegate: "GPU" // Exploite le WebGL/WebGPU du téléphone
-          },
-          runningMode: "IMAGE" // IMAGE suffit car nous envoyons un Canvas stabilisé
-        });
-
-        bar.style.width = '100%';
-        log('Moteur prêt !');
         setTimeout(() => switchView('ready'), 500);
       } catch (err) {
-        log('ERREUR CRITIQUE: ' + err.message);
+        status.innerText = "Erreur: " + err.message;
+        console.error(err);
       }
     }
 
     // =====================================================================
-    // LOGIQUE MÉTIER INTACTE (Sanitization, MRZ, Scoring, Extraction)
+    // 2. EXTRACTION DU TEXTE (L'appel à l'OCR)
     // =====================================================================
-    const L2D = { 'O': '0', 'Q': '0', 'D': '0', 'U': '0', 'I': '1', 'L': '1', 'J': '1', 'Z': '2', 'A': '4', 'S': '5', 'G': '6', 'C': '6', 'T': '7', 'B': '8', 'P': '9' };
-    const D2L = { '0': 'O', '1': 'I', '2': 'Z', '4': 'A', '5': 'S', '6': 'G', '8': 'B', '9': 'P' };
-
-    function sanitizeLine(raw) { return raw.toUpperCase().replace(/[\s]+/g, '<').replace(/[.,;:_\-|!`'"~^°\[\](){}]+/g, '<').replace(/[^A-Z0-9<]/g, '').replace(/^<+/, '').trim(); }
-    function correctByMask(line, mask) {
-      let out = '';
-      for (let i = 0; i < line.length && i < mask.length; i++) {
-        const c = line[i], m = mask[i];
-        if (m === 'D') out += /[0-9]/.test(c) ? c : (L2D[c] || c);
-        else if (m === 'A') out += /[A-Z<]/.test(c) ? c : (D2L[c] || c);
-        else out += c;
-      }
-      return out;
-    }
-
-    const MASK_TD1_L1 = 'AAAAAXXXXXXXXDXXXXXXXXXXXXXXXX';
-    const MASK_TD1_L2 = 'DDDDDDDXDDDDDDDAAAXXXXXXXXXXX';
-    const MASK_PERMIS = 'AAAAAXXXXXXXXDDDDDDDXXXXXXXX';
-    const MASK_TD3_L1 = 'P<AAAXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX';
-    const MASK_TD3_L2 = 'XXXXXXXXXDAAADDDDDDDXDDDDDDXXXXXXXXXXXXXXXDD';
-
-    function normalizeTo(line, len) {
-      if (line.length === len) return line;
-      if (line.length > len) return line.substring(0, len);
-      return line + '<'.repeat(len - line.length);
-    }
-
-    function scoreLine(line) {
-      if (line.length < 25) return 0;
-      let s = 0, len = line.length;
-      if (len >= 40 && len <= 48) { s += 30; if (/^[P0OD][<0O]/.test(line)) s += 20; }
-      if (len >= 28 && len <= 32) { s += 10; if (/^[AIDR][<0O]/.test(line)) s += 15; }
-      const ch = (line.match(/</g) || []).length;
-      if (ch >= 2) s += 10; if (line.includes('<<')) s += 20;
-      if (line.substring(2, 5).replace(/</g, '') === 'FRA') s += 10;
-      if (ch > line.length * 0.85) s -= 20;
-      return Math.max(0, s);
-    }
-
-    function extractCandidateLines(rawText) {
-      if (!rawText) return [];
-      return rawText.split(/\n/).map(r => {
-        const clean = sanitizeLine(r);
-        if (clean.length < 25) return null;
-        const score = scoreLine(clean);
-        return score >= 10 ? { line: clean, score, len: clean.length } : null;
-      }).filter(Boolean).sort((a, b) => b.score - a.score);
-    }
-
-    function groupByFormat(candidates) {
-      const groups = [];
-      const td3 = candidates.filter(c => c.len >= 38 && c.len <= 50);
-      if (td3.length >= 1) {
-        const l1c = td3.filter(c => /^[P0OD][<0O]/.test(c.line) || (c.line.match(/<{2,}/g) || []).length >= 2);
-        if (l1c.length >= 1) {
-          const l1 = l1c[0].line;
-          const others = td3.filter(c => c.line !== l1).sort((a, b) => b.score - a.score);
-          if (others.length >= 1) groups.push({ format: 'TD3', lines: [normalizeTo(l1, 44), normalizeTo(others[0].line, 44)], score: l1c[0].score + others[0].score + 20 });
-        }
-      }
-      const td1 = candidates.filter(c => c.len >= 28 && c.len <= 34);
-      if (td1.length >= 3) groups.push({ format: 'TD1', lines: td1.slice(0, 3).map(c => normalizeTo(c.line, 30)), score: td1.slice(0, 3).reduce((s, c) => s + (c.score || 0), 0) + 15 });
-      const permis = candidates.filter(c => c.len >= 28 && c.len <= 32 && /^[D0][1I]/.test(c.line));
-      if (permis.length >= 1) groups.push({ format: 'PERMIS_FR', lines: [normalizeTo(permis[0].line, 30)], score: permis[0].score + 25 });
-
-      groups.sort((a, b) => b.score - a.score);
-      return groups;
-    }
-
-    function tryMrzParse(lines) {
-      if (!mrzParse || !Array.isArray(lines)) return null;
-      try {
-        let patched = [...lines];
-        if (patched.length === 3 && patched[0].startsWith('IR')) patched[0] = 'ID' + patched[0].substring(2);
-        return mrzParse(patched);
-      } catch (e) { return null; }
-    }
-
-    function parseMrzFromText(rawText) {
-      const candidates = extractCandidateLines(rawText);
-      if (candidates.length === 0) return null;
-      const groups = groupByFormat(candidates);
-      for (const g of groups) {
-        let r = tryMrzParse(g.lines);
-        if (r) return r;
-        const corrected = [...g.lines];
-        if (g.format === 'TD3' && corrected.length >= 2) corrected[1] = correctByMask(corrected[1], MASK_TD3_L2);
-        else if (g.format === 'TD1' && corrected.length >= 2) { corrected[0] = correctByMask(corrected[0], MASK_TD1_L1); corrected[1] = correctByMask(corrected[1], MASK_TD1_L2); }
-        else if (g.format === 'PERMIS_FR') corrected[0] = correctByMask(corrected[0], MASK_PERMIS);
-        r = tryMrzParse(corrected);
-        if (r) return r;
-      }
-      return null;
-    }
-
-    function extractVisibleDates(text) {
-      const dates = [];
-      if (!text) return dates;
-      const pattern = /(\d{2}|XX)[.\/\-](\d{2}|XX)[.\/\-](\d{4}|XXXX)/gi;
-      let m;
-      while ((m = pattern.exec(text)) !== null) {
-        dates.push({ formatted: m[1] + '.' + m[2] + '.' + m[3], index: m.index, year: parseInt(m[3]) || 0 });
-      }
-      return dates;
-    }
-
-    function assignDates(text, dates) {
-      const r = { birthDate: null, issueDate: null, expiryDate: null };
-      if (!text || !dates.length) return r;
-      for (const d of dates) {
-        const before = text.substring(Math.max(0, d.index - 60), d.index).toUpperCase();
-        if (/NAISSANCE/i.test(before)) r.birthDate = d.formatted;
-        else if (/DELIVR|EMISSION/i.test(before)) r.issueDate = d.formatted;
-        else if (/VALID|EXPIR|JUSQU/i.test(before)) r.expiryDate = d.formatted;
-      }
-      return r;
-    }
-
-    function extractNameFields(text) {
-      const r = { lastName: null, firstName: null };
-      if (!text) return r;
-      const lines = text.split(/\n/).map(l => l.trim()).filter(l => l.length > 0);
+    async function extractTextFromImage(imageSource) {
+      let srcW = imageSource === 'camera' ? video.videoWidth : imageSource.width;
+      let srcH = imageSource === 'camera' ? video.videoHeight : imageSource.height;
       
-      for (let i = 0; i < lines.length; i++) {
-        const upper = lines[i].toUpperCase();
-        if (!r.lastName) {
-          const m = upper.match(/(?:NOM|SURNAME)[\s:]+([A-ZÀÂÄÉÈÊËÏÎÔÙÛÜŸ\s\-']{2,})/);
-          if (m) r.lastName = m[1].trim();
-        }
-        if (!r.firstName) {
-          const m = upper.match(/(?:PRENOM|GIVEN\s*NAMES?)[\s:]+([A-ZÀÂÄÉÈÊËÏÎÔÙÛÜŸ\s\-']{2,})/);
-          if (m) r.firstName = m[1].trim();
-        }
+      canvas.width = srcW;
+      canvas.height = srcH;
+      if (imageSource === 'camera') {
+        ctx.drawImage(video, 0, 0, srcW, srcH);
+      } else {
+        ctx.drawImage(imageSource, 0, 0, srcW, srcH);
       }
-      return r;
-    }
 
-    function extractVisibleFields(fullText) {
-      const dates = extractVisibleDates(fullText);
-      const assigned = assignDates(fullText, dates);
-      const names = extractNameFields(fullText);
-      let docType = null;
-      const upper = fullText ? fullText.toUpperCase() : '';
-      if (upper.includes('PERMIS') && upper.includes('CONDUIRE')) docType = 'PERMIS_FR';
-      else if (upper.includes('PASSEPORT')) docType = 'PASSEPORT';
-      
-      let documentNumber = null;
-      const m = upper.match(/(?:N[°O][\s.]*|TITRE[\s:]+)\s*([A-Z0-9]{8,12})/);
-      if (m) documentNumber = m[1];
+      let text = "";
 
-      return { docType, documentNumber, ...names, ...assigned };
-    }
-
-    function synthesizeCycles(cycles) {
-      if (!cycles || cycles.length === 0) return null;
-      const c1 = cycles.find(c => c.valid) || cycles[0];
-      return {
-        format: c1.format,
-        documentNumber: c1.documentNumber,
-        fields: c1.fields,
-        valid: cycles.some(c => c.valid),
-        details: c1.details || [],
-        _rawText: cycles.map(c => c._rawText).join('\n---\n'),
-        _mrzRaw: cycles.map(c => c._mrzRaw).join('\n---\n'),
-        _strategy: 'MediaPipe Vision',
-      };
-    }
-
-    // =====================================================================
-    // EXÉCUTION MEDIAPIPE (Ultra-rapide)
-    // =====================================================================
-    async function runOneCycle(source) {
-      return new Promise((resolve) => {
+      if (ocrEngine === 'NATIVE') {
+        // Utilisation de la puce matérielle (Instantané)
         try {
-          let srcW = source === 'camera' ? video.videoWidth : source.width;
-          let srcH = source === 'camera' ? video.videoHeight : source.height;
-          
-          canvas.width = srcW; canvas.height = srcH;
-          const ctx = canvas.getContext('2d');
-          if (source === 'camera') ctx.drawImage(video, 0, 0, srcW, srcH);
-          else ctx.drawImage(source, 0, 0, srcW, srcH);
-
-          // 1. Lecture Image Globale (Identité)
-          const fullResult = textRecognizer.recognize(canvas);
-          const fullText = fullResult.text || "";
-
-          // 2. Lecture Zone MRZ ciblée (Bas de page, 40%)
-          const mH = Math.round(srcH * 0.40);
-          const mrzCanvas = document.createElement('canvas');
-          mrzCanvas.width = srcW; mrzCanvas.height = mH;
-          const mCtx = mrzCanvas.getContext('2d');
-          mCtx.drawImage(canvas, 0, srcH - mH, srcW, mH, 0, 0, srcW, mH);
-          
-          const mrzResultObj = textRecognizer.recognize(mrzCanvas);
-          const mrzText = mrzResultObj.text || "";
-
-          // Analyse
-          const mrzResult = parseMrzFromText(mrzText);
-          const visible = extractVisibleFields(fullText);
-
-          // Fusion
-          const merged = {
-            format: mrzResult?.format || visible?.docType || 'UNKNOWN',
-            documentNumber: mrzResult?.documentNumber || visible?.documentNumber,
-            valid: mrzResult?.valid || false,
-            fields: {},
-            details: mrzResult?.details || [],
-            _rawText: fullText,
-            _mrzRaw: mrzText
-          };
-
-          if (mrzResult?.fields) Object.assign(merged.fields, mrzResult.fields);
-          if (visible) {
-            if (visible.lastName) merged.fields.lastName = visible.lastName;
-            if (visible.firstName) merged.fields.firstName = visible.firstName;
-            if (visible.birthDate) merged.fields.birthDate = visible.birthDate;
-            if (visible.expiryDate) merged.fields.expirationDate = visible.expiryDate;
-          }
-
-          resolve(merged);
-        } catch(e) {
-          resolve({ error: e.message });
+          const detector = new TextDetector();
+          const detectedTexts = await detector.detect(canvas);
+          // On rassemble tous les blocs détectés
+          text = detectedTexts.map(t => t.rawValue).join('\n');
+        } catch (e) {
+          console.warn("Erreur TextDetector", e);
         }
-      });
+      } else if (ocrEngine === 'TESSERACT') {
+        // Binarisation rapide pour aider Tesseract
+        ctx.filter = 'contrast(1.5) grayscale(1)';
+        ctx.drawImage(canvas, 0, 0);
+        ctx.filter = 'none';
+        const { data } = await tesseractWorker.recognize(canvas);
+        text = data.text;
+      }
+
+      return text;
     }
 
     // =====================================================================
-    // BOUCLE VIDÉO TEMPS RÉEL
+    // 3. PARSING DU MRZ (Logique de nettoyage)
+    // =====================================================================
+    function sanitizeLine(raw) {
+      return raw.toUpperCase().replace(/[\s]+/g, '<').replace(/[^A-Z0-9<]/g, '').replace(/^<+/, '').trim();
+    }
+
+    function parseText(rawText) {
+      if (!rawText) return null;
+      
+      // On extrait les lignes qui ressemblent à du MRZ (longues avec des <)
+      const lines = rawText.split('\n')
+        .map(sanitizeLine)
+        .filter(l => l.length >= 25 && l.includes('<'))
+        .sort((a, b) => b.length - a.length); // On prend les plus longues
+
+      if (lines.length === 0) return null;
+
+      // On tente d'envoyer les 2 ou 3 meilleures lignes au parser officiel
+      const topLines = lines.slice(0, 3);
+      
+      try {
+        const result = mrzParse(topLines);
+        if (result && result.valid) {
+          result._raw = rawText;
+          return result;
+        }
+      } catch (e) {
+        // Le parser ICAO a échoué (souvent à cause d'un caractère mal lu)
+      }
+      
+      // Si non valide, on renvoie quand même les données trouvées pour analyse
+      return { valid: false, _raw: rawText, linesFound: topLines };
+    }
+
+    // =====================================================================
+    // 4. BOUCLE DE LA CAMÉRA
     // =====================================================================
     async function startCamera() {
-      stopCamera();
       switchView('scanning');
-      scanFeedback.innerText = 'Démarrage caméra...';
-      isRecognizing = false;
-      resetAccumulator();
-
+      isScanning = true;
+      document.getElementById('scan-feedback').innerText = "Cadrez la zone MRZ...";
+      
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }
+          video: { facingMode: 'environment', width: { ideal: 1280 } } // Résolution HD suffit
         });
         video.srcObject = stream;
         await video.play();
-        scanFeedback.innerText = 'Cadrez le document...';
-        inferenceLoop();
+        scanLoop();
       } catch (err) {
-        scanFeedback.innerText = 'Erreur caméra: ' + err.message;
+        document.getElementById('scan-feedback').innerText = "Erreur Caméra";
       }
     }
 
-    function stopCamera() {
-      if (inferenceTimeout) { clearTimeout(inferenceTimeout); inferenceTimeout = null; }
-      if (video.srcObject) { video.srcObject.getTracks().forEach(t => t.stop()); video.srcObject = null; }
+    function cancelScan() {
+      isScanning = false;
+      if (scanTimeout) clearTimeout(scanTimeout);
+      if (video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
+      switchView('ready');
     }
-    function cancelScan() { stopCamera(); switchView('ready'); }
-    function resetApp() { switchView('ready'); }
 
-    async function inferenceLoop() {
-      if (!video.srcObject || video.paused || video.ended) return;
+    async function scanLoop() {
+      if (!isScanning || !video.srcObject || video.paused) return;
 
-      if (!isRecognizing && textRecognizer && currentCycle < TOTAL_CYCLES) {
-        isRecognizing = true;
-        try {
-          updateDot(currentCycle + 1, 'bg-yellow-400 animate-pulse');
-          scanFeedback.innerText = `Analyse en temps réel...`;
+      try {
+        const rawText = await extractTextFromImage('camera');
+        document.getElementById('scan-debug').innerText = rawText.replace(/\n/g, ' / ').substring(0, 50);
 
-          const cycleResult = await runOneCycle('camera');
-          
-          // Si on trouve un passeport valide ou une identité forte
-          if (cycleResult && !cycleResult.error && cycleResult.valid) {
-            updateDot(currentCycle + 1, 'bg-green-400');
-            scanCycles.push(cycleResult);
-            currentCycle++;
+        const result = parseText(rawText);
 
-            if (currentCycle >= TOTAL_CYCLES) {
-              const synthesis = synthesizeCycles(scanCycles);
-              showMrzResult(synthesis);
-              return; // Fin de la boucle
-            }
-          } else {
-            // Aucun document valide trouvé sur cette frame, on réinitialise le point
-            updateDot(currentCycle + 1, 'bg-slate-700');
-          }
-          
-          const debugEl = document.getElementById('scan-debug');
-          if (debugEl && cycleResult) {
-            debugEl.innerText = (cycleResult._mrzRaw || "").replace(/\n/g, '|').substring(0, 80);
-          }
-
-        } catch (e) {
-          console.error('[MediaPipe Error]', e);
-        } finally {
-          isRecognizing = false;
+        if (result && result.valid) {
+          // Document trouvé et valide !
+          isScanning = false;
+          if (video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
+          showResult(result);
+          return;
         }
+      } catch (e) {
+        console.error("Erreur de scan", e);
       }
 
-      // La magie MediaPipe : on relance la détection presque immédiatement (300ms) !
-      inferenceTimeout = setTimeout(inferenceLoop, 300);
+      // Si Native, on boucle très vite (100ms). Si Tesseract, on laisse respirer le CPU (800ms).
+      const delay = ocrEngine === 'NATIVE' ? 100 : 800;
+      scanTimeout = setTimeout(scanLoop, delay);
     }
 
     // =====================================================================
-    // UPLOAD PHOTO
+    // 5. IMPORTATION PHOTO
     // =====================================================================
     function handleFileUpload(event) {
       const file = event.target.files[0];
-      if (!file || !textRecognizer) return;
-      event.target.value = '';
-      switchView('processing');
-      resetAccumulator();
-
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const img = new Image();
-        img.onload = async () => {
-          try {
-            const result = await runOneCycle(img);
-            showMrzResult(result);
-          } catch (err) {
-            showRawResult('', 'Erreur: ' + err.message);
-          }
-        };
-        img.src = e.target.result;
+      if (!file) return;
+      
+      switchView('loading');
+      document.getElementById('load-status').innerText = "Analyse de l'image...";
+      
+      const img = new Image();
+      img.onload = async () => {
+        const rawText = await extractTextFromImage(img);
+        const result = parseText(rawText);
+        showResult(result || { valid: false, _raw: rawText });
       };
-      reader.readAsDataURL(file);
+      img.src = URL.createObjectURL(file);
     }
 
     // =====================================================================
-    // AFFICHAGE
+    // 6. AFFICHAGE DES RÉSULTATS
     // =====================================================================
-    const LABELS = {
-      documentType: ['📄', 'Type'], documentNumber: ['🔢', 'N° Document'], issuingState: ['🏳️', 'Pays'],
-      lastName: ['👤', 'Nom'], firstName: ['👤', 'Prénom'], nationality: ['🌍', 'Nationalité'],
-      birthDate: ['🎂', 'Naissance'], sex: ['⚧', 'Sexe'], expirationDate: ['📅', 'Expiration'],
-      issueDate: ['📅', 'Émission'], personalNumber: ['🔑', 'N° Personnel'],
-    };
-
-    const FIELD_ORDER = ['lastName', 'firstName', 'documentNumber', 'birthDate', 'issueDate', 'expirationDate', 'nationality', 'issuingState', 'sex'];
-
-    function fmtDate(d) {
-      if (!d || d.length !== 6) return d || '—';
-      const yy = d.substring(0, 2), mm = d.substring(2, 4), dd = d.substring(4, 6);
-      return dd + '.' + mm + '.' + (parseInt(yy) > 50 ? '19' : '20') + yy;
+    function resetApp() {
+      switchView('ready');
     }
 
-    function showMrzResult(result) {
-      stopCamera();
-      if (!result) { showRawResult('', 'RECOGNITION FAILED'); return; }
+    function formatField(key, val) {
+      if (!val) return '—';
+      if (key.toLowerCase().includes('date') && val.length === 6) {
+        return val.substring(4,6) + '.' + val.substring(2,4) + '.20' + val.substring(0,2);
+      }
+      return val;
+    }
 
+    function showResult(result) {
+      switchView('result');
+      
       const badge = document.getElementById('res-valid-badge');
-      if (result.valid) { badge.className = 'valid-badge'; badge.innerText = '✅ VALIDE'; }
-      else { badge.className = 'warn-badge'; badge.innerText = '⚠️ PARTIEL'; }
+      if (result.valid) {
+        badge.className = 'valid-badge'; badge.innerText = '✅ VALIDE';
+      } else {
+        badge.className = 'invalid-badge'; badge.innerText = '❌ ÉCHEC LECTURE';
+      }
 
-      document.getElementById('res-format').innerText = 'Format: ' + (result.format || '?');
+      document.getElementById('res-format').innerText = "Format: " + (result.format || "Inconnu");
+      document.getElementById('res-raw').innerText = result._raw || "Aucun texte détecté";
 
       const container = document.getElementById('res-fields');
       container.innerHTML = '';
-      finalFields = {};
-
-      if (result.documentNumber) {
-        finalFields['N° Document'] = result.documentNumber;
-        addField(container, '🆔', 'N° Document', result.documentNumber, true);
-      }
 
       if (result.fields) {
-        for (const key of FIELD_ORDER) {
-          let val = result.fields[key];
-          if (!val) continue;
-          if (key === 'documentNumber' && result.documentNumber) continue;
-          const [icon, label] = LABELS[key] || ['📋', key];
-          if (key.toLowerCase().includes('date') && val.length === 6) val = fmtDate(val);
-          finalFields[label] = val;
-          addField(container, icon, label, val);
+        const order = ['documentNumber', 'lastName', 'firstName', 'birthDate', 'expirationDate', 'nationality'];
+        const labels = {
+          documentNumber: ['🆔', 'N° Document'], lastName: ['👤', 'Nom'], firstName: ['👤', 'Prénom'],
+          birthDate: ['🎂', 'Naissance'], expirationDate: ['📅', 'Expiration'], nationality: ['🌍', 'Nationalité']
+        };
+
+        for (const key of order) {
+          if (result.fields[key]) {
+            const row = document.createElement('div');
+            row.className = 'field-row';
+            row.innerHTML = `<span class="text-lg">${labels[key][0]}</span>
+                             <span class="field-label">${labels[key][1]}</span>
+                             <span class="field-value">${formatField(key, result.fields[key])}</span>`;
+            container.appendChild(row);
+          }
         }
+      } else {
+        container.innerHTML = `<p class="text-sm text-slate-400 text-center py-4">Impossible de lire les données. Assurez-vous que la bande du bas est bien visible et sans reflet.</p>`;
       }
-
-      document.getElementById('res-raw').innerText = `Visible:\n${result._rawText}\n\nMRZ:\n${result._mrzRaw}`;
-      switchView('result');
     }
-
-    function addField(container, icon, label, value, highlight) {
-      const row = document.createElement('div');
-      row.className = 'field-row';
-      if (highlight) { row.style.background = 'rgba(59,130,246,0.1)'; row.style.border = '1px solid rgba(59,130,246,0.2)'; }
-      row.innerHTML = `<span class="text-lg">${icon}</span><span class="field-label">${label}</span><span class="field-value" ${highlight ? 'style="color:#60a5fa;font-family:monospace;"' : ''}>${value}</span>`;
-      container.appendChild(row);
-    }
-
-    function showRawResult(rawText, msg) {
-      stopCamera();
-      document.getElementById('res-valid-badge').className = 'invalid-badge';
-      document.getElementById('res-valid-badge').innerText = '❌ ÉCHEC';
-      document.getElementById('res-format').innerText = msg;
-      document.getElementById('res-fields').innerHTML = '<div class="field-row"><span class="field-value text-slate-500">Aucune donnée extraite</span></div>';
-      document.getElementById('res-raw').innerText = rawText || '';
-      switchView('result');
-    }
-
-    function copyAllFields() {
-      const text = Object.entries(finalFields).map(([k, v]) => `${k}: ${v}`).join('\n');
-      navigator.clipboard.writeText(text).then(() => {
-        const toast = document.getElementById('copy-toast');
-        toast.classList.add('show');
-        setTimeout(() => toast.classList.remove('show'), 1500);
-      });
-    }
-
-    window.addEventListener('DOMContentLoaded', init);
   </script>
 </body>
 </html>
+
