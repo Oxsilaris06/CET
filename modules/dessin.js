@@ -681,12 +681,12 @@ function handleDrawMove(e) {
         cancelLongPress();
     }
 
-    if (!isDrawing && !isMovingAnnotation) return;
+    if (!isDrawing && !isMovingAnnotation && !isPanning) return;
     
-    // On bloque le scroll natif SEULEMENT si on est en train de dessiner ou bouger une annotation
+    // On bloque le scroll natif SEULEMENT si on est en train de dessiner, bouger une annotation ou panner
     e.preventDefault(); 
 
-    } else if (isMovingAnnotation && selectedAnnotation) {
+    if (isMovingAnnotation && selectedAnnotation) {
         const deltaX = pos.x - startX;
         const deltaY = pos.y - startY;
 
