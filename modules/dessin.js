@@ -2,6 +2,15 @@
 let longPressTimer = null;
 const LONG_PRESS_DURATION = 500; // ms
 let currentAnnotationZoom = 1.0;
+let currentPanX = 0;
+let currentPanY = 0;
+let initialPinchDistance = null;
+let initialZoom = 1.0;
+let initialPan = { x: 0, y: 0 };
+let pinchCenter = { x: 0, y: 0 };
+let isPanning = false;
+let lastPanX = 0;
+let lastPanY = 0;
 
 function setContextualTools(selection) {
     const contextualTools = document.getElementById('contextual_tools');
@@ -138,7 +147,9 @@ function setActiveTool(toolId) {
     
     // Sur mobile, l'outil 'move' autorise le zoom/pan natif
     if (window.innerWidth <= 768) {
-        canvas.style.touchAction = toolId === 'move' ? 'manipulation' : 'none';
+        // On désactive touchAction: none pour permettre le défilement du dock lui-même si besoin, 
+        // mais le canvas lui-même gère ses propres gestures.
+        canvas.style.touchAction = 'none'; 
     } else {
         canvas.style.touchAction = 'none';
     }
@@ -293,6 +304,8 @@ function resetZoom() {
     const fitScale = Math.min(scaleW, scaleH, 1.0); // Pas plus de 100% par défaut
 
     currentAnnotationZoom = fitScale;
+    currentPanX = 0;
+    currentPanY = 0;
     applyCanvasTransform();
     
     // S'assurer que les dimensions de rendu CSS correspondent à l'image
@@ -310,7 +323,7 @@ function changeZoom(delta) {
 
 function applyCanvasTransform() {
     if (canvas) {
-        canvas.style.transform = `scale(${currentAnnotationZoom})`;
+        canvas.style.transform = `translate(${currentPanX}px, ${currentPanY}px) scale(${currentAnnotationZoom})`;
     }
 }
 
@@ -541,9 +554,23 @@ function drawArrow(fromx, fromy, tox, toy, lineWidth, color) {
 }
 
 function handleDrawStart(e) {
-    // Multi-touch sur mobile : on laisse le navigateur gérer le zoom natif
-    if (e.touches && e.touches.length > 1) {
+    // Multi-touch sur mobile : Gestion du Pinch Zoom
+    if (e.touches && e.touches.length === 2) {
         cancelLongPress();
+        isDrawing = false;
+        isMovingAnnotation = false;
+        
+        initialPinchDistance = Math.hypot(
+            e.touches[0].clientX - e.touches[1].clientX,
+            e.touches[0].clientY - e.touches[1].clientY
+        );
+        initialZoom = currentAnnotationZoom;
+        initialPan = { x: currentPanX, y: currentPanY };
+        
+        pinchCenter = {
+            x: (e.touches[0].clientX + e.touches[1].clientX) / 2,
+            y: (e.touches[0].clientY + e.touches[1].clientY) / 2
+        };
         return;
     }
 
@@ -568,12 +595,18 @@ function handleDrawStart(e) {
 
     if (currentTool === 'move') {
         e.preventDefault();
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        lastPanX = clientX;
+        lastPanY = clientY;
         selectedAnnotation = getAnnotationAtPosition(pos.x, pos.y);
         setContextualTools(selectedAnnotation);
         if (selectedAnnotation) {
             isMovingAnnotation = true;
             document.body.style.overflow = 'hidden';
             redrawCanvas();
+        } else {
+            isPanning = true;
         }
     } else if (currentTool === 'text') {
         e.preventDefault();
@@ -614,7 +647,32 @@ function handleDrawStart(e) {
 }
 
 function handleDrawMove(e) {
-    if (e.touches && e.touches.length > 1) return; // Zoom natif en cours
+    if (e.touches && e.touches.length === 2) {
+        if (!initialPinchDistance) return;
+        
+        const currentDistance = Math.hypot(
+            e.touches[0].clientX - e.touches[1].clientX,
+            e.touches[0].clientY - e.touches[1].clientY
+        );
+        
+        // Calcul du nouveau zoom
+        const zoomFactor = currentDistance / initialPinchDistance;
+        currentAnnotationZoom = Math.max(0.1, Math.min(5, initialZoom * zoomFactor));
+        
+        // Calcul du pan pour garder le centre du pinch (optionnel mais plus naturel)
+        const currentCenter = {
+            x: (e.touches[0].clientX + e.touches[1].clientX) / 2,
+            y: (e.touches[0].clientY + e.touches[1].clientY) / 2
+        };
+        
+        currentPanX = initialPan.x + (currentCenter.x - pinchCenter.x);
+        currentPanY = initialPan.y + (currentCenter.y - pinchCenter.y);
+        
+        applyCanvasTransform();
+        return;
+    }
+    
+    if (e.touches && e.touches.length > 2) return;
 
     const pos = getEventPos(canvas, e);
     
@@ -628,7 +686,7 @@ function handleDrawMove(e) {
     // On bloque le scroll natif SEULEMENT si on est en train de dessiner ou bouger une annotation
     e.preventDefault(); 
 
-    if (isMovingAnnotation && selectedAnnotation) {
+    } else if (isMovingAnnotation && selectedAnnotation) {
         const deltaX = pos.x - startX;
         const deltaY = pos.y - startY;
 
@@ -638,7 +696,6 @@ function handleDrawMove(e) {
             selectedAnnotation.endX += deltaX;
             selectedAnnotation.endY += deltaY;
         } else {
-            // Pour box, location et text
             selectedAnnotation.x += deltaX;
             selectedAnnotation.y += deltaY;
         }
@@ -647,6 +704,17 @@ function handleDrawMove(e) {
         startY = pos.y;
         redrawCanvas();
 
+    } else if (isPanning) {
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        
+        currentPanX += (clientX - lastPanX);
+        currentPanY += (clientY - lastPanY);
+        
+        lastPanX = clientX;
+        lastPanY = clientY;
+        
+        applyCanvasTransform();
     } else if (isDrawing && currentAnnotation) {
         currentAnnotation.endX = pos.x;
         currentAnnotation.endY = pos.y;
@@ -656,7 +724,14 @@ function handleDrawMove(e) {
 
 function handleDrawEnd(e) {
     cancelLongPress();
-    if (e.touches && e.touches.length > 0) return; // Toujours un doigt posé
+    if (e.touches && e.touches.length > 0) {
+        if (e.touches.length < 2) {
+            initialPinchDistance = null;
+        }
+        return; 
+    }
+    initialPinchDistance = null;
+    isPanning = false;
 
     document.body.style.overflow = '';
     if (isMovingAnnotation) {
