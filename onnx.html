@@ -51,6 +51,11 @@
             50% { opacity: 0.7; }
         }
         .animate-pulse-subtle { animation: pulse-subtle 2s infinite; }
+        
+        .log-entry { font-family: 'Fira Code', monospace; font-size: 10px; border-left: 2px solid #3f3f46; padding-left: 8px; margin-bottom: 4px; }
+        .log-info { border-color: #6366f1; color: #a5a6f6; }
+        .log-error { border-color: #ef4444; color: #fca5a5; background: rgba(239, 68, 68, 0.1); }
+        .log-warn { border-color: #f59e0b; color: #fcd34d; }
     </style>
 </head>
 <body class="h-screen overflow-hidden flex flex-col">
@@ -97,11 +102,21 @@
         
         <!-- Sidebar: Info & Progress -->
         <aside id="sidebar" class="w-80 border-r border-zinc-800 bg-[#0c0c0e] hidden lg:flex flex-col">
-            <div class="p-6 overflow-y-auto flex-1">
-                <div class="mb-8">
+            <div class="p-6 overflow-y-auto flex-1 flex flex-col gap-6">
+                <div>
                     <h3 class="text-xs font-semibold text-zinc-500 uppercase tracking-widest mb-4">Téléchargement</h3>
                     <div id="progress-container" class="space-y-4">
                         <p class="text-sm text-zinc-400 italic">Aucun téléchargement actif.</p>
+                    </div>
+                </div>
+
+                <div class="flex-1 flex flex-col min-h-0">
+                    <h3 class="text-xs font-semibold text-zinc-500 uppercase tracking-widest mb-4 flex justify-between items-center">
+                        Logs Engine
+                        <span id="retry-badge" class="hidden px-2 py-0.5 rounded bg-amber-500/10 text-amber-500 text-[9px]">FAIL-SAFE ACTIVE</span>
+                    </h3>
+                    <div id="log-console" class="flex-1 bg-black/50 rounded-lg border border-zinc-800 p-3 overflow-y-auto scrollbar-hide text-zinc-400">
+                        <div class="log-entry log-info">System initialized... waiting for user.</div>
                     </div>
                 </div>
 
@@ -182,7 +197,6 @@
 
     <script type="module">
         // --- Web Worker Logic (Embedded) ---
-        // On crée un blob pour le worker afin de garder un seul fichier
         const workerCode = `
             import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2';
 
@@ -190,27 +204,52 @@
 
             let generator = null;
 
+            async function loadModelWithRetry(retries = 3) {
+                const backends = ['webgpu', 'wasm'];
+                let currentBackendIdx = 0;
+
+                for (let i = 0; i < retries; i++) {
+                    const device = backends[currentBackendIdx];
+                    self.postMessage({ type: 'log', payload: { text: "Tentative de chargement (" + (i+1) + "/" + retries + ") sur " + device + "...", level: 'info' }});
+                    
+                    try {
+                        generator = await pipeline('text-generation', 'onnx-community/LFM2-1.2B-ONNX', {
+                            device: device,
+                            progress_callback: (p) => {
+                                self.postMessage({ type: 'progress', payload: p });
+                                if (p.status === 'progress' && p.progress % 20 < 1) {
+                                     self.postMessage({ type: 'log', payload: { text: "Téléchargement: " + p.file + " (" + Math.round(p.progress) + "%)", level: 'info' }});
+                                }
+                            }
+                        });
+                        self.postMessage({ type: 'log', payload: { text: "Modèle chargé avec succès sur " + device, level: 'info' }});
+                        return true;
+                    } catch (err) {
+                        self.postMessage({ type: 'log', payload: { text: "Erreur (" + device + "): " + err.message, level: 'error' }});
+                        // Fallback sur le backend suivant
+                        currentBackendIdx = (currentBackendIdx + 1) % backends.length;
+                        // Attendre un peu avant de réessayer
+                        await new Promise(r => setTimeout(r, 1500));
+                    }
+                }
+                return false;
+            }
+
             self.onmessage = async (e) => {
                 const { type, payload } = e.data;
 
                 if (type === 'load') {
-                    try {
-                        generator = await pipeline('text-generation', 'onnx-community/LFM2-1.2B-ONNX', {
-                            progress_callback: (p) => {
-                                self.postMessage({ type: 'progress', payload: p });
-                            }
-                        });
+                    const success = await loadModelWithRetry();
+                    if (success) {
                         self.postMessage({ type: 'ready' });
-                    } catch (err) {
-                        self.postMessage({ type: 'error', payload: err.message });
+                    } else {
+                        self.postMessage({ type: 'error', payload: "Impossible de charger le modèle après plusieurs tentatives." });
                     }
                 }
 
                 if (type === 'generate') {
                     if (!generator) return;
-                    
                     const { text, max_tokens } = payload;
-                    
                     try {
                         const result = await generator(text, {
                             max_new_tokens: max_tokens || 512,
@@ -223,9 +262,9 @@
                                 self.postMessage({ type: 'token', payload: decoded });
                             }
                         });
-                        
                         self.postMessage({ type: 'complete', payload: result.generated_text });
                     } catch (err) {
+                        self.postMessage({ type: 'log', payload: { text: "Erreur de génération: " + err.message, level: 'error' }});
                         self.postMessage({ type: 'error', payload: err.message });
                     }
                 }
@@ -246,7 +285,9 @@
             userInput: document.getElementById('user-input'),
             sendBtn: document.getElementById('send-btn'),
             deviceInfo: document.getElementById('device-info'),
-            tokenSpeed: document.getElementById('token-speed')
+            tokenSpeed: document.getElementById('token-speed'),
+            logConsole: document.getElementById('log-console'),
+            retryBadge: document.getElementById('retry-badge')
         };
 
         let isGenerating = false;
@@ -254,6 +295,20 @@
 
         // Init Lucide icons
         lucide.createIcons();
+
+        // Logger function
+        function addLog(text, level = 'info') {
+            const entry = document.createElement('div');
+            entry.className = `log-entry log-${level}`;
+            const time = new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            entry.innerHTML = `<span class="opacity-50 text-[8px]">[${time}]</span> ${text}`;
+            ui.logConsole.appendChild(entry);
+            ui.logConsole.scrollTop = ui.logConsole.scrollHeight;
+            
+            if (level === 'error' || level === 'warn') {
+                ui.retryBadge.classList.remove('hidden');
+            }
+        }
 
         // Check WebGPU availability
         async function checkWebGPU() {
@@ -270,7 +325,6 @@
         }
         checkWebGPU();
 
-        // Resize textarea automatically
         ui.userInput.addEventListener('input', () => {
             ui.userInput.style.height = 'auto';
             ui.userInput.style.height = ui.userInput.scrollHeight + 'px';
@@ -278,11 +332,11 @@
 
         ui.initBtn.onclick = () => {
             ui.initBtn.disabled = true;
-            ui.initBtn.innerHTML = '<span class="flex items-center justify-center gap-2"><i data-lucide="loader-2" class="w-5 h-5 animate-spin"></i> Chargement...</span>';
+            ui.initBtn.innerHTML = '<span class="flex items-center justify-center gap-2"><i data-lucide="loader-2" class="w-5 h-5 animate-spin"></i> Initialisation...</span>';
             lucide.createIcons();
+            addLog("Initialisation du pipeline ONNX Runtime...");
             worker.postMessage({ type: 'load' });
             
-            // On affiche déjà l'interface derrière l'overlay qui devient translucide
             ui.overlay.style.opacity = '0.7';
             ui.overlay.style.pointerEvents = 'none';
         };
@@ -291,6 +345,9 @@
             const { type, payload } = e.data;
 
             switch (type) {
+                case 'log':
+                    addLog(payload.text, payload.level);
+                    break;
                 case 'progress':
                     updateProgress(payload);
                     break;
@@ -304,9 +361,14 @@
                     handleComplete(payload);
                     break;
                 case 'error':
-                    console.error("AI Error:", payload);
-                    ui.statusText.innerText = "Erreur fatale";
+                    addLog(payload, 'error');
+                    ui.statusText.innerText = "Échec critique";
                     ui.statusIndicator.className = "w-2 h-2 rounded-full bg-red-500";
+                    // Fail-safe logic: allow re-init if everything failed
+                    ui.initBtn.disabled = false;
+                    ui.initBtn.innerText = "Réessayer le chargement";
+                    ui.overlay.style.opacity = '1';
+                    ui.overlay.style.pointerEvents = 'auto';
                     break;
             }
         };
@@ -326,8 +388,9 @@
                 ui.progressContainer.appendChild(wrapper);
                 progressTracks.set(data.file, wrapper.querySelector('.progress-bar-fill'));
                 
-                // Clear the "No active download" text if it's the first file
-                if (progressTracks.size === 1) ui.progressContainer.firstElementChild.remove();
+                if (progressTracks.size === 1 && ui.progressContainer.querySelector('p')) {
+                    ui.progressContainer.querySelector('p').remove();
+                }
             }
             
             const bar = progressTracks.get(data.file);
@@ -341,6 +404,7 @@
             ui.userInput.disabled = false;
             ui.sendBtn.disabled = false;
             ui.userInput.focus();
+            addLog("Interface déverrouillée. Inférence prête.", 'info');
         }
 
         let currentAiMessageDiv = null;
@@ -381,6 +445,7 @@
             ui.sendBtn.disabled = true;
             ui.statusText.innerText = "Réflexion...";
             ui.statusIndicator.classList.add('animate-pulse');
+            addLog("Début de génération...");
 
             appendMessage('user', text);
             currentAiMessageDiv = appendMessage('ai', '');
@@ -390,13 +455,11 @@
         }
 
         function handleIncomingToken(fullText) {
-            // Dans ce modèle v2-xenova, le callback renvoie souvent le texte complet généré jusqu'ici
-            // On peut l'afficher avec marked pour le rendu markdown
             currentAiMessageDiv.innerHTML = marked.parse(fullText) + '<span class="inline-block w-1.5 h-3.5 bg-indigo-500 animate-pulse ml-1"></span>';
             ui.chatHistory.scrollTop = ui.chatHistory.scrollHeight;
             
             const elapsed = (performance.now() - startTime) / 1000;
-            const tokenCount = fullText.split(' ').length; // Estimation
+            const tokenCount = fullText.split(' ').length;
             ui.tokenSpeed.innerText = `${(tokenCount / elapsed).toFixed(1)} tps`;
         }
 
@@ -409,6 +472,7 @@
             ui.statusIndicator.classList.remove('animate-pulse');
             ui.userInput.focus();
             ui.chatHistory.scrollTop = ui.chatHistory.scrollHeight;
+            addLog("Génération terminée avec succès.");
         }
 
         ui.sendBtn.onclick = sendMessage;
@@ -422,5 +486,3 @@
     </script>
 </body>
 </html>
-
-
