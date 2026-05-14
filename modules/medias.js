@@ -36,16 +36,29 @@ async function handleFileChange(input, previewContainerId, isSingle) {
         for (const file of Array.from(input.files)) {
             const previewImgId = `img_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
-                    let objectURL = null;
             try {
-                await dbManager.putItem(previewImgId, file);
-                
+                // Compression à l'upload : quasi sans perte (JPEG q0.95) avec
+                // résolution généreuse (2560px max) pour préserver le détail
+                // tout en allégeant IndexedDB et l'embarquement PDF.
+                let blobToStore = file;
+                try {
+                    const compressedBuffer = await compressImage(file, 0.95, 2560);
+                    blobToStore = new Blob([compressedBuffer], {
+                        type: file.type === 'image/png' ? 'image/png' : 'image/jpeg'
+                    });
+                } catch (compressErr) {
+                    console.warn("Compression échouée, stockage de l'original:", compressErr);
+                    blobToStore = file;
+                }
+
+                await dbManager.putItem(previewImgId, blobToStore);
+
                 // On utilise FileReader pour obtenir du Base64 (DataURL)
                 const base64Data = await new Promise((resolve, reject) => {
                     const reader = new FileReader();
                     reader.onloadend = () => resolve(reader.result);
                     reader.onerror = reject;
-                    reader.readAsDataURL(file);
+                    reader.readAsDataURL(blobToStore);
                 });
 
                 const interactiveItem = document.createElement('div');

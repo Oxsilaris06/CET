@@ -128,7 +128,7 @@ function getDragAfterElement(container, y) {
     }, { offset: Number.NEGATIVE_INFINITY }).element;
 }
 
-async function compressImage(imageBlob, quality) {
+async function compressImage(imageBlob, quality, maxDimension = 1920) {
     return new Promise((resolve, reject) => {
         const img = new Image();
         const objectURL = URL.createObjectURL(imageBlob);
@@ -139,7 +139,7 @@ async function compressImage(imageBlob, quality) {
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
 
-            const MAX_DIMENSION = 1920;
+            const MAX_DIMENSION = maxDimension;
             let { naturalWidth: width, naturalHeight: height } = img;
             if (width > MAX_DIMENSION || height > MAX_DIMENSION) {
                 if (width > height) {

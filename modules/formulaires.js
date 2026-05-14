@@ -471,6 +471,13 @@ function syncDomToStore() {
         // Sauvegarde des options de configuration (memberConfig est global dans le bundle)
         if (typeof memberConfig !== 'undefined') data.options = memberConfig;
 
+        // Cartographie OI (pins / dessins / vue) : ce n'est pas un champ DOM du
+        // formulaire, donc syncDomToStore ne sait pas le reconstruire — il faut le
+        // reporter explicitement, sinon il serait perdu à chaque saisie / F5.
+        if (Store.state.formData && Store.state.formData.cartography) {
+            data.cartography = Store.state.formData.cartography;
+        }
+
         // Persister dans Store (le Proxy déclenche notify() -> saveToStorage)
         Store.state.formData = data;
 
@@ -769,7 +776,7 @@ window.updateAdvTitle = updateAdvTitle;
 window.removeAdversary = removeAdversary;
 window.addAdversary = addAdversary;
 window.addHypothesis = addHypothesis;
-window.syncDomToStore = syncDomToStore;
+window.syncDomToStore = debouncedSync;
 window.saveToStorage = syncDomToStore;
 window.saveFormData = syncDomToStore;
 window.loadFormData = loadFormData;

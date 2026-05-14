@@ -422,6 +422,8 @@ function refreshRameVL(savedData) {
 }
 
 function _setupRameDropZone(container) {
+    if (container.dataset.dropZoneInit === 'true') return;
+    container.dataset.dropZoneInit = 'true';
     container.addEventListener('dragover', (e) => {
         e.preventDefault();
         const dragging = container.querySelector('.rame-vl-chip.dragging');
@@ -587,6 +589,8 @@ function _createOrderChip(trigramme, memberInfo, index, type) {
 }
 
 function _setupOrderDropZone(container, type) {
+    if (container.dataset.dropZoneInit === 'true') return;
+    container.dataset.dropZoneInit = 'true';
     container.addEventListener('dragover', (e) => {
         e.preventDefault();
         const dragging = container.querySelector(`.${type}-chip.dragging`);
@@ -614,6 +618,70 @@ function _updateOrderPositions(container) {
     if (!container) return;
     container.querySelectorAll('.order-chip').forEach((chip, i) => {
         chip.querySelector('.order-position').textContent = i + 1;
+    });
+}
+
+/**
+ * Retourne la liste ordonnée des membres PATRACDVR valides pour un type de bloc.
+ * @param {string} type - 'moicp' (India), 'zmspcp' (AO) ou 'effraction'
+ * @returns {Array<{trigramme:string, cellule:string}>}
+ */
+function _getArticulationMembers(type) {
+    if (!Store.state.formData.patracdvr_rows) return [];
+    const allMembers = [];
+    Store.state.formData.patracdvr_rows.forEach(row => {
+        row.members.forEach(m => allMembers.push(m));
+    });
+    if (Store.state.formData.patracdvr_unassigned) {
+        Store.state.formData.patracdvr_unassigned.forEach(m => allMembers.push(m));
+    }
+    return allMembers
+        .filter(m => {
+            const cellule = (m.cellule || '').toLowerCase();
+            const fonction = (m.fonction || '').toLowerCase();
+            if (cellule === 'sans') return false;
+            if (type === 'moicp') return cellule.startsWith('india');
+            if (type === 'zmspcp') return cellule.startsWith('ao');
+            if (type === 'effraction') return cellule.includes('effrac') || fonction.includes('effrac');
+            return false;
+        })
+        .sort((a, b) => (a.cellule || '').localeCompare(b.cellule || '', undefined, { numeric: true, sensitivity: 'base' }));
+}
+
+/**
+ * Synchronise les zones de composition d'un type de bloc SANS détruire
+ * la répartition ni l'ordre manuels :
+ *  - retire les chips dont le membre n'existe plus / a changé de cellule
+ *  - ajoute les nouveaux membres (absents de toutes les zones) dans la 1re zone
+ * @param {string} selector - sélecteur des zones (ex: '.moicp-members')
+ * @param {string} type - 'moicp' | 'zmspcp' | 'effraction'
+ */
+function _syncArticulationBlocks(selector, type) {
+    const zones = document.querySelectorAll(selector);
+    if (zones.length === 0) return;
+
+    const valid = _getArticulationMembers(type);
+    const validSet = new Set(valid.map(m => m.trigramme));
+
+    // 1. Retirer les chips obsolètes de toutes les zones
+    zones.forEach(zone => {
+        zone.querySelectorAll('.articulation-member').forEach(chip => {
+            if (!validSet.has(chip.dataset.trigramme)) chip.remove();
+        });
+    });
+
+    // 2. Recenser les membres déjà placés (dans n'importe quelle zone du type)
+    const present = new Set();
+    zones.forEach(zone => {
+        zone.querySelectorAll('.articulation-member').forEach(chip => present.add(chip.dataset.trigramme));
+    });
+
+    // 3. Ajouter les nouveaux membres dans la première zone, dans l'ordre des cellules
+    const firstZone = zones[0];
+    valid.forEach(m => {
+        if (!present.has(m.trigramme)) {
+            _addArticulationMemberChip(firstZone, m.trigramme, type);
+        }
     });
 }
 
@@ -645,10 +713,11 @@ function refreshArticulationFromPatracdvr() {
     const currentPenetration = Array.from(document.querySelectorAll('#ordre_penetration_container .order-chip')).map(c => c.dataset.trigramme);
     refreshOrdrePenetration(currentPenetration.length > 0 ? currentPenetration : null);
 
-    // 4. Mise à jour des compositions dans les blocs MOICP/ZMSPCP
-    document.querySelectorAll('.moicp-members').forEach(zone => _autoPopulateFromCellule(zone, 'india', 'moicp'));
-    document.querySelectorAll('.zmspcp-members').forEach(zone => _autoPopulateFromCellule(zone, 'ao', 'zmspcp'));
-    document.querySelectorAll('.effraction-members').forEach(zone => _autoPopulateEffraction(zone));
+    // 4. Synchronisation NON destructive des compositions MOICP/ZMSPCP/Effraction
+    //    (préserve l'ordre et la répartition manuelle ; ajoute les nouveaux, retire les obsolètes)
+    _syncArticulationBlocks('.moicp-members', 'moicp');
+    _syncArticulationBlocks('.zmspcp-members', 'zmspcp');
+    _syncArticulationBlocks('.effraction-members', 'effraction');
 }
 
 // --- RÉACTIVITÉ ---
