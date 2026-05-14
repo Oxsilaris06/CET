@@ -1,8 +1,7 @@
 // ==================== Constants.js ====================
-// Support OI2_CONFIG override (oi2.html uses separate storage keys)
-const LOCAL_STORAGE_KEY = (window.OI2_CONFIG && window.OI2_CONFIG.LOCAL_STORAGE_KEY) || 'tactical_oi_data';
+const LOCAL_STORAGE_KEY = 'tactical_oi_data';
 window.LOCAL_STORAGE_KEY = LOCAL_STORAGE_KEY;
-const INDEXED_DB_NAME = (window.OI2_CONFIG && window.OI2_CONFIG.DB_NAME) || 'OI_GeneratorLiteDB';
+const INDEXED_DB_NAME = 'OI_GeneratorLiteDB';
 const BACKGROUND_IMAGE_ID = 'pdf_background';
 const BACKGROUND_IMAGE_LIGHT = 'assets/img/fond_oi_light.png';
 const BACKGROUND_IMAGE_DARK = 'assets/img/fond_oi_dark.png';
@@ -89,9 +88,17 @@ const listeners = new Set();
 /**
  * Crée un proxy récursif pour surveiller les changements de propriétés,
  * même dans les objets imbriqués (ex: Store.state.formData.nom = '...')
+ *
+ * Cache WeakMap : sans cela, CHAQUE accès (Store.state.formData.x) recréait
+ * une cascade de Proxy neufs — gaspillage majeur sur les accès fréquents
+ * (navigation, syncDomToStore, collecte PDF). Le cache réutilise le proxy
+ * d'un même objet cible ; le comportement des traps reste identique.
  */
+const _proxyCache = new WeakMap();
 function createDeepProxy(target, notifyCallback) {
-    return new Proxy(target, {
+    const cached = _proxyCache.get(target);
+    if (cached) return cached;
+    const proxy = new Proxy(target, {
         get(obj, prop) {
             const val = Reflect.get(obj, prop);
 
@@ -115,6 +122,8 @@ function createDeepProxy(target, notifyCallback) {
             return result;
         }
     });
+    _proxyCache.set(target, proxy);
+    return proxy;
 }
 
 const StoreBase = {
@@ -137,6 +146,11 @@ const StoreBase = {
             localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(this.state.formData));
         } catch (e) {
             console.error("LocalStorage Error:", e);
+            if (e && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED')) {
+                if (typeof toast === 'function') {
+                    toast("Mémoire de sauvegarde saturée ! Exportez votre session puis réinitialisez les données.", "error");
+                }
+            }
         }
     },
 
