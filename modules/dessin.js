@@ -1,55 +1,198 @@
+/**
+ * dessin.js — Système d'annotation et de dessin sur les photos (outils, sélection, historique undo/redo).
+ * Chargé par : 4.html
+ * Fonctions principales : pushAnnotationHistory, commitAnnotationHistory, undoAnnotation, redoAnnotation, getSelectionBBox
+ */
 // --- Annotation / Drawing Globals ---
 let longPressTimer = null;
 const LONG_PRESS_DURATION = 500; // ms
 let currentAnnotationZoom = 1.0;
 
+// ===== Historique annotation — undo / redo (Lot B1) =====
+let annotationHistory = [];
+let annotationRedoStack = [];
+const ANNOTATION_HISTORY_MAX = 50;
+
+// ===== Manipulation directe — poignées resize / rotation (Lot B2) =====
+let isResizing = false;
+let isRotating = false;
+let gestureSnapshot = null;   // snapshot JSON pris au début d'un geste move/resize/rotate
+let gestureStart = null;      // { cx, cy, dist0, metric0 } pour le redimensionnement
+
+/** Empile l'état courant des annotations (à appeler AVANT une mutation discrète). */
+function pushAnnotationHistory() {
+    annotationHistory.push(JSON.stringify(Store.state.annotations));
+    if (annotationHistory.length > ANNOTATION_HISTORY_MAX) annotationHistory.shift();
+    annotationRedoStack = [];
+    refreshAnnotationUndoRedo();
+}
+
+/** Valide un snapshot pré-geste dans l'historique (uniquement si l'état a changé). */
+function commitAnnotationHistory(snapshot) {
+    if (!snapshot || snapshot === JSON.stringify(Store.state.annotations)) return;
+    annotationHistory.push(snapshot);
+    if (annotationHistory.length > ANNOTATION_HISTORY_MAX) annotationHistory.shift();
+    annotationRedoStack = [];
+    refreshAnnotationUndoRedo();
+}
+
+function undoAnnotation() {
+    if (!annotationHistory.length) return;
+    annotationRedoStack.push(JSON.stringify(Store.state.annotations));
+    try { Store.state.annotations = JSON.parse(annotationHistory.pop()); } catch (e) {}
+    selectedAnnotation = null;
+    setContextualTools(null);
+    redrawCanvas();
+    persistAnnotationsToPreview();
+    refreshAnnotationUndoRedo();
+}
+
+function redoAnnotation() {
+    if (!annotationRedoStack.length) return;
+    annotationHistory.push(JSON.stringify(Store.state.annotations));
+    try { Store.state.annotations = JSON.parse(annotationRedoStack.pop()); } catch (e) {}
+    selectedAnnotation = null;
+    setContextualTools(null);
+    redrawCanvas();
+    persistAnnotationsToPreview();
+    refreshAnnotationUndoRedo();
+}
+
+function refreshAnnotationUndoRedo() {
+    const u = document.getElementById('annotation_undo');
+    const r = document.getElementById('annotation_redo');
+    if (u) { u.disabled = !annotationHistory.length; u.style.opacity = annotationHistory.length ? '1' : '0.4'; }
+    if (r) { r.disabled = !annotationRedoStack.length; r.style.opacity = annotationRedoStack.length ? '1' : '0.4'; }
+}
+
+function resetAnnotationHistory() {
+    annotationHistory = [];
+    annotationRedoStack = [];
+    refreshAnnotationUndoRedo();
+}
+
+/** Snapshot avant / commit après pour les sliders contextuels (input continu). */
+function bindHistorySlider(el) {
+    if (!el) return;
+    let snap = null;
+    const take = () => { snap = JSON.stringify(Store.state.annotations); };
+    el.addEventListener('pointerdown', take);
+    el.addEventListener('keydown', take);
+    el.addEventListener('change', () => { commitAnnotationHistory(snap); snap = null; });
+}
+
+window.undoAnnotation = undoAnnotation;
+window.redoAnnotation = redoAnnotation;
+
+/** Boîte englobante non pivotée d'une annotation : {x, y, width, height, centerX, centerY}. */
+function getSelectionBBox(annotation) {
+    let x, y, width, height;
+    if (annotation.type === 'location') {
+        x = annotation.x - annotation.radius; y = annotation.y - annotation.radius;
+        width = annotation.radius * 2; height = annotation.radius * 2;
+    } else if (annotation.type === 'box') {
+        x = annotation.x; y = annotation.y; width = annotation.width; height = annotation.height;
+    } else if (annotation.type === 'arrow') {
+        const minX = Math.min(annotation.startX, annotation.endX);
+        const minY = Math.min(annotation.startY, annotation.endY);
+        const maxX = Math.max(annotation.startX, annotation.endX);
+        const maxY = Math.max(annotation.startY, annotation.endY);
+        x = minX - 10; y = minY - 10; width = (maxX - minX) + 20; height = (maxY - minY) + 20;
+    } else { // text / member
+        const size = annotation.size || 30;
+        ctx.save();
+        ctx.font = `bold ${size}px Oswald`;
+        const tw = ctx.measureText(annotation.text || '').width;
+        ctx.restore();
+        if (annotation.type === 'member') {
+            const padX = size * 0.8, padY = size * 0.4;
+            width = tw + padX * 2; height = size + padY * 2;
+            x = annotation.x - width / 2; y = annotation.y - height / 2;
+        } else {
+            width = tw + 20; height = size + 10;
+            x = annotation.x - 10; y = annotation.y - size;
+        }
+    }
+    return { x, y, width, height, centerX: x + width / 2, centerY: y + height / 2 };
+}
+
+/** Positions des poignées (repère canvas non pivoté) de la sélection. */
+function getSelectionHandles(annotation) {
+    const bb = getSelectionBBox(annotation);
+    const rotOffset = 34 / currentAnnotationZoom;
+    return {
+        bbox: bb,
+        rotate: { x: bb.centerX, y: bb.y - rotOffset },
+        resize: { x: bb.x + bb.width, y: bb.y + bb.height }
+    };
+}
+
+/** Teste si (ux,uy) — déjà ramené dans le repère non pivoté — touche une poignée.
+ *  Retourne 'rotate' | 'resize' | null. */
+function hitSelectionHandle(annotation, ux, uy) {
+    const h = getSelectionHandles(annotation);
+    const tol = 18 / currentAnnotationZoom;
+    if (Math.hypot(ux - h.rotate.x, uy - h.rotate.y) <= tol) return 'rotate';
+    if (Math.hypot(ux - h.resize.x, uy - h.resize.y) <= tol) return 'resize';
+    return null;
+}
+
+/** Métrique de taille d'une annotation, utilisée pour le redimensionnement uniforme. */
+function getAnnotationMetric(a) {
+    if (a.type === 'location') return a.radius || 1;
+    if (a.type === 'box') return Math.max(a.width || 1, a.height || 1);
+    if (a.type === 'arrow') return Math.hypot(a.endX - a.startX, a.endY - a.startY) || 1;
+    return a.size || 30; // text / member
+}
+
 function setContextualTools(selection) {
     const contextualTools = document.getElementById('contextual_tools');
-    if (selection) {
-        contextualTools.classList.add('active');
+    if (!contextualTools) return;
 
-        const rotationInput = document.getElementById('rotation_input');
-        rotationInput.value = Math.round((selection.rotation || 0) * 180 / Math.PI) % 360;
-        if (rotationInput.value < 0) rotationInput.value = 360 + parseInt(rotationInput.value);
-
-        // Mise à jour des sliders de redimensionnement
-        const wSlider = document.getElementById('resize_w');
-        const hSlider = document.getElementById('resize_h');
-        const strokeSlider = document.getElementById('stroke_width_edit');
-
-        if (wSlider) {
-            wSlider.value = selection.type === 'location' ? (selection.radius * 2) : (selection.width || 0);
-            wSlider.parentElement.style.display = (selection.type === 'location' || selection.type === 'box') ? 'flex' : 'none';
-        }
-        if (hSlider) {
-            hSlider.value = selection.height || 0;
-            hSlider.parentElement.style.display = selection.type === 'box' ? 'flex' : 'none';
-        }
-        if (strokeSlider) {
-            strokeSlider.value = selection.thickness || 5;
-            strokeSlider.parentElement.style.display = (selection.type === 'box' || selection.type === 'arrow') ? 'flex' : 'none';
-        }
-
-        const textSizeControl = document.getElementById('text_size_control');
-        if (textSizeControl) {
-            textSizeControl.style.display = (selection.type === 'text' || selection.type === 'member') ? 'flex' : 'none';
-            if (selection.type === 'text' || selection.type === 'member') {
-                const textSizeSlider = document.getElementById('text_size_edit');
-                if (textSizeSlider) textSizeSlider.value = selection.size || 30;
-            }
-        }
-
-        const zoneSettings = document.getElementById('zone_settings');
-        if (zoneSettings) {
-            zoneSettings.style.display = selection.type === 'location' ? 'flex' : 'none';
-            if (selection.type === 'location') {
-                document.getElementById('circle_text').value = selection.text || '';
-                document.getElementById('circle_opacity').value = selection.opacity || 0.5;
-            }
-        }
-
-    } else {
+    if (!selection) {
         contextualTools.classList.remove('active');
+        return;
+    }
+    contextualTools.classList.add('active');
+
+    // Rotation : refléter l'angle dans le slider visible + l'input caché.
+    // (Le redimensionnement passe désormais par les poignées du canvas — Lot B2.)
+    let deg = Math.round((selection.rotation || 0) * 180 / Math.PI) % 360;
+    if (deg < 0) deg += 360;
+    const rotationInput = document.getElementById('rotation_input');
+    const rotationSlider = document.getElementById('rotation_input_slider');
+    if (rotationInput) rotationInput.value = deg;
+    if (rotationSlider) rotationSlider.value = deg;
+
+    // Épaisseur de trait (box / arrow)
+    const strokeSlider = document.getElementById('stroke_width_edit');
+    if (strokeSlider) {
+        strokeSlider.value = selection.thickness || 5;
+        strokeSlider.parentElement.style.display =
+            (selection.type === 'box' || selection.type === 'arrow') ? 'flex' : 'none';
+    }
+
+    // Taille de texte (text / member)
+    const textSizeControl = document.getElementById('text_size_control');
+    if (textSizeControl) {
+        const isText = selection.type === 'text' || selection.type === 'member';
+        textSizeControl.style.display = isText ? 'flex' : 'none';
+        if (isText) {
+            const textSizeSlider = document.getElementById('text_size_edit');
+            if (textSizeSlider) textSizeSlider.value = selection.size || 30;
+        }
+    }
+
+    // Réglages de zone (location)
+    const zoneSettings = document.getElementById('zone_settings');
+    if (zoneSettings) {
+        zoneSettings.style.display = selection.type === 'location' ? 'flex' : 'none';
+        if (selection.type === 'location') {
+            const ct = document.getElementById('circle_text');
+            const co = document.getElementById('circle_opacity');
+            if (ct) ct.value = selection.text || '';
+            if (co) co.value = selection.opacity || 0.5;
+        }
     }
 }
 
@@ -59,21 +202,6 @@ function persistAnnotationsToPreview() {
     if (!previewEl) return;
     previewEl.dataset.annotations = JSON.stringify(Store.state.annotations);
     if (typeof saveToStorage === 'function') saveToStorage();
-}
-
-function resizeSelected(w, h) {
-    if (!selectedAnnotation) return;
-    // Pour box, width/height
-    if (selectedAnnotation.type === 'box') {
-        if (w) selectedAnnotation.width = parseInt(w);
-        if (h) selectedAnnotation.height = parseInt(h);
-    }
-    // Pour location, radius
-    if (selectedAnnotation.type === 'location' && w) {
-        selectedAnnotation.radius = parseInt(w) / 2;
-    }
-    redrawCanvas();
-    persistAnnotationsToPreview();
 }
 
 function updateStrokeWidth(val) {
@@ -154,7 +282,8 @@ function setAnnotationColor(color, element) {
     currentAnnotationColor = color;
     document.querySelectorAll('.color-circle').forEach(el => el.classList.remove('active'));
     if (element) element.classList.add('active');
-    if (selectedAnnotation) {
+    if (selectedAnnotation && selectedAnnotation.color !== color) {
+        pushAnnotationHistory();
         selectedAnnotation.color = color; // Appliquer la couleur à la sélection
         redrawCanvas();
         persistAnnotationsToPreview();
@@ -238,6 +367,9 @@ async function openAnnotationModal(previewImgId) {
                     Store.state.annotations = [];
                 }
                 Store.state.annotations.forEach(a => { if (!a.color) a.color = '#c0392b'; });
+
+                // Nouvelle session d'édition : on repart d'un historique vierge.
+                resetAnnotationHistory();
 
                 // GESTION AFFICHAGE INITIAL (RESET ZOOM / FIT)
                 resetZoom();
@@ -333,67 +465,57 @@ function redrawCanvas() {
 }
 
 function drawSelectionBorder(annotation) {
+    const bb = getSelectionBBox(annotation);
+    const angle = annotation.rotation || 0;
+    // Tailles constantes à l'écran : on divise par le zoom courant du canvas.
+    const z = currentAnnotationZoom || 1;
+    const lw = 2 / z;
+    const hr = 9 / z;             // demi-côté / rayon des poignées
+    const rotOffset = 34 / z;
+
     ctx.save();
-    ctx.setLineDash([5, 5]);
+    if (angle) {
+        ctx.translate(bb.centerX, bb.centerY);
+        ctx.rotate(angle);
+        ctx.translate(-bb.centerX, -bb.centerY);
+    }
+
+    // Cadre pointillé
+    ctx.setLineDash([6 / z, 4 / z]);
     ctx.strokeStyle = 'white';
-    ctx.lineWidth = 3;
-    ctx.shadowColor = "black";
-    ctx.shadowBlur = 5;
-            let centerX, centerY;
-    let x, y, width, height;
+    ctx.lineWidth = lw;
+    ctx.shadowColor = 'black';
+    ctx.shadowBlur = 4;
+    ctx.strokeRect(bb.x, bb.y, bb.width, bb.height);
+    ctx.setLineDash([]);
+    ctx.shadowBlur = 0;
 
-    if (annotation.type === 'location') {
-        x = annotation.x - annotation.radius;
-        y = annotation.y - annotation.radius;
-        width = annotation.radius * 2;
-        height = annotation.radius * 2;
-        centerX = annotation.x;
-        centerY = annotation.y;
-    } else if (annotation.type === 'box') {
-        x = annotation.x;
-        y = annotation.y;
-        width = annotation.width;
-        height = annotation.height;
-        centerX = annotation.x + annotation.width / 2;
-        centerY = annotation.y + annotation.height / 2;
-    } else if (annotation.type === 'arrow') {
-        const minX = Math.min(annotation.startX, annotation.endX);
-        const minY = Math.min(annotation.startY, annotation.endY);
-        const maxX = Math.max(annotation.startX, annotation.endX);
-        const maxY = Math.max(annotation.startY, annotation.endY);
-        x = minX - 10;
-        y = minY - 10;
-        width = maxX - minX + 20;
-        height = maxY - minY + 20;
-        centerX = (annotation.startX + annotation.endX) / 2;
-        centerY = (annotation.startY + annotation.endY) / 2;
-    } else if (annotation.type === 'text' || annotation.type === 'member') {
-        const size = annotation.size || 30;
-        ctx.font = `bold ${size}px Oswald`;
-        if (annotation.type === 'member') {
-            const paddingX = size * 0.8;
-            const paddingY = size * 0.4;
-            width = ctx.measureText(annotation.text).width + paddingX * 2;
-            height = size + paddingY * 2;
-            x = annotation.x - width / 2;
-            y = annotation.y - height / 2;
-        } else {
-            width = ctx.measureText(annotation.text).width + 20;
-            height = size + 10;
-            x = annotation.x - 10;
-            y = annotation.y - size; // approx ascent
-        }
-        centerX = x + width / 2;
-        centerY = y + height / 2;
-    }
+    // Tige + poignée de rotation (au-dessus du cadre)
+    const rotX = bb.centerX, rotY = bb.y - rotOffset;
+    ctx.beginPath();
+    ctx.moveTo(bb.centerX, bb.y);
+    ctx.lineTo(rotX, rotY);
+    ctx.strokeStyle = 'white';
+    ctx.lineWidth = lw;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(rotX, rotY, hr, 0, Math.PI * 2);
+    ctx.fillStyle = '#3b82f6';
+    ctx.fill();
+    ctx.strokeStyle = 'white';
+    ctx.lineWidth = lw;
+    ctx.stroke();
 
-    if (annotation.rotation) {
-        ctx.translate(centerX, centerY);
-        ctx.rotate(annotation.rotation);
-        ctx.translate(-centerX, -centerY);
-    }
+    // Poignée de redimensionnement (coin bas-droit)
+    const rsX = bb.x + bb.width, rsY = bb.y + bb.height;
+    ctx.beginPath();
+    ctx.rect(rsX - hr, rsY - hr, hr * 2, hr * 2);
+    ctx.fillStyle = '#3b82f6';
+    ctx.fill();
+    ctx.strokeStyle = 'white';
+    ctx.lineWidth = lw;
+    ctx.stroke();
 
-    ctx.strokeRect(x, y, width, height);
     ctx.restore();
 }
 
@@ -551,6 +673,41 @@ function handleDrawStart(e) {
     startX = pos.x;
     startY = pos.y;
 
+    // --- Poignées de manipulation directe (resize / rotation) — Lot B2 ---
+    // Prioritaire sur tout le reste : si une annotation est sélectionnée et qu'on
+    // saisit une de ses poignées, on entre en mode redimensionnement ou rotation.
+    if (selectedAnnotation) {
+        const bb = getSelectionBBox(selectedAnnotation);
+        const angle = selectedAnnotation.rotation || 0;
+        const u = getRotatedPoint(pos.x, pos.y, bb.centerX, bb.centerY, angle);
+        const handle = hitSelectionHandle(selectedAnnotation, u.x, u.y);
+        if (handle) {
+            e.preventDefault();
+            cancelLongPress();
+            gestureSnapshot = JSON.stringify(Store.state.annotations);
+            if (handle === 'resize') {
+                isResizing = true;
+                gestureStart = {
+                    cx: bb.centerX, cy: bb.centerY,
+                    dist0: Math.hypot(u.x - bb.centerX, u.y - bb.centerY) || 1,
+                    metric0: getAnnotationMetric(selectedAnnotation),
+                    box0: {
+                        width: selectedAnnotation.width, height: selectedAnnotation.height
+                    },
+                    arrow0: {
+                        startX: selectedAnnotation.startX, startY: selectedAnnotation.startY,
+                        endX: selectedAnnotation.endX, endY: selectedAnnotation.endY
+                    }
+                };
+            } else {
+                isRotating = true;
+                gestureStart = { cx: bb.centerX, cy: bb.centerY };
+            }
+            document.body.style.overflow = 'hidden';
+            return;
+        }
+    }
+
     // Détection d'appui long pour éditer une annotation existante (comportement d'app de retouche)
     if (e.touches && e.touches.length === 1) {
         const hit = getAnnotationAtPosition(pos.x, pos.y);
@@ -560,6 +717,7 @@ function handleDrawStart(e) {
                 setActiveTool('move');
                 selectedAnnotation = hit;
                 isMovingAnnotation = true;
+                gestureSnapshot = JSON.stringify(Store.state.annotations);
                 setContextualTools(selectedAnnotation);
                 redrawCanvas();
             }, LONG_PRESS_DURATION);
@@ -572,6 +730,7 @@ function handleDrawStart(e) {
         setContextualTools(selectedAnnotation);
         if (selectedAnnotation) {
             isMovingAnnotation = true;
+            gestureSnapshot = JSON.stringify(Store.state.annotations);
             document.body.style.overflow = 'hidden';
             redrawCanvas();
         }
@@ -581,6 +740,7 @@ function handleDrawStart(e) {
         if (text) {
             const sizeInput = document.getElementById('text_size_tool');
             const size = sizeInput ? parseInt(sizeInput.value) : 30;
+            pushAnnotationHistory();
             Store.state.annotations.push({
                 id: Date.now() + Math.random(),
                 type: 'text',
@@ -617,16 +777,53 @@ function handleDrawMove(e) {
     if (e.touches && e.touches.length > 1) return; // Zoom natif en cours
 
     const pos = getEventPos(canvas, e);
-    
+
     // Si on bouge trop, on annule l'appui long
     if (longPressTimer && (Math.abs(pos.x - startX) > 10 || Math.abs(pos.y - startY) > 10)) {
         cancelLongPress();
     }
 
+    // --- Redimensionnement uniforme via la poignée (Lot B2) ---
+    if (isResizing && selectedAnnotation && gestureStart) {
+        e.preventDefault();
+        const a = selectedAnnotation;
+        const angle = a.rotation || 0;
+        const u = getRotatedPoint(pos.x, pos.y, gestureStart.cx, gestureStart.cy, angle);
+        let scale = Math.hypot(u.x - gestureStart.cx, u.y - gestureStart.cy) / gestureStart.dist0;
+        if (!isFinite(scale) || scale <= 0) scale = 0.01;
+        if (a.type === 'box') {
+            a.width = Math.max(5, gestureStart.box0.width * scale);
+            a.height = Math.max(5, gestureStart.box0.height * scale);
+            a.x = gestureStart.cx - a.width / 2;
+            a.y = gestureStart.cy - a.height / 2;
+        } else if (a.type === 'location') {
+            a.radius = Math.max(3, gestureStart.metric0 * scale);
+        } else if (a.type === 'arrow') {
+            const g = gestureStart.arrow0;
+            a.startX = gestureStart.cx + (g.startX - gestureStart.cx) * scale;
+            a.startY = gestureStart.cy + (g.startY - gestureStart.cy) * scale;
+            a.endX = gestureStart.cx + (g.endX - gestureStart.cx) * scale;
+            a.endY = gestureStart.cy + (g.endY - gestureStart.cy) * scale;
+        } else { // text / member
+            a.size = Math.max(8, Math.min(400, gestureStart.metric0 * scale));
+        }
+        redrawCanvas();
+        return;
+    }
+
+    // --- Rotation via la poignée (Lot B2) ---
+    if (isRotating && selectedAnnotation && gestureStart) {
+        e.preventDefault();
+        selectedAnnotation.rotation =
+            Math.atan2(pos.y - gestureStart.cy, pos.x - gestureStart.cx) + Math.PI / 2;
+        redrawCanvas();
+        return;
+    }
+
     if (!isDrawing && !isMovingAnnotation) return;
-    
+
     // On bloque le scroll natif SEULEMENT si on est en train de dessiner ou bouger une annotation
-    e.preventDefault(); 
+    e.preventDefault();
 
     if (isMovingAnnotation && selectedAnnotation) {
         const deltaX = pos.x - startX;
@@ -659,8 +856,28 @@ function handleDrawEnd(e) {
     if (e.touches && e.touches.length > 0) return; // Toujours un doigt posé
 
     document.body.style.overflow = '';
+
+    // Fin d'un geste de redimensionnement / rotation via poignée
+    if (isResizing || isRotating) {
+        isResizing = false;
+        isRotating = false;
+        gestureStart = null;
+        commitAnnotationHistory(gestureSnapshot);
+        gestureSnapshot = null;
+        setContextualTools(selectedAnnotation);
+        const targetId = annotationModal.dataset.targetPreviewId;
+        const targetPreview = targetId ? document.getElementById(targetId) : null;
+        if (targetPreview) targetPreview.dataset.annotations = JSON.stringify(Store.state.annotations);
+        saveToStorage();
+        redrawCanvas();
+        return;
+    }
+
     if (isMovingAnnotation) {
         isMovingAnnotation = false;
+        // Historique : on valide le snapshot pris au début du déplacement.
+        commitAnnotationHistory(gestureSnapshot);
+        gestureSnapshot = null;
         // CONFORMITÉ: Sauvegarde après déplacement/modification d'une annotation
         const targetId = annotationModal.dataset.targetPreviewId;
         const targetPreview = document.getElementById(targetId);
@@ -696,6 +913,9 @@ function handleDrawEnd(e) {
             if (final.radius < 5) return;
         }
 
+        // Historique : on empile l'état AVANT l'ajout (après les retours anticipés
+        // pour ne pas créer d'entrée pour un tracé trop petit, ignoré).
+        pushAnnotationHistory();
         if (final.type !== 'text') Store.state.annotations.push(final);
 
         currentAnnotation = null;
@@ -903,6 +1123,7 @@ window.populateMemberCanvasModal = function (x, y) {
                 document.getElementById('memberSelectionModalCanvas').close();
                 // Taille un peu plus petite par défaut pour les puces membres
                 const size = document.getElementById('text_size_edit') ? parseInt(document.getElementById('text_size_edit').value) : 20;
+                pushAnnotationHistory();
                 Store.state.annotations.push({
                     id: Date.now() + Math.random(), type: 'member', x, y, text: tri, color: currentAnnotationColor, rotation: 0, size: size
                 });
@@ -920,7 +1141,6 @@ window.populateMemberCanvasModal = function (x, y) {
 
 // --- GLOBAL EXPOSURE ---
 window.setActiveTool = setActiveTool;
-window.resizeSelected = resizeSelected;
 window.updateStrokeWidth = updateStrokeWidth;
 window.updateTextSize = updateTextSize;
 window.updateZoneText = updateZoneText;
@@ -950,6 +1170,18 @@ function toggleMobileDock() {
 window.toggleMobileDock = toggleMobileDock;
 
 /**
+ * Ferme le bottom-sheet contextuel mobile : désélectionne l'annotation courante
+ * et masque les réglages. Le sheet se referme via la classe .active de
+ * #contextual_tools (cf. setContextualTools), pilotée par le CSS mobile.
+ */
+function closeMobileSheet() {
+    selectedAnnotation = null;
+    setContextualTools(null);
+    if (typeof redrawCanvas === 'function') redrawCanvas();
+}
+window.closeMobileSheet = closeMobileSheet;
+
+/**
  * Branche le canvas et la barre d'outils d'annotation (équivalent monolithique 4.html).
  * À appeler une fois le canvas initialisé (ex. après getElementById dans presentation.js).
  */
@@ -960,13 +1192,19 @@ function initAnnotationWorkspace() {
     
     // Initialiser le workspace (le triple dock mobile est géré via CSS Grid et toggleMobileDock)
 
-    canvas.addEventListener('mousedown', handleDrawStart);
-    canvas.addEventListener('mousemove', handleDrawMove);
-    canvas.addEventListener('mouseup', handleDrawEnd);
-    canvas.addEventListener('mouseout', handleDrawEnd);
-    canvas.addEventListener('touchstart', handleDrawStart, { passive: false });
-    canvas.addEventListener('touchmove', handleDrawMove, { passive: false });
-    canvas.addEventListener('touchend', handleDrawEnd);
+    // Enveloppe : une exception dans un handler canvas ne doit pas casser
+    // silencieusement l'annotation (le filet global de 4.html journalise aussi).
+    const safeAnnot = (fn, label) => function (ev) {
+        try { return fn(ev); }
+        catch (e) { console.error('[Annotation] ' + label + ' a échoué:', e); }
+    };
+    canvas.addEventListener('mousedown', safeAnnot(handleDrawStart, 'drawStart'));
+    canvas.addEventListener('mousemove', safeAnnot(handleDrawMove, 'drawMove'));
+    canvas.addEventListener('mouseup', safeAnnot(handleDrawEnd, 'drawEnd'));
+    canvas.addEventListener('mouseout', safeAnnot(handleDrawEnd, 'drawEnd'));
+    canvas.addEventListener('touchstart', safeAnnot(handleDrawStart, 'drawStart'), { passive: false });
+    canvas.addEventListener('touchmove', safeAnnot(handleDrawMove, 'drawMove'), { passive: false });
+    canvas.addEventListener('touchend', safeAnnot(handleDrawEnd, 'drawEnd'));
 
     const drawingTools = ['tool_move', 'tool_location', 'tool_arrow', 'tool_box', 'tool_text', 'tool_member'];
     drawingTools.forEach(id => {
@@ -990,6 +1228,7 @@ function initAnnotationWorkspace() {
     const toolReset = document.getElementById('tool_reset');
     if (toolReset) {
         toolReset.addEventListener('click', () => {
+            if (Store.state.annotations.length) pushAnnotationHistory();
             Store.state.annotations = [];
             selectedAnnotation = null;
             setContextualTools(null);
@@ -1043,6 +1282,7 @@ function initAnnotationWorkspace() {
     if (delBtn) {
         delBtn.addEventListener('click', () => {
             if (!selectedAnnotation) return;
+            pushAnnotationHistory();
             // Support backward compatibility if old annotations don't have an ID
             if (selectedAnnotation.id) {
                 Store.state.annotations = Store.state.annotations.filter((ann) => ann.id !== selectedAnnotation.id);
@@ -1065,7 +1305,8 @@ function initAnnotationWorkspace() {
             }
             const cur = selectedAnnotation.text != null ? String(selectedAnnotation.text) : '';
             const newText = prompt('Modifier texte :', cur);
-            if (newText !== null) {
+            if (newText !== null && newText !== cur) {
+                pushAnnotationHistory();
                 selectedAnnotation.text = newText;
                 redrawCanvas();
                 persistAnnotationsToPreview();
@@ -1073,10 +1314,19 @@ function initAnnotationWorkspace() {
         });
     }
 
-    const resizeW = document.getElementById('resize_w');
-    const resizeH = document.getElementById('resize_h');
-    if (resizeW) resizeW.addEventListener('input', (e) => resizeSelected(e.target.value, null));
-    if (resizeH) resizeH.addEventListener('input', (e) => resizeSelected(null, e.target.value));
+    // Boutons Annuler / Rétablir (Lot B1)
+    const undoBtn = document.getElementById('annotation_undo');
+    if (undoBtn) undoBtn.addEventListener('click', undoAnnotation);
+    const redoBtn = document.getElementById('annotation_redo');
+    if (redoBtn) redoBtn.addEventListener('click', redoAnnotation);
+    refreshAnnotationUndoRedo();
+
+    // Raccourcis clavier Ctrl+Z / Ctrl+Y (uniquement quand la modale est ouverte)
+    document.addEventListener('keydown', (e) => {
+        if (!annotationModal || !annotationModal.open) return;
+        if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); undoAnnotation(); }
+        else if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.shiftKey && e.key === 'Z'))) { e.preventDefault(); redoAnnotation(); }
+    });
 
     const strokeSlider = document.getElementById('stroke_width_edit');
     if (strokeSlider) strokeSlider.addEventListener('input', (e) => updateStrokeWidth(e.target.value));
@@ -1087,6 +1337,12 @@ function initAnnotationWorkspace() {
     const circleOpacity = document.getElementById('circle_opacity');
     if (circleText) circleText.addEventListener('input', (e) => updateZoneText(e.target.value));
     if (circleOpacity) circleOpacity.addEventListener('input', (e) => updateZoneOpacity(e.target.value));
+
+    // Historique : snapshot avant / commit après pour les sliders contextuels
+    bindHistorySlider(strokeSlider);
+    bindHistorySlider(textSizeEdit);
+    bindHistorySlider(circleOpacity);
+    bindHistorySlider(document.getElementById('rotation_input_slider'));
 }
 
 window.initAnnotationWorkspace = initAnnotationWorkspace;

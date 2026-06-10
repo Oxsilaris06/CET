@@ -51,8 +51,29 @@ export const LogManager = {
         const logData = Storage.loadLogData();
         logData.push(newEntry);
         Storage.saveLogData(logData);
-        
+
+        if (newEntry.lieu) this.addLieuToHistory(newEntry.lieu);
+
         return newEntry;
+    },
+
+    /**
+     * Mémorise une localisation dans l'historique de suggestions (LRU, max 30)
+     */
+    addLieuToHistory(lieu) {
+        const trimmed = (lieu || '').trim();
+        if (!trimmed) return;
+        let hist = [];
+        try { hist = JSON.parse(localStorage.getItem('pcTacLieuHistory') || '[]'); } catch (e) {}
+        hist = hist.filter(l => l.toLowerCase() !== trimmed.toLowerCase());
+        hist.unshift(trimmed);
+        if (hist.length > 30) hist = hist.slice(0, 30);
+        localStorage.setItem('pcTacLieuHistory', JSON.stringify(hist));
+    },
+
+    getLieuHistory() {
+        try { return JSON.parse(localStorage.getItem('pcTacLieuHistory') || '[]'); }
+        catch (e) { return []; }
     },
 
     /**
@@ -101,5 +122,7 @@ export const LogManager = {
     }
 };
 
-window.deleteLogEntry = LogManager.deleteEntry.bind(LogManager);
+// NB : window.deleteLogEntry est défini dans main.js (delete + re-render de la table).
+// L'ancienne définition ici (bind sans re-render) était systématiquement écrasée
+// au DOMContentLoaded et donc morte — retirée pour lever l'ambiguïté (PC6).
 window.LogManager = LogManager;

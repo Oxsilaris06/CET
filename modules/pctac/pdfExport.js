@@ -10,7 +10,14 @@ import { PDF_PAX_COLORS, PHOTO_CATEGORIES, FREE_MODE_COLORS } from './config.js'
 export const PdfExport = {
     async buildPdf() {
         try {
+            if (typeof PDFLib === 'undefined') {
+                alert('Librairie pdf-lib non chargée (réseau ?). Réessaie dans quelques secondes.');
+                return;
+            }
             const { PDFDocument, rgb: pdfRgb, StandardFonts, PageSizes } = PDFLib;
+            // PageSizes.A4 est un tuple partagé : toujours cloner avant addPage
+            const A4_PORTRAIT  = PageSizes.A4.slice();
+            const A4_LANDSCAPE = PageSizes.A4.slice().reverse();
             const pdfDoc = await PDFDocument.create();
             const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
             const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
@@ -66,7 +73,9 @@ export const PdfExport = {
             };
 
             const addNewPage = (title, isLandscape = false) => {
-                context.currentPage = pdfDoc.addPage(isLandscape ? PageSizes.A4.slice().reverse() : PageSizes.A4);
+                // Cloner à chaque appel : pdf-lib peut conserver la référence
+                const size = (isLandscape ? A4_LANDSCAPE : A4_PORTRAIT).slice();
+                context.currentPage = pdfDoc.addPage(size);
                 context.pageWidth = context.currentPage.getWidth();
                 context.pageHeight = context.currentPage.getHeight();
                 context.y = context.pageHeight - context.margin;
@@ -86,13 +95,13 @@ export const PdfExport = {
 
             const drawImageSafe = async (page, dataUrl, x, y, maxWidth, maxHeight) => {
                 try {
-                    if (!dataUrl || !dataUrl.startsWith('data:image')) return y;
-                    const imgBytes = await fetch(dataUrl).then(res => res.arrayBuffer());
-                    
+                    if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image')) return y;
+                    const ab = await fetch(dataUrl).then(res => res.arrayBuffer());
+                    const imgBytes = new Uint8Array(ab); // pdf-lib préfère Uint8Array
+
                     // Validation simple du header JPEG/PNG
-                    const uint8 = new Uint8Array(imgBytes.slice(0, 4));
-                    const isPng = uint8[0] === 0x89 && uint8[1] === 0x50;
-                    const isJpeg = uint8[0] === 0xFF && uint8[1] === 0xD8;
+                    const isPng  = imgBytes[0] === 0x89 && imgBytes[1] === 0x50;
+                    const isJpeg = imgBytes[0] === 0xFF && imgBytes[1] === 0xD8;
 
                     let img;
                     if (isPng) img = await pdfDoc.embedPng(imgBytes);
@@ -273,7 +282,8 @@ export const PdfExport = {
 
                 addNewPage(`GALERIE : ${cat.label.toUpperCase()}`, true); // Mode PAYSAGE
                 for (let i = 0; i < catPhotos.length; i += 2) {
-                    if (context.y < 400) addNewPage(`GALERIE : ${cat.label.toUpperCase()} (SUITE)`, true);
+                    // Une page paysage par paire de photos (toute la hauteur dispo).
+                    if (i > 0) addNewPage(`GALERIE : ${cat.label.toUpperCase()} (SUITE)`, true);
                     
                     const photoWidth = (context.pageWidth - 3 * context.margin) / 2;
                     const photoHeightMax = context.pageHeight - 2 * context.margin - 40; // Presque toute la hauteur
@@ -341,7 +351,7 @@ export const PdfExport = {
 
         } catch (e) {
             console.error("PDF Export Critical Error:", e);
-            alert("Erreur lors de la génération du PDF.");
+            alert("Erreur lors de la génération du PDF :\n\n" + (e && e.message ? e.message : e));
         }
     }
 };

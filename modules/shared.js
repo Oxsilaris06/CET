@@ -1,3 +1,8 @@
+/**
+ * shared.js — Fournit des composants HTML communs et un système de stockage local simplifié pour les données partagées.
+ * Chargé par : 4.html
+ * Fonctions principales : SharedData.init, SharedComponents.Adversaire.renderForm, SharedComponents.Pax.renderForm, SharedComponents.Photo.renderUploadZone
+ */
 // ==================== SharedUI.js ====================
 
 /**

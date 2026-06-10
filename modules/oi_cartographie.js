@@ -1,3 +1,8 @@
+/**
+ * oi_cartographie.js — Cartographie de préparation mission (MapLibre) pour le Générateur d'OI.
+ * Chargé par : 4.html
+ * Fonctions principales : OICarto (objet : init, gestion des pins, shapes, historique undo/redo)
+ */
 // ==================== oi_cartographie.js ====================
 // Cartographie de préparation mission pour le Générateur d'OI (4.html).
 //
@@ -57,7 +62,213 @@ const OI_PIN_DEFS = {
 };
 const OI_PIN_FALLBACK = { icon: 'place', color: '#a1a1aa', label: 'Point' };
 
+// Mapping fonction OI → icône Material (placement automatique des membres).
+// La cellule "India *" bascule aussi sur l'icône pion d'échecs si la fonction
+// n'a pas de mapping plus spécifique.
+const OI_FONCTION_ICONS = {
+    'chef de dispo': 'stars',
+    'chef dispo':    'stars',
+    'chef inter':    'support_agent',
+    'effrac':        'hardware',
+    'inter':         'chess',
+    'india':         'chess',
+    'chef oscar':    'eye_tracking',
+    'ao':            'visibility',
+    'conducteur':    'search_hands_free',
+    'de':            'saved_search',
+    'cyno':          'pets'
+};
+
+function oiNormalize(s) {
+    return (s || '').toString().normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+}
+
+/** Icône Material auto pour un membre, d'après sa fonction puis sa cellule. */
+function oiIconForMember(fonction, cellule) {
+    const f = oiNormalize(fonction);
+    if (OI_FONCTION_ICONS[f]) return OI_FONCTION_ICONS[f];
+    if (oiNormalize(cellule).startsWith('india')) return 'chess';
+    return OI_PIN_DEFS.member.icon; // défaut : gendarme
+}
+
+// Catalogue d'icônes pour la sélection libre (roue → Icône).
+const OI_ICON_CATALOG = [
+    { id: 'stars', label: 'Chef dispo' }, { id: 'support_agent', label: 'Chef inter' },
+    { id: 'hardware', label: 'Effrac' }, { id: 'chess', label: 'Inter / India' },
+    { id: 'eye_tracking', label: 'Chef Oscar' }, { id: 'visibility', label: 'AO' },
+    { id: 'search_hands_free', label: 'Conducteur' }, { id: 'saved_search', label: 'DE' },
+    { id: 'pets', label: 'Cyno' }, { id: 'local_police', label: 'Membre' },
+    { id: 'military_tech', label: 'Gendarmerie' }, { id: 'shield_person', label: 'Inter armé' },
+    { id: 'record_voice_over', label: 'Négociateur' }, { id: 'medical_services', label: 'Médecin' },
+    { id: 'local_fire_department', label: 'Pompier' }, { id: 'directions_car', label: 'Véhicule' },
+    { id: 'local_shipping', label: 'Camion' }, { id: 'two_wheeler', label: 'Moto' },
+    { id: 'groups', label: 'Rassemblement' }, { id: 'person_alert', label: 'Adversaire' },
+    { id: 'person_off', label: 'Otage' }, { id: 'target', label: 'Objectif' },
+    { id: 'home', label: 'Domicile' }, { id: 'door_front', label: 'Accès' },
+    { id: 'flag', label: 'Repère' }, { id: 'dvr', label: 'PC op' },
+    { id: 'crisis_alert', label: 'Menace' }, { id: 'videocam', label: 'Caméra' }
+];
+
+/**
+ * Roue contextuelle (radial menu) — portée depuis pctac2 (wheel.js) en script
+ * global. Ouvre un menu radial à un point lng/lat ; suit la carte ; se ferme
+ * sur clic extérieur / Échap / bouton central / choix d'une option.
+ */
+class OIWheel {
+    constructor(opts) {
+        this.map = opts.map;
+        this.lngLat = opts.lngLat;
+        this.title = opts.title;
+        this.centerIcon = opts.centerIcon || 'close';
+        this.options = opts.options || [];
+        this.radius = opts.radius || 80;
+        this.onClose = opts.onClose;
+        this.element = null;
+        this._onMove = () => this._position();
+        this._onOutside = this._onOutside.bind(this);
+        this._onKey = (ev) => { if (ev.key === 'Escape') this.destroy(); };
+        this._destroyed = false;
+        this._mountedAt = 0;
+    }
+    open() {
+        if (this.element) return;
+        this.element = this._buildElement();
+        const parent = this.map ? this.map.getContainer() : document.body;
+        parent.appendChild(this.element);
+        this._position();
+        if (this.map) { this.map.on('move', this._onMove); this.map.on('zoom', this._onMove); }
+        this._mountedAt = Date.now();
+        document.addEventListener('pointerdown', this._onOutside, { capture: true });
+        document.addEventListener('touchstart', this._onOutside, { capture: true, passive: true });
+        document.addEventListener('keydown', this._onKey);
+        requestAnimationFrame(() => { if (this.element) this.element.classList.add('open'); });
+    }
+    destroy() {
+        if (this._destroyed) return;
+        this._destroyed = true;
+        if (this.element) { try { this.element.remove(); } catch (_) {} this.element = null; }
+        if (this.map) {
+            try { this.map.off('move', this._onMove); } catch (_) {}
+            try { this.map.off('zoom', this._onMove); } catch (_) {}
+        }
+        document.removeEventListener('pointerdown', this._onOutside, { capture: true });
+        document.removeEventListener('touchstart', this._onOutside, { capture: true });
+        document.removeEventListener('keydown', this._onKey);
+        if (this.onClose) { try { this.onClose(); } catch (_) {} }
+    }
+    _onOutside(ev) {
+        if (!this.element) return;
+        if (Date.now() - this._mountedAt < 120) return;
+        if (!this.element.contains(ev.target)) this.destroy();
+    }
+    _position() {
+        if (!this.element || !this.map) return;
+        if (!this.lngLat) {
+            const r = this.map.getContainer().getBoundingClientRect();
+            this.element.style.left = `${r.width / 2}px`;
+            this.element.style.top = `${r.height / 2}px`;
+            return;
+        }
+        const p = this.map.project(this.lngLat);
+        this.element.style.left = `${p.x}px`;
+        this.element.style.top = `${p.y}px`;
+    }
+    _buildElement() {
+        const n = this.options.length;
+        const vw = (typeof window !== 'undefined' ? window.innerWidth : 1024);
+        const radius = vw < 480 ? Math.min(this.radius, 88) : Math.max(this.radius, 98);
+        const arcSpan = n <= 2 ? Math.PI : 2 * Math.PI;
+        const arcStart = n <= 2 ? -Math.PI / 2 - arcSpan / 2 : -Math.PI / 2;
+        const btnSize = vw < 480 ? 52 : 58;
+        const wrap = document.createElement('div');
+        wrap.className = 'oi-wheel';
+        wrap.style.cssText = `position:absolute; width:${radius * 2 + btnSize + 36}px; height:${radius * 2 + btnSize + 36}px;
+            transform:translate(-50%,-50%) scale(0.85); opacity:0;
+            transition:transform 160ms cubic-bezier(.34,1.56,.64,1), opacity 140ms ease-out; z-index:60; pointer-events:none;`;
+        const bg = document.createElement('div');
+        bg.style.cssText = `position:absolute; inset:0; border-radius:50%;
+            background:radial-gradient(circle at center, rgba(20,24,32,0.55) 0%, rgba(20,24,32,0.10) 70%, transparent 100%); pointer-events:none;`;
+        wrap.appendChild(bg);
+        const center = document.createElement('button');
+        center.type = 'button';
+        center.className = 'oi-wheel-center';
+        center.title = 'Fermer';
+        center.style.cssText = `position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+            width:54px; height:54px; border-radius:50%; background:rgba(20,24,32,0.95);
+            border:2px solid rgba(255,255,255,0.35); color:#fff; cursor:pointer;
+            display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px;
+            pointer-events:auto; box-shadow:0 4px 16px rgba(0,0,0,0.55); touch-action:none; font-family:var(--font-ui,sans-serif);`;
+        center.innerHTML = `<span class="material-symbols-outlined" style="font-size:22px; line-height:1;">${this.centerIcon}</span>
+            <span style="font-size:9px; font-weight:700; letter-spacing:0.5px; opacity:0.85;">FERMER</span>`;
+        center.addEventListener('pointerdown', (ev) => ev.stopPropagation());
+        center.onclick = (ev) => { ev.stopPropagation(); this.destroy(); };
+        wrap.appendChild(center);
+        if (this.title) {
+            const t = document.createElement('div');
+            t.style.cssText = `position:absolute; left:50%; bottom:-28px; transform:translateX(-50%);
+                background:rgba(20,24,32,0.92); color:#fff; padding:3px 10px; border-radius:12px;
+                font-family:var(--font-ui,sans-serif); font-size:0.78em; font-weight:600; white-space:nowrap;
+                pointer-events:none; box-shadow:0 2px 8px rgba(0,0,0,0.4);`;
+            t.textContent = this.title;
+            wrap.appendChild(t);
+        }
+        this.options.forEach((opt, i) => {
+            const angle = arcStart + (n === 1 ? 0 : (i / Math.max(1, n - (arcSpan >= 2 * Math.PI ? 0 : 1))) * arcSpan);
+            const x = Math.cos(angle) * radius, y = Math.sin(angle) * radius;
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.title = opt.label;
+            const bg2 = opt.bg || 'rgba(20,24,32,0.92)';
+            const col = opt.color || '#fff';
+            const border = opt.color || (opt.bg ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.18)');
+            b.style.cssText = `position:absolute; left:50%; top:50%;
+                transform:translate(calc(-50% + ${x}px), calc(-50% + ${y}px));
+                width:${btnSize}px; height:${btnSize}px; border-radius:50%; background:${bg2};
+                border:2px solid ${border}; color:${col}; cursor:pointer; display:flex; align-items:center; justify-content:center;
+                pointer-events:auto; box-shadow:0 3px 12px rgba(0,0,0,0.55); touch-action:none; padding:0;`;
+            b.innerHTML = `<span class="material-symbols-outlined" style="font-size:${btnSize >= 56 ? 26 : 22}px; line-height:1;">${opt.icon}</span>`;
+            const labelBelow = y > -radius * 0.3;
+            const labelOffset = labelBelow ? (btnSize / 2 + 6) : -(btnSize / 2 + 16);
+            const tip = document.createElement('span');
+            tip.textContent = opt.label;
+            tip.style.cssText = `position:absolute; top:calc(50% + ${labelOffset}px); left:50%; transform:translateX(-50%);
+                background:rgba(0,0,0,0.85); color:#fff; font-family:var(--font-ui,sans-serif); font-size:0.7em; font-weight:700;
+                letter-spacing:0.3px; padding:2px 7px; border-radius:8px; white-space:nowrap; pointer-events:none;
+                box-shadow:0 1px 4px rgba(0,0,0,0.5); max-width:110px; overflow:hidden; text-overflow:ellipsis;`;
+            b.appendChild(tip);
+            b.addEventListener('pointerdown', (ev) => ev.stopPropagation());
+            b.onclick = (ev) => {
+                ev.stopPropagation();
+                if (opt.action) { try { opt.action(this); } catch (e) { console.error('[OIWheel] action:', e); } }
+                if (!opt.keepOpen) this.destroy();
+            };
+            wrap.appendChild(b);
+        });
+        return wrap;
+    }
+}
+
+if (typeof document !== 'undefined' && !document.getElementById('oi-wheel-style')) {
+    const s = document.createElement('style');
+    s.id = 'oi-wheel-style';
+    s.textContent = `
+        .oi-wheel.open { opacity:1 !important; transform:translate(-50%,-50%) scale(1) !important; }
+        .oi-wheel button:active { filter:brightness(0.82); box-shadow:0 1px 4px rgba(0,0,0,0.75) inset, 0 1px 5px rgba(0,0,0,0.45); }
+        .oi-wheel-center:active { transform:translate(-50%,-50%) scale(0.94) !important; }
+        .oi-carto-inline-panel { position:absolute; z-index:62; transform:translate(-50%,-100%);
+            background:rgba(20,24,32,0.97); border:1px solid rgba(255,255,255,0.18); border-radius:12px;
+            padding:10px; box-shadow:0 8px 28px rgba(0,0,0,0.6); pointer-events:auto;
+            font-family:var(--font-ui,sans-serif); color:#fff; max-width:min(92vw,340px); }
+        .oi-carto-member-placed { opacity:0.5; filter:grayscale(0.7); }
+        .oi-carto-fn-group-title { font-size:0.72em; text-transform:uppercase; letter-spacing:0.5px;
+            color:var(--text-muted,#9aa4b2); margin:8px 0 4px; font-weight:700; }
+    `;
+    document.head.appendChild(s);
+}
+
 const OICarto = {
+    _activeWheel: null,
+    _inlinePanel: null,
     map: null,
     initialized: false,
     is3D: false,
@@ -69,6 +280,15 @@ const OICarto = {
     drawState: null,        // état temporaire pendant un tracé
     history: [],            // pile JSON des shapes avant chaque modif
     redoStack: [],
+
+    /** Enveloppe un handler : capture toute exception (log) pour qu'une erreur
+     *  dans un callback carte/marqueur ne casse pas l'interaction silencieusement. */
+    _safe(fn, label) {
+        return (...args) => {
+            try { return fn(...args); }
+            catch (e) { console.error('[OICarto] ' + (label || 'handler') + ' a échoué:', e); }
+        };
+    },
 
     /** Ouvre la modale cartographie (init paresseuse de la carte au 1er appel). */
     open() {
@@ -112,26 +332,26 @@ const OICarto = {
         this.map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-left');
         this.map.addControl(new maplibregl.ScaleControl({ maxWidth: 120, unit: 'metric' }), 'bottom-right');
 
-        this.map.on('moveend', () => this._saveView());
-        this.map.on('pitchend', () => this._saveView());
-        this.map.on('rotateend', () => this._saveView());
+        this.map.on('moveend', this._safe(() => this._saveView(), 'moveend'));
+        this.map.on('pitchend', this._safe(() => this._saveView(), 'pitchend'));
+        this.map.on('rotateend', this._safe(() => this._saveView(), 'rotateend'));
 
-        this.map.on('click', (e) => this._onMapClick(e));
+        this.map.on('click', this._safe((e) => this._onMapClick(e), 'mapClick'));
 
         // Drag-to-draw — souris ET tactile
-        this.map.on('mousedown', (e) => this._handleDrawDown(e));
-        this.map.on('mousemove', (e) => this._handleDrawMove(e));
-        this.map.on('mouseup', (e) => this._handleDrawUp(e));
-        this.map.on('touchstart', (e) => this._handleDrawDown(e));
-        this.map.on('touchmove', (e) => this._handleDrawMove(e));
-        this.map.on('touchend', (e) => this._handleDrawUp(e));
+        this.map.on('mousedown', this._safe((e) => this._handleDrawDown(e), 'drawDown'));
+        this.map.on('mousemove', this._safe((e) => this._handleDrawMove(e), 'drawMove'));
+        this.map.on('mouseup', this._safe((e) => this._handleDrawUp(e), 'drawUp'));
+        this.map.on('touchstart', this._safe((e) => this._handleDrawDown(e), 'drawDown'));
+        this.map.on('touchmove', this._safe((e) => this._handleDrawMove(e), 'drawMove'));
+        this.map.on('touchend', this._safe((e) => this._handleDrawUp(e), 'drawUp'));
 
-        this.map.on('load', () => {
+        this.map.on('load', this._safe(() => {
             this._initDrawingLayers();
             if (savedView.is3D) this._enable3D(false);
             this._renderShapes();
             setTimeout(() => this.map && this.map.resize(), 60);
-        });
+        }, 'load'));
 
         this._bindUi();
         this._bindDrawUi();
@@ -258,6 +478,8 @@ const OICarto = {
             // Sauvegarde de la vue à la fermeture (croix, Échap, bouton)
             modal.addEventListener('close', () => {
                 document.body.classList.remove('modal-open');
+                this._closeWheel();
+                this._closeInlinePanel();
                 this._saveView();
             });
             // Échap : si un outil de dessin / un placement est actif, on l'annule
@@ -360,14 +582,18 @@ const OICarto = {
         try {
             const url = `https://nominatim.openstreetmap.org/search?format=json&limit=5&q=${encodeURIComponent(q)}`;
             const r = await fetch(url, { headers: { 'Accept-Language': 'fr' } });
-            if (!r.ok) throw new Error('HTTP ' + r.status);
+            if (!r.ok) {
+                if (r.status === 429 || r.status === 403) throw new Error('QUOTA');
+                throw new Error('HTTP ' + r.status);
+            }
             const list = await r.json();
             if (!list.length) {
                 resultsBox.innerHTML = '<em style="color: var(--text-muted);">Aucun résultat.</em>';
                 return;
             }
+            const esc = (s) => (window.UIPlatform ? UIPlatform.esc(s) : s);
             resultsBox.innerHTML = list.map((item, i) =>
-                `<div class="oi-carto-search-result" data-idx="${i}">${item.display_name}</div>`
+                `<div class="oi-carto-search-result" data-idx="${i}">${esc(item.display_name)}</div>`
             ).join('');
             resultsBox.querySelectorAll('.oi-carto-search-result').forEach(div => {
                 div.onclick = () => {
@@ -378,7 +604,10 @@ const OICarto = {
             });
         } catch (e) {
             console.error('[OICarto] Nominatim échec:', e);
-            resultsBox.innerHTML = '<em style="color: var(--danger-red);">Erreur réseau. Vérifiez la connexion.</em>';
+            const msg = (e && e.message === 'QUOTA')
+                ? 'Quota de recherche atteint. Réessayez dans un instant.'
+                : 'Erreur réseau. Vérifiez la connexion.';
+            resultsBox.innerHTML = `<em style="color: var(--danger-red);">${msg}</em>`;
         }
     },
 
@@ -406,20 +635,11 @@ const OICarto = {
         const members = Array.from(document.querySelectorAll('.patracdvr-member-btn'))
             .filter(b => b.dataset.trigramme && b.dataset.trigramme !== 'N/A');
 
-        // 1) Membres (hors fonction Cyno) — icône gendarme, bleu
+        // 1) Membres (hors fonction Cyno) — triés par fonction, icône auto par fonction.
         const memberList = document.getElementById('oi_carto_member_list');
         if (memberList) {
-            memberList.innerHTML = '';
             const regular = members.filter(b => b.dataset.fonction !== 'Cyno');
-            if (!regular.length) {
-                memberList.innerHTML = this._emptyMsg('Aucun membre PATRACDVR configuré.');
-            } else {
-                regular.forEach(b => {
-                    const label = this._memberLabel(b);
-                    memberList.appendChild(this._pinButton(label, OI_PIN_DEFS.member.color,
-                        () => this._armPinPlacement({ kind: 'member', label })));
-                });
-            }
+            this._renderMemberList(memberList, regular, 'member');
         }
 
         // 2) Cyno — pin générique + membres de fonction "Cyno" — icône chien
@@ -428,10 +648,19 @@ const OICarto = {
             cynoList.innerHTML = '';
             cynoList.appendChild(this._pinButton('Cyno (générique)', OI_PIN_DEFS.cyno.color,
                 () => this._armPinPlacement({ kind: 'cyno', label: this._customOr('Cyno') })));
-            members.filter(b => b.dataset.fonction === 'Cyno').forEach(b => {
+            const cynoMembers = members.filter(b => b.dataset.fonction === 'Cyno');
+            cynoMembers.forEach(b => {
+                const tri = b.dataset.trigramme;
+                const fonction = b.dataset.fonction || '';
                 const label = this._memberLabel(b);
-                cynoList.appendChild(this._pinButton(label, OI_PIN_DEFS.cyno.color,
-                    () => this._armPinPlacement({ kind: 'cyno', label })));
+                const placed = this._isMemberPlaced(tri);
+                cynoList.appendChild(this._memberButton({
+                    text: label, color: OI_PIN_DEFS.cyno.color, placed, tri,
+                    onPlace: () => this._armPinPlacement({
+                        kind: 'cyno', label, memberTri: tri, fonction,
+                        icon: oiIconForMember(fonction, b.dataset.cellule)
+                    })
+                }));
             });
         }
 
@@ -496,6 +725,110 @@ const OICarto = {
         return b;
     },
 
+    /** Un membre est-il déjà posé sur la carte ? (clé = trigramme). */
+    _isMemberPlaced(tri) {
+        return this._loadPins().some(p => p.memberTri && p.memberTri === tri);
+    },
+
+    /**
+     * Rend la liste des membres triée par Fonction (groupes), chaque membre placé
+     * étant grisé. Un clic sur un membre grisé propose : Réinitialiser / Aller à.
+     */
+    _renderMemberList(container, memberBtns, kind) {
+        container.innerHTML = '';
+        if (!memberBtns.length) {
+            container.innerHTML = this._emptyMsg('Aucun membre PATRACDVR configuré.');
+            return;
+        }
+        // Regroupement par fonction (tri alpha, "Sans" en dernier).
+        const groups = {};
+        memberBtns.forEach(b => {
+            const fonc = (b.dataset.fonction && b.dataset.fonction !== 'Sans') ? b.dataset.fonction : 'Autres';
+            (groups[fonc] = groups[fonc] || []).push(b);
+        });
+        const keys = Object.keys(groups).sort((a, c) => {
+            if (a === 'Autres') return 1; if (c === 'Autres') return -1;
+            return a.localeCompare(c, 'fr');
+        });
+        keys.forEach(fonc => {
+            const title = document.createElement('div');
+            title.className = 'oi-carto-fn-group-title';
+            const ic = groups[fonc][0] ? oiIconForMember(groups[fonc][0].dataset.fonction, groups[fonc][0].dataset.cellule) : 'badge';
+            title.innerHTML = `<span class="material-symbols-outlined" style="font-size:15px; vertical-align:middle;">${ic}</span> ${fonc}`;
+            container.appendChild(title);
+            const row = document.createElement('div');
+            row.className = 'oi-carto-ping-list';
+            groups[fonc].forEach(b => {
+                const tri = b.dataset.trigramme;
+                const fonction = b.dataset.fonction || '';
+                const cellule = b.dataset.cellule || '';
+                const label = this._memberLabel(b);
+                row.appendChild(this._memberButton({
+                    text: label, color: OI_PIN_DEFS.member.color, placed: this._isMemberPlaced(tri), tri,
+                    onPlace: () => this._armPinPlacement({
+                        kind, label, memberTri: tri, fonction,
+                        icon: oiIconForMember(fonction, cellule)
+                    })
+                }));
+            });
+            container.appendChild(row);
+        });
+    },
+
+    /**
+     * Bouton membre. Non placé → arme le placement. Placé → grisé ; un clic
+     * déplie deux actions : Réinitialiser (retire le pin) ou Aller à la position.
+     */
+    _memberButton({ text, color, placed, tri, onPlace }) {
+        const wrap = document.createElement('div');
+        wrap.style.cssText = 'display:inline-flex; flex-direction:column; gap:4px;';
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'add-btn' + (placed ? ' oi-carto-member-placed' : '');
+        const darkText = ['#eab308', '#d4af37', '#22c55e', '#94a3b8', '#a1a1aa'].includes(color);
+        b.style.cssText = `width:auto; padding:6px 10px; background:${color}; color:${darkText ? '#000' : '#fff'}; border:none;`;
+        b.textContent = placed ? `✓ ${text}` : text;
+        b.title = placed ? 'Déjà placé — cliquer pour les options' : 'Cliquer puis toucher la carte pour placer';
+        const actions = document.createElement('div');
+        actions.style.cssText = 'display:none; gap:6px;';
+        if (placed) {
+            const reset = document.createElement('button');
+            reset.type = 'button'; reset.className = 'add-btn';
+            reset.style.cssText = 'width:auto; padding:5px 9px; background:rgba(239,68,68,0.18); color:#fca5a5; border:1px solid #ef4444; font-size:0.8em;';
+            reset.innerHTML = '<span class="material-symbols-outlined" style="font-size:15px; vertical-align:middle;">restart_alt</span> Réinitialiser';
+            reset.onclick = (e) => { e.stopPropagation(); this._resetMember(tri); };
+            const go = document.createElement('button');
+            go.type = 'button'; go.className = 'add-btn';
+            go.style.cssText = 'width:auto; padding:5px 9px; background:rgba(59,130,246,0.18); color:#93c5fd; border:1px solid #3b82f6; font-size:0.8em;';
+            go.innerHTML = '<span class="material-symbols-outlined" style="font-size:15px; vertical-align:middle;">my_location</span> Aller à';
+            go.onclick = (e) => { e.stopPropagation(); this._goToMember(tri); };
+            actions.appendChild(reset);
+            actions.appendChild(go);
+            b.onclick = () => { actions.style.display = actions.style.display === 'flex' ? 'none' : 'flex'; };
+        } else {
+            b.onclick = onPlace;
+        }
+        wrap.appendChild(b);
+        wrap.appendChild(actions);
+        return wrap;
+    },
+
+    /** Retire de la carte le(s) pin(s) d'un membre puis rafraîchit la modale. */
+    _resetMember(tri) {
+        const pins = this._loadPins().filter(p => !(p.memberTri && p.memberTri === tri));
+        this._savePins(pins);
+        this._renderPins();
+        this._renderPingLists();
+    },
+
+    /** Centre la carte sur le pin du membre (ferme la modale d'ajout). */
+    _goToMember(tri) {
+        const pin = this._loadPins().find(p => p.memberTri && p.memberTri === tri);
+        if (!pin) return;
+        this._closePingModal();
+        if (this.map) this.map.flyTo({ center: [pin.lng, pin.lat], zoom: Math.max(this.map.getZoom(), 17), speed: 1.4 });
+    },
+
     /** Véhicules créés dans le PATRACDVR (lignes .patracdvr-vehicle-row). */
     _getPatracdvrVehicles() {
         return Array.from(document.querySelectorAll('#patracdvr_container .patracdvr-vehicle-row'))
@@ -521,6 +854,8 @@ const OICarto = {
     },
 
     _onMapClick(e) {
+        // Un clic sur le fond ferme tout panneau flottant d'édition de pin.
+        this._closeInlinePanel();
         if (this.drawTool) return; // pendant un dessin, les clics sont gérés ailleurs
         if (!this.pendingPin) return;
         const p = this.pendingPin;
@@ -528,11 +863,18 @@ const OICarto = {
             id: 'pin_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
             kind: p.kind,
             label: p.label,
+            // Métadonnées membre + icône auto/personnalisée (placement OI).
+            memberTri: p.memberTri || null,
+            fonction: p.fonction || null,
+            icon: p.icon || null,
+            color: p.color || null,
             lng: e.lngLat.lng,
             lat: e.lngLat.lat
         });
         this.pendingPin = null;
         this._hideHint();
+        // Rafraîchit la modale d'ajout si encore ouverte (état "placé").
+        this._renderPingLists();
     },
 
     _addPin(pin) {
@@ -569,7 +911,8 @@ const OICarto = {
 
         for (const pin of this._loadPins()) {
             const def = OI_PIN_DEFS[pin.kind] || OI_PIN_FALLBACK;
-            const color = def.color;
+            const color = pin.color || def.color;          // couleur personnalisée prioritaire
+            const icon = pin.icon || def.icon;              // icône auto/personnalisée prioritaire
             const labelOffset = [0, 22];
 
             // --- 1) Marqueur = icône Material colorée, halo blanc, ancrée au centre ---
@@ -579,80 +922,225 @@ const OICarto = {
                 <span class="material-symbols-outlined" style="
                     font-size: 38px; color: ${color}; line-height: 1;
                     text-shadow: 0 0 2px #fff, 0 0 2px #fff, 0 0 2px #fff, 0 0 2px #fff, 0 2px 4px rgba(0,0,0,0.6);
-                    font-variation-settings: 'FILL' 1;">${def.icon}</span>`;
-
-            const popupHtml = `
-                <div style="font-size: 1.05em; min-width: 150px;">
-                    <div style="font-weight: bold; color: ${color}; margin-bottom: 2px;">${pin.label}</div>
-                    <div style="font-size: 0.8em; color: #888; margin-bottom: 8px;">${def.label}</div>
-                    <button type="button" class="oi-carto-pin-delete" data-id="${pin.id}"
-                        style="background: rgba(239,68,68,0.15); border: 1px solid #ef4444; color: #ef4444; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 0.85em;">
-                        Supprimer
-                    </button>
-                </div>`;
-            const popup = new maplibregl.Popup({ offset: 22, closeButton: false }).setHTML(popupHtml);
+                    font-variation-settings: 'FILL' 1;">${icon}</span>`;
 
             const pinMarker = new maplibregl.Marker({ element: pinWrap, anchor: 'center', draggable: true })
                 .setLngLat([pin.lng, pin.lat])
-                .setPopup(popup)
                 .addTo(this.map);
 
-            // --- 2) Marqueur libellé séparé, ancré au même point ---
-            // Fond sombre opaque + halo blanc (box-shadow ring) + ombre portée :
-            // reste lisible quelle que soit la couleur du fond satellite.
+            // --- 2) Marqueur libellé : trigramme + intitulé SOUS l'icône ---
+            // Pour un membre : trigramme (gras) sur la 1re ligne, intitulé (fonction
+            // ou texte personnalisé) sur la 2e. Sinon, libellé simple.
             const labelEl = document.createElement('div');
-            labelEl.textContent = pin.label;
             labelEl.style.cssText = `
                 padding: 3px 8px; background: rgba(0,0,0,0.82); color: #fff;
                 font-size: 13px; font-weight: 500; line-height: 1.2; border-left: 4px solid ${color};
-                border-radius: 3px; white-space: nowrap;
+                border-radius: 3px; white-space: nowrap; text-align: center;
                 box-shadow: 0 0 0 1px rgba(255,255,255,0.35), 0 1px 4px rgba(0,0,0,0.75);
                 pointer-events: none; text-shadow: 0 1px 2px rgba(0,0,0,0.9); letter-spacing: 0.3px;`;
+            if (pin.memberTri) {
+                const sub = pin.text || (pin.fonction && pin.fonction !== 'Sans' ? pin.fonction : '');
+                labelEl.innerHTML = `<div style="font-weight:700; font-size:13px;">${this._esc(pin.memberTri)}</div>` +
+                    (sub ? `<div style="font-size:11px; opacity:0.85;">${this._esc(sub)}</div>` : '');
+            } else {
+                labelEl.textContent = pin.text || pin.label;
+            }
             if (!this.labelsVisible) labelEl.style.display = 'none';
             const labelMarker = new maplibregl.Marker({ element: labelEl, anchor: 'top', offset: labelOffset })
                 .setLngLat([pin.lng, pin.lat])
                 .addTo(this.map);
 
-            // Survol = pin + libellé passent au-dessus des marqueurs voisins
-            // (lisibilité en cas de pins superposés).
-            pinWrap.addEventListener('mouseenter', () => {
-                pinWrap.style.zIndex = '1000';
-                labelEl.style.zIndex = '1000';
-            });
-            pinWrap.addEventListener('mouseleave', () => {
-                pinWrap.style.zIndex = '';
-                labelEl.style.zIndex = '';
-            });
+            pinWrap.addEventListener('mouseenter', () => { pinWrap.style.zIndex = '1000'; labelEl.style.zIndex = '1000'; });
+            pinWrap.addEventListener('mouseleave', () => { pinWrap.style.zIndex = ''; labelEl.style.zIndex = ''; });
 
             // --- Drag : pin + libellé se déplacent ensemble ---
-            pinMarker.on('dragstart', () => {
+            let lastDragEnd = 0;
+            pinMarker.on('dragstart', this._safe(() => {
                 pinWrap.style.cursor = 'grabbing';
                 pinWrap.style.opacity = '0.85';
                 labelEl.style.opacity = '0.5';
-            });
-            pinMarker.on('drag', () => labelMarker.setLngLat(pinMarker.getLngLat()));
-            pinMarker.on('dragend', () => {
+            }, 'pin:dragstart'));
+            pinMarker.on('drag', this._safe(() => labelMarker.setLngLat(pinMarker.getLngLat()), 'pin:drag'));
+            pinMarker.on('dragend', this._safe(() => {
                 pinWrap.style.cursor = 'grab';
                 pinWrap.style.opacity = '1';
                 labelEl.style.opacity = '1';
+                lastDragEnd = Date.now();
                 const ll = pinMarker.getLngLat();
                 labelMarker.setLngLat(ll);
                 const allPins = this._loadPins().slice();
                 const target = allPins.find(p => p.id === pin.id);
-                if (target) {
-                    target.lng = ll.lng;
-                    target.lat = ll.lat;
-                    this._savePins(allPins);
-                }
-            });
+                if (target) { target.lng = ll.lng; target.lat = ll.lat; this._savePins(allPins); }
+            }, 'pin:dragend'));
 
-            popup.on('open', () => {
-                const btn = document.querySelector(`.oi-carto-pin-delete[data-id="${pin.id}"]`);
-                if (btn) btn.onclick = () => { this._removePin(pin.id); popup.remove(); };
-            });
+            // --- Tap (sans drag) → roue d'options portée (Icône / Couleur / Renommer / Aller à / Supprimer) ---
+            pinWrap.addEventListener('click', this._safe((ev) => {
+                if (Date.now() - lastDragEnd < 300) return; // clic qui suit un drag : ignoré
+                ev.stopPropagation();
+                this._openPinWheel(pin.id);
+            }, 'pin:click'));
 
             this.markers.set(pin.id, { pin: pinMarker, label: labelMarker });
         }
+    },
+
+    _esc(s) {
+        return (s == null ? '' : String(s)).replace(/[&<>"']/g, c => (
+            { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+        ));
+    },
+
+    // ------------------------------------------------------------------
+    // Roue d'options d'un pin (système porté de pctac2)
+    // ------------------------------------------------------------------
+
+    _closeWheel() {
+        if (this._activeWheel) { try { this._activeWheel.destroy(); } catch (_) {} this._activeWheel = null; }
+    },
+
+    _closeInlinePanel() {
+        if (this._inlinePanel) { try { this._inlinePanel.remove(); } catch (_) {} this._inlinePanel = null; }
+        if (this._inlinePanelMove && this.map) {
+            try { this.map.off('move', this._inlinePanelMove); this.map.off('zoom', this._inlinePanelMove); } catch (_) {}
+            this._inlinePanelMove = null;
+        }
+    },
+
+    _openPinWheel(pinId) {
+        const pin = this._loadPins().find(p => p.id === pinId);
+        if (!pin) return;
+        this._closeWheel();
+        this._closeInlinePanel();
+        const ll = { lng: pin.lng, lat: pin.lat };
+        const opts = [
+            { id: 'icon', icon: 'category', label: 'Icône', bg: 'rgba(59,130,246,0.95)', action: () => this._openPinIconPanel(pinId) },
+            { id: 'color', icon: 'palette', label: 'Couleur', bg: 'rgba(168,85,247,0.95)', action: () => this._openPinColorPanel(pinId) },
+            { id: 'rename', icon: 'edit', label: 'Renommer', bg: 'rgba(234,179,8,0.95)', color: '#000', action: () => this._openPinRenamePanel(pinId) },
+            { id: 'goto', icon: 'my_location', label: 'Centrer', bg: 'rgba(34,197,94,0.95)', color: '#000', action: () => this.map && this.map.flyTo({ center: [pin.lng, pin.lat], zoom: Math.max(this.map.getZoom(), 17), speed: 1.2 }) },
+            { id: 'delete', icon: 'delete', label: 'Supprimer', bg: 'rgba(239,68,68,0.95)', action: () => { this._removePin(pinId); this._renderPingLists(); } }
+        ];
+        this._activeWheel = new OIWheel({
+            map: this.map, lngLat: ll,
+            title: pin.memberTri ? `${pin.memberTri}${pin.fonction && pin.fonction !== 'Sans' ? ' · ' + pin.fonction : ''}` : (pin.text || pin.label),
+            options: opts,
+            onClose: () => { this._activeWheel = null; }
+        });
+        this._activeWheel.open();
+    },
+
+    /** Panneau flottant ancré au pin (suit la carte). */
+    _openInlinePanel(lngLat, innerHtml, onMount) {
+        this._closeInlinePanel();
+        const panel = document.createElement('div');
+        panel.className = 'oi-carto-inline-panel';
+        panel.innerHTML = innerHtml;
+        panel.addEventListener('pointerdown', (e) => e.stopPropagation());
+        panel.addEventListener('click', (e) => e.stopPropagation());
+        const parent = this.map.getContainer();
+        parent.appendChild(panel);
+        const place = () => {
+            const p = this.map.project(lngLat);
+            panel.style.left = `${p.x}px`;
+            panel.style.top = `${p.y - 26}px`;
+        };
+        place();
+        this._inlinePanelMove = place;
+        this.map.on('move', place); this.map.on('zoom', place);
+        this._inlinePanel = panel;
+        if (onMount) onMount(panel);
+        return panel;
+    },
+
+    _openPinIconPanel(pinId) {
+        const pin = this._loadPins().find(p => p.id === pinId);
+        if (!pin) return;
+        const cells = OI_ICON_CATALOG.map(ic => `
+            <button type="button" class="oi-ic" data-id="${ic.id}" title="${this._esc(ic.label)}"
+                style="display:flex; flex-direction:column; align-items:center; gap:2px; padding:7px 4px; border-radius:8px; cursor:pointer;
+                       background:${(pin.icon || '') === ic.id ? 'rgba(59,130,246,0.35)' : 'rgba(255,255,255,0.05)'};
+                       border:1px solid ${(pin.icon || '') === ic.id ? '#3b82f6' : 'rgba(255,255,255,0.12)'}; color:#fff;">
+                <span class="material-symbols-outlined" style="font-size:22px;">${ic.id}</span>
+                <span style="font-size:0.6em; text-align:center; line-height:1.05;">${this._esc(ic.label)}</span>
+            </button>`).join('');
+        const html = `
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                <span class="material-symbols-outlined" style="font-size:18px; color:#60a5fa;">category</span>
+                <strong style="font-size:13px;">Choisir une icône</strong>
+            </div>
+            <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:6px; max-height:230px; overflow-y:auto;">${cells}</div>`;
+        this._openInlinePanel({ lng: pin.lng, lat: pin.lat }, html, (panel) => {
+            panel.querySelectorAll('.oi-ic').forEach(b => {
+                b.onclick = () => {
+                    const list = this._loadPins();
+                    const t = list.find(p => p.id === pinId);
+                    if (t) { t.icon = b.dataset.id; this._savePins(list); this._renderPins(); }
+                    this._closeInlinePanel();
+                };
+            });
+        });
+    },
+
+    _openPinColorPanel(pinId) {
+        const pin = this._loadPins().find(p => p.id === pinId);
+        if (!pin) return;
+        const colors = ['#3b82f6', '#ef4444', '#eab308', '#22c55e', '#a855f7', '#f97316', '#14b8a6', '#ffffff'];
+        const chips = colors.map(c => `
+            <button type="button" class="oi-col" data-c="${c}"
+                style="width:30px; height:30px; border-radius:50%; cursor:pointer; background:${c};
+                       border:2px solid ${(pin.color || '') === c ? '#fff' : 'rgba(255,255,255,0.25)'};"></button>`).join('');
+        const html = `
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                <span class="material-symbols-outlined" style="font-size:18px; color:#c084fc;">palette</span>
+                <strong style="font-size:13px;">Couleur du pin</strong>
+            </div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap; max-width:240px;">${chips}</div>`;
+        this._openInlinePanel({ lng: pin.lng, lat: pin.lat }, html, (panel) => {
+            panel.querySelectorAll('.oi-col').forEach(b => {
+                b.onclick = () => {
+                    const list = this._loadPins();
+                    const t = list.find(p => p.id === pinId);
+                    if (t) { t.color = b.dataset.c; this._savePins(list); this._renderPins(); }
+                    this._closeInlinePanel();
+                };
+            });
+        });
+    },
+
+    _openPinRenamePanel(pinId) {
+        const pin = this._loadPins().find(p => p.id === pinId);
+        if (!pin) return;
+        const current = pin.text || (pin.memberTri ? (pin.fonction || '') : pin.label);
+        const html = `
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                <span class="material-symbols-outlined" style="font-size:18px; color:#fcd34d;">edit</span>
+                <strong style="font-size:13px;">${pin.memberTri ? 'Intitulé du membre' : 'Renommer le point'}</strong>
+            </div>
+            <div style="display:flex; gap:6px; align-items:center;">
+                <input type="text" id="oi_pin_rename_input" value="${this._esc(current)}"
+                    style="flex:1; min-width:170px; background:rgba(255,255,255,0.08); color:#fff; border:1px solid rgba(255,255,255,0.2);
+                           border-radius:8px; padding:7px 10px; font-size:14px; outline:none;">
+                <button type="button" id="oi_pin_rename_ok"
+                    style="background:#22c55e; border:none; color:#000; border-radius:8px; width:38px; height:38px; cursor:pointer;">
+                    <span class="material-symbols-outlined" style="font-size:20px;">check</span>
+                </button>
+            </div>`;
+        this._openInlinePanel({ lng: pin.lng, lat: pin.lat }, html, (panel) => {
+            const input = panel.querySelector('#oi_pin_rename_input');
+            const apply = () => {
+                const list = this._loadPins();
+                const t = list.find(p => p.id === pinId);
+                if (t) {
+                    const v = (input.value || '').trim();
+                    t.text = v;
+                    if (!t.memberTri) t.label = v || t.label;
+                    this._savePins(list); this._renderPins();
+                }
+                this._closeInlinePanel();
+            };
+            panel.querySelector('#oi_pin_rename_ok').onclick = apply;
+            input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); apply(); } });
+            setTimeout(() => input.focus(), 40);
+        });
     },
 
     /** Affiche / masque tous les libellés de pins (anti-superposition). */

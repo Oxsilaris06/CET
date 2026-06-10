@@ -1,3 +1,8 @@
+/**
+ * medias.js — Gestion des images et médias : import, compression, miniatures, fond personnalisé.
+ * Chargé par : 4.html
+ * Fonctions principales : handleFileChange, removeImage, syncAllThumbnails, handleCustomBackgroundChange
+ */
 // ==================== MediaManager.js ====================
 
 
@@ -71,7 +76,7 @@ async function handleFileChange(input, previewContainerId, isSingle) {
                 interactiveItem.innerHTML = `
                             <img id="${previewImgId}" class="image-preview" src="${base64Data}" style="display:block;" data-annotations="[]" data-tools="[]" data-other-tools="">
                             <input type="text" class="photo-title-input" placeholder="Légende de la photo..." 
-                                style="width: 100%; margin-top: 5px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; border-radius: 4px; padding: 2px 5px; font-size: 0.8em;" 
+                                style="width: 100%; margin-top: 5px; background: var(--bg-interactive); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 4px; padding: 2px 5px; font-size: 0.8em;"
                                 oninput="syncDomToStore()">
                             <div style="display: flex; gap: 5px; margin-top: 5px;">
                                 <button type="button" class="add-btn" style="background-color: var(--accent-blue); padding: 4px 8px;" onmousedown="event.stopPropagation()" ontouchstart="event.stopPropagation()" onclick="openAnnotationModal('${previewImgId}')"><span class="material-symbols-outlined" style="font-size: 1.2em;">edit</span></button>
@@ -82,6 +87,10 @@ async function handleFileChange(input, previewContainerId, isSingle) {
 
             } catch (error) {
                 console.error("Erreur lors du stockage de l'image (IndexedDB) - Persistance indisponible:", error);
+                // OI3 — fail-loud : ne pas perdre une photo en silence.
+                if (typeof toast === 'function') {
+                    toast("Échec d'enregistrement d'une photo (stockage saturé/indisponible). Exportez votre session puis réessayez.", "error");
+                }
             }
         }
     }

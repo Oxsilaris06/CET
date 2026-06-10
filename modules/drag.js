@@ -1,3 +1,8 @@
+/**
+ * drag.js — Glisser-déposer tactile (touch) pour le réordonnancement et la suppression d'éléments.
+ * Chargé par : 4.html
+ * Fonctions principales : persistAfterDrag, handleTouchStart, handleTouchMove, handleTouchEnd
+ */
 // ==================== DragDrop.js ====================
 let touchDragItem = null;
 let touchDragClone = null;

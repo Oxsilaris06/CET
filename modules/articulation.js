@@ -1,3 +1,8 @@
+/**
+ * articulation.js — Gestion dynamique des blocs MOICP / ZMSPCP / effraction et de l'articulation tactique.
+ * Chargé par : 4.html
+ * Fonctions principales : addMoicp, addZmspcp, addEffraction, refreshArticulationFromPatracdvr, refreshColonneProgression
+ */
 // ==================== Articulation.js ====================
 
 
@@ -35,7 +40,7 @@ function addMoicp(data) {
     const defaultMission = data?.mission || DEFAULTS.missions.moicp;
 
     div.innerHTML = `
-        <div class="collapsible-header" style="background: rgba(59, 130, 246, 0.1); color: var(--accent-blue); border-left: 4px solid var(--accent-blue); border-radius: var(--radius-md) var(--radius-md) 0 0;">
+        <div class="collapsible-header" style="background: color-mix(in srgb, var(--accent-blue) 12%, transparent); color: var(--accent-blue); border-left: 4px solid var(--accent-blue); border-radius: var(--radius-md) var(--radius-md) 0 0;">
             <h3 class="block-title" style="margin: 0; display: flex; align-items: center; gap: 10px;">
                 <span class="material-symbols-outlined">shield</span>
                 <input type="text" class="block-title-input" value="${data?.title || 'Inter ' + blockIndex}" 
@@ -44,7 +49,7 @@ function addMoicp(data) {
             </h3>
             <div style="display: flex; align-items: center; gap: 8px;">
                 <button type="button" class="remove-btn" onclick="event.stopPropagation(); this.closest('.moicp-block').remove(); syncDomToStore();" 
-                    style="background: rgba(59, 130, 246, 0.15); border: none; color: var(--accent-blue); border-radius: 50%; width: 30px; height: 30px; cursor: pointer;" title="Supprimer ce MOICP">❌</button>
+                    style="min-height: 36px; height: 36px; width: 36px; padding: 0; border-radius: 50%;" title="Supprimer ce MOICP"><span class="material-symbols-outlined">close</span></button>
                 <span class="material-symbols-outlined">expand_more</span>
             </div>
         </div>
@@ -72,7 +77,7 @@ function addMoicp(data) {
             </h4>
             <p style="font-size: 0.85em; color: var(--text-muted); margin-bottom: 8px;">
                 <span class="material-symbols-outlined" style="font-size: 1em; vertical-align: middle;">info</span> 
-                Glissez pour réordonner. Cliquez ❌ pour retirer un membre de ce bloc.
+                Glissez pour réordonner. Cliquez sur la croix pour retirer un membre de ce bloc.
             </p>
             <div class="articulation-members-zone moicp-members" 
                 style="min-height: 50px; border: 2px dashed var(--border-color); border-radius: var(--radius-md); padding: 10px; display: flex; flex-wrap: wrap; gap: 8px;">
@@ -83,10 +88,10 @@ function addMoicp(data) {
                 <span class="material-symbols-outlined" style="vertical-align: middle;">route</span> Photos Itinéraire
             </h4>
             <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px;">
-                <button type="button" class="add-btn" style="flex:1; justify-content: center; min-height: 44px;" onclick="document.getElementById('input_itin_ext_${blockId}').click()">📷 Extérieur</button>
+                <button type="button" class="add-btn" style="flex:1; justify-content: center; min-height: 44px;" onclick="document.getElementById('input_itin_ext_${blockId}').click()"><span class="material-symbols-outlined">photo_camera</span> Extérieur</button>
                 <input type="file" id="input_itin_ext_${blockId}" class="sr-only-input" accept="image/*" multiple onchange="handleFileChange(this, 'photo_itin_ext_${blockId}', false)">
                 
-                <button type="button" class="add-btn" style="flex:1; justify-content: center; min-height: 44px;" onclick="document.getElementById('input_itin_int_${blockId}').click()">📷 Intérieur</button>
+                <button type="button" class="add-btn" style="flex:1; justify-content: center; min-height: 44px;" onclick="document.getElementById('input_itin_int_${blockId}').click()"><span class="material-symbols-outlined">photo_camera</span> Intérieur</button>
                 <input type="file" id="input_itin_int_${blockId}" class="sr-only-input" accept="image/*" multiple onchange="handleFileChange(this, 'photo_itin_int_${blockId}', false)">
             </div>
             <div id="photo_itin_ext_${blockId}" class="image-preview-container photo-display-area" style="margin-bottom:10px;"></div>
@@ -100,13 +105,14 @@ function addMoicp(data) {
     const membersZone = div.querySelector('.moicp-members');
     _setupArticulationDropZone(membersZone);
 
-    if (data?.members && data.members.length > 0) {
-        // Restauration depuis sauvegarde
+    if (data && Array.isArray(data.members)) {
+        // Restauration fidèle : on respecte EXACTEMENT les membres sauvegardés
+        // (y compris une liste vide → bloc volontairement vidé, pas de re-peuplement).
         data.members.forEach(trigramme => {
             _addArticulationMemberChip(membersZone, trigramme, 'moicp');
         });
     } else {
-        // Auto-peuplement depuis les India du PATRACDVR
+        // Création manuelle uniquement : auto-peuplement depuis les India du PATRACDVR.
         _autoPopulateFromCellule(membersZone, 'india', 'moicp');
     }
 
@@ -132,7 +138,7 @@ function addZmspcp(data) {
     const defaultMission = data?.mission || DEFAULTS.missions.zmspcp;
 
     div.innerHTML = `
-        <div class="collapsible-header" style="background: rgba(142, 68, 173, 0.1); color: var(--moicp-zmspcp-purple, #8e44ad); border-left: 4px solid var(--moicp-zmspcp-purple, #8e44ad); border-radius: var(--radius-md) var(--radius-md) 0 0;">
+        <div class="collapsible-header" style="background: color-mix(in srgb, var(--moicp-zmspcp-purple) 12%, transparent); color: var(--moicp-zmspcp-purple, #8e44ad); border-left: 4px solid var(--moicp-zmspcp-purple, #8e44ad); border-radius: var(--radius-md) var(--radius-md) 0 0;">
             <h3 class="block-title" style="margin: 0; display: flex; align-items: center; gap: 10px;">
                 <span class="material-symbols-outlined">visibility</span>
                 <input type="text" class="block-title-input" value="${data?.title || 'Appui Observation ' + blockIndex}" 
@@ -141,7 +147,7 @@ function addZmspcp(data) {
             </h3>
             <div style="display: flex; align-items: center; gap: 8px;">
                 <button type="button" class="remove-btn" onclick="event.stopPropagation(); this.closest('.zmspcp-block').remove(); syncDomToStore();" 
-                    style="background: rgba(142, 68, 173, 0.15); border: none; color: var(--moicp-zmspcp-purple, #8e44ad); border-radius: 50%; width: 30px; height: 30px; cursor: pointer;" title="Supprimer ce ZMSPCP">❌</button>
+                    style="min-height: 36px; height: 36px; width: 36px; padding: 0; border-radius: 50%;" title="Supprimer ce ZMSPCP"><span class="material-symbols-outlined">close</span></button>
                 <span class="material-symbols-outlined">expand_more</span>
             </div>
         </div>
@@ -169,7 +175,7 @@ function addZmspcp(data) {
             </h4>
             <p style="font-size: 0.85em; color: var(--text-muted); margin-bottom: 8px;">
                 <span class="material-symbols-outlined" style="font-size: 1em; vertical-align: middle;">info</span>
-                Glissez pour réordonner. Cliquez ❌ pour retirer un membre de ce bloc.
+                Glissez pour réordonner. Cliquez sur la croix pour retirer un membre de ce bloc.
             </p>
             <div class="articulation-members-zone zmspcp-members" 
                 style="min-height: 50px; border: 2px dashed var(--border-color); border-radius: var(--radius-md); padding: 10px; display: flex; flex-wrap: wrap; gap: 8px;">
@@ -180,10 +186,10 @@ function addZmspcp(data) {
                 <span class="material-symbols-outlined" style="vertical-align: middle;">terrain</span> Photos Terrain / AO
             </h4>
             <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px;">
-                <button type="button" class="add-btn" style="flex:1; justify-content: center;" onclick="document.getElementById('input_bapteme_${blockId}').click()">📷 Baptême Terrain</button>
+                <button type="button" class="add-btn" style="flex:1; justify-content: center;" onclick="document.getElementById('input_bapteme_${blockId}').click()"><span class="material-symbols-outlined">photo_camera</span> Baptême Terrain</button>
                 <input type="file" id="input_bapteme_${blockId}" hidden accept="image/*" multiple onchange="handleFileChange(this, 'photo_bapteme_${blockId}', false)">
                 
-                <button type="button" class="add-btn" style="flex:1; justify-content: center;" onclick="document.getElementById('input_empl_ao_${blockId}').click()">📷 Emplacement AO</button>
+                <button type="button" class="add-btn" style="flex:1; justify-content: center;" onclick="document.getElementById('input_empl_ao_${blockId}').click()"><span class="material-symbols-outlined">photo_camera</span> Emplacement AO</button>
                 <input type="file" id="input_empl_ao_${blockId}" hidden accept="image/*" multiple onchange="handleFileChange(this, 'photo_empl_ao_${blockId}', false)">
             </div>
             <div id="photo_bapteme_${blockId}" class="image-preview-container photo-display-area" style="margin-bottom:10px;"></div>
@@ -196,7 +202,8 @@ function addZmspcp(data) {
     const membersZone = div.querySelector('.zmspcp-members');
     _setupArticulationDropZone(membersZone);
 
-    if (data?.members && data.members.length > 0) {
+    if (data && Array.isArray(data.members)) {
+        // Restauration fidèle (liste vide respectée).
         data.members.forEach(trigramme => {
             _addArticulationMemberChip(membersZone, trigramme, 'zmspcp');
         });
@@ -291,7 +298,7 @@ function _addArticulationMemberChip(zone, trigramme, type) {
     chip.innerHTML = `
         <span class="art-member-trigramme">${trigramme}</span>
         ${subtitle ? `<span class="art-member-detail">${subtitle}</span>` : ''}
-        <button type="button" class="art-member-remove" onclick="this.parentElement.remove(); syncDomToStore();" title="Retirer">×</button>
+        <button type="button" class="art-member-remove" onclick="this.parentElement.remove(); syncDomToStore();" title="Retirer"><span class="material-symbols-outlined">close</span></button>
     `;
 
     // Drag events pour réordonner
@@ -344,6 +351,11 @@ function _setupArticulationDropZone(zone) {
         zone.style.borderColor = 'var(--border-color)';
         zone.style.background = '';
     });
+
+    // T6 — réordonnancement tactile intra-zone (horizontal). Le transfert entre
+    // zones reste géré par le drag&drop HTML5 (souris) ; le tactile réordonne au sein
+    // d'une zone (l'affectation des zones est principalement auto-peuplée).
+    _enableTouchSort(zone, '.articulation-member', () => { syncDomToStore(); }, 'x');
 
     zone.addEventListener('drop', (e) => {
         e.preventDefault();
@@ -421,6 +433,21 @@ function refreshRameVL(savedData) {
     _setupRameDropZone(container);
 }
 
+// T6 — active le réordonnancement TACTILE d'une liste (Pointer Events), en
+// complément du drag&drop HTML5 (souris desktop) qui reste inchangé. Idempotent.
+function _enableTouchSort(container, itemSelector, onReorder, axis) {
+    if (!window.UIPlatform || typeof UIPlatform.sortable !== 'function') return;
+    if (!container || container.dataset.touchSortInit === 'true') return;
+    container.dataset.touchSortInit = 'true';
+    UIPlatform.sortable(container, {
+        itemSelector,
+        pointerTypes: ['touch'],   // souris -> on laisse le DnD HTML5 natif
+        longPress: 180,            // appui maintenu court avant de saisir (laisse passer le scroll)
+        axis: axis || 'y',
+        onReorder
+    });
+}
+
 function _setupRameDropZone(container) {
     if (container.dataset.dropZoneInit === 'true') return;
     container.dataset.dropZoneInit = 'true';
@@ -445,6 +472,8 @@ function _setupRameDropZone(container) {
             container.insertBefore(dragging, afterElement);
         }
     });
+    // T6 — réordonnancement tactile (le DnD HTML5 ci-dessus ne marche qu'à la souris).
+    _enableTouchSort(container, '.rame-vl-chip', () => { _updateRamePositions(); syncDomToStore(); });
 }
 
 function _updateRamePositions() {
@@ -612,6 +641,8 @@ function _setupOrderDropZone(container, type) {
             container.insertBefore(dragging, afterElement);
         }
     });
+    // T6 — réordonnancement tactile (le DnD HTML5 ci-dessus ne marche qu'à la souris).
+    _enableTouchSort(container, `.${type}-chip`, () => { _updateOrderPositions(container); syncDomToStore(); });
 }
 
 function _updateOrderPositions(container) {
@@ -757,7 +788,7 @@ function addEffraction(data) {
     div.dataset.blockId = blockId;
 
     div.innerHTML = `
-        <div class="collapsible-header" style="background: rgba(212, 175, 55, 0.1); color: var(--effraction-gold); border-left: 4px solid var(--effraction-gold); border-radius: var(--radius-md) var(--radius-md) 0 0;">
+        <div class="collapsible-header" style="background: color-mix(in srgb, var(--effraction-gold) 12%, transparent); color: var(--effraction-gold); border-left: 4px solid var(--effraction-gold); border-radius: var(--radius-md) var(--radius-md) 0 0;">
             <h3 class="block-title" style="margin: 0; display: flex; align-items: center; gap: 10px;">
                 <span class="material-symbols-outlined">hardware</span>
                 <input type="text" class="block-title-input" value="${data?.title || 'Effraction ' + blockIndex}" 
@@ -766,7 +797,7 @@ function addEffraction(data) {
             </h3>
             <div style="display: flex; align-items: center; gap: 8px;">
                 <button type="button" class="remove-btn" onclick="event.stopPropagation(); this.closest('.effraction-block').remove(); syncDomToStore();" 
-                    style="background: rgba(212, 175, 55, 0.15); border: none; color: var(--effraction-gold); border-radius: 50%; width: 30px; height: 30px; cursor: pointer;" title="Supprimer">❌</button>
+                    style="min-height: 36px; height: 36px; width: 36px; padding: 0; border-radius: 50%;" title="Supprimer"><span class="material-symbols-outlined">close</span></button>
                 <span class="material-symbols-outlined">expand_more</span>
             </div>
         </div>
@@ -836,7 +867,7 @@ function addEffraction(data) {
                 <span class="material-symbols-outlined" style="vertical-align: middle;">psychology</span> Hypothèses & Déroulement
             </h4>
             <div class="effrac-hypotheses-list" id="effrac_hyp_list_${blockId}"></div>
-            <button type="button" class="add-btn" style="width:100%; justify-content: center; margin-bottom: 20px;" onclick="addEffractionHypothesis('${blockId}')">➕ Ajouter Hypothèse</button>
+            <button type="button" class="add-btn" style="width:100%; justify-content: center; margin-bottom: 20px;" onclick="addEffractionHypothesis('${blockId}')"><span class="material-symbols-outlined">add</span> Ajouter Hypothèse</button>
 
             <h4 style="margin-top: 15px; color: var(--effraction-gold);">
                 <span class="material-symbols-outlined" style="vertical-align: middle;">add_a_photo</span> Photos Effraction
@@ -845,7 +876,7 @@ function addEffraction(data) {
                 <span class="material-symbols-outlined" style="font-size: 1em; vertical-align: middle;">info</span> 
                 Ajoutez des photos et précisez les outils pour chacune.
             </div>
-            <button type="button" class="add-btn" style="width:100%; justify-content: center;" onclick="document.getElementById('input_effrac_${blockId}').click()">➕ Ajouter Photo(s)</button>
+            <button type="button" class="add-btn" style="width:100%; justify-content: center;" onclick="document.getElementById('input_effrac_${blockId}').click()"><span class="material-symbols-outlined">add</span> Ajouter Photo(s)</button>
             <input type="file" id="input_effrac_${blockId}" class="sr-only-input" accept="image/*" multiple onchange="handleFileChange(this, 'photo_effrac_${blockId}', false)">
             <div id="photo_effrac_${blockId}" class="image-preview-container photo-display-area" style="margin-top:10px;"></div>
         </div>
@@ -856,7 +887,8 @@ function addEffraction(data) {
     const membersZone = div.querySelector('.effraction-members');
     _setupArticulationDropZone(membersZone);
 
-    if (data?.members && data.members.length > 0) {
+    if (data && Array.isArray(data.members)) {
+        // Restauration fidèle (liste vide respectée).
         data.members.forEach(trigramme => {
             _addArticulationMemberChip(membersZone, trigramme, 'effraction');
         });
@@ -895,7 +927,7 @@ window.addEffractionHypothesis = function (blockId, data = null) {
     div.innerHTML = `
         <div style="display:flex; justify-content: space-between; align-items:center; margin-bottom: 10px;">
             <input type="text" class="effrac-hyp-title" value="${data?.title || 'Hypothèse ' + (list.children.length + 1)}" placeholder="Titre..." style="font-weight: bold; background: transparent; border: none; border-bottom: 1px solid var(--border-color); color: var(--text-primary); font-size: 1.1em; width: 60%;" oninput="syncDomToStore()">
-            <button type="button" class="remove-btn" onclick="this.closest('.effrac-hypothesis-item').remove(); syncDomToStore();" style="padding: 5px;">❌</button>
+            <button type="button" class="remove-btn" onclick="this.closest('.effrac-hypothesis-item').remove(); syncDomToStore();" style="padding: 5px;"><span class="material-symbols-outlined">close</span></button>
         </div>
         
         <label style="font-size: 0.85em;">Description Initiale:</label>

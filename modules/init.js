@@ -1,3 +1,8 @@
+/**
+ * init.js — Constantes globales et Store réactif (Proxy) de l'application ; point d'initialisation.
+ * Chargé par : 4.html
+ * Fonctions principales : createDeepProxy, Store (Proxy réactif), LOCAL_STORAGE_KEY, DEFAULTS
+ */
 // ==================== Constants.js ====================
 const LOCAL_STORAGE_KEY = 'tactical_oi_data';
 window.LOCAL_STORAGE_KEY = LOCAL_STORAGE_KEY;
@@ -244,8 +249,12 @@ const dbManager = {
             const transaction = this.db.transaction([this.storeName], 'readwrite');
             const store = transaction.objectStore(this.storeName);
             const request = store.put(blob, key);
-            request.onsuccess = () => resolve();
             request.onerror = (event) => reject(event.target.error);
+            // On résout sur le COMMIT de la transaction (oncomplete), pas sur onsuccess :
+            // garantit que l'écriture est persistée avant un éventuel location.reload().
+            transaction.oncomplete = () => resolve();
+            transaction.onerror = (event) => reject(event.target.error);
+            transaction.onabort = (event) => reject(event.target.error || new Error('transaction abort'));
         });
     },
 
@@ -255,6 +264,17 @@ const dbManager = {
             const store = transaction.objectStore(this.storeName);
             const request = store.get(key);
             request.onsuccess = (event) => resolve(event.target.result);
+            request.onerror = (event) => reject(event.target.error);
+        });
+    },
+
+    // Retourne toutes les clés d'images stockées (utilisé par l'archive tout-en-un).
+    getAllKeys() {
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction([this.storeName], 'readonly');
+            const store = transaction.objectStore(this.storeName);
+            const request = store.getAllKeys();
+            request.onsuccess = (event) => resolve(event.target.result || []);
             request.onerror = (event) => reject(event.target.error);
         });
     },
