@@ -1,3 +1,8 @@
+/**
+ * formulaires.js — Gestion des champs de formulaire dynamiques (chips, événements chronologiques, adversaires).
+ * Chargé par : 4.html
+ * Fonctions principales : addDynamicField, initChipContainer, getChipData, addTimeEvent, addAdversary
+ */
 // ==================== FormManager.js ====================
 
 
@@ -12,7 +17,7 @@ function addDynamicField(containerId, value = '') {
     const item = document.createElement('div');
     item.className = 'dynamic-list-item';
     const fieldId = `dyn_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
-    item.innerHTML = `<label for="${fieldId}" class="sr-only">Champ dynamique</label><input type="text" id="${fieldId}" class="dynamic-input" value="${value}" oninput="syncDomToStore()"><button type="button" class="remove-btn" onclick="this.parentElement.remove(); syncDomToStore();">❌</button>`;
+    item.innerHTML = `<label for="${fieldId}" class="sr-only">Champ dynamique</label><input type="text" id="${fieldId}" class="dynamic-input" value="${value}" oninput="syncDomToStore()"><button type="button" class="remove-btn" onclick="this.parentElement.remove(); syncDomToStore();"><span class="material-symbols-outlined">close</span></button>`;
     container.appendChild(item);
 }
 
@@ -68,10 +73,16 @@ function initChipContainer(containerId, selectedValues = []) {
             syncDomToStore();
         }
     };
-    customInput.style.flexBasis = '150px';
-    customInput.style.flexGrow = '0';
+    customInput.className = 'chip-add-input';
+    customInput.style.flex = '0 0 170px';
     customInput.style.minHeight = '40px';
-    customInput.style.padding = '8px 12px';
+    customInput.style.padding = '8px 16px';
+    customInput.style.margin = '0';
+    customInput.style.borderRadius = '9999px';
+    customInput.style.border = '1px dashed var(--border-color)';
+    customInput.style.background = 'transparent';
+    customInput.style.color = 'var(--text-primary)';
+    customInput.style.fontSize = '0.9em';
     container.appendChild(customInput);
 }
 
@@ -81,16 +92,18 @@ function getChipData(containerId) {
     return Array.from(selectedChips).map(btn => btn.textContent);
 }
 
-function addMeField(value = '', containerId = 'me_container') {
+function addMeField(value = '', containerId = 'me_container', fromLoad = false) {
     const container = document.getElementById(containerId);
-    // Limiter à 3 éléments comme dans le code original
+    // Limite UX à la SAISIE interactive uniquement. La reconstruction depuis les
+    // données (fromLoad) est fidèle : aucune troncature silencieuse au chargement.
     const currentItems = container.querySelectorAll('.dynamic-list-item');
-    if (currentItems.length >= 3) return;
+    if (!fromLoad && currentItems.length >= 3) return;
     const item = document.createElement('div');
     item.className = 'dynamic-list-item';
     const meIndex = currentItems.length + 1;
     const fieldId = `me_${containerId}_${meIndex}_${Date.now()}`;
-    item.innerHTML = `<label for="${fieldId}">ME${meIndex}:</label><input type="text" id="${fieldId}" name="${fieldId}" class="me-input" value="${value}" oninput="syncDomToStore()"><button type="button" class="remove-btn" onclick="this.parentElement.remove(); syncDomToStore();">❌</button>`;
+    const safeVal = (window.UIPlatform ? UIPlatform.esc(value) : value);
+    item.innerHTML = `<label for="${fieldId}">ME${meIndex}:</label><input type="text" id="${fieldId}" name="${fieldId}" class="me-input" value="${safeVal}" oninput="syncDomToStore()"><button type="button" class="remove-btn" onclick="this.parentElement.remove(); syncDomToStore();"><span class="material-symbols-outlined">close</span></button>`;
     container.appendChild(item);
 }
 
@@ -135,7 +148,7 @@ function addTimeEvent(type_from_load, hour_from_load = '', desc_from_load) {
                 <input type="time" id="${hourId}" class="time-hour-input" value="${hour}" onchange="syncDomToStore()">
                 <label for="${descId}" class="sr-only">Description</label>
                 <input type="text" id="${descId}" class="time-description-input" placeholder="Description" value="${desc || ''}" oninput="syncDomToStore()">
-                <button type="button" class="remove-btn" onmousedown="event.stopPropagation()" ontouchstart="event.stopPropagation()" onclick="this.parentElement.remove(); syncDomToStore();">❌</button>`;
+                <button type="button" class="remove-btn" onmousedown="event.stopPropagation()" ontouchstart="event.stopPropagation()" onclick="this.parentElement.remove(); syncDomToStore();"><span class="material-symbols-outlined">close</span></button>`;
     container.appendChild(item);
 }
 
@@ -172,59 +185,63 @@ function addAdversary(data = null) {
     div.dataset.advId = id;
 
     const advIndex = container.children.length + 1;
+    // Échappement HTML de toute valeur restaurée (évite corruption du reload/PDF et self-XSS).
+    const e = (v) => (window.UIPlatform ? UIPlatform.esc(v) : String(v == null ? '' : v)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'));
     const nameVal = data?.nom_adversaire || '';
-    const title = nameVal ? `Adversaire: ${nameVal}` : `Adversaire`;
+    const nameValSafe = e(nameVal);
+    const title = nameVal ? `Adversaire: ${e(nameVal)}` : `Adversaire`;
 
     div.innerHTML = `
         <div class="collapsible-header">
             <h3 class="adv-title">${title}</h3>
             <div style="display: flex; gap: 10px; align-items: center;">
                 <div onclick="event.stopPropagation()">
-                    <button type="button" class="remove-btn" onclick="removeAdversary('${id}')" title="Supprimer cet adversaire">❌</button>
+                    <button type="button" class="remove-btn" onclick="removeAdversary('${id}')" title="Supprimer cet adversaire"><span class="material-symbols-outlined">close</span></button>
                 </div>
                 <span class="material-symbols-outlined">expand_more</span>
             </div>
         </div>
         <div class="collapsible-content">
-            <h3 style="margin: 0 0 10px 0; color: var(--accent-blue); font-size: 1.1em;">📷 Gestion Photos</h3>
+            <h3 style="margin: 0 0 10px 0; color: var(--accent-blue); font-size: 1.1em;"><span class="material-symbols-outlined">photo_camera</span> Gestion Photos</h3>
             
             <label for="input_main_${id}">Photo principale (Aperçu):</label>
             <div id="photo_main_${id}" class="image-preview-container single-photo photo-display-area" data-is-single="true" style="margin-bottom: 5px;"></div>
-            <button type="button" class="add-btn" style="width:100%; margin-bottom: 15px;" onclick="document.getElementById('input_main_${id}').click()">📷 Ajouter Photo Principale</button>
+            <button type="button" class="add-btn" style="width:100%; margin-bottom: 15px;" onclick="document.getElementById('input_main_${id}').click()"><span class="material-symbols-outlined">photo_camera</span> Ajouter Photo Principale</button>
             <input type="file" id="input_main_${id}" name="input_main_${id}" class="sr-only-input" accept="image/*" onchange="handleFileChange(this, 'photo_main_${id}', true)">
             
             <label for="input_extra_${id}">Photos supplémentaires (Aperçu):</label>
             <div id="photo_extra_${id}" class="image-preview-container extra-photos photo-display-area" style="margin-bottom: 5px;"></div>
-            <button type="button" class="add-btn" style="width:100%; margin-bottom: 15px;" onclick="document.getElementById('input_extra_${id}').click()">📷 Ajouter Photos Supplémentaires</button>
+            <button type="button" class="add-btn" style="width:100%; margin-bottom: 15px;" onclick="document.getElementById('input_extra_${id}').click()"><span class="material-symbols-outlined">photo_camera</span> Ajouter Photos Supplémentaires</button>
             <input type="file" id="input_extra_${id}" name="input_extra_${id}" class="sr-only-input" accept="image/*" multiple onchange="handleFileChange(this, 'photo_extra_${id}', false)">
             
-            <h3 style="margin-top: 10px; color: var(--danger-red); font-size: 1.1em;">📷 Renforts Potentiels</h3>
+            <h3 style="margin-top: 10px; color: var(--danger-red); font-size: 1.1em;"><span class="material-symbols-outlined">photo_camera</span> Renforts Potentiels</h3>
             <div id="photo_renforts_${id}" class="image-preview-container photo-display-area" style="margin-bottom: 5px;"></div>
-            <button type="button" class="add-btn" style="width:100%; justify-content: center; margin-bottom: 20px;" onclick="document.getElementById('input_renforts_${id}').click()">➕ Ajouter Photo(s) Renforts</button>
+            <button type="button" class="add-btn" style="width:100%; justify-content: center; margin-bottom: 20px;" onclick="document.getElementById('input_renforts_${id}').click()"><span class="material-symbols-outlined">add</span> Ajouter Photo(s) Renforts</button>
             <input type="file" id="input_renforts_${id}" class="sr-only-input" accept="image/*" multiple onchange="handleFileChange(this, 'photo_renforts_${id}', false)">
 
             <hr style="border: 0; border-top: 1px solid var(--border-light); margin: 15px 0;">
 
             <label for="nom_adv_${id}">Nom/Prénom:</label>
-            <input type="text" id="nom_adv_${id}" name="nom_adv_${id}" class="adv-field" data-field="nom_adversaire" placeholder="Nom et Prénom..." value="${nameVal}" oninput="updateAdvTitle('${id}', this.value); syncDomToStore()">
-            
+            <input type="text" id="nom_adv_${id}" name="nom_adv_${id}" class="adv-field" data-field="nom_adversaire" placeholder="Nom et Prénom..." value="${nameValSafe}" oninput="updateAdvTitle('${id}', this.value); syncDomToStore()">
+
             <label for="domicile_adv_${id}">Domicile:</label>
-            <textarea id="domicile_adv_${id}" name="domicile_adv_${id}" class="adv-field" data-field="domicile_adversaire" rows="2" oninput="syncDomToStore()">${data?.domicile_adversaire || ''}</textarea>
+            <textarea id="domicile_adv_${id}" name="domicile_adv_${id}" class="adv-field" data-field="domicile_adversaire" rows="2" oninput="syncDomToStore()">${e(data?.domicile_adversaire)}</textarea>
             
             <label>Moyens Employés (ME):</label>
             <div id="me_${id}" class="me-container"></div>
-            <button type="button" class="add-btn" onclick="addMeField('', 'me_${id}')">➕ ME</button>
+            <button type="button" class="add-btn" onclick="addMeField('', 'me_${id}')"><span class="material-symbols-outlined">add</span> ME</button>
             
             <h3>Informations Target</h3>
             <div class="dynamic-list-item">
                 <label for="naissance_adv_${id}" class="sr-only">Date de naissance</label>
                 <input type="date" id="naissance_adv_${id}" name="naissance_adv_${id}" class="adv-field" data-field="date_naissance" value="${data?.date_naissance || ''}" oninput="syncDomToStore()">
                 <label for="lieu_adv_${id}" class="sr-only">Lieu de naissance</label>
-                <input type="text" id="lieu_adv_${id}" name="lieu_adv_${id}" class="adv-field" data-field="lieu_naissance" placeholder="Lieu de naissance" value="${data?.lieu_naissance || ''}" oninput="syncDomToStore()">
+                <input type="text" id="lieu_adv_${id}" name="lieu_adv_${id}" class="adv-field" data-field="lieu_naissance" placeholder="Lieu de naissance" value="${e(data?.lieu_naissance)}" oninput="syncDomToStore()">
             </div>
             <div class="dynamic-list-item">
                 <label for="stature_adv_${id}" class="sr-only">Stature</label>
-                <input type="text" id="stature_adv_${id}" name="stature_adv_${id}" class="adv-field" data-field="stature_adversaire" placeholder="Stature" value="${data?.stature_adversaire || ''}" oninput="syncDomToStore()">
+                <input type="text" id="stature_adv_${id}" name="stature_adv_${id}" class="adv-field" data-field="stature_adversaire" placeholder="Stature" value="${e(data?.stature_adversaire)}" oninput="syncDomToStore()">
                 <label for="ethnie_adv_${id}" class="sr-only">Ethnie</label>
                 <select id="ethnie_adv_${id}" name="ethnie_adv_${id}" class="adv-field" data-field="ethnie_adversaire" onchange="syncDomToStore()">
                     <option value="" ${!data?.ethnie_adversaire ? 'selected' : ''} disabled>Ethnie</option>
@@ -235,35 +252,35 @@ function addAdversary(data = null) {
                 </select>
             </div>
             <label for="signes_adv_${id}">Signes particuliers:</label>
-            <input type="text" id="signes_adv_${id}" name="signes_adv_${id}" class="adv-field" data-field="signes_particuliers" value="${data?.signes_particuliers || ''}" oninput="syncDomToStore()">
-            
+            <input type="text" id="signes_adv_${id}" name="signes_adv_${id}" class="adv-field" data-field="signes_particuliers" value="${e(data?.signes_particuliers)}" oninput="syncDomToStore()">
+
             <label for="sitfam_adv_${id}">Situation familiale:</label>
-            <input type="text" id="sitfam_adv_${id}" name="sitfam_adv_${id}" class="adv-field" data-field="situation_familiale" value="${data?.situation_familiale || ''}" oninput="syncDomToStore()">
+            <input type="text" id="sitfam_adv_${id}" name="sitfam_adv_${id}" class="adv-field" data-field="situation_familiale" value="${e(data?.situation_familiale)}" oninput="syncDomToStore()">
 
             <label for="profession_adv_${id}">Profession:</label>
-            <input type="text" id="profession_adv_${id}" name="profession_adv_${id}" class="adv-field" data-field="profession_adversaire" value="${data?.profession_adversaire || ''}" oninput="syncDomToStore()">
-            
+            <input type="text" id="profession_adv_${id}" name="profession_adv_${id}" class="adv-field" data-field="profession_adversaire" value="${e(data?.profession_adversaire)}" oninput="syncDomToStore()">
+
             <label for="antecedents_adv_${id}">Antécédents:</label>
-            <textarea id="antecedents_adv_${id}" name="antecedents_adv_${id}" class="adv-field" data-field="antecedents_adversaire" rows="2" oninput="syncDomToStore()">${data?.antecedents_adversaire || ''}</textarea>
+            <textarea id="antecedents_adv_${id}" name="antecedents_adv_${id}" class="adv-field" data-field="antecedents_adversaire" rows="2" oninput="syncDomToStore()">${e(data?.antecedents_adversaire)}</textarea>
             
             <label>État d'esprit:</label>
             <div id="esprit_${id}" class="chip-container" data-options='["Serein", "Hostile", "Conciliant", "Sur ses gardes"]'></div>
             
             <label for="attitude_adv_${id}">Attitude (connue):</label>
-            <textarea id="attitude_adv_${id}" name="attitude_adv_${id}" class="adv-field" data-field="attitude_adversaire" rows="2" oninput="syncDomToStore()">${data?.attitude_adversaire || ''}</textarea>
+            <textarea id="attitude_adv_${id}" name="attitude_adv_${id}" class="adv-field" data-field="attitude_adversaire" rows="2" oninput="syncDomToStore()">${e(data?.attitude_adversaire)}</textarea>
             
             <label>Volume (renfort potentiel):</label>
             <div id="volume_${id}" class="chip-container" data-options='["Seul", "Famille", "BO", "Conjointe", "2-3", "4+"]'></div>
 
             <label for="substances_adv_${id}">Substances:</label>
-            <input type="text" id="substances_adv_${id}" name="substances_adv_${id}" class="adv-field" data-field="substances_adversaire" value="${data?.substances_adversaire || ''}" oninput="syncDomToStore()">
+            <input type="text" id="substances_adv_${id}" name="substances_adv_${id}" class="adv-field" data-field="substances_adversaire" value="${e(data?.substances_adversaire)}" oninput="syncDomToStore()">
             
             <label>Véhicules:</label>
             <div id="vehicules_${id}" class="vehicules-container"></div>
-            <button type="button" class="add-btn" onclick="addDynamicField('vehicules_${id}')">➕</button>
+            <button type="button" class="add-btn" onclick="addDynamicField('vehicules_${id}')"><span class="material-symbols-outlined">add</span></button>
             
             <label for="armes_adv_${id}">Armes connues:</label>
-            <input type="text" id="armes_adv_${id}" name="armes_adv_${id}" class="adv-field" data-field="armes_connues" value="${data?.armes_connues || ''}" oninput="syncDomToStore()">
+            <input type="text" id="armes_adv_${id}" name="armes_adv_${id}" class="adv-field" data-field="armes_connues" value="${e(data?.armes_connues)}" oninput="syncDomToStore()">
         </div>
     `;
 
@@ -274,7 +291,7 @@ function addAdversary(data = null) {
     initChipContainer(`volume_${id}`, data?.volume_list || []);
 
     if (data?.me_list) {
-        data.me_list.forEach(val => addMeField(val, `me_${id}`));
+        data.me_list.forEach(val => addMeField(val, `me_${id}`, true));
     }
     if (data?.vehicules_list) {
         data.vehicules_list.forEach(val => addDynamicField(`vehicules_${id}`, val));
@@ -294,7 +311,7 @@ function addHypothesis(val = '') {
     div.innerHTML = `
         <label for="${id}" class="sr-only">Hypothèse</label>
         <input type="text" id="${id}" class="hypothese-input" value="${val.replace(/"/g, '&quot;')}" placeholder="Saisir une hypothèse..." oninput="syncDomToStore()" style="flex-grow: 1; padding: 10px; border-radius: 8px; border: 1px solid var(--border-color); background-color: var(--bg-body); color: var(--text-primary);">
-        <button type="button" class="remove-btn" onclick="this.parentElement.remove(); syncDomToStore()" style="padding: 0 10px;" title="Supprimer">❌</button>
+        <button type="button" class="remove-btn" onclick="this.parentElement.remove(); syncDomToStore()" style="padding: 0 10px;" title="Supprimer"><span class="material-symbols-outlined">close</span></button>
     `;
     container.appendChild(div);
     syncDomToStore();
@@ -327,8 +344,13 @@ function debounce(func, wait) {
 }
 
 const debouncedSync = debounce(syncDomToStore, 500);
+// IMPORTANT : en script classique, `function syncDomToStore` crée window.syncDomToStore.
+// La ligne suivante l'écrase par la version débouncée → ensuite l'identifiant nu
+// `syncDomToStore` désigne la version DÉBOUNCÉE. On capture donc la version brute
+// (immédiate) AVANT la réassignation, pour les flush de fin de cycle de vie.
+const immediateSync = syncDomToStore;
 window.syncDomToStore = debouncedSync;
-window.syncDomToStoreImmediate = syncDomToStore; // For cases where immediate sync is needed
+window.syncDomToStoreImmediate = immediateSync; // vraie sauvegarde immédiate (non débouncée)
 
 function syncDomToStore() {
     if (window.isFormLoading) {
@@ -777,9 +799,23 @@ window.removeAdversary = removeAdversary;
 window.addAdversary = addAdversary;
 window.addHypothesis = addHypothesis;
 window.syncDomToStore = debouncedSync;
-window.saveToStorage = syncDomToStore;
-window.saveFormData = syncDomToStore;
+window.saveToStorage = debouncedSync;
+window.saveFormData = debouncedSync;
+window.flushFormData = immediateSync; // OI1 — vrai flush immédiat (non débouncé)
 window.loadFormData = loadFormData;
+
+// OI1 — Flush IMMÉDIAT DOM→Store→stockage avant toute frontière sortante, pour
+// qu'aucune frappe récente (dans la fenêtre de débounce 500 ms) ne soit perdue
+// à la fermeture de l'onglet ou au passage en arrière-plan. On utilise immediateSync
+// (et non la version débouncée, dont le minuteur ne se déclenche jamais si la page se ferme).
+(function installFlushOnBoundaries() {
+    const flush = () => { try { immediateSync(); } catch (e) { /* non bloquant */ } };
+    window.addEventListener('pagehide', flush);
+    window.addEventListener('beforeunload', flush);
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') flush();
+    });
+})();
 window.checkCoherence = checkCoherence;
 
 // --- SESSION MANAGEMENT & RESET FUNCTIONS ---
@@ -835,6 +871,336 @@ window.importSession = function (file) {
     };
     reader.readAsText(file);
 };
+
+// --- ARCHIVE TOUT-EN-UN (.oi.zip) ---
+// Exporte/importe en un clic l'INTÉGRALITÉ de l'OI : tous les champs
+// (tactical_oi_data, qui inclut la cartographie pins/shapes/vue) + toutes les
+// photos (Blobs IndexedDB : zones photos, fond PDF, membres, annotations).
+// Même principe que l'archive PC-Tac (.pctac.zip).
+const OI_ARCHIVE_KEYS = [LOCAL_STORAGE_KEY]; // tactical_oi_data = champs + cartographie
+
+/**
+ * Exporte toute la session (champs + photos + carto) dans un seul .oi.zip.
+ */
+window.exportArchive = async function () {
+    if (typeof JSZip === 'undefined') {
+        alert("JSZip indisponible (réseau ?). Impossible de générer l'archive.");
+        return;
+    }
+    try {
+        // 1) Flush DOM -> Store -> localStorage (immédiat, non débouncé)
+        immediateSync();
+        if (window.dbManager && !window.dbManager.db) {
+            try { await window.dbManager.init(); } catch (e) { /* IndexedDB indispo */ }
+        }
+
+        const zip = new JSZip();
+
+        // 2) Données localStorage (champs + cartographie)
+        const data = {};
+        OI_ARCHIVE_KEYS.forEach(k => {
+            const raw = localStorage.getItem(k);
+            if (raw !== null) data[k] = raw;
+        });
+        zip.file('data.json', JSON.stringify(data, null, 2));
+
+        // 3) Images (Blobs IndexedDB) -> octets bruts + table des types MIME
+        const imageMeta = {};
+        const imagesFolder = zip.folder('images');
+        let imgCount = 0;
+        if (window.dbManager && window.dbManager.db) {
+            let keys = [];
+            try { keys = await window.dbManager.getAllKeys(); } catch (e) { keys = []; }
+            for (const key of keys) {
+                try {
+                    const blob = await window.dbManager.getItem(key);
+                    if (!blob) continue;
+                    imageMeta[key] = (blob.type) || '';
+                    // ArrayBuffer plutôt que Blob : entrée JSZip la plus largement supportée.
+                    const ab = (typeof blob.arrayBuffer === 'function')
+                        ? await blob.arrayBuffer()
+                        : blob;
+                    imagesFolder.file(encodeURIComponent(key) + '.bin', ab);
+                    imgCount++;
+                } catch (e) {
+                    console.warn('[OI Archive] image illisible:', key, e);
+                }
+            }
+        }
+        zip.file('images.json', JSON.stringify(imageMeta, null, 2));
+
+        // 4) Manifest
+        zip.file('manifest.json', JSON.stringify({
+            appName: 'OI',
+            version: 1,
+            createdAt: new Date().toISOString(),
+            imageCount: imgCount
+        }, null, 2));
+
+        const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+        const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `OI-Archive-${stamp}.oi.zip`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+        if (typeof toast === 'function') toast(`Archive exportée (${imgCount} photo${imgCount > 1 ? 's' : ''})`, 'success');
+    } catch (e) {
+        console.error('[OI Archive] export échec:', e);
+        alert("Erreur d'export d'archive : " + e.message);
+    }
+};
+
+/**
+ * Importe une archive .oi.zip (champs + photos + carto). Accepte aussi un
+ * ancien fichier .json de session (compat : délègue à importSession).
+ */
+/**
+ * Analyse robuste d'une archive .oi.zip. Ne touche À RIEN : se contente de
+ * valider et de renvoyer { ok, error?, zip?, dataJson?, imageMeta? }.
+ * Centralise TOUTES les exceptions (zip illisible, data.json manquant/corrompu,
+ * mauvaise app, données OI absentes/illisibles) pour un message clair.
+ */
+window.parseArchive = async function (file) {
+    if (!file) return { ok: false, error: 'Aucun fichier sélectionné.' };
+    if (file.size === 0) return { ok: false, error: 'Archive vide (0 octet) : fichier illisible.' };
+    if (typeof JSZip === 'undefined') return { ok: false, error: 'JSZip indisponible (réseau ?). Impossible de lire l\'archive.' };
+
+    let zip;
+    try {
+        zip = await JSZip.loadAsync(await file.arrayBuffer());
+    } catch (e) {
+        return { ok: false, error: 'Fichier illisible : ce n\'est pas une archive .oi.zip valide (ou elle est corrompue).' };
+    }
+
+    const dataFile = zip.file('data.json');
+    if (!dataFile) return { ok: false, error: 'Archive invalide : « data.json » introuvable. Fichier non reconnu.' };
+
+    let dataJson;
+    try {
+        dataJson = JSON.parse(await dataFile.async('string'));
+    } catch (e) {
+        return { ok: false, error: 'Archive corrompue : « data.json » illisible (JSON invalide). Import annulé.' };
+    }
+    if (!dataJson || typeof dataJson !== 'object' || Array.isArray(dataJson)) {
+        return { ok: false, error: 'Archive invalide : structure de données inattendue. Import annulé.' };
+    }
+
+    // Garde-fou : refuser une archive d'une autre app (best-effort sur le manifest).
+    const manifestFile = zip.file('manifest.json');
+    if (manifestFile) {
+        try {
+            const manifest = JSON.parse(await manifestFile.async('string'));
+            if (manifest && manifest.appName && manifest.appName !== 'OI') {
+                return { ok: false, error: `Cette archive provient de « ${manifest.appName} », pas du Générateur d'OI. Import annulé.` };
+            }
+        } catch (e) { /* manifest illisible : on tolère */ }
+    }
+
+    // Donnée OI présente ET réellement exploitable.
+    const oiRaw = dataJson[OI_ARCHIVE_KEYS[0]];
+    if (oiRaw === undefined || oiRaw === null) {
+        return { ok: false, error: 'Archive non reconnue : aucune donnée OI (tactical_oi_data) trouvée.' };
+    }
+    try {
+        const probe = JSON.parse(oiRaw);
+        if (!probe || typeof probe !== 'object') throw new Error('shape');
+    } catch (e) {
+        return { ok: false, error: 'Données OI corrompues dans l\'archive (tactical_oi_data illisible). Import annulé.' };
+    }
+
+    // Types MIME des images (best-effort, jamais bloquant).
+    let imageMeta = {};
+    const metaFile = zip.file('images.json');
+    if (metaFile) {
+        try { imageMeta = JSON.parse(await metaFile.async('string')) || {}; } catch (e) { imageMeta = {}; }
+    }
+
+    return { ok: true, zip, dataJson, imageMeta };
+};
+
+window.importArchive = async function (file) {
+    if (!file) return;
+    const name = (file.name || '').toLowerCase();
+
+    // Compat : ancienne session JSON -> on délègue à importSession (si dispo).
+    if (name.endsWith('.json')) {
+        if (typeof window.importSession === 'function') return window.importSession(file);
+        alert("Import JSON indisponible : fonction de session absente.");
+        return;
+    }
+
+    // 1) Analyse robuste : toute exception est interceptée et explicitée.
+    const parsed = await window.parseArchive(file);
+    if (!parsed.ok) { alert(parsed.error); return; }
+    // 2) Détection des catégories réellement présentes + modale de sélection.
+    const cats = detectImportCategories(parsed);
+    if (!cats.length) { alert("L'archive ne contient aucune donnée importable."); return; }
+    const selectedIds = await showImportSelectModal(cats);
+    if (!selectedIds || !selectedIds.length) return; // annulé, fermé, ou rien coché
+
+    // 3) Import SÉLECTIF robuste (images best-effort, rollback quota).
+    await applyArchiveImport(parsed, cats, selectedIds);
+};
+
+/**
+ * Catégories d'import. `rest:true` = toutes les clés non possédées par une autre
+ * catégorie (= les champs texte du formulaire). `images:true` = tire aussi les
+ * blobs IndexedDB. `countOf(oi, imgN)` compte les éléments pour l'affichage.
+ */
+const IMPORT_CATEGORIES = [
+    { id: 'champs', label: 'Champs texte (situation, mission, environnement…)', icon: 'description', rest: true },
+    { id: 'adversaires', label: 'Adversaires', icon: 'person_search', keys: ['adversaries'], unit: 'adversaire', countOf: o => (o.adversaries || []).length },
+    { id: 'photos', label: 'Photos HD (annotations, légendes)', icon: 'photo_camera', keys: ['dynamic_photos'], images: true, unit: 'photo', countOf: (o, imgN) => imgN },
+    { id: 'membres', label: 'Membres PATRACDVR (+ Configuration Unité)', icon: 'groups', keys: ['patracdvr_unassigned', 'patracdvr_rows', 'options'], unit: 'membre', countOf: o => ((o.patracdvr_unassigned || []).length + (o.patracdvr_rows || []).reduce((s, r) => s + (r.members || []).length, 0)) },
+    { id: 'articulation', label: 'Articulation MOICP / ZMSPCP / Effraction', icon: 'account_tree', keys: ['moicp_blocks', 'zmspcp_blocks', 'effraction_blocks', 'rame_vl_order', 'colonne_progression_order', 'ordre_penetration_order'], unit: 'bloc', countOf: o => ((o.moicp_blocks || []).length + (o.zmspcp_blocks || []).length + (o.effraction_blocks || []).length) },
+    { id: 'cartographie', label: 'Cartographie (carte, pings, dessins)', icon: 'map', keys: ['cartography'], unit: 'élément', countOf: o => { const c = o.cartography || {}; return (c.pins || []).length + (c.shapes || []).length; } }
+];
+
+function _imgCountInZip(zip) {
+    let n = 0; const f = zip.folder('images');
+    if (f) f.forEach((rp, e) => { if (!e.dir) n++; });
+    return n;
+}
+
+/** Renvoie la liste des catégories réellement présentes dans l'archive (avec compteur). */
+function detectImportCategories(parsed) {
+    let oi = {};
+    try { oi = JSON.parse(parsed.dataJson[OI_ARCHIVE_KEYS[0]] || '{}') || {}; } catch (e) { oi = {}; }
+    const imgN = _imgCountInZip(parsed.zip);
+    const specialKeys = new Set(IMPORT_CATEGORIES.filter(c => !c.rest).flatMap(c => c.keys || []));
+    const restKeys = Object.keys(oi).filter(k => !specialKeys.has(k));
+    const hasVal = v => v != null && v !== '' && !(Array.isArray(v) && v.length === 0) && !(typeof v === 'object' && !Array.isArray(v) && Object.keys(v).length === 0);
+
+    const present = [];
+    for (const c of IMPORT_CATEGORIES) {
+        if (c.rest) {
+            const cnt = restKeys.filter(k => hasVal(oi[k])).length;
+            if (cnt > 0) present.push({ ...c, count: cnt, restKeys });
+        } else {
+            const count = c.countOf ? c.countOf(oi, imgN) : 0;
+            if (count > 0) present.push({ ...c, count });
+        }
+    }
+    return present;
+}
+
+/** Affiche la modale de sélection. Résout avec la liste d'ids cochés, ou null si annulé. */
+function showImportSelectModal(cats) {
+    return new Promise(resolve => {
+        const modal = document.getElementById('importSelectModal');
+        const list = document.getElementById('importSelectList');
+        const allCb = document.getElementById('importSelectAll');
+        const confirmBtn = document.getElementById('importSelectConfirmBtn');
+        const cancelBtn = document.getElementById('importSelectCancelBtn');
+        const closeBtn = document.getElementById('importSelectCloseBtn');
+        if (!modal || !list || !allCb || !confirmBtn) { resolve(null); return; }
+        const esc = v => (window.UIPlatform ? UIPlatform.esc(v) : String(v));
+
+        list.innerHTML = '';
+        cats.forEach(c => {
+            const row = document.createElement('label');
+            row.className = 'import-cat-row';
+            const unitTxt = c.unit ? `${c.count} ${esc(c.unit)}${c.count > 1 ? 's' : ''}` : `${c.count}`;
+            row.innerHTML = `<input type="checkbox" class="import-cat-cb" value="${esc(c.id)}" checked>
+                <span class="material-symbols-outlined">${esc(c.icon)}</span>
+                <span class="import-cat-label">${esc(c.label)}</span>
+                <span class="import-cat-count">${unitTxt}</span>`;
+            list.appendChild(row);
+        });
+        const cbs = () => Array.from(list.querySelectorAll('.import-cat-cb'));
+        allCb.checked = true;
+        allCb.onchange = () => { cbs().forEach(cb => { cb.checked = allCb.checked; }); };
+        list.onchange = () => { allCb.checked = cbs().every(cb => cb.checked); };
+
+        let done = false;
+        const cleanup = (result) => {
+            if (done) return; done = true;
+            confirmBtn.onclick = cancelBtn.onclick = closeBtn.onclick = null;
+            if (typeof modal.close === 'function') { try { modal.close(); } catch (e) { } }
+            document.body.classList.remove('modal-open');
+            resolve(result);
+        };
+        confirmBtn.onclick = () => cleanup(cbs().filter(cb => cb.checked).map(cb => cb.value));
+        if (cancelBtn) cancelBtn.onclick = () => cleanup(null);
+        if (closeBtn) closeBtn.onclick = () => cleanup(null);
+
+        document.body.classList.add('modal-open');
+        if (typeof modal.showModal === 'function') { try { modal.showModal(); } catch (e) { modal.setAttribute('open', ''); } }
+        else modal.setAttribute('open', '');
+    });
+}
+
+/** Importe UNIQUEMENT les catégories cochées (fusion non destructive du reste). */
+async function applyArchiveImport(parsed, cats, selectedIds) {
+    const KEY = OI_ARCHIVE_KEYS[0];
+    let oiArchive = {}, oiCurrent = {};
+    try { oiArchive = JSON.parse(parsed.dataJson[KEY] || '{}') || {}; } catch (e) { oiArchive = {}; }
+    try { oiCurrent = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { oiCurrent = {}; }
+
+    const selected = cats.filter(c => selectedIds.includes(c.id));
+    const importImages = selected.some(c => c.images);
+
+    // Fusion sélective : on ne touche QUE les clés des catégories cochées.
+    for (const c of selected) {
+        if (c.rest) {
+            (c.restKeys || []).forEach(k => { oiCurrent[k] = oiArchive[k]; });
+        } else {
+            (c.keys || []).forEach(k => { if (k in oiArchive) oiCurrent[k] = oiArchive[k]; });
+        }
+    }
+
+    const snapshot = localStorage.getItem(KEY);
+    let imgFail = 0;
+    try {
+        // Images AVANT le localStorage (clearAllImages mute le Store → flush).
+        if (importImages && window.dbManager) {
+            if (!window.dbManager.db) { try { await window.dbManager.init(); } catch (e) { } }
+            if (window.dbManager.db) {
+                try { await window.dbManager.clearAllImages(); } catch (e) { }
+                const imagesFolder = parsed.zip.folder('images');
+                if (imagesFolder) {
+                    const tasks = [];
+                    imagesFolder.forEach((relPath, entry) => {
+                        if (entry.dir) return;
+                        const k = decodeURIComponent(relPath.replace(/\.bin$/, '').replace(/\.txt$/, ''));
+                        tasks.push(entry.async('arraybuffer')
+                            .then(ab => window.dbManager.putItem(k, new Blob([ab], { type: parsed.imageMeta[k] || '' })))
+                            .catch(err => { imgFail++; console.warn('[OI Archive] image ignorée:', k, err); }));
+                    });
+                    await Promise.allSettled(tasks);
+                }
+            }
+        }
+
+        try {
+            localStorage.setItem(KEY, JSON.stringify(oiCurrent));
+        } catch (quotaErr) {
+            if (snapshot === null) localStorage.removeItem(KEY); else localStorage.setItem(KEY, snapshot);
+            throw new Error("Espace de stockage insuffisant (quota localStorage). Données d'origine restaurées.");
+        }
+
+        if (window.Store && typeof window.Store.loadFromStorage === 'function') {
+            try { window.Store.loadFromStorage(); } catch (e) { }
+        }
+
+        const labels = selected.map(c => c.label.split(' (')[0]).join(', ');
+        const warn = imgFail > 0 ? ` (${imgFail} photo(s) ignorée(s))` : '';
+        // Neutraliser le flush de fermeture (pagehide/beforeunload) : sans ça, le DOM
+        // courant (non importé) réécraserait l'import pendant le reload. syncDomToStore
+        // ignore tout flush tant que isFormLoading est vrai.
+        window.isFormLoading = true;
+        alert(`Import effectué : ${labels}${warn}. Rechargement…`);
+        location.reload();
+    } catch (e) {
+        console.error('[OI Archive] import sélectif échec:', e);
+        alert("Erreur d'import : " + e.message);
+    }
+}
+window.detectImportCategories = detectImportCategories;
+window.showImportSelectModal = showImportSelectModal;
 
 /**
  * Réinitialise tous les champs de la page active.

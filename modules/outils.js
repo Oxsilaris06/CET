@@ -1,3 +1,8 @@
+/**
+ * outils.js — Fonctions utilitaires : couleurs, géométrie canvas, compression d'image, gestion d'URLs objet.
+ * Chargé par : 4.html
+ * Fonctions principales : hexToRgb, getEventPos, getRotatedPoint, getAnnotationAtPosition, compressImage
+ */
 // ==================== Utils.js ====================
 
 function hexToRgb(hex) {

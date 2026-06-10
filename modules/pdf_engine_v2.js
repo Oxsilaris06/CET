@@ -1,4 +1,9 @@
 /**
+ * pdf_engine_v2.js — Moteur de rendu PDF et d'aperçu, collectant les données du Store et des photos pour produire un document structuré.
+ * Chargé par : 4.html
+ * Fonctions principales : PDFEngineV2.openPreview, PDFEngineV2.downloadOiPdf, PDFEngineV2.collectAllData, PDFEngineV2.generateHTML
+ */
+/**
  * ============================================================
  * PDF ENGINE V2 - GSTART PROJECT
  * ============================================================
@@ -137,9 +142,16 @@ const PDFEngineV2 = {
             });
 
             // 5. BOUCLE DE RENDU INDÉPENDANTE
-            for (let i = 0; i < pageElements.length; i++) {
+            const N = pageElements.length;
+            // OI7 — échelle de rendu ADAPTATIVE au nombre de pages : scale 2 × beaucoup
+            // de pages sature la mémoire WebKit (crash / pages blanches sur mobile). On
+            // réduit progressivement tout en gardant une résolution largement lisible.
+            const renderScale = N > 20 ? 1.5 : (N > 10 ? 1.75 : 2);
+            let blankPages = 0;
+
+            for (let i = 0; i < N; i++) {
                 const isCover = (i === 0);
-                updateStatus(isCover ? "Rendu : Couverture..." : `Rendu : Page ${i + 1}/${pageElements.length}...`);
+                updateStatus(isCover ? "Rendu : Couverture..." : `Rendu : Page ${i + 1}/${N}...`);
 
                 const pageEl = pageElements[i];
 
@@ -157,7 +169,7 @@ const PDFEngineV2 = {
 
                 // Capture de la page
                 const canvas = await html2canvasLib(pageEl, {
-                    scale: 2,
+                    scale: renderScale,
                     useCORS: true,
                     allowTaint: true,
                     backgroundColor: '#ffffff',
@@ -168,13 +180,24 @@ const PDFEngineV2 = {
                     scrollY: 0
                 });
 
-                const imgData = canvas.toDataURL('image/jpeg', 0.95);
+                let imgData = canvas.toDataURL('image/jpeg', 0.95);
+
+                // OI7 — détecter un rendu VIDE (canvas 0×0 / mémoire insuffisante / tainted)
+                // au lieu d'ajouter une page blanche et d'annoncer un faux « succès ».
+                if (!imgData || imgData.length < 100) {
+                    blankPages++;
+                    console.error(`[PDF] Page ${i + 1}/${N} : rendu vide (${imgData ? imgData.length : 0} octets) — mémoire probablement insuffisante.`);
+                }
 
                 if (i > 0) doc.addPage();
                 doc.addImage(imgData, 'JPEG', 0, 0, PAGE_W, PAGE_H, undefined, 'FAST');
 
                 canvas.width = 0;
                 canvas.height = 0;
+                imgData = null; // libère le dataURL pour le GC entre pages
+                // Micro-pause sur les gros documents : laisse le navigateur respirer
+                // (et le GC récupérer) avant la page suivante.
+                if (N > 8) await new Promise(r => setTimeout(r, 0));
             }
 
             // 6. Sauvegarde
@@ -182,8 +205,15 @@ const PDFEngineV2 = {
             const fileName = `OI_${(data.formData.date_op || 'SANS_DATE').replace(/\//g, '-')}_${data.formData.trigramme_redacteur || 'RED'}.pdf`;
             doc.save(fileName);
 
-            console.log(`✅ [SUCCESS] PDF V4 généré en ${((Date.now() - startTime) / 1000).toFixed(2)}s`);
-            if (typeof toast === 'function') toast("PDF généré avec succès !", "success");
+            console.log(`✅ [SUCCESS] PDF V4 généré en ${((Date.now() - startTime) / 1000).toFixed(2)}s (échelle ${renderScale}, ${blankPages} page(s) vide(s))`);
+            // OI7 — ne pas annoncer un succès si des pages n'ont pas pu être rendues.
+            if (typeof toast === 'function') {
+                if (blankPages > 0) {
+                    toast(`PDF généré, mais ${blankPages} page(s) n'ont pas pu être rendues (mémoire insuffisante). Réduisez le nombre/poids des photos ou scindez l'OI.`, "error");
+                } else {
+                    toast("PDF généré avec succès !", "success");
+                }
+            }
 
         } catch (error) {
             console.error("❌ [CRITICAL V4] PDF Engine Failed:", error);
@@ -376,16 +406,21 @@ const PDFEngineV2 = {
                 h1 { font-size: ${is169 ? '28pt' : '32pt'}; color: ${colors.accent} !important; background: transparent !important; }
                 h2 { font-size: ${is169 ? '17pt' : '20pt'}; border-bottom: 2px solid ${colors.accent}; padding-bottom: 5px; margin-bottom: ${H2_MARGIN_B}; margin-top: ${H2_MARGIN_T}; color: ${colors.accent} !important; }
                 h3 { font-size: ${is169 ? '12pt' : '14pt'}; margin-bottom: 8px; color: ${colors.accent} !important; }
-                .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; }
-                .card { 
-                    background: ${isDark ? 'rgba(18, 18, 20, 0.85)' : 'rgba(255, 255, 255, 0.95)'}; 
-                    border: 1px solid ${isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.08)'}; 
-                    border-radius: 16px; 
-                    padding: ${is169 ? '10px' : '15px'}; 
-                    margin-bottom: ${CARD_MARGIN_B}; 
+                .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 15px; align-items: start; }
+                /* min-width:0 indispensable : sans lui une chaîne sans espace ne peut pas
+                   rétrécir sous sa largeur min-content et DÉBORDE la colonne/la carte. */
+                .grid > * { min-width: 0; }
+                .card {
+                    background: ${isDark ? 'rgba(18, 18, 20, 0.85)' : 'rgba(255, 255, 255, 0.95)'};
+                    border: 1px solid ${isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.08)'};
+                    border-radius: 16px;
+                    padding: ${is169 ? '10px' : '15px'};
+                    margin-bottom: ${CARD_MARGIN_B};
                     box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.25);
                     position: relative;
                     page-break-inside: avoid;
+                    min-width: 0;
+                    overflow-wrap: anywhere;
                 }
                 .patracdvr-table th { 
                     background: ${colors.header}; 
@@ -398,13 +433,13 @@ const PDFEngineV2 = {
                     overflow: hidden;
                     text-overflow: ellipsis;
                 }
-                .patracdvr-table td { 
-                    padding: 4px 2px; 
-                    border: 1px solid ${colors.border}; 
-                    font-size: 7.5pt; 
-                    vertical-align: middle;
-                    overflow: hidden;
-                    text-overflow: ellipsis;
+                .patracdvr-table td {
+                    padding: 4px 3px;
+                    border: 1px solid ${colors.border};
+                    font-size: 7.5pt;
+                    vertical-align: top;
+                    word-break: break-word;
+                    overflow-wrap: anywhere;
                 }
                 .label { font-weight: bold; color: ${colors.accent}; font-size: 9pt; text-transform: uppercase; display: block; margin-bottom: 3px; }
                 .value { margin-bottom: 8px; white-space: pre-wrap; word-break: break-word; overflow-wrap: break-word; font-size: 10pt; }
@@ -460,7 +495,12 @@ const PDFEngineV2 = {
                 .cell-group { border: 1px solid ${colors.accent}; border-radius: 6px; padding: 8px; background: rgba(59, 130, 246, 0.05); margin-bottom: 8px; page-break-inside: avoid; }
                 .cell-name { font-size: 0.7em; font-weight: bold; color: ${colors.accent}; text-transform: uppercase; margin-bottom: 4px; border-bottom: 1px solid rgba(59, 130, 246, 0.2); }
                 .cell-members { display: flex; flex-wrap: wrap; gap: 5px; }
-                .patracdvr-table { font-size: 7.5pt !important; width: 100%; height: 100%; table-layout: fixed; }
+                .patracdvr-table { font-size: 7.5pt !important; width: 100%; table-layout: fixed; }
+                /* Spécifications techniques EFFRACTION : grille rétrécissable (min-width:0)
+                   pour que les valeurs longues s'enroulent DANS la case au lieu de déborder. */
+                .effrac-specs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+                .effrac-specs > div { min-width: 0; overflow-wrap: anywhere; }
+                .effrac-specs .label { margin-bottom: 1px; }
             </style>
         `;
 
@@ -590,7 +630,8 @@ const PDFEngineV2 = {
                                     <img src="${mainPhotoSrc}" style="max-width: 100%; max-height: ${MAX_ADV_PORTRAIT_H}; width: auto; height: auto; display: block;">
                                 </div>
                             ` : ''}
-                                <div class="card" style="padding: 10px; margin-bottom: 8px;">
+                            <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px;">
+                                <div class="card" style="padding: 10px; margin-bottom: 0;">
                                     <h3 style="border-bottom: 2px solid ${colors.accent}; padding-bottom: 3px; margin: 0 0 5px 0; font-size: 11pt;">IDENTITÉ</h3>
                                     <div class="grid" style="gap: 5px;">
                                         <div>
@@ -612,7 +653,7 @@ const PDFEngineV2 = {
                                     </div>
                                     ${(adv.me_list && adv.me_list.length > 0) ? `<span class="label" style="margin-top:5px;">Moyens Employés</span><div class="value" style="font-size:9pt;">${adv.me_list.join(' / ')}</div>` : ''}
                                 </div>
-                                <div class="card" style="padding: 10px; margin-bottom: 8px;">
+                                <div class="card" style="padding: 10px; margin-bottom: 0;">
                                     <h3 style="border-bottom: 2px solid ${colors.danger}; padding-bottom: 3px; margin: 0 0 5px 0; font-size: 11pt;">DANGEROSITÉ</h3>
                                     <span class="label">Armes Connues</span>
                                     <div class="value" style="color:${colors.danger}; font-weight:bold; font-size: 10pt;">${adv.armes_connues || '-'}</div>
@@ -680,7 +721,7 @@ const PDFEngineV2 = {
             </div>
 
             <div class="pdf-page">
-                <h2>4. MISSION</h2>
+                <h2>4. MISSION DE L'UNITÉ</h2>
                 <div class="card" style="border-left: 10px solid ${colors.accent}; padding: ${is169 ? '25px 30px' : '40px'}; background: ${colors.header}; min-height: ${is169 ? '65mm' : '80mm'};">
                     <div class="value" style="font-size: ${is169 ? '1.5em' : '1.8em'}; font-weight: 800; font-family: 'Inter', sans-serif; text-align: left; line-height: 1.6; white-space: pre-wrap;">${formData.missions_psig || '-'}</div>
                 </div>
@@ -741,17 +782,21 @@ const PDFEngineV2 = {
         `;
 
         // --- BLOCS ARTICULATION GROUPÉS PAR INDEX (ZMSPCP[i] + MOICP[i] + EFFRAC[i]) ---
-        // Les photo_bapteme_* sont extraites et regroupées dans une section dédiée après la boucle
+        // Ordre par bloc ZMSPCP : Baptême Terrain → page ZMSPCP → Emplacement AO
         const moicpBlocks = formData.moicp_blocks || [];
         const zmspcpBlocks = formData.zmspcp_blocks || [];
         const effracBlocks = formData.effraction_blocks || [];
         const maxBlocks = Math.max(moicpBlocks.length, zmspcpBlocks.length, effracBlocks.length);
 
         for (let i = 0; i < maxBlocks; i++) {
-            // --- ZMSPCP[i] — sans photos bapteme (traitées séparément) ---
+            // --- ZMSPCP[i] ---
             const zmspcpBlock = zmspcpBlocks[i];
             if (zmspcpBlock) {
                 const cellGroups = regroupByCell(zmspcpBlock.members || []);
+                // Photos « Baptême Terrain » — placées JUSTE AU-DESSUS de la page ZMSPCP
+                // (quel que soit leur nombre), avant le bloc d'articulation.
+                const bapteme = formData.dynamic_photos?.['photo_bapteme_' + zmspcpBlock.id] || [];
+                pages += renderGallery(bapteme, `Baptême Terrain — ${zmspcpBlock.title || '-'}`);
                 pages += `
                     <div class="pdf-page"><h2>Articulation : ZMSPCP - ${zmspcpBlock.title || '-'}</h2><div class="grid">
                         <div class="card"><h3>ZMSPCP</h3>
@@ -772,7 +817,7 @@ const PDFEngineV2 = {
                         </div>
                     </div></div>
                 `;
-                // Photos Emplacement AO uniquement (bapteme traité séparément)
+                // Photos « Emplacement AO » — placées JUSTE EN DESSOUS de la page ZMSPCP
                 const empl_ao = formData.dynamic_photos?.['photo_empl_ao_' + zmspcpBlock.id] || [];
                 pages += renderGallery(empl_ao, `ZMSPCP : ${zmspcpBlock.title || '-'} (Emplacement AO)`);
             }
@@ -827,10 +872,10 @@ const PDFEngineV2 = {
                                     </div>
                                 </div>
                             ` : ''}
-                            <div style="flex: 1;">
-                                <div class="card" style="padding: ${is169 ? '8px' : '10px'}; height: ${EFFRAC_TOP_H}; overflow: hidden;">
+                            <div style="flex: 1; min-width: 0;">
+                                <div class="card" style="padding: ${is169 ? '8px' : '10px'}; min-height: ${EFFRAC_TOP_H};">
                                     <h3 style="margin-top:0; font-size: ${is169 ? '11pt' : '13pt'};">Caractéristiques Techniques</h3>
-                                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: ${is169 ? '4px' : '8px'}; font-size: ${is169 ? '0.8em' : '0.85em'};">
+                                    <div class="effrac-specs" style="gap: ${is169 ? '4px' : '8px'}; font-size: ${is169 ? '0.8em' : '0.85em'};">
                                         <div><span class="label">Structure</span> ${effracBlock.structure || '-'}</div>
                                         <div><span class="label">Serrurerie</span> ${effracBlock.serrurerie || '-'}</div>
                                         <div><span class="label">Environnement</span> ${effracBlock.environnement || '-'}</div>
@@ -868,15 +913,8 @@ const PDFEngineV2 = {
             }
         }
 
-        // --- SECTION DÉDIÉE : BAPTÊME TERRAIN (toutes ZMSPCP réunies dans l'ordre) ---
-        const allBaptemePhotos = [];
-        zmspcpBlocks.forEach(block => {
-            const bPhotos = formData.dynamic_photos?.['photo_bapteme_' + block.id] || [];
-            bPhotos.forEach(p => allBaptemePhotos.push({ ...p, _sectionTitle: `Baptême Terrain — ${block.title || '-'}` }));
-        });
-        if (allBaptemePhotos.length > 0) {
-            pages += renderGallery(allBaptemePhotos, 'BAPTÊME TERRAIN');
-        }
+        // (Baptême Terrain & Emplacement AO sont désormais rendus dans la boucle,
+        //  respectivement juste au-dessus et juste en dessous de chaque page ZMSPCP.)
 
         // --- PAGE: CONDUITES GÉNÉRALES / NO-GO / LIAISON ---
         const hasCatPage = formData.cat_generales || formData.no_go || formData.cat_liaison;
@@ -927,7 +965,7 @@ const PDFEngineV2 = {
                 patracPages += `
                     <div class="pdf-page">
                         <h2>7. RÉCAPITULATIF PATRACDVR ${allMembers.length > MAX_MEMBERS_PER_PAGE ? `(Partie ${Math.floor(i / MAX_MEMBERS_PER_PAGE) + 1})` : ''}</h2>
-                        <div class="card" style="padding: 2px; height: 170mm; overflow: hidden; display: flex; flex-direction: column;">
+                        <div class="card" style="padding: 2px; min-height: 170mm; display: flex; flex-direction: column;">
                             <table class="patracdvr-table" style="width: 100%; table-layout: fixed;">
                                 <thead>
                                     <tr>

@@ -95,13 +95,19 @@ export const Storage = {
      */
     clearAllData() {
         const keys = [
-            LOCAL_STORAGE_KEY, 
-            TP_ASSOC_KEY, 
-            ADVERSARIES_KEY, 
-            HOSTAGES_KEY, 
-            FRIENDS_KEY, 
+            LOCAL_STORAGE_KEY,
+            TP_ASSOC_KEY,
+            ADVERSARIES_KEY,
+            HOSTAGES_KEY,
+            FRIENDS_KEY,
             PHOTOS_KEY,
-            CUSTOM_PAX_KEY
+            CUSTOM_PAX_KEY,
+            'pcTacPlanPins',
+            'pcTacPlanView',
+            'pcTacPlanShapes',
+            'pcTacLieuHistory',
+            'lastView',
+            'lastPhotoFilter'
         ];
         keys.forEach(k => localStorage.removeItem(k));
     }

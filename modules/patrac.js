@@ -1,3 +1,8 @@
+/**
+ * patrac.js — Gestion du tableau de répartition du personnel et des véhicules (PATRACDVR).
+ * Chargé par : 4.html
+ * Fonctions principales : addPatracdvrRow, addPatracdvrMember, handleMemberSelection, initializePatracdvr
+ */
 // ==================== Patracdvr.js ====================
 
 // Redundant declarations removed (now in init.js)
@@ -34,7 +39,7 @@ function addPatracdvrRow(vehicleName, members = []) {
     row.innerHTML = `
                 <div class="vehicle-header">
                     <span class="vehicle-name" onclick="renameVehicle(this)" title="Cliquer pour renommer">${vehicleName}</span>
-                    <button type="button" class="remove-btn" title="Supprimer le véhicule">❌</button>
+                    <button type="button" class="remove-btn" title="Supprimer le véhicule"><span class="material-symbols-outlined">close</span></button>
                 </div>
                 <div class="patracdvr-members-container"></div>`;
 
@@ -108,8 +113,8 @@ function addManualMember() {
                 afis: 'Sans',
                 grenades: 'Sans',
                 equipement: 'Sans',
-                equipement2: 'Sans',
-                tenues: 'UBAS',
+                equipement2: 'Cam pieton',
+                tenue: 'UBAS',
                 gpb: 'GPBL',
                 dir: '' // Initialisation DIR
             };
@@ -124,6 +129,69 @@ function addManualMember() {
         }
     }
 }
+/**
+ * Crée une CELLULE entière (≥ 2 PAX) en une fois. Une cellule India/AO occupe le
+ * prochain numéro libre ; Effraction est unique. La fonction par défaut découle du
+ * type (India→Inter, AO→AO, Effrac→Effrac). Les PAX sont pré-affectés à la cellule,
+ * donc l'articulation (MOICP←India / ZMSPCP←AO / Effraction) se peuple aussitôt.
+ */
+function addCellBatch(type) {
+    const labelMap = { India: 'India (Inter)', AO: 'AO', Effrac: 'Effraction' };
+    const input = prompt(
+        `Trigrammes des PAX de la cellule ${labelMap[type] || type}\n` +
+        `(séparés par espace, virgule ou retour à la ligne — 2 minimum) :`
+    );
+    if (input === null) return;
+    const trigs = input.split(/[\s,;]+/).map(t => t.trim().toUpperCase()).filter(Boolean);
+    if (trigs.length < 2) {
+        alert('Une cellule comporte au moins 2 personnels.');
+        return;
+    }
+
+    let cellule, fonction;
+    if (type === 'Effrac') {
+        cellule = 'Effrac';
+        fonction = 'Effrac';
+    } else {
+        const isIndia = (type === 'India');
+        const prefix = isIndia ? 'India ' : 'AO';
+        const max = isIndia ? 5 : 8;
+        const used = new Set(
+            Array.from(document.querySelectorAll('.patracdvr-member-btn')).map(b => b.dataset.cellule)
+        );
+        let n = 1;
+        while (n <= max && used.has(prefix + n)) n++;
+        if (n > max) n = max; // toutes occupées : on réutilise la dernière
+        cellule = prefix + n;
+        fonction = isIndia ? 'Inter' : 'AO';
+    }
+
+    const existing = new Set(
+        Array.from(document.querySelectorAll('.patracdvr-member-btn')).map(b => b.dataset.trigramme)
+    );
+    let created = 0, skipped = 0;
+    // Cellule Effraction : auto-équipement → 1er PAX = Bélier, 2e PAX = Lot 5.11.
+    const effracEquip = ['Belier', 'Lot 5.11'];
+    trigs.forEach(trig => {
+        if (trig.length < 2 || trig.length > 4 || existing.has(trig)) { skipped++; return; }
+        existing.add(trig);
+        const memberData = { trigramme: trig, cellule: cellule, fonction: fonction };
+        if (type === 'Effrac') memberData.equipement = effracEquip[created] || 'Sans';
+        addPatracdvrMember(getUnassignedContainer(), memberData);
+        created++;
+    });
+
+    if (created > 0) {
+        syncDomToStore();
+        updateArticulationDisplay();
+        if (typeof toast === 'function') {
+            toast(`Cellule ${cellule} : ${created} PAX ajouté(s)${skipped ? ', ' + skipped + ' ignoré(s)' : ''}.`, 'success');
+        }
+    } else {
+        alert('Aucun PAX valide créé (trigrammes invalides ou déjà existants).');
+    }
+}
+
 function addPatracdvrMember(containerElement, data = {}) {
     if (!containerElement) return;
     const btn = document.createElement('button');
@@ -140,10 +208,10 @@ function addPatracdvrMember(containerElement, data = {}) {
         afis: 'Sans',
         grenades: 'Sans',
         equipement: 'Sans',
-        equipement2: 'Sans',
+        equipement2: 'Cam pieton',
         tenue: 'UBAS',
         gpb: 'GPBL',
-        dir: '', 
+        dir: '',
         ...data
     };
     Object.keys(memberData).forEach(key => btn.dataset[key] = memberData[key]);
@@ -313,24 +381,36 @@ function loadConfigObject(config) {
     syncDomToStore();
 }
 
+// Panneau d'édition de membre = fiche-accordéon : 1 ligne par attribut (en-tête
+// label → valeur(s) courante(s) + chevron) ; le corps repliable contient les pills.
 function setupQuickEditPanel() {
     const contentContainer = document.querySelector('#quickEditPanel .quick-edit-content');
     if (!contentContainer) return;
     contentContainer.innerHTML = '';
 
     for (const [title, config] of Object.entries(quickEditMapping)) {
+        const options = memberConfig[config.key] || [];
 
-        const categoryDiv = document.createElement('div');
-        categoryDiv.className = 'quick-edit-category';
+        const row = document.createElement('div');
+        row.className = 'qe-row';
+        row.dataset.attr = config.attribute;
+        row.dataset.key = config.key;
 
-        const panelTitle = document.createElement('h5');
-        panelTitle.textContent = title;
-        categoryDiv.appendChild(panelTitle);
+        const head = document.createElement('button');
+        head.type = 'button';
+        head.className = 'qe-row-head';
+        head.setAttribute('aria-expanded', 'false');
+        head.innerHTML =
+            `<span class="qe-row-label">${title}</span>` +
+            `<span class="qe-row-value"></span>` +
+            `<span class="material-symbols-outlined qe-row-chevron">chevron_right</span>`;
+        row.appendChild(head);
 
+        const body = document.createElement('div');
+        body.className = 'qe-row-body';
         const optionsContainer = document.createElement('div');
         optionsContainer.className = 'quick-edit-options';
-
-        (memberConfig[config.key] || []).forEach(option => {
+        options.forEach(option => {
             const btn = document.createElement('button');
             btn.type = 'button';
             btn.className = 'quick-edit-btn';
@@ -339,10 +419,54 @@ function setupQuickEditPanel() {
             btn.dataset.value = option;
             optionsContainer.appendChild(btn);
         });
+        body.appendChild(optionsContainer);
+        row.appendChild(body);
 
-        categoryDiv.appendChild(optionsContainer);
-        contentContainer.appendChild(categoryDiv);
+        // Attribut à option unique (ex Arme S. = "PSA") : pas d'accordéon, l'en-tête
+        // bascule la valeur entre l'option et "Sans".
+        if (options.length <= 1) {
+            row.classList.add('qe-row-mono');
+            row.dataset.single = options[0] || 'Sans';
+            const chev = row.querySelector('.qe-row-chevron');
+            if (chev) chev.style.display = 'none';
+        }
+
+        contentContainer.appendChild(row);
     }
+}
+
+/** Texte de synthèse de la valeur d'un attribut pour l'en-tête de ligne. */
+function _qeRowValueText(member, row) {
+    const attr = row.dataset.attr;
+    const raw = member.dataset[attr] || '';
+    if (multiSelectAttributes.includes(attr)) {
+        // Afficher TOUTES les valeurs sélectionnées (aucune troncature).
+        const vals = raw.split(', ').map(v => v.trim()).filter(v => v && v !== 'Sans');
+        if (!vals.length) return { text: 'Sans', empty: true };
+        return { text: vals.join(' · '), empty: false };
+    }
+    if (!raw || raw === 'Sans') return { text: 'Sans', empty: true };
+    return { text: raw, empty: false };
+}
+
+/** Rafraîchit la valeur affichée dans l'en-tête d'une ligne (+ état mono on/off). */
+function repaintRowValue(row, member) {
+    const valEl = row.querySelector('.qe-row-value');
+    if (!valEl) return;
+    const { text, empty } = _qeRowValueText(member, row);
+    valEl.textContent = text;
+    valEl.classList.toggle('is-empty', empty);
+    if (row.classList.contains('qe-row-mono')) row.classList.toggle('qe-mono-on', !empty);
+}
+
+/** Pastille « Enregistré » : feedback visuel d'auto-sauvegarde. */
+let _qeAutosaveTimer = null;
+function flashAutoSave() {
+    const el = document.getElementById('qeAutosave');
+    if (!el) return;
+    el.classList.add('show');
+    clearTimeout(_qeAutosaveTimer);
+    _qeAutosaveTimer = setTimeout(() => el.classList.remove('show'), 1200);
 }
 
 function handleMemberSelection(event) {
@@ -368,12 +492,11 @@ function handleMemberSelection(event) {
     activeMemberId = clickedButton.id;
     clickedButton.classList.add('member-active');
 
-    if (window.innerWidth < 768) {
-        openQuickEditModal(activeMemberId);
-    } else {
-        populateQuickEditPanel(activeMemberId);
-        document.getElementById('quickEditPanel').style.display = 'flex';
-    }
+    // Composant unique mobile + desktop : la fiche-accordéon inline (compacte).
+    populateQuickEditPanel(activeMemberId);
+    const panel = document.getElementById('quickEditPanel');
+    panel.style.display = 'flex';
+    panel.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     syncDomToStore();
 }
 
@@ -398,6 +521,14 @@ function populateQuickEditPanel(memberId) {
         } else {
             btn.classList.toggle('selected', memberValue === value);
         }
+    });
+
+    // Peindre la valeur courante de chaque ligne-fiche + replier toutes les lignes.
+    document.querySelectorAll('#quickEditPanel .qe-row').forEach(row => {
+        repaintRowValue(row, member);
+        row.classList.remove('is-open');
+        const h = row.querySelector('.qe-row-head');
+        if (h) h.setAttribute('aria-expanded', 'false');
     });
 }
 
@@ -560,16 +691,44 @@ function initPatracQuickEditUi() {
     if (patracQuickEditUiInitialized) return;
     patracQuickEditUiInitialized = true;
 
-    const saveBtn = document.getElementById('saveQuickEditBtn');
-    if (saveBtn) saveBtn.addEventListener('click', saveQuickEditChanges);
+    // (Plus de bouton « Sauvegarder » : auto-sauvegarde à chaque modification.)
 
     const quickEditPanel = document.getElementById('quickEditPanel');
     if (quickEditPanel) {
         quickEditPanel.addEventListener('click', (event) => {
             event.stopPropagation();
             const target = event.target;
-            const quickEditButton = target.closest('.quick-edit-btn');
 
+            // 1) Clic sur un EN-TÊTE de ligne : accordéon (ouvre/ferme), ou bascule
+            //    on/off pour les attributs à option unique (mono).
+            const head = target.closest('.qe-row-head');
+            if (head) {
+                const row = head.closest('.qe-row');
+                if (!row) return;
+                if (row.classList.contains('qe-row-mono')) {
+                    if (!activeMemberId) return;
+                    const m = document.getElementById(activeMemberId);
+                    if (!m) return;
+                    const attr = row.dataset.attr;
+                    const single = row.dataset.single || 'Sans';
+                    m.dataset[attr] = (m.dataset[attr] === single) ? 'Sans' : single;
+                    repaintRowValue(row, m);
+                    updateMemberButtonVisuals(m);
+                    if (typeof syncDomToStore === 'function') { syncDomToStore(); updateArticulationDisplay(); }
+                    flashAutoSave();
+                    return;
+                }
+                const willOpen = !row.classList.contains('is-open');
+                quickEditPanel.querySelectorAll('.qe-row.is-open').forEach(r => {
+                    r.classList.remove('is-open');
+                    const h = r.querySelector('.qe-row-head'); if (h) h.setAttribute('aria-expanded', 'false');
+                });
+                if (willOpen) { row.classList.add('is-open'); head.setAttribute('aria-expanded', 'true'); }
+                return;
+            }
+
+            // 2) Clic sur une PILL d'option : écrit l'attribut du membre actif.
+            const quickEditButton = target.closest('.quick-edit-btn');
             if (quickEditButton && activeMemberId) {
                 const activeMember = document.getElementById(activeMemberId);
                 if (!activeMember) return;
@@ -618,6 +777,24 @@ function initPatracQuickEditUi() {
                     syncDomToStore();
                     updateArticulationDisplay();
                 }
+
+                // Refléter la nouvelle valeur dans l'en-tête + replier (mono-select).
+                const editedRow = quickEditButton.closest('.qe-row');
+                if (editedRow) {
+                    repaintRowValue(editedRow, activeMember);
+                    // Couplage cellule↔fonction : repeindre toutes les lignes concernées.
+                    if (attribute === 'cellule' || attribute === 'fonction') {
+                        quickEditPanel.querySelectorAll('.qe-row').forEach(r => repaintRowValue(r, activeMember));
+                    }
+                    // Sélection unique (non multi) : on replie pour enchaîner vite.
+                    if (!multiSelectAttributes.includes(attribute)) {
+                        setTimeout(() => {
+                            editedRow.classList.remove('is-open');
+                            const h = editedRow.querySelector('.qe-row-head'); if (h) h.setAttribute('aria-expanded', 'false');
+                        }, 150);
+                    }
+                }
+                flashAutoSave();
             }
         });
 
@@ -629,6 +806,7 @@ function initPatracQuickEditUi() {
                 member.dataset.trigramme = e.target.value.toUpperCase();
                 updateMemberButtonVisuals(member);
                 if (typeof syncDomToStore === 'function') syncDomToStore();
+                flashAutoSave();
             } else if (e.target.id === 'quick_edit_dir_input') {
                 member.dataset.dir = e.target.value;
                 updateMemberButtonVisuals(member);
@@ -636,6 +814,7 @@ function initPatracQuickEditUi() {
                     syncDomToStore();
                     updateArticulationDisplay();
                 }
+                flashAutoSave();
             }
         });
     }
@@ -661,6 +840,7 @@ window.initPatracQuickEditUi = initPatracQuickEditUi;
 window.renameVehicle = renameVehicle;
 window.addManualVehicle = addManualVehicle;
 window.addManualMember = addManualMember;
+window.addCellBatch = addCellBatch;
 window.addPatracdvrRow = addPatracdvrRow;
 window.addPatracdvrMember = addPatracdvrMember;
 window.initializePatracdvr = initializePatracdvr;
@@ -672,3 +852,154 @@ window.cloneMemberFromContext = cloneMemberFromContext;
 window.deleteMemberFromContext = deleteMemberFromContext;
 window.resetPatracdvrUI = resetPatracdvrUI;
 window.loadConfigObject = loadConfigObject;
+
+// ============================================================
+// CONFIGURATION UNITÉ — édition de memberConfig depuis l'OI
+// (remplace l'aller-retour vers patracdvr.html : tout se fait dans 4.html)
+// ============================================================
+function openUniteConfigModal() {
+    const content = document.getElementById('unite_config_content');
+    const modal = document.getElementById('uniteConfigModal');
+    if (!content || !modal || typeof quickEditMapping === 'undefined') return;
+    const esc = (v) => (window.UIPlatform ? UIPlatform.esc(v) : String(v));
+    content.innerHTML = '';
+    for (const [title, cfg] of Object.entries(quickEditMapping)) {
+        const group = document.createElement('div');
+        group.className = 'unite-config-group';
+        const opts = (memberConfig[cfg.key] || []).join(', ');
+        group.innerHTML = `<label>${esc(title)}</label><textarea data-config-key="${esc(cfg.key)}" rows="2">${esc(opts)}</textarea>`;
+        content.appendChild(group);
+    }
+    document.body.classList.add('modal-open');
+    if (typeof modal.showModal === 'function') { try { modal.showModal(); } catch (e) { modal.setAttribute('open', ''); } }
+    else modal.setAttribute('open', '');
+}
+
+function saveUniteConfig() {
+    const content = document.getElementById('unite_config_content');
+    if (!content) return;
+    content.querySelectorAll('textarea[data-config-key]').forEach(ta => {
+        const key = ta.dataset.configKey;
+        const list = ta.value.split(/[,\n]/).map(s => s.trim()).filter(Boolean);
+        const deduped = [...new Set(list)];
+        memberConfig[key] = deduped.length ? deduped : ['Sans'];
+    });
+    // Régénérer les boutons d'édition de membre + persister IMMÉDIATEMENT (data.options).
+    if (typeof setupQuickEditPanel === 'function') setupQuickEditPanel();
+    if (typeof window.flushFormData === 'function') window.flushFormData();
+    else if (typeof syncDomToStore === 'function') syncDomToStore();
+    const modal = document.getElementById('uniteConfigModal');
+    if (modal && typeof modal.close === 'function') modal.close();
+    document.body.classList.remove('modal-open');
+    if (typeof toast === 'function') toast("Configuration de l'unité enregistrée", 'success');
+}
+window.openUniteConfigModal = openUniteConfigModal;
+window.saveUniteConfig = saveUniteConfig;
+
+// ============================================================
+// PDF DU PATRACDVR — généré directement (pdf-lib), sans patracdvr.html
+// ============================================================
+async function generatePatracdvrPdf() {
+    if (typeof PDFLib === 'undefined') {
+        if (typeof toast === 'function') toast('Bibliothèque PDF indisponible (réseau ?).', 'error');
+        return;
+    }
+    try {
+        // Collecte depuis le DOM (mêmes classes que patracdvr.html).
+        const rowsData = [];
+        document.querySelectorAll('#patracdvr_container .patracdvr-vehicle-row').forEach(row => {
+            const members = Array.from(row.querySelectorAll('.patracdvr-member-btn')).map(b => ({ ...b.dataset }));
+            rowsData.push({ vehicle: row.dataset.vehicleName || 'Véhicule', members });
+        });
+        const unassigned = Array.from(document.querySelectorAll('#unassigned_members_container .patracdvr-member-btn')).map(b => ({ ...b.dataset }));
+        if (unassigned.length) rowsData.push({ vehicle: 'NON ASSIGNÉS', members: unassigned });
+        if (!rowsData.length) { if (typeof toast === 'function') toast('Aucun membre dans le PATRACDVR.', 'warning'); return; }
+
+        const { PDFDocument, StandardFonts, rgb } = PDFLib;
+        const pdf = await PDFDocument.create();
+        const font = await pdf.embedFont(StandardFonts.Helvetica);
+        const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+        // Helvetica standard = WinAnsi : on neutralise tout caractère non encodable.
+        const safe = (v) => String(v == null ? '' : v).replace(/[^\x00-\xFF]/g, '?');
+
+        const A4L = [841.89, 595.28];
+        const M = 28;
+        const cols = [
+            { t: 'PAX', k: 'trigramme', w: 52 }, { t: 'Fct', k: 'fonction', w: 78 },
+            { t: 'Cel.', k: 'cellule', w: 56 }, { t: 'Arme P.', k: 'principales', w: 66 },
+            { t: 'Arme S.', k: 'secondaires', w: 56 }, { t: 'AFI', k: 'afis', w: 54 },
+            { t: 'Gren.', k: 'grenades', w: 56 }, { t: 'Equip 1', k: 'equipement', w: 92 },
+            { t: 'Equip 2', k: 'equipement2', w: 92 }, { t: 'Tenue', k: 'tenue', w: 56 },
+            { t: 'GPB', k: 'gpb', w: 56 }, { t: 'DIR', k: 'dir', w: 42 }
+        ];
+        const tableW = cols.reduce((s, c) => s + c.w, 0);
+        const cInk = rgb(0.1, 0.1, 0.12), cLine = rgb(0.62, 0.62, 0.66), cHead = rgb(0.85, 0.88, 0.95), cVeh = rgb(0.80, 0.86, 1);
+        const fs = 8, vehH = 16, headH = 18;
+
+        let page, y;
+        const newPage = () => { page = pdf.addPage(A4L); y = A4L[1] - M; };
+        const wrap = (txt, w) => {
+            const words = safe(txt).split(/\s+/).filter(Boolean); const lines = []; let cur = '';
+            for (const wd of words) {
+                const test = cur ? cur + ' ' + wd : wd;
+                if (font.widthOfTextAtSize(test, fs) > w - 6 && cur) { lines.push(cur); cur = wd; } else cur = test;
+            }
+            if (cur) lines.push(cur);
+            return lines.length ? lines : ['-'];
+        };
+        const drawHeaderRow = () => {
+            let x = M;
+            page.drawRectangle({ x: M, y: y - headH, width: tableW, height: headH, color: cHead });
+            cols.forEach(c => {
+                page.drawText(c.t, { x: x + 3, y: y - headH + 6, size: fs, font: bold, color: cInk });
+                page.drawLine({ start: { x, y }, end: { x, y: y - headH }, color: cLine, thickness: 0.5 });
+                x += c.w;
+            });
+            page.drawLine({ start: { x, y }, end: { x, y: y - headH }, color: cLine, thickness: 0.5 });
+            page.drawLine({ start: { x: M, y: y - headH }, end: { x: M + tableW, y: y - headH }, color: cLine, thickness: 0.5 });
+            y -= headH;
+        };
+
+        newPage();
+        page.drawText('PATRACDVR', { x: M, y: y - 14, size: 20, font: bold, color: rgb(0.18, 0.42, 0.85) });
+        page.drawText(new Date().toLocaleDateString('fr-FR'), { x: M + tableW - 70, y: y - 12, size: 10, font, color: cInk });
+        y -= 34;
+        drawHeaderRow();
+
+        for (const grp of rowsData) {
+            if (y - vehH - 6 < M) { newPage(); drawHeaderRow(); }
+            page.drawRectangle({ x: M, y: y - vehH, width: tableW, height: vehH, color: cVeh });
+            page.drawText('VEHICULE : ' + safe(grp.vehicle), { x: M + 4, y: y - vehH + 4, size: 9, font: bold, color: cInk });
+            y -= vehH;
+            for (const m of grp.members) {
+                const cellLines = cols.map(c => { let v = m[c.k] || ''; if (v === 'Sans') v = '-'; return wrap(v, c.w); });
+                const nLines = Math.max(1, ...cellLines.map(l => l.length));
+                const h = Math.max(vehH, nLines * (fs + 2) + 4);
+                if (y - h < M) { newPage(); drawHeaderRow(); }
+                let x = M;
+                cols.forEach((c, ci) => {
+                    page.drawLine({ start: { x, y }, end: { x, y: y - h }, color: cLine, thickness: 0.5 });
+                    cellLines[ci].forEach((ln, li) => page.drawText(ln, { x: x + 3, y: y - 11 - li * (fs + 2), size: fs, font, color: cInk }));
+                    x += c.w;
+                });
+                page.drawLine({ start: { x, y }, end: { x, y: y - h }, color: cLine, thickness: 0.5 });
+                page.drawLine({ start: { x: M, y: y - h }, end: { x: M + tableW, y: y - h }, color: cLine, thickness: 0.5 });
+                y -= h;
+            }
+        }
+
+        const bytes = await pdf.save();
+        const blob = new Blob([bytes], { type: 'application/pdf' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `PATRACDVR_${new Date().toISOString().slice(0, 10)}.pdf`;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+        if (typeof toast === 'function') toast('PDF PATRACDVR généré', 'success');
+    } catch (e) {
+        console.error('[PATRACDVR PDF] échec:', e);
+        if (typeof toast === 'function') toast('Erreur de génération PDF : ' + e.message, 'error');
+        else alert('Erreur PDF PATRACDVR : ' + e.message);
+    }
+}
+window.generatePatracdvrPdf = generatePatracdvrPdf;

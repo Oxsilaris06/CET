@@ -1,3 +1,8 @@
+/**
+ * presentation.js — Gestion de l'affichage de la modale de présentation et nettoyage du texte pour l'export PDF.
+ * Chargé par : 4.html
+ * Fonctions principales : openPresentationMode, sanitizePdfText
+ */
 window.openPresentationMode = openPresentationMode;
 // window.downloadOiPdf = downloadOiPdf; // Déplacé vers pdf_engine_v2.js
 
