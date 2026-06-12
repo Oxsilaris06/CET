@@ -1241,6 +1241,13 @@ window.resetActivePage = async function () {
 
     // Sauvegarde de l'état vidé
     syncDomToStore();
+
+    // Fermer la modale d'options de reset : sans ça elle reste ouverte par-dessus
+    // les champs vidés et l'utilisateur croit que rien ne s'est passé.
+    const _rom = document.getElementById('resetOptionsModal');
+    if (_rom && _rom.open) _rom.close();
+    document.body.classList.remove('modal-open');
+
     toast("Page réinitialisée", "success");
 };
 
@@ -1253,6 +1260,18 @@ window.resetAllData = async function (keepPatrac = true) {
         : "Réinitialisation TOTALE : Effacer TOUTES les données, y compris le personnel ?";
 
     if (!confirm(msg)) return;
+
+    // Neutraliser le flush de fermeture (pagehide/beforeunload) ET la sauvegarde
+    // débouncée : sans ça, le DOM courant — encore rempli, car le reset n'efface
+    // que le stockage et le Store, pas les champs visibles — réécraserait le
+    // localStorage vidé pendant la fenêtre d'1 s précédant le reload.
+    // syncDomToStore ignore tout flush tant que isFormLoading est vrai.
+    window.isFormLoading = true;
+
+    // Fermer la modale d'options (le reload la fermerait, mais on évite le clignotement).
+    const _rom = document.getElementById('resetOptionsModal');
+    if (_rom && _rom.open) _rom.close();
+    document.body.classList.remove('modal-open');
 
     let patracBackup = null;
     if (keepPatrac && Store.state.formData) {
