@@ -1378,6 +1378,60 @@
             font-family: var(--font-data);
             margin-bottom: 10px;
         }
+
+        /* ==================== BARRE DE TOGGLES (panneaux) ==================== */
+        .panel-toggles {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 18px;
+        }
+
+        .panel-toggle {
+            flex: 1 1 auto;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding: 11px 14px;
+            font-family: var(--font-title);
+            font-size: 0.9em;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            background: var(--bg-input);
+            border: 1px solid var(--border-glass);
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .panel-toggle .material-icons {
+            font-size: 18px;
+        }
+
+        .panel-toggle:hover {
+            color: var(--text-primary);
+            border-color: var(--accent-blue);
+        }
+
+        .panel-toggle.active {
+            background: var(--accent-blue);
+            border-color: var(--accent-blue);
+            color: #fff;
+            box-shadow: 0 0 12px var(--accent-glow);
+        }
+
+        .panel-toggle .flip-sep {
+            opacity: 0.5;
+            margin: 0 2px;
+        }
+
+        .panel-toggle .flip-on {
+            font-weight: 700;
+            text-decoration: underline;
+            text-underline-offset: 3px;
+        }
     </style>
 </head>
 
@@ -1596,7 +1650,28 @@
             <span>{{ validationMessage.text }}</span>
         </div>
 
-        <fieldset id="conso-fieldset" v-if="isConnected">
+        <!-- ==================== BARRE DE TOGGLES (connecté) ==================== -->
+        <div class="panel-toggles" v-if="isConnected">
+            <button v-if="isAdmin" class="panel-toggle" :class="{ active: activePanel === 'admin' }"
+                @click="togglePanel('admin')">
+                <span class="material-icons">settings</span> Admin
+            </button>
+            <button class="panel-toggle" :class="{ active: activePanel === 'conso' || activePanel === 'cafe' }"
+                @click="togglePanel('consocafe')">
+                <span :class="{ 'flip-on': activePanel === 'conso' }">Conso</span>
+                <span class="flip-sep">⇄</span>
+                <span :class="{ 'flip-on': activePanel === 'cafe' }">Café</span>
+            </button>
+            <button v-if="!isAdmin" class="panel-toggle" :class="{ active: activePanel === 'params' }"
+                @click="togglePanel('params')">
+                <span class="material-icons">settings</span> Paramètres
+            </button>
+            <button class="panel-toggle" :class="{ active: activePanel === 'prozis' }" @click="togglePanel('prozis')">
+                Prozis
+            </button>
+        </div>
+
+        <fieldset id="conso-fieldset" v-if="isConnected && activePanel === 'conso'">
             <legend>Ajouter une consommation</legend>
             <div v-if="isAlertDebt" class="high-debt-message">Votre dette est élevée, veuillez penser à la régler.</div>
             <div v-if="isBlockDebt" class="high-debt-message">Votre dette est trop élevée, veuillez la régler pour
@@ -1624,7 +1699,7 @@
         </fieldset>
 
         <!-- ==================== ZONE CAFÉ ==================== -->
-        <fieldset id="cafe-fieldset" v-if="isConnected">
+        <fieldset id="cafe-fieldset" v-if="isConnected && activePanel === 'cafe'">
             <legend>☕ Café</legend>
 
             <!-- Bandeau statut -->
@@ -1713,22 +1788,9 @@
             </div>
         </fieldset>
 
-        <fieldset id="password-fieldset" v-if="isConnected">
-            <legend>Modifier le mot de passe</legend>
-            <input type="password" v-model="oldPassword" placeholder="Ancien mot de passe" style="margin-bottom: 10px;">
-            <input type="password" v-model="newPassword" placeholder="Nouveau mot de passe">
-            <button @click="changeUserPassword" class="action-button"
-                :style="{'background-color': 'var(--accent-blue)'}" :disabled="loadingPasswordChange">{{
-                loadingPasswordChange ? 'Mise à jour...' : 'Modifier' }}</button>
-            <div id="password-change-box" v-if="passwordChangeMessage.text">{{ passwordChangeMessage.text }}</div>
-        </fieldset>
-
-        <fieldset v-if="isConnected" style="margin-top: 25px;">
+        <fieldset v-if="isConnected && activePanel === 'prozis'" style="margin-top: 25px;">
             <legend>Prozis Élite</legend>
-            <button @click="toggleProzisInfo" class="action-button prozis-button">
-                {{ showProzisInfo ? 'Masquer les informations' : 'Prozis Élite' }}
-            </button>
-            <div v-if="showProzisInfo" class="prozis-info-box">
+            <div class="prozis-info-box">
                 <p>Informations du partenaire :</p>
                 <ul>
                     <li>
@@ -1761,7 +1823,7 @@
         </fieldset>
 
         <!-- ==================== ADMINISTRATION (MAHEUX) ==================== -->
-        <fieldset id="admin-fieldset" v-if="isAdmin">
+        <fieldset id="admin-fieldset" v-if="isAdmin && activePanel === 'admin'">
             <legend>🛠️ Administration</legend>
 
             <!-- DETTES -->
@@ -1836,6 +1898,17 @@
                 :class="adminMessage.isCorrect ? 'dette-box-correct' : 'dette-box-incorrect'">
                 <span>{{ adminMessage.text }}</span>
             </div>
+        </fieldset>
+
+        <!-- Modifier le mot de passe : panneau Paramètres (client) OU intégré à l'Admin (MAHEUX) -->
+        <fieldset id="password-fieldset" v-if="isConnected && (activePanel === 'params' || activePanel === 'admin')">
+            <legend>Modifier le mot de passe</legend>
+            <input type="password" v-model="oldPassword" placeholder="Ancien mot de passe" style="margin-bottom: 10px;">
+            <input type="password" v-model="newPassword" placeholder="Nouveau mot de passe">
+            <button @click="changeUserPassword" class="action-button"
+                :style="{'background-color': 'var(--accent-blue)'}" :disabled="loadingPasswordChange">{{
+                loadingPasswordChange ? 'Mise à jour...' : 'Modifier' }}</button>
+            <div id="password-change-box" v-if="passwordChangeMessage.text">{{ passwordChangeMessage.text }}</div>
         </fieldset>
 
         <footer id="main-footer">
@@ -1957,6 +2030,9 @@
                         adminNewMemberPassword: '',
                         adminNewMemberCafe: false,
                         adminAnnonceText: '',
+                        // --- NAVIGATION PAR PANNEAUX (toggles) ---
+                        activePanel: '',
+                        consoCafeLast: 'conso',
                     };
                 },
                 created() {
@@ -2005,7 +2081,7 @@
                     },
                     // --- CAFÉ ---
                     isCafeAdmin() {
-                        return this.selectedMember === this.cafeConfig.adminMember;
+                        return this.isConnected && this.selectedMember === this.cafeConfig.adminMember;
                     },
                     isInCafePool() {
                         return this.cafePool.some(p => p.trigramme === this.selectedMember);
@@ -2027,7 +2103,7 @@
                     },
                     // --- ADMINISTRATION ---
                     isAdmin() {
-                        return this.selectedMember === this.cafeConfig.adminMember;
+                        return this.isConnected && this.selectedMember === this.cafeConfig.adminMember;
                     },
                     sortedDettes() {
                         return this.allDettes
@@ -2071,8 +2147,12 @@
                             this.isConnected = true;
                             this.validationMessage = { text: `Accès autorisé pour ${this.selectedMember}.`, isCorrect: true };
                             try { localStorage.setItem('popote_last_member', this.selectedMember); } catch (e) { }
+                            // Panneau par défaut : Admin pour MAHEUX, Conso pour les clients
+                            const admin = this.selectedMember === this.cafeConfig.adminMember;
+                            this.activePanel = admin ? 'admin' : 'conso';
+                            this.consoCafeLast = 'conso';
                             await this.fetchDettes();
-                            if (this.selectedMember === this.cafeConfig.adminMember) this.fetchAnnonceForAdmin();
+                            if (admin) this.fetchAnnonceForAdmin();
                         } else {
                             this.validationMessage = { text: "Mot de passe incorrect.", isCorrect: false };
                         }
@@ -2141,6 +2221,7 @@
                         this.password = "";
                         this.isConnected = false;
                         this.showPassword = false;
+                        this.activePanel = '';
                         this.validationMessage = { text: "", isCorrect: false };
                         this.passwordChangeMessage = { text: "", isCorrect: false };
                         this.resetConsoInputs();
@@ -2268,6 +2349,20 @@
                     },
                     async adminSaveAnnonce() {
                         await this.adminPost('adminSetAnnonce', { texte: this.adminAnnonceText });
+                    },
+                    // ==================== NAVIGATION PANNEAUX ====================
+                    togglePanel(panel) {
+                        if (panel === 'consocafe') {
+                            // Bouton unique qui bascule Conso <-> Café
+                            if (this.activePanel === 'conso') this.activePanel = 'cafe';
+                            else if (this.activePanel === 'cafe') this.activePanel = 'conso';
+                            else this.activePanel = this.consoCafeLast || 'conso';
+                            this.consoCafeLast = this.activePanel;
+                        } else {
+                            // Exclusif + repliable : re-clic sur le panneau actif le referme
+                            this.activePanel = (this.activePanel === panel) ? '' : panel;
+                        }
+                        if (panel === 'prozis') this.showProzisInfo = true;
                     }
                 }
             }).mount('#app');
