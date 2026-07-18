@@ -1223,6 +1223,161 @@
                 transform: translateY(0);
             }
         }
+
+        /* ==================== ADMINISTRATION ==================== */
+        #admin-fieldset {
+            border-color: rgba(239, 68, 68, 0.35);
+        }
+
+        #admin-fieldset > legend {
+            color: var(--danger-red);
+        }
+
+        .admin-block {
+            margin-bottom: 22px;
+            padding-bottom: 18px;
+            border-bottom: 1px solid var(--border-glass);
+        }
+
+        .admin-block:last-of-type {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+
+        .admin-block-title {
+            font-family: var(--font-title);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--accent-blue);
+            font-size: 0.95em;
+            margin-bottom: 10px;
+        }
+
+        .admin-dette-table {
+            background: var(--bg-input);
+            border: 1px solid var(--border-glass);
+            border-radius: var(--radius-sm);
+            padding: 8px 12px;
+            margin-bottom: 12px;
+            max-height: 260px;
+            overflow-y: auto;
+        }
+
+        .admin-dette-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 6px 0;
+            border-bottom: 1px dashed var(--border-glass);
+            font-family: var(--font-data);
+            font-size: 0.9em;
+        }
+
+        .admin-dette-name {
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .admin-dette-amount {
+            font-weight: 700;
+            color: var(--success-green);
+        }
+
+        .admin-dette-amount.owed {
+            color: var(--danger-red);
+        }
+
+        .admin-mini-btn {
+            flex-shrink: 0;
+            font-family: var(--font-ui);
+            font-size: 0.8em;
+            padding: 5px 10px;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--accent-blue);
+            background: transparent;
+            color: var(--accent-blue);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .admin-mini-btn:hover:not(:disabled) {
+            background: var(--accent-blue);
+            color: #fff;
+        }
+
+        .admin-mini-btn:disabled {
+            opacity: 0.35;
+            cursor: not-allowed;
+        }
+
+        .admin-dette-total {
+            display: flex;
+            justify-content: space-between;
+            padding-top: 8px;
+            font-family: var(--font-data);
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .admin-inline-form {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: stretch;
+            margin-bottom: 8px;
+        }
+
+        .admin-inline-form select,
+        .admin-inline-form input {
+            flex: 1 1 130px;
+            margin-bottom: 0;
+            min-height: 44px;
+        }
+
+        .admin-inline-form .action-button {
+            width: auto;
+            flex: 1 1 140px;
+            margin-top: 0;
+            padding: 10px 14px;
+            font-size: 0.9em;
+        }
+
+        .admin-subdivider {
+            margin: 16px 0 10px;
+            font-size: 0.8em;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-secondary);
+            border-top: 1px dashed var(--border-glass);
+            padding-top: 12px;
+        }
+
+        .admin-checkbox {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9em;
+            color: var(--text-secondary);
+            margin-bottom: 10px;
+            cursor: pointer;
+        }
+
+        .admin-checkbox input {
+            width: auto;
+            min-height: 0;
+            margin-bottom: 0;
+        }
+
+        .admin-annonce {
+            width: 100%;
+            resize: vertical;
+            font-family: var(--font-data);
+            margin-bottom: 10px;
+        }
     </style>
 </head>
 
@@ -1604,6 +1759,85 @@
                 </ul>
             </div>
         </fieldset>
+
+        <!-- ==================== ADMINISTRATION (MAHEUX) ==================== -->
+        <fieldset id="admin-fieldset" v-if="isAdmin">
+            <legend>🛠️ Administration</legend>
+
+            <!-- DETTES -->
+            <div class="admin-block">
+                <p class="admin-block-title">Dettes</p>
+                <div class="admin-dette-table">
+                    <div v-for="d in sortedDettes" :key="d.membre" class="admin-dette-row">
+                        <span class="admin-dette-name">{{ d.membre }}</span>
+                        <span class="admin-dette-amount" :class="{ owed: d.dette > 0 }">{{ d.dette.toFixed(2) }} €</span>
+                        <button class="admin-mini-btn" :disabled="loadingAdmin || d.dette === 0"
+                            @click="adminReglerDette(d.membre)" title="Marquer réglée (→ 0)">Régler</button>
+                    </div>
+                    <div class="admin-dette-total"><span>Total</span><strong>{{ dettesTotal.toFixed(2) }} €</strong></div>
+                </div>
+                <div class="admin-inline-form">
+                    <select v-model="adminDetteTarget">
+                        <option value="">Ajuster la dette de…</option>
+                        <option v-for="m in allMembers" :key="'dt-'+m" :value="m">{{ m }}</option>
+                    </select>
+                    <input type="number" v-model.number="adminDetteMontant" step="0.1" placeholder="Montant €">
+                    <select v-model="adminDetteMode">
+                        <option value="set">Fixer à</option>
+                        <option value="add">Ajouter (±)</option>
+                    </select>
+                    <button class="action-button" :style="{'background-color': 'var(--accent-blue)'}"
+                        :disabled="loadingAdmin || !adminDetteTarget" @click="adminApplyDette">Appliquer</button>
+                </div>
+            </div>
+
+            <!-- MEMBRES -->
+            <div class="admin-block">
+                <p class="admin-block-title">Membres &amp; mots de passe</p>
+                <div class="item-selector">
+                    <label>Membre</label>
+                    <select v-model="adminMemberTarget" @change="adminRemoveConfirm = ''">
+                        <option value="">Sélectionner…</option>
+                        <option v-for="m in allMembers" :key="'mb-'+m" :value="m">{{ m }}</option>
+                    </select>
+                </div>
+                <div class="admin-inline-form">
+                    <input type="text" v-model="adminNewPassword" placeholder="Nouveau mot de passe">
+                    <button class="action-button" :style="{'background-color': 'var(--accent-blue)'}"
+                        :disabled="loadingAdmin || !adminMemberTarget" @click="adminResetPassword">Réinitialiser le MDP</button>
+                </div>
+                <button class="action-button" :class="{ 'pulse-high': adminRemoveConfirm === adminMemberTarget && adminMemberTarget }"
+                    :style="{'background-color': 'var(--danger-red)'}" :disabled="loadingAdmin || !adminMemberTarget"
+                    @click="adminConfirmRemove">
+                    {{ (adminRemoveConfirm === adminMemberTarget && adminMemberTarget) ? '⚠️ Confirmer le retrait de ' + adminMemberTarget : 'Retirer ce membre' }}
+                </button>
+
+                <div class="admin-subdivider">Ajouter un membre</div>
+                <div class="admin-inline-form">
+                    <input type="text" v-model="adminNewMemberName" placeholder="Nom (ex. DUPONT)">
+                    <input type="text" v-model="adminNewMemberPassword" placeholder="Mot de passe">
+                </div>
+                <label class="admin-checkbox">
+                    <input type="checkbox" v-model="adminNewMemberCafe"> Ajouter aussi au pool café
+                </label>
+                <button class="action-button" :style="{'background-color': 'var(--accent-blue)'}"
+                    :disabled="loadingAdmin || !adminNewMemberName || !adminNewMemberPassword" @click="adminAddMember">Ajouter le membre</button>
+            </div>
+
+            <!-- ANNONCE -->
+            <div class="admin-block">
+                <p class="admin-block-title">Annonce (page d'accueil)</p>
+                <textarea v-model="adminAnnonceText" class="admin-annonce" rows="3" placeholder="Texte de l'annonce…"></textarea>
+                <button class="action-button" :style="{'background-color': 'var(--accent-blue)'}"
+                    :disabled="loadingAdmin" @click="adminSaveAnnonce">Enregistrer l'annonce</button>
+            </div>
+
+            <div class="dette-box" v-if="adminMessage.text"
+                :class="adminMessage.isCorrect ? 'dette-box-correct' : 'dette-box-incorrect'">
+                <span>{{ adminMessage.text }}</span>
+            </div>
+        </fieldset>
+
         <footer id="main-footer">
             © G/ Maheux
         </footer>
@@ -1710,6 +1944,19 @@
                         cafeAdminTargetMember: '',
                         cafeAdminQte: 0,
                         cafeResetConfirm: false,
+                        // --- ADMINISTRATION (MAHEUX) ---
+                        loadingAdmin: false,
+                        adminMessage: { text: '', isCorrect: false },
+                        adminDetteTarget: '',
+                        adminDetteMontant: 0,
+                        adminDetteMode: 'set',
+                        adminMemberTarget: '',
+                        adminNewPassword: '',
+                        adminRemoveConfirm: '',
+                        adminNewMemberName: '',
+                        adminNewMemberPassword: '',
+                        adminNewMemberCafe: false,
+                        adminAnnonceText: '',
                     };
                 },
                 created() {
@@ -1777,6 +2024,19 @@
                         if (ms <= 0) return '';
                         const j = Math.floor(ms / 86400000), h = Math.floor((ms % 86400000) / 3600000);
                         return j > 0 ? `${j} j ${h} h` : `${h} h`;
+                    },
+                    // --- ADMINISTRATION ---
+                    isAdmin() {
+                        return this.selectedMember === this.cafeConfig.adminMember;
+                    },
+                    sortedDettes() {
+                        return this.allDettes
+                            .filter(d => d.membre && !/total/i.test(d.membre))
+                            .slice()
+                            .sort((a, b) => (b.dette || 0) - (a.dette || 0));
+                    },
+                    dettesTotal() {
+                        return this.sortedDettes.reduce((s, d) => s + (d.dette || 0), 0);
                     }
                 },
                 methods: {
@@ -1812,6 +2072,7 @@
                             this.validationMessage = { text: `Accès autorisé pour ${this.selectedMember}.`, isCorrect: true };
                             try { localStorage.setItem('popote_last_member', this.selectedMember); } catch (e) { }
                             await this.fetchDettes();
+                            if (this.selectedMember === this.cafeConfig.adminMember) this.fetchAnnonceForAdmin();
                         } else {
                             this.validationMessage = { text: "Mot de passe incorrect.", isCorrect: false };
                         }
@@ -1952,6 +2213,61 @@
                         if (!this.cafeResetConfirm) { this.cafeResetConfirm = true; return; }
                         this.cafeResetConfirm = false;
                         this.cafeAdmin('cafeAdminReset', { confirm: true });
+                    },
+                    // ==================== ADMINISTRATION (MAHEUX) ====================
+                    async adminPost(action, extra = {}) {
+                        this.loadingAdmin = true;
+                        const res = await this.postBackend({ action, membre: this.selectedMember, password: this.password, ...extra });
+                        this.adminMessage = { text: res.result === 'success' ? 'Action effectuée ✓' : (res.message || 'Action refusée.'), isCorrect: res.result === 'success' };
+                        this.loadingAdmin = false;
+                        return res;
+                    },
+                    async adminReglerDette(membre) {
+                        const res = await this.adminPost('adminAdjustDette', { membre_cible: membre, montant: 0, mode: 'set' });
+                        if (res.result === 'success') await this.fetchDettes();
+                    },
+                    async adminApplyDette() {
+                        if (!this.adminDetteTarget) { this.adminMessage = { text: 'Choisis un membre.', isCorrect: false }; return; }
+                        const res = await this.adminPost('adminAdjustDette', { membre_cible: this.adminDetteTarget, montant: this.adminDetteMontant, mode: this.adminDetteMode });
+                        if (res.result === 'success') { await this.fetchDettes(); this.adminDetteMontant = 0; }
+                    },
+                    async adminResetPassword() {
+                        if (!this.adminMemberTarget || !this.adminNewPassword) { this.adminMessage = { text: 'Membre et nouveau mot de passe requis.', isCorrect: false }; return; }
+                        const res = await this.adminPost('adminResetPassword', { membre_cible: this.adminMemberTarget, newPassword: this.adminNewPassword });
+                        if (res.result === 'success') this.adminNewPassword = '';
+                    },
+                    adminConfirmRemove() {
+                        if (!this.adminMemberTarget) { this.adminMessage = { text: 'Choisis un membre.', isCorrect: false }; return; }
+                        if (this.adminRemoveConfirm !== this.adminMemberTarget) { this.adminRemoveConfirm = this.adminMemberTarget; return; }
+                        const cible = this.adminMemberTarget;
+                        this.adminRemoveConfirm = '';
+                        this.adminRemoveMember(cible);
+                    },
+                    async adminRemoveMember(membre) {
+                        const res = await this.adminPost('adminRemoveMember', { membre_cible: membre });
+                        if (res.result === 'success') {
+                            if (this.adminMemberTarget === membre) this.adminMemberTarget = '';
+                            await this.fetchMembers(); await this.fetchDettes(); await this.fetchCafeState();
+                        }
+                    },
+                    async adminAddMember() {
+                        if (!this.adminNewMemberName || !this.adminNewMemberPassword) { this.adminMessage = { text: 'Nom et mot de passe requis.', isCorrect: false }; return; }
+                        const res = await this.adminPost('adminAddMember', { membre_cible: this.adminNewMemberName, newPassword: this.adminNewMemberPassword, addToCafe: this.adminNewMemberCafe });
+                        if (res.result === 'success') {
+                            this.adminNewMemberName = ''; this.adminNewMemberPassword = ''; this.adminNewMemberCafe = false;
+                            await this.fetchMembers(); await this.fetchDettes(); await this.fetchCafeState();
+                        }
+                    },
+                    async fetchAnnonceForAdmin() {
+                        try {
+                            const url = new URL(this.backendUrl);
+                            url.searchParams.append('action', 'getAnnonce');
+                            const r = await fetch(url, { redirect: 'follow' });
+                            this.adminAnnonceText = (await r.text()) || '';
+                        } catch (e) { }
+                    },
+                    async adminSaveAnnonce() {
+                        await this.adminPost('adminSetAnnonce', { texte: this.adminAnnonceText });
                     }
                 }
             }).mount('#app');
