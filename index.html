@@ -531,8 +531,9 @@
 
             .container {
                 padding: 5px;
-                padding-top: 85px;
-                /* Modifié de 100px à 85px pour rapprocher le contenu du haut */
+                /* Le bandeau annonce prend la place de l'ancien bouton drive (en haut) et
+                   grandit vers le bas (flux normal) : il ne remonte jamais, le texte n'est jamais coupé */
+                padding-top: 20px;
                 padding-bottom: 100px;
             }
 
@@ -594,43 +595,24 @@
                 transform: none;
             }
 
+            /* Drive en bas à gauche (le style visuel vient de .media-fab) */
             .bottom-icons {
                 position: fixed;
-                top: 25px;
-                /* Position en haut de l'écran */
-                left: 0;
-                width: 100%;
+                top: auto;
+                bottom: 14px;
+                left: 14px;
+                width: auto;
                 display: flex;
-                justify-content: space-evenly;
-                /* Même espacement entre les icônes */
                 align-items: center;
+                justify-content: flex-start;
                 padding: 0;
                 margin: 0;
-                z-index: 20;
-                /* S'assurer qu'elles sont au-dessus du reste */
+                z-index: 1000;
             }
 
-            .upload-icon-bottom,
-            .settings-icon-bottom,
-            .download-icon-bottom {
-                width: 48px;
-                height: 48px;
+            .upload-icon-bottom {
                 position: relative;
                 overflow: hidden;
-                border-radius: 50%;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-            }
-
-            .upload-icon-bottom .material-icons,
-            .settings-icon-bottom .material-icons,
-            .download-icon-bottom .material-icons {
-                font-size: 48px;
-            }
-
-            .settings-icon-bottom:visited {
-                color: rgba(255, 255, 255, 0.6);
             }
         }
 
@@ -759,11 +741,8 @@
         }
 
         /* Bouton son de la vidéo de fond (bas à droite, desktop + mobile) */
-        #sound-toggle-btn {
-            position: fixed;
-            bottom: 18px;
-            right: 18px;
-            z-index: 1000;
+        /* Boutons flottants média — même style pour son, lecture/pause et drive mobile */
+        .media-fab {
             width: 46px;
             height: 46px;
             border: 1px solid rgba(255, 255, 255, 0.25);
@@ -779,12 +758,24 @@
             padding: 0;
             box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
             transition: transform 0.2s ease, background 0.2s ease, color 0.2s ease;
+            text-decoration: none;
         }
 
-        #sound-toggle-btn:hover {
+        .media-fab:hover {
             color: #fff;
             background: rgba(0, 0, 0, 0.65);
             transform: scale(1.08);
+        }
+
+        .media-fab .material-icons {
+            font-size: 24px;
+        }
+
+        #sound-toggle-btn {
+            position: fixed;
+            bottom: 18px;
+            right: 18px;
+            z-index: 1000;
         }
 
         #sound-toggle-btn.sound-on {
@@ -792,20 +783,50 @@
             border-color: var(--accent-blue);
         }
 
-        #sound-toggle-btn .material-icons {
-            font-size: 24px;
+        /* Play/Pause : masqué en desktop, affiché en mobile */
+        #playpause-btn {
+            display: none;
+        }
+
+        /* Fond statique (fd2.png) montré quand la vidéo est en pause */
+        #background-static {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            object-position: center;
+            z-index: -101;
+        }
+
+        #background-video {
+            transition: opacity 0.3s ease;
         }
 
         @media (max-width: 600px) {
-            #sound-toggle-btn {
-                bottom: 14px;
-                right: 14px;
+            .media-fab {
                 width: 42px;
                 height: 42px;
             }
 
-            #sound-toggle-btn .material-icons {
+            .media-fab .material-icons {
                 font-size: 22px;
+            }
+
+            #sound-toggle-btn {
+                bottom: 14px;
+                right: 14px;
+            }
+
+            /* Play/Pause au centre en bas */
+            #playpause-btn {
+                display: flex;
+                position: fixed;
+                bottom: 14px;
+                left: 50%;
+                transform: translateX(-50%);
+                z-index: 1000;
             }
         }
     </style>
@@ -816,11 +837,18 @@
     <video autoplay muted loop id="background-video">
         <source type="video/mp4">
     </video>
+    <!-- Fond statique affiché quand la vidéo est en pause -->
+    <img id="background-static" src="assets/fd2.png" alt="" aria-hidden="true">
 
     <!-- Bouton activation du son de la vidéo -->
-    <button id="sound-toggle-btn" type="button" onclick="toggleVideoSound()" title="Activer le son"
+    <button id="sound-toggle-btn" class="media-fab" type="button" onclick="toggleVideoSound()" title="Activer le son"
         aria-label="Activer le son de la vidéo">
         <span class="material-icons">volume_off</span>
+    </button>
+    <!-- Bouton lecture / pause (mobile uniquement) -->
+    <button id="playpause-btn" class="media-fab" type="button" onclick="toggleVideoPlayback()" title="Mettre en pause"
+        aria-label="Lecture ou pause de la vidéo">
+        <span class="material-icons">pause</span>
     </button>
 
     <div class="container">
@@ -844,7 +872,7 @@
 
 
         <div class="bottom-icons">
-            <span class="upload-icon-bottom" onclick="openLoginModal('drive')">
+            <span class="upload-icon-bottom media-fab" onclick="openLoginModal('drive')">
                 <span class="material-icons">drive_folder_upload</span>
             </span>
         </div>
@@ -921,6 +949,26 @@
                 btn.classList.remove('sound-on');
                 btn.title = 'Activer le son';
                 btn.setAttribute('aria-label', 'Activer le son de la vidéo');
+            }
+        }
+
+        // Lecture / pause de la vidéo de fond. En pause : la vidéo est masquée et
+        // le fond statique fd2.png (placé derrière) devient visible.
+        function toggleVideoPlayback() {
+            const videoElement = document.getElementById('background-video');
+            const btn = document.getElementById('playpause-btn');
+            const icon = btn.querySelector('.material-icons');
+
+            if (videoElement.paused) {
+                videoElement.play().catch(() => { });
+                videoElement.style.opacity = '1';
+                icon.textContent = 'pause';
+                btn.title = 'Mettre en pause';
+            } else {
+                videoElement.pause();
+                videoElement.style.opacity = '0';
+                icon.textContent = 'play_arrow';
+                btn.title = 'Lecture';
             }
         }
 
