@@ -4,7 +4,8 @@
 <head>
     <link rel="manifest" href="assets/manifest.json">
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#0b0c0f">
     <title>Espace PSIG</title>
     <link rel="icon" href="favicon.ico" type="image/x-icon">
     <link rel="icon" href="assets/favicon.ico" type="image/x-icon">
@@ -31,6 +32,7 @@
         rel="stylesheet">
     <style>
         :root {
+            color-scheme: dark;
             --bg-body: #121212;
             --bg-container: rgba(18, 18, 18, 0.8);
             --text-primary: #e0e0e0;
@@ -853,12 +855,184 @@
                 z-index: 1000;
             }
         }
+
+        /* ---- HUD : le chrome aux bords, l'image au centre ----
+           Les deux clips posent leurs propres titres au centre du cadre (OBSCURITÉ, SILENCE,
+           TIRE, ATTENTE). L'interface se tient donc sur les bandes haute et basse, jamais au
+           milieu : titre et icônes en haut, annonce et outils ancrés en bas. Une seule échelle
+           de rayon (12 à 16 px) et un seul accent, le bleu déjà défini. */
+        body {
+            padding: 0;
+            touch-action: manipulation;
+        }
+
+        /* Grille : titre et icônes sur une seule ligne en haut, image libre au milieu,
+           annonce et outils ancrés en bas. Rien ne flotte au centre du cadre. */
+        .container {
+            max-width: 980px;
+            min-height: 100vh;
+            min-height: 100dvh;
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            grid-template-rows: auto minmax(0, 1fr) auto auto auto;
+            column-gap: clamp(12px, 2vw, 24px);
+            row-gap: clamp(12px, 2vh, 20px);
+            padding: clamp(16px, 3vh, 32px) clamp(16px, 3vw, 40px);
+            padding-bottom: calc(var(--bande-fab) + env(safe-area-inset-bottom) + clamp(8px, 1.5vh, 16px));
+        }
+
+        h1 {
+            grid-column: 1;
+            grid-row: 1;
+            align-self: center;
+            font-size: clamp(1.5rem, 2.2vw + 0.7rem, 2.75rem);
+            line-height: 1.05;
+            letter-spacing: -0.02em;
+            text-align: left;
+            text-wrap: balance;
+        }
+
+        .top-icons {
+            grid-column: 2;
+            grid-row: 1;
+            align-self: center;
+            justify-content: flex-end;
+            margin-bottom: 0;
+        }
+
+        .annonce-box {
+            grid-column: 1 / -1;
+            grid-row: 3;
+            margin-top: 0;
+            margin-bottom: 0;
+            border-radius: 14px;
+            border: 1px solid rgba(255, 255, 255, 0.10);
+            background-color: rgba(8, 9, 12, 0.44);
+            backdrop-filter: blur(14px) saturate(140%);
+            -webkit-backdrop-filter: blur(14px) saturate(140%);
+        }
+
+        .tools-grid {
+            grid-column: 1 / -1;
+            grid-row: 4;
+            border-radius: 16px;
+            gap: clamp(12px, 1.8vw, 22px);
+            align-items: flex-end;
+        }
+
+        /* Les vignettes d'outils sont des pastilles, pas des affiches plein cadre : la barre
+           reste fine et le bas de l'image respire. */
+        .tool-button.image-mode {
+            width: auto;
+            min-width: 0;
+        }
+
+        .tool-button.image-mode img {
+            width: clamp(104px, 11vw, 152px);
+        }
+
+        .annonce-box {
+            max-width: 640px;
+            margin-inline: auto;
+            font-size: 1.15em;
+        }
+
+        .bottom-icons {
+            grid-column: 1 / -1;
+            grid-row: 5;
+        }
+
+        /* Bande d'utilitaires en bas : les commandes média vivent dessous, jamais sur les outils. */
+        :root {
+            --bande-fab: 60px;
+        }
+
+        #sound-toggle-btn,
+        #playpause-btn,
+        .bottom-icons {
+            bottom: calc(env(safe-area-inset-bottom) + 12px);
+        }
+
+        .tool-button {
+            border-radius: 12px;
+            min-height: 44px;
+            transition: background-color 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
+        }
+
+        /* Le retour vit sur l'appui, pas au relâchement. */
+        .tool-button:active {
+            transform: scale(0.97);
+        }
+
+        .tool-button:focus-visible,
+        .media-fab:focus-visible,
+        .upload-icon:focus-visible,
+        .upload-icon-bottom:focus-visible,
+        .refresh-icon:focus-visible {
+            outline: 2px solid var(--accent-blue);
+            outline-offset: 3px;
+        }
+
+        .media-fab,
+        .upload-icon,
+        .upload-icon-bottom {
+            min-width: 44px;
+            min-height: 44px;
+        }
+
+        @media (max-width: 600px) {
+            /* Le titre reste lisible sur téléphone : c'est le point d'entrée de l'identité. */
+            h1 {
+                display: block;
+                grid-column: 1 / -1;
+                font-size: clamp(1.35rem, 5vw, 1.75rem);
+                text-align: center;
+            }
+
+            .annonce-box {
+                font-size: 1.05em;
+                padding: 14px 16px;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .tool-button,
+            .refresh-icon,
+            #background-video,
+            body::before {
+                transition: none;
+            }
+
+            .tool-button:hover {
+                transform: none;
+            }
+        }
+
+        @media (prefers-reduced-transparency: reduce) {
+            .annonce-box,
+            .tool-button {
+                backdrop-filter: none;
+                -webkit-backdrop-filter: none;
+                background-color: rgba(8, 9, 12, 0.94);
+            }
+        }
+
+        @media (prefers-contrast: more) {
+            .annonce-box {
+                border-color: rgba(255, 255, 255, 0.55);
+                background-color: rgba(4, 5, 7, 0.95);
+            }
+
+            .tool-button {
+                box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.55);
+            }
+        }
     </style>
 </head>
 
 <body>
 
-    <video autoplay muted loop id="background-video">
+    <video autoplay muted loop playsinline aria-hidden="true" id="background-video">
         <source type="video/mp4">
     </video>
     <!-- Fond statique affiché quand la vidéo est en pause -->
@@ -960,13 +1134,20 @@
 
         async function suivreLuminosite() {
             if (luminositeFonds) return;
+            const videoElement = document.getElementById('background-video');
+
+            // Mouvement réduit demandé par le système : le fond se fige sur l'image fixe.
+            if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+                videoElement.pause();
+                videoElement.style.opacity = '0';
+                return;
+            }
+
             try {
                 luminositeFonds = await (await fetch('assets/luminosite.json')).json();
             } catch (e) {
                 luminositeFonds = {};   // voile de secours 0.45, déjà dans le CSS
             }
-
-            const videoElement = document.getElementById('background-video');
             const appliquer = () => {
                 const cle = window.innerWidth <= MOBILE_BREAKPOINT ? 'mobile' : 'desktop';
                 const table = luminositeFonds[cle] || [];
