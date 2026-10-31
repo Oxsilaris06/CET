@@ -1971,6 +1971,19 @@
                 const response = await fetch('all.json');
                 if (!response.ok) throw new Error('Network response was not ok.');
                 siteConfig = await response.json();
+                // Compte partenaire hors depot : gist non liste, lu a l'execution.
+                // Un gist "secret" n'est pas protege : il est seulement non indexe.
+                if (!siteConfig.popoteConfig || !siteConfig.popoteConfig.elitePartner) {
+                    try {
+                        const gist = await fetch('https://gist.githubusercontent.com/Oxsilaris06/56af2d01feee46df97860cc3b006db00/raw/partenaire.json');
+                        if (gist.ok) {
+                            const secret = await gist.json();
+                            if (secret && secret.elitePartner) {
+                                siteConfig.popoteConfig = Object.assign({}, siteConfig.popoteConfig, { elitePartner: secret.elitePartner });
+                            }
+                        }
+                    } catch (e) { console.warn('Compte partenaire indisponible', e); }
+                }
                 initializeApp();
             } catch (error) {
                 document.body.innerHTML = `<div style="color: white; text-align: center; padding: 50px;"><h1>Erreur de Configuration</h1><p>Le fichier <code>all.json</code> est introuvable ou invalide. Veuillez configurer le site via la page <code>setup.html</code>.</p></div>`;
